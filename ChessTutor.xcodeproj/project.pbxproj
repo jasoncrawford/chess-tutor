@@ -1,0 +1,419 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3272E453609A9FD096EE431 /* ContentView.swift */; };
+		55CF4F3C57F42B3D1F3D9582 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858232DD64C12811E9351DF8 /* AppTheme.swift */; };
+		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6A1C1618FB340995F4AEB9C4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 181AD28789152C5E31A3BA34 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6A716FFF3AA67ABE8A7992B0;
+			remoteInfo = ChessTutor;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessTutorApp.swift; sourceTree = "<group>"; };
+		CEAF84C004414D1A30475620 /* ChessTutor.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ChessTutor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3272E453609A9FD096EE431 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		DBBCE3885F06B31979F4483D /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
+		FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ChessTutorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		082A768E46499309C59E58B8 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				842912F4F9E7831D88B04E5C /* Root */,
+				5620B9DA5A30AC514ACF1ECF /* Theme */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		111656FD3D1E492F8A08BD3A = {
+			isa = PBXGroup;
+			children = (
+				9480EA40179DF223C311D73B /* ChessTutor */,
+				338012C1CB044A5CBACB10AD /* ChessTutorTests */,
+				641F0956F63041D1840B6373 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		338012C1CB044A5CBACB10AD /* ChessTutorTests */ = {
+			isa = PBXGroup;
+			children = (
+				DBBCE3885F06B31979F4483D /* .gitkeep */,
+			);
+			path = ChessTutorTests;
+			sourceTree = "<group>";
+		};
+		5620B9DA5A30AC514ACF1ECF /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				858232DD64C12811E9351DF8 /* AppTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		59D4B980F3B4D416419B2779 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		641F0956F63041D1840B6373 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CEAF84C004414D1A30475620 /* ChessTutor.app */,
+				FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		842912F4F9E7831D88B04E5C /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				D3272E453609A9FD096EE431 /* ContentView.swift */,
+			);
+			path = Root;
+			sourceTree = "<group>";
+		};
+		9480EA40179DF223C311D73B /* ChessTutor */ = {
+			isa = PBXGroup;
+			children = (
+				59D4B980F3B4D416419B2779 /* App */,
+				082A768E46499309C59E58B8 /* UI */,
+			);
+			path = ChessTutor;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6A716FFF3AA67ABE8A7992B0 /* ChessTutor */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 880EE52ADEEF79B0CCF817C3 /* Build configuration list for PBXNativeTarget "ChessTutor" */;
+			buildPhases = (
+				43226AE67B1FB4A261B6C0B0 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ChessTutor;
+			packageProductDependencies = (
+			);
+			productName = ChessTutor;
+			productReference = CEAF84C004414D1A30475620 /* ChessTutor.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A9E509D3714BBC0F2F7BAE66 /* ChessTutorTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9EC4C56F3221D28569BFA888 /* Build configuration list for PBXNativeTarget "ChessTutorTests" */;
+			buildPhases = (
+				8B5C83885BFDCCCAF6C3F14E /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				88DBA25A208ABE4C60E0262A /* PBXTargetDependency */,
+			);
+			name = ChessTutorTests;
+			packageProductDependencies = (
+			);
+			productName = ChessTutorTests;
+			productReference = FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		181AD28789152C5E31A3BA34 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = D5AAB133253D85981CF0C8E9 /* Build configuration list for PBXProject "ChessTutor" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 111656FD3D1E492F8A08BD3A;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6A716FFF3AA67ABE8A7992B0 /* ChessTutor */,
+				A9E509D3714BBC0F2F7BAE66 /* ChessTutorTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		43226AE67B1FB4A261B6C0B0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				55CF4F3C57F42B3D1F3D9582 /* AppTheme.swift in Sources */,
+				C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */,
+				1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B5C83885BFDCCCAF6C3F14E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		88DBA25A208ABE4C60E0262A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6A716FFF3AA67ABE8A7992B0 /* ChessTutor */;
+			targetProxy = 6A1C1618FB340995F4AEB9C4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4963CC53B930579318FD9DCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ChessTutorTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ChessTutor.app/ChessTutor";
+			};
+			name = Release;
+		};
+		5CC6116F99F6A56E899199F5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ChessTutor;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A05452AC21A0EE60938D1BCD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ChessTutorTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ChessTutor.app/ChessTutor";
+			};
+			name = Debug;
+		};
+		B479BF7B3AA8637B54FA2087 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		B58B891EA94AE0310FEB36A0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		D2892597F06918EB2CE6C20B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ChessTutor;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		880EE52ADEEF79B0CCF817C3 /* Build configuration list for PBXNativeTarget "ChessTutor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5CC6116F99F6A56E899199F5 /* Debug */,
+				D2892597F06918EB2CE6C20B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9EC4C56F3221D28569BFA888 /* Build configuration list for PBXNativeTarget "ChessTutorTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A05452AC21A0EE60938D1BCD /* Debug */,
+				4963CC53B930579318FD9DCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D5AAB133253D85981CF0C8E9 /* Build configuration list for PBXProject "ChessTutor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B58B891EA94AE0310FEB36A0 /* Debug */,
+				B479BF7B3AA8637B54FA2087 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 181AD28789152C5E31A3BA34 /* Project object */;
+}

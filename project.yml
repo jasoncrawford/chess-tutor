@@ -1,0 +1,28 @@
+name: ChessTutor
+options:
+  bundleIdPrefix: com.example
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    TARGETED_DEVICE_FAMILY: "2"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    INFOPLIST_KEY_UILaunchScreen_Generation: true
+targets:
+  ChessTutor:
+    type: application
+    platform: iOS
+    sources:
+      - ChessTutor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ChessTutor
+  ChessTutorTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ChessTutorTests
+    dependencies:
+      - target: ChessTutor
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
