@@ -15,7 +15,9 @@ targets:
       - ChessTutor
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: true
         PRODUCT_BUNDLE_IDENTIFIER: com.example.ChessTutor
+        TARGETED_DEVICE_FAMILY: "2"
   ChessTutorTests:
     type: bundle.unit-test
     platform: iOS
