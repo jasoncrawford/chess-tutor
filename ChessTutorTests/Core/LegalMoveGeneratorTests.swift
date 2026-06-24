@@ -33,4 +33,42 @@ final class LegalMoveGeneratorTests: XCTestCase {
 
         XCTAssertFalse(moves.contains(Move(from: Square(file: .e, rank: 1), to: Square(file: .e, rank: 2))))
     }
+
+    func testMoveThatExposesOwnKingIsIllegal() {
+        var board = Board()
+        board[Square(file: .e, rank: 1)] = Piece(kind: .king, color: .white)
+        board[Square(file: .e, rank: 2)] = Piece(kind: .rook, color: .white)
+        board[Square(file: .e, rank: 8)] = Piece(kind: .rook, color: .black)
+        board[Square(file: .a, rank: 8)] = Piece(kind: .king, color: .black)
+        let state = GameState(board: board, sideToMove: .white)
+
+        let moves = LegalMoveGenerator.legalMoves(for: Square(file: .e, rank: 2), in: state)
+
+        XCTAssertFalse(moves.contains(Move(from: Square(file: .e, rank: 2), to: Square(file: .d, rank: 2))))
+    }
+
+    func testKingInCheckCanCaptureCheckingPiece() {
+        var board = Board()
+        board[Square(file: .e, rank: 1)] = Piece(kind: .king, color: .white)
+        board[Square(file: .e, rank: 2)] = Piece(kind: .rook, color: .black)
+        board[Square(file: .a, rank: 8)] = Piece(kind: .king, color: .black)
+        let state = GameState(board: board, sideToMove: .white)
+
+        let moves = LegalMoveGenerator.legalMoves(for: Square(file: .e, rank: 1), in: state)
+
+        XCTAssertTrue(moves.contains(Move(from: Square(file: .e, rank: 1), to: Square(file: .e, rank: 2))))
+    }
+
+    func testCheckmateResultAfterMove() {
+        var board = Board()
+        board[Square(file: .h, rank: 1)] = Piece(kind: .king, color: .white)
+        board[Square(file: .f, rank: 2)] = Piece(kind: .queen, color: .black)
+        board[Square(file: .a, rank: 8)] = Piece(kind: .king, color: .black)
+        board[Square(file: .h, rank: 7)] = Piece(kind: .rook, color: .black)
+        var state = GameState(board: board, sideToMove: .black)
+
+        state.apply(Move(from: Square(file: .h, rank: 7), to: Square(file: .h, rank: 2)))
+
+        XCTAssertEqual(state.result, .checkmate(winner: .black))
+    }
 }

@@ -4,6 +4,23 @@ enum LegalMoveGenerator {
             return []
         }
         return pseudoLegalMoves(for: square, piece: piece, board: state.board)
+            .filter { move in
+                let nextState = state.applyingUnchecked(move)
+                return !isKingInCheck(piece.color, in: nextState.board)
+            }
+    }
+
+    static func allLegalMoves(in state: GameState) -> [Move] {
+        state.board.pieces.keys.flatMap { legalMoves(for: $0, in: state) }
+    }
+
+    static func isKingInCheck(_ color: PieceColor, in board: Board) -> Bool {
+        guard let kingSquare = board.pieces.first(where: { $0.value == Piece(kind: .king, color: color) })?.key else {
+            return false
+        }
+        return board.pieces.contains { square, piece in
+            piece.color != color && pseudoLegalMoves(for: square, piece: piece, board: board).contains { $0.to == kingSquare }
+        }
     }
 
     private static func pseudoLegalMoves(for square: Square, piece: Piece, board: Board) -> [Move] {
