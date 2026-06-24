@@ -14,9 +14,13 @@ enum LegalMoveGenerator {
         state.board.pieces.keys.flatMap { legalMoves(for: $0, in: state) }
     }
 
+    static func kingSquare(for color: PieceColor, in board: Board) -> Square? {
+        board.pieces.first(where: { $0.value == Piece(kind: .king, color: color) })?.key
+    }
+
     static func isKingInCheck(_ color: PieceColor, in board: Board) -> Bool {
-        guard let kingSquare = board.pieces.first(where: { $0.value == Piece(kind: .king, color: color) })?.key else {
-            return false
+        guard let kingSquare = kingSquare(for: color, in: board) else {
+            preconditionFailure("Cannot determine check state: missing \(color.rawValue) king")
         }
         return board.pieces.contains { square, piece in
             piece.color != color && pseudoLegalMoves(for: square, piece: piece, board: board).contains { $0.to == kingSquare }

@@ -71,4 +71,11 @@ final class LegalMoveGeneratorTests: XCTestCase {
 
         XCTAssertEqual(state.result, .checkmate(winner: .black))
     }
+
+    func testKingSquareReturnsNilWhenKingIsMissing() {
+        var board = Board()
+        board[Square(file: .a, rank: 8)] = Piece(kind: .king, color: .black)
+
+        XCTAssertNil(LegalMoveGenerator.kingSquare(for: .white, in: board))
+    }
 }
