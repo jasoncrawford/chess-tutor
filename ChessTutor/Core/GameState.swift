@@ -1,8 +1,8 @@
 struct CastlingRights: Equatable, Sendable {
-    var whiteKingside = true
-    var whiteQueenside = true
-    var blackKingside = true
-    var blackQueenside = true
+    var whiteKingside = false
+    var whiteQueenside = false
+    var blackKingside = false
+    var blackQueenside = false
 }
 
 struct GameState: Equatable, Sendable {
@@ -30,7 +30,16 @@ struct GameState: Equatable, Sendable {
     }
 
     static func startingPosition() -> GameState {
-        GameState(board: .startingPosition(), sideToMove: .white)
+        GameState(
+            board: .startingPosition(),
+            sideToMove: .white,
+            castlingRights: CastlingRights(
+                whiteKingside: true,
+                whiteQueenside: true,
+                blackKingside: true,
+                blackQueenside: true
+            )
+        )
     }
 
     func applyingUnchecked(_ move: Move) -> GameState {

@@ -95,10 +95,16 @@ enum LegalMoveGenerator {
     private static func enPassantMoves(from square: Square, piece: Piece, state: GameState) -> [Move] {
         guard let target = state.enPassantTarget else { return [] }
         let direction = piece.color == .white ? 1 : -1
-        for fileDelta in [-1, 1] {
-            if square.offset(fileDelta: fileDelta, rankDelta: direction) == target {
-                return [Move(from: square, to: target, special: .enPassant)]
-            }
+        let requiredRank = piece.color == .white ? 5 : 4
+        let capturedPawnSquare = Square(file: target.file, rank: square.rank)
+        guard square.rank == requiredRank,
+              state.board[target] == nil,
+              state.board[capturedPawnSquare] == Piece(kind: .pawn, color: piece.color.opposite) else {
+            return []
+        }
+
+        for fileDelta in [-1, 1] where square.offset(fileDelta: fileDelta, rankDelta: direction) == target {
+            return [Move(from: square, to: target, special: .enPassant)]
         }
         return []
     }
