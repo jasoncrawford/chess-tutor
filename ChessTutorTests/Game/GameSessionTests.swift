@@ -19,7 +19,32 @@ final class GameSessionTests: XCTestCase {
         let result = session.moveSelectedPiece(to: Square(file: .e, rank: 5))
 
         XCTAssertEqual(result, .illegal("That piece can't move there."))
+        XCTAssertEqual(session.message, "That piece can't move there.")
         XCTAssertEqual(session.state.sideToMove, .white)
+    }
+
+    func testPromotionRequestClearsStaleIllegalMoveMessage() {
+        let promotionFrom = Square(file: .e, rank: 7)
+        let promotionTo = Square(file: .e, rank: 8)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        promotionFrom: Piece(kind: .pawn, color: .white),
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(promotionFrom)
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 6))
+        let result = session.moveSelectedPiece(to: promotionTo)
+
+        XCTAssertEqual(result, .needsPromotion(from: promotionFrom, to: promotionTo))
+        XCTAssertNil(session.message)
     }
 
     func testLegalMoveAdvancesTurn() {

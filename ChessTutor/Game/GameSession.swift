@@ -47,6 +47,7 @@ final class GameSession {
         }
 
         if case .promotion = move.special {
+            message = nil
             return .needsPromotion(from: selectedSquare, to: destination)
         }
 
