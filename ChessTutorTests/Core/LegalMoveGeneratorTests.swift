@@ -34,6 +34,18 @@ final class LegalMoveGeneratorTests: XCTestCase {
         XCTAssertFalse(moves.contains(Move(from: Square(file: .e, rank: 1), to: Square(file: .e, rank: 2))))
     }
 
+    func testCannotCaptureOpposingKing() {
+        var board = Board()
+        board[Square(file: .e, rank: 1)] = Piece(kind: .king, color: .white)
+        board[Square(file: .e, rank: 7)] = Piece(kind: .queen, color: .white)
+        board[Square(file: .e, rank: 8)] = Piece(kind: .king, color: .black)
+        let state = GameState(board: board, sideToMove: .white)
+
+        let moves = LegalMoveGenerator.legalMoves(for: Square(file: .e, rank: 7), in: state)
+
+        XCTAssertFalse(moves.contains(Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 8))))
+    }
+
     func testMoveThatExposesOwnKingIsIllegal() {
         var board = Board()
         board[Square(file: .e, rank: 1)] = Piece(kind: .king, color: .white)

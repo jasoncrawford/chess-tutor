@@ -38,26 +38,26 @@ enum LegalMoveGenerator {
         return moves
     }
 
-    private static func pseudoLegalMoves(for square: Square, piece: Piece, board: Board) -> [Move] {
+    private static func pseudoLegalMoves(for square: Square, piece: Piece, board: Board, includesKingTargets: Bool = false) -> [Move] {
         switch piece.kind {
         case .pawn:
-            return pawnMoves(from: square, piece: piece, board: board)
+            return pawnMoves(from: square, piece: piece, board: board, includesKingTargets: includesKingTargets)
         case .knight:
             return jumpMoves(from: square, piece: piece, board: board, deltas: [
                 (1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1), (-2, 1), (-1, 2)
-            ])
+            ], includesKingTargets: includesKingTargets)
         case .bishop:
-            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 1), (1, -1), (-1, 1), (-1, -1)])
+            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 1), (1, -1), (-1, 1), (-1, -1)], includesKingTargets: includesKingTargets)
         case .rook:
-            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 0), (-1, 0), (0, 1), (0, -1)])
+            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 0), (-1, 0), (0, 1), (0, -1)], includesKingTargets: includesKingTargets)
         case .queen:
-            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)])
+            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)], includesKingTargets: includesKingTargets)
         case .king:
-            return jumpMoves(from: square, piece: piece, board: board, deltas: [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)])
+            return jumpMoves(from: square, piece: piece, board: board, deltas: [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)], includesKingTargets: includesKingTargets)
         }
     }
 
-    private static func pawnMoves(from square: Square, piece: Piece, board: Board) -> [Move] {
+    private static func pawnMoves(from square: Square, piece: Piece, board: Board, includesKingTargets: Bool = false) -> [Move] {
         let direction = piece.color == .white ? 1 : -1
         let startRank = piece.color == .white ? 2 : 7
         var moves: [Move] = []
@@ -74,7 +74,7 @@ enum LegalMoveGenerator {
         for fileDelta in [-1, 1] {
             guard let capture = square.offset(fileDelta: fileDelta, rankDelta: direction),
                   let target = board[capture],
-                  target.color != piece.color else { continue }
+                  canCapture(target, with: piece, includesKingTargets: includesKingTargets) else { continue }
             appendPawnMove(from: square, to: capture, piece: piece, moves: &moves)
         }
 
@@ -151,21 +151,21 @@ enum LegalMoveGenerator {
             && !isSquareAttacked(Square(file: .c, rank: rank), by: piece.color.opposite, board: state.board)
     }
 
-    private static func jumpMoves(from square: Square, piece: Piece, board: Board, deltas: [(Int, Int)]) -> [Move] {
+    private static func jumpMoves(from square: Square, piece: Piece, board: Board, deltas: [(Int, Int)], includesKingTargets: Bool = false) -> [Move] {
         deltas.compactMap { fileDelta, rankDelta in
             guard let target = square.offset(fileDelta: fileDelta, rankDelta: rankDelta) else { return nil }
-            if let occupant = board[target], occupant.color == piece.color { return nil }
+            if let occupant = board[target], !canCapture(occupant, with: piece, includesKingTargets: includesKingTargets) { return nil }
             return Move(from: square, to: target)
         }
     }
 
-    private static func slidingMoves(from square: Square, piece: Piece, board: Board, directions: [(Int, Int)]) -> [Move] {
+    private static func slidingMoves(from square: Square, piece: Piece, board: Board, directions: [(Int, Int)], includesKingTargets: Bool = false) -> [Move] {
         var moves: [Move] = []
         for direction in directions {
             var current = square
             while let next = current.offset(fileDelta: direction.0, rankDelta: direction.1) {
                 if let occupant = board[next] {
-                    if occupant.color != piece.color {
+                    if canCapture(occupant, with: piece, includesKingTargets: includesKingTargets) {
                         moves.append(Move(from: square, to: next))
                     }
                     break
@@ -175,6 +175,10 @@ enum LegalMoveGenerator {
             }
         }
         return moves
+    }
+
+    private static func canCapture(_ target: Piece, with piece: Piece, includesKingTargets: Bool = false) -> Bool {
+        target.color != piece.color && (includesKingTargets || target.kind != .king)
     }
 
     private static func isSquareAttacked(_ square: Square, by color: PieceColor, board: Board) -> Bool {
@@ -189,6 +193,6 @@ enum LegalMoveGenerator {
             return square.offset(fileDelta: -1, rankDelta: direction) == target
                 || square.offset(fileDelta: 1, rankDelta: direction) == target
         }
-        return pseudoLegalMoves(for: square, piece: piece, board: board).contains { $0.to == target }
+        return pseudoLegalMoves(for: square, piece: piece, board: board, includesKingTargets: true).contains { $0.to == target }
     }
 }
