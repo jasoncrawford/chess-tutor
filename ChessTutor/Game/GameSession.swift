@@ -58,6 +58,14 @@ final class GameSession {
         return .moved
     }
 
+    func promote(from: Square, to: Square, to kind: Piece.Kind) {
+        let move = Move(from: from, to: to, special: .promotion(kind))
+        state.apply(move)
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = nil
+    }
+
     func newGame() {
         state = .startingPosition()
         selectedSquare = nil

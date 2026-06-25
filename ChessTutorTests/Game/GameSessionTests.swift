@@ -47,6 +47,40 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.message)
     }
 
+    func testPromotionMoveRequestsPromotionChoice() {
+        var board = Board()
+        board[Square(file: .e, rank: 7)] = Piece(kind: .pawn, color: .white)
+        board[Square(file: .e, rank: 1)] = Piece(kind: .king, color: .white)
+        board[Square(file: .a, rank: 8)] = Piece(kind: .king, color: .black)
+        let session = GameSession(state: GameState(board: board, sideToMove: .white))
+
+        session.select(Square(file: .e, rank: 7))
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 8))
+
+        XCTAssertEqual(result, .needsPromotion(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 8)))
+    }
+
+    func testPromoteAppliesPromotionChoiceAndClearsSelection() {
+        let promotionFrom = Square(file: .e, rank: 7)
+        let promotionTo = Square(file: .e, rank: 8)
+        var board = Board()
+        board[promotionFrom] = Piece(kind: .pawn, color: .white)
+        board[Square(file: .e, rank: 1)] = Piece(kind: .king, color: .white)
+        board[Square(file: .a, rank: 8)] = Piece(kind: .king, color: .black)
+        let session = GameSession(state: GameState(board: board, sideToMove: .white))
+
+        session.select(promotionFrom)
+        session.message = "Choose a promotion piece."
+        session.promote(from: promotionFrom, to: promotionTo, to: .knight)
+
+        XCTAssertEqual(session.state.board[promotionTo], Piece(kind: .knight, color: .white))
+        XCTAssertNil(session.state.board[promotionFrom])
+        XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertTrue(session.legalMovesForSelection.isEmpty)
+        XCTAssertNil(session.message)
+    }
+
     func testLegalMoveAdvancesTurn() {
         let session = GameSession()
 
