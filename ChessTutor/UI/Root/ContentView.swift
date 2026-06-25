@@ -6,7 +6,11 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             HStack(alignment: .top, spacing: 20) {
-                ChessBoardView(session: session)
+                ChessBoardView(session: session) { result in
+                    if case .needsPromotion = result {
+                        session.message = "Choose a promotion piece."
+                    }
+                }
                     .frame(maxWidth: 720)
                 VStack(alignment: .leading, spacing: 16) {
                     Text("\(session.state.sideToMove.rawValue.capitalized) to move")
