@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChessBoardView: View {
     @Bindable var session: GameSession
+    var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
 
     var body: some View {
         GeometryReader { proxy in
@@ -60,10 +61,14 @@ struct ChessBoardView: View {
     private func handleTap(_ square: Square) {
         if session.selectedSquare == nil {
             session.select(square)
-        } else if session.legalDestinations.contains(square) {
-            _ = session.moveSelectedPiece(to: square)
         } else {
-            session.select(square)
+            let result = session.moveSelectedPiece(to: square)
+            onMoveAttempt(result)
+
+            if case .illegal = result,
+               session.state.board[square]?.color == session.state.sideToMove {
+                session.select(square)
+            }
         }
     }
 }

@@ -56,4 +56,19 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(result, .moved)
         XCTAssertEqual(session.state.sideToMove, .black)
     }
+
+    func testHiddenLegalMoveHintsDoNotBlockLegalMoveExecution() {
+        let session = GameSession()
+        session.assistSettings.showLegalMovesOnSelection = false
+
+        session.select(Square(file: .e, rank: 2))
+
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 4)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 2)])
+    }
 }
