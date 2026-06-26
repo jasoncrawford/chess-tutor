@@ -15,11 +15,29 @@ final class GameSession {
         LegalMoveHighlighter.destinations(for: legalMovesForSelection)
     }
 
+    var statusText: String {
+        switch state.result {
+        case .ongoing:
+            "\(state.sideToMove.rawValue.capitalized) to move"
+        case .checkmate(let winner):
+            "Checkmate. \(winner.rawValue.capitalized) wins."
+        case .stalemate:
+            "Stalemate."
+        }
+    }
+
     init(state: GameState = .startingPosition()) {
         self.state = state
     }
 
     func select(_ square: Square) {
+        guard state.result == .ongoing else {
+            selectedSquare = nil
+            legalMovesForSelection = []
+            message = statusText
+            return
+        }
+
         guard state.board[square]?.color == state.sideToMove else {
             selectedSquare = nil
             legalMovesForSelection = []
@@ -35,6 +53,13 @@ final class GameSession {
     }
 
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
+        guard state.result == .ongoing else {
+            selectedSquare = nil
+            legalMovesForSelection = []
+            message = statusText
+            return .illegal(statusText)
+        }
+
         guard let selectedSquare else {
             message = "Choose a piece first."
             return .illegal("Choose a piece first.")
@@ -54,7 +79,7 @@ final class GameSession {
         state.apply(move)
         self.selectedSquare = nil
         legalMovesForSelection = []
-        message = nil
+        message = state.result == .ongoing ? nil : statusText
         return .moved
     }
 
@@ -63,7 +88,7 @@ final class GameSession {
         state.apply(move)
         selectedSquare = nil
         legalMovesForSelection = []
-        message = nil
+        message = state.result == .ongoing ? nil : statusText
     }
 
     func newGame() {
