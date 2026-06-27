@@ -65,4 +65,18 @@ final class MoveHistoryFormatterTests: XCTestCase {
 
         XCTAssertEqual(rows.last, MoveHistoryRow(number: 4, whiteMove: "O-O", blackMove: nil))
     }
+
+    func testFormatsEnPassantAsPawnCapture() {
+        let moves = [
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+            Move(from: Square(file: .a, rank: 7), to: Square(file: .a, rank: 6)),
+            Move(from: Square(file: .e, rank: 4), to: Square(file: .e, rank: 5)),
+            Move(from: Square(file: .d, rank: 7), to: Square(file: .d, rank: 5)),
+            Move(from: Square(file: .e, rank: 5), to: Square(file: .d, rank: 6), special: .enPassant),
+        ]
+
+        let rows = MoveHistoryFormatter.rows(for: moves)
+
+        XCTAssertEqual(rows.last, MoveHistoryRow(number: 3, whiteMove: "exd6", blackMove: nil))
+    }
 }
