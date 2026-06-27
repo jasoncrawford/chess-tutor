@@ -37,7 +37,10 @@ final class GameSession {
     }
 
     var canFinishTurn: Bool {
-        tentativeMove != nil
+        guard let tentativeMove else {
+            return false
+        }
+        return isLegal(tentativeMove)
     }
 
     var hasGameInProgress: Bool {
@@ -83,6 +86,9 @@ final class GameSession {
         guard committedState.result == .ongoing else {
             return nil
         }
+        if let checkRuleViolationMessage {
+            return checkRuleViolationMessage
+        }
         if let message {
             return message
         }
@@ -117,7 +123,7 @@ final class GameSession {
 
         selectedSquare = square
         legalMovesForSelection = assistSettings.showLegalMovesOnSelection
-            ? legalMoves(forSelectionAt: square)
+            ? allowedMoves(forSelectionAt: square)
             : []
         message = nil
     }
@@ -143,8 +149,8 @@ final class GameSession {
             return .moved
         }
 
-        let legalMoves = legalMoves(forSelectionAt: selectedSquare)
-        guard let move = legalMoves.first(where: { $0.to == destination }) else {
+        let allowedMoves = allowedMoves(forSelectionAt: selectedSquare)
+        guard let move = allowedMoves.first(where: { $0.to == destination }) else {
             message = "That piece can't move there."
             return .illegal("That piece can't move there.")
         }
@@ -172,6 +178,10 @@ final class GameSession {
     func finishTurn() {
         guard let tentativeMove else {
             message = "Make a move first."
+            return
+        }
+        guard isLegal(tentativeMove) else {
+            message = checkRuleViolationMessage
             return
         }
 
@@ -206,6 +216,28 @@ final class GameSession {
             return LegalMoveGenerator.legalMoves(for: tentativeMove.from, in: committedState)
         }
         return LegalMoveGenerator.legalMoves(for: square, in: committedState)
+    }
+
+    private func allowedMoves(forSelectionAt square: Square) -> [Move] {
+        if let tentativeMove, square == tentativeMove.to {
+            return LegalMoveGenerator.allowedMoves(for: tentativeMove.from, in: committedState)
+        }
+        return LegalMoveGenerator.allowedMoves(for: square, in: committedState)
+    }
+
+    private func isLegal(_ move: Move) -> Bool {
+        legalMoves(forSelectionAt: move.to).contains(move)
+    }
+
+    private var checkRuleViolationMessage: String? {
+        guard let tentativeMove, !isLegal(tentativeMove) else {
+            return nil
+        }
+
+        if LegalMoveGenerator.isKingInCheck(committedState.sideToMove, in: committedState.board) {
+            return "Your king would still be in check. Move to defend your king."
+        }
+        return "That move would put your king in check."
     }
 
     private func capturedPiece(for move: Move, in state: GameState) -> (square: Square, piece: Piece)? {

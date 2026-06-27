@@ -271,6 +271,83 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.guidanceText, "Check! You must move to defend.")
     }
 
+    func testSelectionGuidanceShowsAllowedMovesEvenWhenOnlySomeResolveCheck() {
+        let whiteKing = Square(file: .e, rank: 1)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whiteKing: Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(whiteKing)
+
+        XCTAssertTrue(session.legalDestinations.contains(Square(file: .d, rank: 1)))
+        XCTAssertTrue(session.legalDestinations.contains(Square(file: .e, rank: 2)))
+    }
+
+    func testCheckRuleViolationCanBeStagedButCannotFinishTurn() {
+        let whiteKing = Square(file: .e, rank: 1)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whiteKing: Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(whiteKing)
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 2))
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 2)], Piece(kind: .king, color: .white))
+        XCTAssertNil(session.state.board[whiteKing])
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertEqual(session.guidanceText, "Your king would still be in check. Move to defend your king.")
+
+        session.finishTurn()
+
+        XCTAssertEqual(session.state.sideToMove, .white)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertEqual(session.guidanceText, "Your king would still be in check. Move to defend your king.")
+    }
+
+    func testMoveThatExposesKingCanBeStagedButCannotFinishTurn() {
+        let whiteKing = Square(file: .e, rank: 1)
+        let whiteRook = Square(file: .e, rank: 2)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whiteKing: Piece(kind: .king, color: .white),
+                        whiteRook: Piece(kind: .rook, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(whiteRook)
+        let result = session.moveSelectedPiece(to: Square(file: .a, rank: 2))
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertEqual(session.guidanceText, "That move would put your king in check.")
+    }
+
     func testHiddenLegalMoveHintsDoNotBlockLegalMoveExecution() {
         let session = GameSession()
         session.assistSettings.showLegalMovesOnSelection = false

@@ -1,9 +1,16 @@
 enum LegalMoveGenerator {
-    static func legalMoves(for square: Square, in state: GameState) -> [Move] {
+    static func allowedMoves(for square: Square, in state: GameState) -> [Move] {
         guard let piece = state.board[square], piece.color == state.sideToMove else {
             return []
         }
         return pseudoLegalMoves(for: square, piece: piece, in: state)
+    }
+
+    static func legalMoves(for square: Square, in state: GameState) -> [Move] {
+        guard let piece = state.board[square], piece.color == state.sideToMove else {
+            return []
+        }
+        return allowedMoves(for: square, in: state)
             .filter { move in
                 let nextState = state.applyingUnchecked(move)
                 return !isKingInCheck(piece.color, in: nextState.board)
