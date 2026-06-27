@@ -71,6 +71,14 @@ final class GameSession {
         return destinations
     }
 
+    var captureIndicatorSquares: Set<Square> {
+        Set(
+            legalMovesForSelection.compactMap { move in
+                capturedPiece(for: move, in: committedState)?.square
+            }
+        )
+    }
+
     var statusText: String {
         switch committedState.result {
         case .ongoing:

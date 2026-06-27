@@ -290,6 +290,55 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.capturedPieces.map(\.state), [.committed])
     }
 
+    func testEnPassantSelectionMarksCapturedPawnSeparatelyFromDestination() {
+        let whitePawn = Square(file: .e, rank: 5)
+        let blackPawn = Square(file: .d, rank: 5)
+        let enPassantDestination = Square(file: .d, rank: 6)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whitePawn: Piece(kind: .pawn, color: .white),
+                        blackPawn: Piece(kind: .pawn, color: .black),
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white,
+                enPassantTarget: enPassantDestination
+            )
+        )
+
+        session.select(whitePawn)
+
+        XCTAssertTrue(session.legalDestinations.contains(enPassantDestination))
+        XCTAssertFalse(session.captureIndicatorSquares.contains(enPassantDestination))
+        XCTAssertEqual(session.captureIndicatorSquares, [blackPawn])
+    }
+
+    func testNormalCaptureSelectionMarksDestinationAsCapturedPiece() {
+        let whitePawn = Square(file: .e, rank: 4)
+        let blackPawn = Square(file: .d, rank: 5)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whitePawn: Piece(kind: .pawn, color: .white),
+                        blackPawn: Piece(kind: .pawn, color: .black),
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(whitePawn)
+
+        XCTAssertTrue(session.legalDestinations.contains(blackPawn))
+        XCTAssertEqual(session.captureIndicatorSquares, [blackPawn])
+    }
+
     func testTentativeEnPassantCanBePutBackBeforeDone() {
         let whitePawn = Square(file: .e, rank: 5)
         let blackPawn = Square(file: .d, rank: 5)
