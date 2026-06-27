@@ -2,7 +2,8 @@ import Observation
 
 @Observable
 final class GameSession {
-    var state: GameState
+    private var committedState: GameState
+    private var tentativeMove: Move?
     var selectedSquare: Square?
     var legalMovesForSelection: [Move] = []
     var assistSettings = BeginnerAssistSettings()
@@ -11,14 +12,34 @@ final class GameSession {
     var boardOrientation: PieceColor = .white
     var message: String?
 
+    var state: GameState {
+        guard let tentativeMove else {
+            return committedState
+        }
+
+        var displayState = committedState.applyingUnchecked(tentativeMove)
+        displayState.sideToMove = committedState.sideToMove
+        displayState.moveHistory = committedState.moveHistory
+        displayState.result = committedState.result
+        return displayState
+    }
+
+    var canFinishTurn: Bool {
+        tentativeMove != nil
+    }
+
     var legalDestinations: Set<Square> {
-        LegalMoveHighlighter.destinations(for: legalMovesForSelection)
+        var destinations = LegalMoveHighlighter.destinations(for: legalMovesForSelection)
+        if let tentativeMove, selectedSquare == tentativeMove.to {
+            destinations.insert(tentativeMove.from)
+        }
+        return destinations
     }
 
     var statusText: String {
-        switch state.result {
+        switch committedState.result {
         case .ongoing:
-            return "\(state.sideToMove.rawValue.capitalized)'s turn"
+            return "\(committedState.sideToMove.rawValue.capitalized)'s turn"
         case .checkmate(let winner):
             return "Checkmate. \(winner.rawValue.capitalized) wins."
         case .stalemate:
@@ -27,46 +48,53 @@ final class GameSession {
     }
 
     var guidanceText: String? {
-        guard state.result == .ongoing else {
+        guard committedState.result == .ongoing else {
             return nil
         }
         if let message {
             return message
         }
-        if LegalMoveGenerator.isKingInCheck(state.sideToMove, in: state.board) {
+        if tentativeMove != nil {
+            return "Tap Done when you're ready."
+        }
+        if LegalMoveGenerator.isKingInCheck(committedState.sideToMove, in: committedState.board) {
             return "Check! You must move to defend."
         }
         return nil
     }
 
     init(state: GameState = .startingPosition()) {
-        self.state = state
+        self.committedState = state
     }
 
     func select(_ square: Square) {
-        guard state.result == .ongoing else {
+        guard committedState.result == .ongoing else {
             selectedSquare = nil
             legalMovesForSelection = []
             message = statusText
             return
         }
 
-        guard state.board[square]?.color == state.sideToMove else {
+        if let tentativeMove, square != tentativeMove.to {
+            self.tentativeMove = nil
+        }
+
+        guard state.board[square]?.color == committedState.sideToMove else {
             selectedSquare = nil
             legalMovesForSelection = []
-            message = "Choose a \(state.sideToMove.rawValue) piece."
+            message = "Choose a \(committedState.sideToMove.rawValue) piece."
             return
         }
 
         selectedSquare = square
         legalMovesForSelection = assistSettings.showLegalMovesOnSelection
-            ? LegalMoveGenerator.legalMoves(for: square, in: state)
+            ? legalMoves(forSelectionAt: square)
             : []
         message = nil
     }
 
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
-        guard state.result == .ongoing else {
+        guard committedState.result == .ongoing else {
             selectedSquare = nil
             legalMovesForSelection = []
             message = statusText
@@ -78,7 +106,15 @@ final class GameSession {
             return .illegal("Choose a piece first.")
         }
 
-        let legalMoves = LegalMoveGenerator.legalMoves(for: selectedSquare, in: state)
+        if let tentativeMove, selectedSquare == tentativeMove.to, destination == tentativeMove.from {
+            self.tentativeMove = nil
+            self.selectedSquare = nil
+            legalMovesForSelection = []
+            message = nil
+            return .moved
+        }
+
+        let legalMoves = legalMoves(forSelectionAt: selectedSquare)
         guard let move = legalMoves.first(where: { $0.to == destination }) else {
             message = "That piece can't move there."
             return .illegal("That piece can't move there.")
@@ -86,26 +122,40 @@ final class GameSession {
 
         if case .promotion = move.special {
             message = nil
-            return .needsPromotion(from: selectedSquare, to: destination)
+            return .needsPromotion(from: move.from, to: destination)
         }
 
-        state.apply(move)
+        tentativeMove = move
         self.selectedSquare = nil
         legalMovesForSelection = []
-        message = state.result == .ongoing ? nil : statusText
+        message = nil
         return .moved
     }
 
     func promote(from: Square, to: Square, to kind: Piece.Kind) {
         let move = Move(from: from, to: to, special: .promotion(kind))
-        state.apply(move)
+        tentativeMove = move
         selectedSquare = nil
         legalMovesForSelection = []
-        message = state.result == .ongoing ? nil : statusText
+        message = nil
+    }
+
+    func finishTurn() {
+        guard let tentativeMove else {
+            message = "Make a move first."
+            return
+        }
+
+        committedState.apply(tentativeMove)
+        self.tentativeMove = nil
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = committedState.result == .ongoing ? nil : statusText
     }
 
     func newGame() {
-        state = .startingPosition()
+        committedState = .startingPosition()
+        tentativeMove = nil
         selectedSquare = nil
         legalMovesForSelection = []
         message = nil
@@ -113,5 +163,12 @@ final class GameSession {
 
     func flipBoard() {
         boardOrientation = boardOrientation.opposite
+    }
+
+    private func legalMoves(forSelectionAt square: Square) -> [Move] {
+        if let tentativeMove, square == tentativeMove.to {
+            return LegalMoveGenerator.legalMoves(for: tentativeMove.from, in: committedState)
+        }
+        return LegalMoveGenerator.legalMoves(for: square, in: committedState)
     }
 }

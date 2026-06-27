@@ -60,7 +60,7 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(result, .needsPromotion(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 8)))
     }
 
-    func testPromoteAppliesPromotionChoiceAndClearsSelection() {
+    func testPromoteStagesPromotionChoiceAndClearsSelection() {
         let promotionFrom = Square(file: .e, rank: 7)
         let promotionTo = Square(file: .e, rank: 8)
         var board = Board()
@@ -75,21 +75,48 @@ final class GameSessionTests: XCTestCase {
 
         XCTAssertEqual(session.state.board[promotionTo], Piece(kind: .knight, color: .white))
         XCTAssertNil(session.state.board[promotionFrom])
-        XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertEqual(session.state.sideToMove, .white)
+        XCTAssertTrue(session.canFinishTurn)
         XCTAssertNil(session.selectedSquare)
         XCTAssertTrue(session.legalMovesForSelection.isEmpty)
         XCTAssertNil(session.message)
     }
 
-    func testLegalMoveAdvancesTurn() {
+    func testLegalMoveWaitsForDoneBeforeAdvancingTurn() {
         let session = GameSession()
 
         session.select(Square(file: .e, rank: 2))
         let result = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
 
         XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 4)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 2)])
+        XCTAssertEqual(session.state.sideToMove, .white)
+        XCTAssertEqual(session.statusText, "White's turn")
+        XCTAssertEqual(session.guidanceText, "Tap Done when you're ready.")
+        XCTAssertTrue(session.canFinishTurn)
+
+        session.finishTurn()
+
         XCTAssertEqual(session.state.sideToMove, .black)
         XCTAssertEqual(session.statusText, "Black's turn")
+        XCTAssertFalse(session.canFinishTurn)
+    }
+
+    func testTentativeMoveCanBePutBackBeforeDone() {
+        let session = GameSession()
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        session.select(Square(file: .e, rank: 4))
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 2))
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 2)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+        XCTAssertEqual(session.state.sideToMove, .white)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertNil(session.guidanceText)
     }
 
     func testCheckKeepsTurnStatusAndShowsGuidance() {
@@ -138,6 +165,11 @@ final class GameSessionTests: XCTestCase {
         let result = session.moveSelectedPiece(to: Square(file: .h, rank: 2))
 
         XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.result, .ongoing)
+        XCTAssertTrue(session.canFinishTurn)
+
+        session.finishTurn()
+
         XCTAssertEqual(session.state.result, .checkmate(winner: .black))
         XCTAssertEqual(session.message, "Checkmate. Black wins.")
 

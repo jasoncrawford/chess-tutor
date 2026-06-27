@@ -5,6 +5,7 @@ struct ChessBoardView: View {
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
+    @State private var settlingPieceID: UUID?
 
     var body: some View {
         GeometryReader { proxy in
@@ -100,7 +101,7 @@ struct ChessBoardView: View {
     private func piecesOverlay(side: CGFloat, origin: CGPoint) -> some View {
         ZStack {
             ForEach(visualPieces) { visualPiece in
-                if dragState?.from != visualPiece.square {
+                if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
                     PieceIconView(piece: visualPiece.piece)
                         .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
                         .position(center(of: visualPiece.square, side: side, origin: origin))
@@ -148,7 +149,10 @@ struct ChessBoardView: View {
                 if dragState == nil {
                     session.select(from)
                 }
-                dragState = DragState(from: from, piece: piece, location: value.location)
+                let visualPieceID = dragState?.visualPieceID ?? visualPieces.first {
+                    $0.square == from && $0.piece == piece
+                }?.id
+                dragState = DragState(from: from, piece: piece, visualPieceID: visualPieceID, location: value.location)
             }
             .onEnded { value in
                 guard let dragState else {
@@ -158,24 +162,32 @@ struct ChessBoardView: View {
                     return
                 }
 
-                defer {
+                let distance = hypot(value.translation.width, value.translation.height)
+                guard distance > 8 else {
                     withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
                         self.dragState = nil
                     }
-                }
-
-                let distance = hypot(value.translation.width, value.translation.height)
-                guard distance > 8 else {
                     return
                 }
 
                 guard let destination = square(at: value.location, side: side, origin: origin) else {
                     session.select(dragState.from)
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                        self.dragState = nil
+                    }
                     return
                 }
 
                 let result = session.moveSelectedPiece(to: destination)
                 onMoveAttempt(result)
+                switch result {
+                case .moved, .needsPromotion:
+                    settleDraggedPiece(dragState, to: destination, side: side, origin: origin)
+                case .illegal:
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                        self.dragState = nil
+                    }
+                }
             }
     }
 
@@ -220,6 +232,17 @@ struct ChessBoardView: View {
             }
         } else {
             update()
+        }
+    }
+
+    private func settleDraggedPiece(_ dragState: DragState, to destination: Square, side: CGFloat, origin: CGPoint) {
+        settlingPieceID = dragState.visualPieceID
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+            self.dragState?.location = center(of: destination, side: side, origin: origin)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            self.dragState = nil
+            self.settlingPieceID = nil
         }
     }
 
@@ -279,6 +302,7 @@ struct ChessBoardView: View {
 private struct DragState {
     let from: Square
     let piece: Piece
+    let visualPieceID: UUID?
     var location: CGPoint
 }
 

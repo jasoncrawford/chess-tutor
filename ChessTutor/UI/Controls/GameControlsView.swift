@@ -6,19 +6,27 @@ struct GameControlsView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button {
+                session.finishTurn()
+            } label: {
+                Label("Done", systemImage: "checkmark.circle.fill")
+            }
+            .disabled(!session.canFinishTurn)
+
+            Button {
                 session.newGame()
             } label: {
-                Label("New game", systemImage: "arrow.counterclockwise")
+                Image(systemName: "arrow.counterclockwise")
+                    .accessibilityLabel("New game")
             }
             Button {
                 session.flipBoard()
             } label: {
-                Label("Flip board", systemImage: "arrow.triangle.2.circlepath")
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .accessibilityLabel("Flip board")
             }
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.regular)
-        .labelStyle(.iconOnly)
         .tint(AppTheme.boardFrame)
     }
 }
