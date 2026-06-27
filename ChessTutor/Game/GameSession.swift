@@ -1,9 +1,22 @@
 import Observation
 
+struct CapturedPiece: Equatable, Identifiable, Sendable {
+    enum State: Equatable, Sendable {
+        case tentative
+        case committed
+    }
+
+    let id: String
+    let piece: Piece
+    let capturedAt: Square
+    let state: State
+}
+
 @Observable
 final class GameSession {
     private var committedState: GameState
     private var tentativeMove: Move?
+    private var committedCapturedPieces: [CapturedPiece] = []
     var selectedSquare: Square?
     var legalMovesForSelection: [Move] = []
     var assistSettings = BeginnerAssistSettings()
@@ -30,6 +43,22 @@ final class GameSession {
 
     var hasGameInProgress: Bool {
         tentativeMove != nil || !committedState.moveHistory.isEmpty
+    }
+
+    var capturedPieces: [CapturedPiece] {
+        guard let tentativeMove,
+              let capturedPiece = capturedPiece(for: tentativeMove, in: committedState) else {
+            return committedCapturedPieces
+        }
+
+        return committedCapturedPieces + [
+            CapturedPiece(
+                id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
+                piece: capturedPiece.piece,
+                capturedAt: capturedPiece.square,
+                state: .tentative
+            )
+        ]
     }
 
     var legalDestinations: Set<Square> {
@@ -150,6 +179,16 @@ final class GameSession {
             return
         }
 
+        if let capturedPiece = capturedPiece(for: tentativeMove, in: committedState) {
+            committedCapturedPieces.append(
+                CapturedPiece(
+                    id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
+                    piece: capturedPiece.piece,
+                    capturedAt: capturedPiece.square,
+                    state: .committed
+                )
+            )
+        }
         committedState.apply(tentativeMove)
         self.tentativeMove = nil
         selectedSquare = nil
@@ -160,6 +199,7 @@ final class GameSession {
     func newGame() {
         committedState = .startingPosition()
         tentativeMove = nil
+        committedCapturedPieces = []
         selectedSquare = nil
         legalMovesForSelection = []
         message = nil
@@ -174,5 +214,22 @@ final class GameSession {
             return LegalMoveGenerator.legalMoves(for: tentativeMove.from, in: committedState)
         }
         return LegalMoveGenerator.legalMoves(for: square, in: committedState)
+    }
+
+    private func capturedPiece(for move: Move, in state: GameState) -> (square: Square, piece: Piece)? {
+        if case .enPassant = move.special {
+            let capturedSquare = Square(file: move.to.file, rank: move.from.rank)
+            return state.board[capturedSquare].map { (capturedSquare, $0) }
+        }
+
+        return state.board[move.to].map { (move.to, $0) }
+    }
+
+    private func capturedID(for piece: Piece, at square: Square) -> String {
+        pieceAnimationID(for: piece, at: square)
+    }
+
+    func pieceAnimationID(for piece: Piece, at square: Square) -> String {
+        "\(committedState.moveHistory.count)-\(square.file.rawValue)\(square.rank)-\(piece.color.rawValue)-\(piece.kind.rawValue)"
     }
 }

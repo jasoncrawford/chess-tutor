@@ -38,7 +38,7 @@ struct GameControlsView: View {
                     }
                     return
                 }
-                withoutAnimation {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                     session.finishTurn()
                 }
             } label: {

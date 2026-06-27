@@ -138,6 +138,121 @@ final class GameSessionTests: XCTestCase {
         XCTAssertFalse(session.hasGameInProgress)
     }
 
+    func testTentativeCaptureMovesCapturedPieceToTrayUntilPutBack() {
+        let whitePawn = Square(file: .e, rank: 4)
+        let blackPawn = Square(file: .d, rank: 5)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whitePawn: Piece(kind: .pawn, color: .white),
+                        blackPawn: Piece(kind: .pawn, color: .black),
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        XCTAssertTrue(session.capturedPieces.isEmpty)
+
+        session.select(whitePawn)
+        _ = session.moveSelectedPiece(to: blackPawn)
+
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.tentative])
+
+        session.select(blackPawn)
+        _ = session.moveSelectedPiece(to: whitePawn)
+
+        XCTAssertTrue(session.capturedPieces.isEmpty)
+    }
+
+    func testCaptureBecomesCommittedWhenTurnFinishesAndClearsOnNewGame() {
+        let whitePawn = Square(file: .e, rank: 4)
+        let blackPawn = Square(file: .d, rank: 5)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whitePawn: Piece(kind: .pawn, color: .white),
+                        blackPawn: Piece(kind: .pawn, color: .black),
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(whitePawn)
+        _ = session.moveSelectedPiece(to: blackPawn)
+        session.finishTurn()
+
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.committed])
+
+        session.newGame()
+
+        XCTAssertTrue(session.capturedPieces.isEmpty)
+    }
+
+    func testCapturedPieceAnimationIDDiffersFromCapturingPieceOnSameSquare() {
+        let whitePawn = Square(file: .e, rank: 4)
+        let blackPawn = Square(file: .d, rank: 5)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        whitePawn: Piece(kind: .pawn, color: .white),
+                        blackPawn: Piece(kind: .pawn, color: .black),
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.select(whitePawn)
+        _ = session.moveSelectedPiece(to: blackPawn)
+
+        guard let capturedPieceID = session.capturedPieces.first?.id else {
+            XCTFail("Expected the captured pawn to appear in the captured-piece tray.")
+            return
+        }
+        let capturingPieceID = session.pieceAnimationID(for: Piece(kind: .pawn, color: .white), at: blackPawn)
+
+        XCTAssertNotEqual(capturedPieceID, capturingPieceID)
+    }
+
+    func testPawnCaptureThroughNormalOpeningKeepsCapturedPieceInTrayAfterDone() {
+        let session = GameSession()
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        session.finishTurn()
+        session.select(Square(file: .d, rank: 7))
+        _ = session.moveSelectedPiece(to: Square(file: .d, rank: 5))
+        session.finishTurn()
+
+        session.select(Square(file: .e, rank: 4))
+        _ = session.moveSelectedPiece(to: Square(file: .d, rank: 5))
+
+        XCTAssertEqual(session.state.board[Square(file: .d, rank: 5)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.tentative])
+
+        session.finishTurn()
+
+        XCTAssertEqual(session.state.board[Square(file: .d, rank: 5)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.committed])
+    }
+
     func testCheckKeepsTurnStatusAndShowsGuidance() {
         let session = GameSession(
             state: GameState(

@@ -3,12 +3,13 @@ import SwiftUI
 struct ContentView: View {
     @State private var session = GameSession()
     @State private var pendingPromotion: PendingPromotion?
+    @Namespace private var captureNamespace
 
     var body: some View {
         ZStack {
             AppTheme.table.ignoresSafeArea()
             HStack(alignment: .top, spacing: 28) {
-                ChessBoardView(session: session) { result in
+                ChessBoardView(session: session, captureNamespace: captureNamespace) { result in
                     if case let .needsPromotion(from, to) = result {
                         pendingPromotion = PendingPromotion(from: from, to: to)
                     }
@@ -60,17 +61,51 @@ struct ContentView: View {
                     .fill(session.guidanceText == nil ? Color.clear : Color.white.opacity(0.58))
             )
 
+            captureTrays
+
             GameControlsView(session: session)
         }
         .frame(maxWidth: .infinity, minHeight: 240, alignment: .topLeading)
         .padding(20)
-        .transaction { transaction in
-            transaction.animation = nil
-        }
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(AppTheme.panel)
                 .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
+        )
+    }
+
+    private var captureTrays: some View {
+        VStack(spacing: 6) {
+            captureTray(for: .black)
+            captureTray(for: .white)
+        }
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+        .padding(.vertical, 2)
+    }
+
+    private func captureTray(for color: PieceColor) -> some View {
+        let pieces = session.capturedPieces.filter { $0.piece.color == color }
+
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.fixed(28), spacing: 4), count: 6),
+            alignment: .leading,
+            spacing: 4
+        ) {
+            ForEach(pieces) { capturedPiece in
+                PieceIconView(piece: capturedPiece.piece)
+                    .matchedGeometryEffect(id: capturedPiece.id, in: captureNamespace)
+                    .frame(width: 28, height: 28)
+                    .opacity(capturedPiece.state == .tentative ? 0.62 : 1)
+                    .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: pieces)
+        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(AppTheme.ink.opacity(pieces.isEmpty ? 0.04 : 0.07))
         )
     }
 }

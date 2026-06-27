@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChessBoardView: View {
     @Bindable var session: GameSession
+    let captureNamespace: Namespace.ID
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
@@ -103,6 +104,10 @@ struct ChessBoardView: View {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
                     PieceIconView(piece: visualPiece.piece)
+                        .matchedGeometryEffect(
+                            id: session.pieceAnimationID(for: visualPiece.piece, at: visualPiece.square),
+                            in: captureNamespace
+                        )
                         .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
                         .position(center(of: visualPiece.square, side: side, origin: origin))
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
