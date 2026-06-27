@@ -4,6 +4,7 @@ struct ChessBoardView: View {
     @Bindable var session: GameSession
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
     @State private var dragState: DragState?
+    @State private var visualPieces: [VisualPiece] = []
 
     var body: some View {
         GeometryReader { proxy in
@@ -24,6 +25,8 @@ struct ChessBoardView: View {
                     .shadow(color: .black.opacity(0.20), radius: 18, y: 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                piecesOverlay(side: side, origin: origin)
+
                 if let dragState {
                     PieceIconView(piece: dragState.piece)
                         .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
@@ -33,6 +36,15 @@ struct ChessBoardView: View {
             }
             .contentShape(Rectangle())
             .gesture(dragGesture(side: side, origin: origin))
+            .onAppear {
+                syncVisualPieces(animated: false)
+            }
+            .onChange(of: session.state.board) {
+                syncVisualPieces(animated: true)
+            }
+            .onChange(of: session.boardOrientation) {
+                syncVisualPieces(animated: false)
+            }
         }
         .aspectRatio(1, contentMode: .fit)
     }
@@ -57,7 +69,6 @@ struct ChessBoardView: View {
     private func squareView(_ square: Square) -> some View {
         let isLight = (square.file.rawValue + square.rank).isMultiple(of: 2)
         let piece = session.state.board[square]
-        let isDraggingFromSquare = dragState?.from == square
         let isLegalDestination = session.legalDestinations.contains(square)
         let isCaptureDestination = isLegalDestination && piece?.color == session.state.sideToMove.opposite
 
@@ -79,15 +90,26 @@ struct ChessBoardView: View {
                 }
             }
             coordinateLabels(for: square)
-            if let piece, !isDraggingFromSquare {
-                PieceIconView(piece: piece)
-                    .padding(8)
-            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
             handleTap(square)
         }
+    }
+
+    private func piecesOverlay(side: CGFloat, origin: CGPoint) -> some View {
+        ZStack {
+            ForEach(visualPieces) { visualPiece in
+                if dragState?.from != visualPiece.square {
+                    PieceIconView(piece: visualPiece.piece)
+                        .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
+                        .position(center(of: visualPiece.square, side: side, origin: origin))
+                        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
     }
 
     private func coordinateLabels(for square: Square) -> some View {
@@ -172,6 +194,73 @@ struct ChessBoardView: View {
         return Square(file: visibleFiles[column], rank: visibleRanks[row])
     }
 
+    private func center(of square: Square, side: CGFloat, origin: CGPoint) -> CGPoint {
+        let visibleFiles = Array(session.boardOrientation == .white ? Square.File.allCases : Square.File.allCases.reversed())
+        let visibleRanks = session.boardOrientation == .white ? Array((1...8).reversed()) : Array(1...8)
+        guard let column = visibleFiles.firstIndex(of: square.file),
+              let row = visibleRanks.firstIndex(of: square.rank) else {
+            return origin
+        }
+
+        let cell = side / 8
+        return CGPoint(
+            x: origin.x + (CGFloat(column) + 0.5) * cell,
+            y: origin.y + (CGFloat(row) + 0.5) * cell
+        )
+    }
+
+    private func syncVisualPieces(animated: Bool) {
+        let update = {
+            visualPieces = nextVisualPieces()
+        }
+
+        if animated {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                update()
+            }
+        } else {
+            update()
+        }
+    }
+
+    private func nextVisualPieces() -> [VisualPiece] {
+        let boardPieces = session.state.board.pieces
+        guard !visualPieces.isEmpty else {
+            return boardPieces
+                .map { VisualPiece(square: $0.key, piece: $0.value) }
+                .sorted()
+        }
+
+        var stablePieces: [VisualPiece] = []
+        var movablePieces: [VisualPiece] = []
+        var newSquares: [(square: Square, piece: Piece)] = []
+
+        for visualPiece in visualPieces {
+            if boardPieces[visualPiece.square] == visualPiece.piece {
+                stablePieces.append(visualPiece)
+            } else {
+                movablePieces.append(visualPiece)
+            }
+        }
+
+        for (square, piece) in boardPieces where !stablePieces.contains(where: { $0.square == square }) {
+            newSquares.append((square, piece))
+        }
+
+        for newSquare in newSquares.sorted(by: { $0.square.sortKey < $1.square.sortKey }) {
+            if let index = movablePieces.bestMatchIndex(for: newSquare) {
+                var movedPiece = movablePieces.remove(at: index)
+                movedPiece.square = newSquare.square
+                movedPiece.piece = newSquare.piece
+                stablePieces.append(movedPiece)
+            } else {
+                stablePieces.append(VisualPiece(square: newSquare.square, piece: newSquare.piece))
+            }
+        }
+
+        return stablePieces.sorted()
+    }
+
     private func handleTap(_ square: Square) {
         if session.selectedSquare == nil {
             session.select(square)
@@ -191,4 +280,38 @@ private struct DragState {
     let from: Square
     let piece: Piece
     var location: CGPoint
+}
+
+private struct VisualPiece: Identifiable, Equatable, Comparable {
+    let id = UUID()
+    var square: Square
+    var piece: Piece
+
+    static func < (lhs: VisualPiece, rhs: VisualPiece) -> Bool {
+        lhs.square.sortKey < rhs.square.sortKey
+    }
+}
+
+private extension Array where Element == VisualPiece {
+    func bestMatchIndex(for target: (square: Square, piece: Piece)) -> Int? {
+        if let exact = indices
+            .filter({ self[$0].piece == target.piece })
+            .min(by: { self[$0].square.distance(to: target.square) < self[$1].square.distance(to: target.square) }) {
+            return exact
+        }
+
+        return indices
+            .filter { self[$0].piece.color == target.piece.color }
+            .min(by: { self[$0].square.distance(to: target.square) < self[$1].square.distance(to: target.square) })
+    }
+}
+
+private extension Square {
+    var sortKey: Int {
+        rank * 10 + file.rawValue
+    }
+
+    func distance(to other: Square) -> Int {
+        abs(file.rawValue - other.file.rawValue) + abs(rank - other.rank)
+    }
 }

@@ -18,12 +18,25 @@ final class GameSession {
     var statusText: String {
         switch state.result {
         case .ongoing:
-            "\(state.sideToMove.rawValue.capitalized) to move"
+            return "\(state.sideToMove.rawValue.capitalized)'s turn"
         case .checkmate(let winner):
-            "Checkmate. \(winner.rawValue.capitalized) wins."
+            return "Checkmate. \(winner.rawValue.capitalized) wins."
         case .stalemate:
-            "Stalemate."
+            return "Stalemate."
         }
+    }
+
+    var guidanceText: String? {
+        guard state.result == .ongoing else {
+            return nil
+        }
+        if let message {
+            return message
+        }
+        if LegalMoveGenerator.isKingInCheck(state.sideToMove, in: state.board) {
+            return "Check! You must move to defend."
+        }
+        return nil
     }
 
     init(state: GameState = .startingPosition()) {

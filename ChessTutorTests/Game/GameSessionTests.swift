@@ -89,6 +89,25 @@ final class GameSessionTests: XCTestCase {
 
         XCTAssertEqual(result, .moved)
         XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertEqual(session.statusText, "Black's turn")
+    }
+
+    func testCheckKeepsTurnStatusAndShowsGuidance() {
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        XCTAssertEqual(session.statusText, "White's turn")
+        XCTAssertEqual(session.guidanceText, "Check! You must move to defend.")
     }
 
     func testHiddenLegalMoveHintsDoNotBlockLegalMoveExecution() {
