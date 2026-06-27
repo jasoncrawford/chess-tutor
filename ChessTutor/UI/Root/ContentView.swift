@@ -42,17 +42,12 @@ struct ContentView: View {
             applyViewingAngle(nextAngle, animated: true)
         }
         .sheet(item: $pendingPromotion) { promotion in
-            VStack(spacing: 16) {
-                Text("Choose promotion")
-                    .font(.title2.bold())
-                ForEach([Piece.Kind.queen, .rook, .bishop, .knight], id: \.self) { kind in
-                    Button(kind.rawValue.capitalized) {
-                        session.promote(from: promotion.from, to: promotion.to, to: kind)
-                        pendingPromotion = nil
-                    }
-                }
+            PromotionPickerView(color: session.state.sideToMove) { kind in
+                session.promote(from: promotion.from, to: promotion.to, to: kind)
+                pendingPromotion = nil
             }
-            .padding()
+            .presentationDetents([.height(340)])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -278,6 +273,91 @@ private struct PendingPromotion: Identifiable {
     let id = UUID()
     let from: Square
     let to: Square
+}
+
+private struct PromotionPickerView: View {
+    let color: PieceColor
+    let promote: (Piece.Kind) -> Void
+
+    private let choices: [Piece.Kind] = [.queen, .rook, .bishop, .knight]
+    private let columns = [
+        GridItem(.flexible(minimum: 132), spacing: 12),
+        GridItem(.flexible(minimum: 132), spacing: 12),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Choose promotion")
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundStyle(AppTheme.ink)
+                Text("Pick the piece your pawn becomes.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.mutedInk)
+            }
+
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(choices, id: \.self) { kind in
+                    Button {
+                        promote(kind)
+                    } label: {
+                        PromotionChoiceLabel(kind: kind, color: color)
+                    }
+                    .buttonStyle(PromotionChoiceButtonStyle())
+                    .accessibilityLabel("Promote to \(kind.rawValue)")
+                    .accessibilityIdentifier("promotion-\(kind.rawValue)-button")
+                }
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: 420)
+        .presentationBackground(AppTheme.table)
+    }
+}
+
+private struct PromotionChoiceLabel: View {
+    let kind: Piece.Kind
+    let color: PieceColor
+
+    var body: some View {
+        HStack(spacing: 14) {
+            PieceIconView(piece: Piece(kind: kind, color: color))
+                .frame(width: 56, height: 56)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(AppTheme.lightSquare.opacity(0.72))
+                )
+
+            Text(kind.rawValue.capitalized)
+                .font(.system(.title3, design: .rounded).weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct PromotionChoiceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(SwiftUI.Color.white.opacity(configuration.isPressed ? 0.72 : 0.86))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(AppTheme.boardFrame.opacity(configuration.isPressed ? 0.42 : 0.24), lineWidth: 1)
+            )
+            .shadow(color: SwiftUI.Color.black.opacity(configuration.isPressed ? 0.06 : 0.12), radius: configuration.isPressed ? 2 : 8, y: configuration.isPressed ? 1 : 4)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.24, dampingFraction: 0.82), value: configuration.isPressed)
+    }
 }
 
 #Preview {
