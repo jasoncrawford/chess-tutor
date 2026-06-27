@@ -119,6 +119,25 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.guidanceText)
     }
 
+    func testGameInProgressReflectsTentativeAndCommittedMoves() {
+        let session = GameSession()
+
+        XCTAssertFalse(session.hasGameInProgress)
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertTrue(session.hasGameInProgress)
+
+        session.finishTurn()
+
+        XCTAssertTrue(session.hasGameInProgress)
+
+        session.newGame()
+
+        XCTAssertFalse(session.hasGameInProgress)
+    }
+
     func testCheckKeepsTurnStatusAndShowsGuidance() {
         let session = GameSession(
             state: GameState(

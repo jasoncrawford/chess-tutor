@@ -28,6 +28,10 @@ final class GameSession {
         tentativeMove != nil
     }
 
+    var hasGameInProgress: Bool {
+        tentativeMove != nil || !committedState.moveHistory.isEmpty
+    }
+
     var legalDestinations: Set<Square> {
         var destinations = LegalMoveHighlighter.destinations(for: legalMovesForSelection)
         if let tentativeMove, selectedSquare == tentativeMove.to {

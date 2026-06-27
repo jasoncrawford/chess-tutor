@@ -64,6 +64,9 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 240, alignment: .topLeading)
         .padding(20)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(AppTheme.panel)
