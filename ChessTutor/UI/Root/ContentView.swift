@@ -1,26 +1,45 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @State private var session = GameSession()
     @State private var pendingPromotion: PendingPromotion?
+    @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
+    @State private var viewingAngle: BoardViewingAngle
+    @State private var tableRotationDegrees: Double
     @Namespace private var captureNamespace
 
+    init() {
+        let initialViewingAngle = Self.currentViewingAngle()
+        _viewingAngle = State(initialValue: initialViewingAngle)
+        _tableRotationDegrees = State(initialValue: initialViewingAngle.tableRotationDegrees)
+    }
+
     var body: some View {
-        ZStack {
-            AppTheme.table.ignoresSafeArea()
-            HStack(alignment: .top, spacing: 28) {
-                ChessBoardView(session: session, captureNamespace: captureNamespace) { result in
-                    if case let .needsPromotion(from, to) = result {
-                        pendingPromotion = PendingPromotion(from: from, to: to)
-                    }
-                }
-                .frame(maxWidth: 760)
-                sidePanel
-                    .frame(width: 260)
-                    .frame(minHeight: 240, alignment: .top)
+        GeometryReader { proxy in
+            let tabletopSize = tabletopSize(for: proxy.size)
+
+            ZStack {
+                AppTheme.table.ignoresSafeArea()
+                tabletop
+                    .frame(width: tabletopSize.width, height: tabletopSize.height)
+                    .rotationEffect(.degrees(tableRotationDegrees))
+                    .frame(width: proxy.size.width, height: proxy.size.height)
             }
-            .padding(.horizontal, 30)
-            .padding(.vertical, 24)
+        }
+        .onAppear {
+            syncToCurrentInterfaceOrientation(animated: false)
+            DispatchQueue.main.async {
+                syncToCurrentInterfaceOrientation(animated: false)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            let orientation = UIDevice.current.orientation
+            guard orientation.isValidBoardViewingOrientation else {
+                return
+            }
+            let nextAngle = BoardViewingAngle(deviceOrientation: orientation, baseline: baselineOrientation.deviceOrientation)
+            applyViewingAngle(nextAngle, animated: true)
         }
         .sheet(item: $pendingPromotion) { promotion in
             VStack(spacing: 16) {
@@ -37,7 +56,48 @@ struct ContentView: View {
         }
     }
 
+    private var tabletop: some View {
+        HStack(alignment: .top, spacing: 28) {
+            chessBoard
+            sidePanelContainer
+        }
+        .padding(.horizontal, 30)
+        .padding(.vertical, 24)
+    }
+
+    private var chessBoard: some View {
+        ChessBoardView(
+            session: session,
+            captureNamespace: captureNamespace,
+            viewingAngle: viewingAngle,
+            readableRotationDegrees: readableRotationDegrees
+        ) { result in
+            if case let .needsPromotion(from, to) = result {
+                pendingPromotion = PendingPromotion(from: from, to: to)
+            }
+        }
+        .frame(maxWidth: 760)
+    }
+
+    private var sidePanelContainer: some View {
+        sidePanel
+            .frame(width: 260)
+            .frame(height: 760, alignment: .top)
+    }
+
     private var sidePanel: some View {
+        VStack(spacing: 12) {
+            ForEach(viewingAngle.sidebarSegmentsInTabletopOrder, id: \.self) { segment in
+                sidebarTile(segment) {
+                    sidebarSegment(segment)
+                }
+            }
+        }
+        .frame(width: 260, height: 760, alignment: .top)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewingAngle.sidebarSegmentsInTabletopOrder)
+    }
+
+    private var turnTile: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(session.statusText)
                 .font(.system(.title2, design: .rounded).weight(.bold))
@@ -61,17 +121,48 @@ struct ContentView: View {
                     .fill(session.guidanceText == nil ? Color.clear : Color.white.opacity(0.58))
             )
 
-            captureTrays
+            Spacer(minLength: 0)
 
-            GameControlsView(session: session)
+            GameControlsView(session: session, placement: .done)
         }
-        .frame(maxWidth: .infinity, minHeight: 240, alignment: .topLeading)
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(AppTheme.panel)
-                .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var newGameTile: some View {
+        VStack {
+            Spacer()
+            GameControlsView(session: session, placement: .newGame)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func sidebarSegment(_ segment: SidebarSegment) -> some View {
+        switch segment {
+        case .messageAndDone:
+            turnTile
+        case .capturedPieces:
+            captureTrays
+        case .newGame:
+            newGameTile
+        }
+    }
+
+    private func sidebarTile<Content: View>(
+        _ segment: SidebarSegment,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .padding(16)
+            .frame(width: 240, height: 240)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(AppTheme.panel)
+                    .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
+            )
+            .rotationEffect(.degrees(readableRotationDegrees))
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tableRotationDegrees)
     }
 
     private var captureTrays: some View {
@@ -107,6 +198,79 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(AppTheme.ink.opacity(pieces.isEmpty ? 0.04 : 0.07))
         )
+    }
+
+    private func tabletopSize(for size: CGSize) -> CGSize {
+        CGSize(width: max(size.width, size.height), height: min(size.width, size.height))
+    }
+
+    private func syncToCurrentInterfaceOrientation(animated: Bool) {
+        applyViewingAngle(Self.currentViewingAngle(), animated: animated)
+    }
+
+    private func applyViewingAngle(_ nextAngle: BoardViewingAngle, animated: Bool) {
+        let nextTableRotationDegrees = nextAngle.tableRotationDegrees(closestTo: tableRotationDegrees)
+        let update = {
+            viewingAngle = nextAngle
+            tableRotationDegrees = nextTableRotationDegrees
+        }
+
+        if animated {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                update()
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                update()
+            }
+        }
+    }
+
+    private static func currentViewingAngle() -> BoardViewingAngle {
+        if let orientation = UIApplication.shared.activeInterfaceOrientation {
+            return BoardViewingAngle(interfaceOrientation: orientation, baseline: .landscapeLeft)
+        }
+
+        let orientation = UIDevice.current.orientation
+        if orientation.isValidBoardViewingOrientation {
+            return BoardViewingAngle(deviceOrientation: orientation, baseline: .landscapeLeft)
+        }
+
+        return .normal
+    }
+
+    private var readableRotationDegrees: Double {
+        -tableRotationDegrees
+    }
+}
+
+private extension UIApplication {
+    var activeInterfaceOrientation: UIInterfaceOrientation? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { scene in
+                scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
+            }?
+            .interfaceOrientation
+    }
+}
+
+private extension UIInterfaceOrientation {
+    var deviceOrientation: UIDeviceOrientation {
+        switch self {
+        case .portrait:
+            return .portrait
+        case .portraitUpsideDown:
+            return .portraitUpsideDown
+        case .landscapeLeft:
+            return .landscapeLeft
+        case .landscapeRight:
+            return .landscapeRight
+        default:
+            return .unknown
+        }
     }
 }
 

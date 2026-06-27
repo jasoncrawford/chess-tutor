@@ -1,18 +1,24 @@
 import SwiftUI
 
+enum GameControlsPlacement {
+    case done
+    case newGame
+}
+
 struct GameControlsView: View {
     @Bindable var session: GameSession
+    let placement: GameControlsPlacement
     @State private var isConfirmingNewGame = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            turnControls
-
-            Spacer(minLength: 20)
-
-            newGameButton
+        VStack(alignment: .leading, spacing: 10) {
+            if placement == .done {
+                turnControls
+            } else {
+                newGameButton
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .lineLimit(1)
         .minimumScaleFactor(0.85)
         .controlSize(.regular)
@@ -30,31 +36,25 @@ struct GameControlsView: View {
     }
 
     private var turnControls: some View {
-        VStack(spacing: 10) {
-            Button {
-                guard session.canFinishTurn else {
-                    return
-                }
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                    session.finishTurn()
-                }
-            } label: {
-                Label("Done", systemImage: "checkmark.circle.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!session.canFinishTurn)
-
-            Button {
-                session.flipBoard()
-            } label: {
-                Label("Flip Board", systemImage: "arrow.triangle.2.circlepath")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-        }
+        doneButton
         .labelStyle(.titleAndIcon)
         .tint(AppTheme.boardFrame)
+    }
+
+    private var doneButton: some View {
+        Button {
+            guard session.canFinishTurn else {
+                return
+            }
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                session.finishTurn()
+            }
+        } label: {
+            Label("Done", systemImage: "checkmark.circle.fill")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!session.canFinishTurn)
     }
 
     private var newGameButton: some View {

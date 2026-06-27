@@ -1,8 +1,184 @@
 import SwiftUI
+import UIKit
+
+enum SidebarSegment: Equatable, Hashable {
+    case messageAndDone
+    case capturedPieces
+    case newGame
+}
+
+enum BoardViewingAngle: Equatable {
+    case normal
+    case clockwiseQuarterTurn
+    case halfTurn
+    case counterclockwiseQuarterTurn
+
+    var files: [Square.File] {
+        Square.File.allCases
+    }
+
+    var ranks: [Int] {
+        Array((1...8).reversed())
+    }
+
+    var tableRotationDegrees: Double {
+        switch self {
+        case .normal:
+            return 0
+        case .clockwiseQuarterTurn:
+            return 90
+        case .halfTurn:
+            return 180
+        case .counterclockwiseQuarterTurn:
+            return -90
+        }
+    }
+
+    var readableRotationDegrees: Double {
+        -tableRotationDegrees
+    }
+
+    func tableRotationDegrees(closestTo currentDegrees: Double) -> Double {
+        let target = tableRotationDegrees
+        let candidates = [target - 360, target, target + 360]
+        return candidates.min {
+            abs($0 - currentDegrees) < abs($1 - currentDegrees)
+        } ?? target
+    }
+
+    var presentsSidebarSegmentsHorizontally: Bool {
+        switch self {
+        case .clockwiseQuarterTurn, .counterclockwiseQuarterTurn:
+            return true
+        case .normal, .halfTurn:
+            return false
+        }
+    }
+
+    var sidebarSegmentsInTabletopOrder: [SidebarSegment] {
+        switch self {
+        case .normal, .counterclockwiseQuarterTurn:
+            return [.messageAndDone, .capturedPieces, .newGame]
+        case .clockwiseQuarterTurn, .halfTurn:
+            return [.newGame, .capturedPieces, .messageAndDone]
+        }
+    }
+
+    init(deviceOrientation: UIDeviceOrientation) {
+        self.init(deviceOrientation: deviceOrientation, baseline: .portrait)
+    }
+
+    init(deviceOrientation: UIDeviceOrientation, baseline: UIDeviceOrientation) {
+        guard deviceOrientation.isValidBoardViewingOrientation,
+              baseline.isValidBoardViewingOrientation else {
+            self = .normal
+            return
+        }
+
+        let degrees = deviceOrientation.tabletopDegrees - baseline.tabletopDegrees
+        self.init(normalizedTabletopDegrees: degrees.normalizedTabletopDegrees)
+    }
+
+    init(interfaceOrientation: UIInterfaceOrientation, baseline: UIInterfaceOrientation) {
+        guard interfaceOrientation.isValidBoardViewingOrientation,
+              baseline.isValidBoardViewingOrientation else {
+            self = .normal
+            return
+        }
+
+        let degrees = interfaceOrientation.tabletopDegrees - baseline.tabletopDegrees
+        self.init(normalizedTabletopDegrees: degrees.normalizedTabletopDegrees)
+    }
+
+    private init(normalizedTabletopDegrees degrees: Int) {
+        switch degrees.normalizedTabletopDegrees {
+        case 90:
+            self = .clockwiseQuarterTurn
+        case 180:
+            self = .halfTurn
+        case 270:
+            self = .counterclockwiseQuarterTurn
+        default:
+            self = .normal
+        }
+    }
+}
+
+extension UIInterfaceOrientation {
+    var isValidBoardViewingOrientation: Bool {
+        switch self {
+        case .portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var tabletopDegrees: Int {
+        switch self {
+        case .landscapeLeft:
+            return 0
+        case .portrait:
+            return 90
+        case .landscapeRight:
+            return 180
+        case .portraitUpsideDown:
+            return 270
+        default:
+            return 0
+        }
+    }
+}
+
+extension UIDeviceOrientation {
+    var isValidBoardViewingOrientation: Bool {
+        switch self {
+        case .portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight:
+            return true
+        default:
+            return false
+        }
+    }
+
+    func isOpposite(to orientation: UIDeviceOrientation) -> Bool {
+        switch (self, orientation) {
+        case (.portrait, .portraitUpsideDown),
+             (.portraitUpsideDown, .portrait),
+             (.landscapeLeft, .landscapeRight),
+             (.landscapeRight, .landscapeLeft):
+            return true
+        default:
+            return false
+        }
+    }
+
+    var tabletopDegrees: Int {
+        switch self {
+        case .landscapeLeft:
+            return 0
+        case .portrait:
+            return 90
+        case .landscapeRight:
+            return 180
+        case .portraitUpsideDown:
+            return 270
+        default:
+            return 0
+        }
+    }
+}
+
+private extension Int {
+    var normalizedTabletopDegrees: Int {
+        ((self % 360) + 360) % 360
+    }
+}
 
 struct ChessBoardView: View {
     @Bindable var session: GameSession
     let captureNamespace: Namespace.ID
+    let viewingAngle: BoardViewingAngle
+    let readableRotationDegrees: Double
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
@@ -31,6 +207,7 @@ struct ChessBoardView: View {
 
                 if let dragState {
                     PieceIconView(piece: dragState.piece)
+                        .rotationEffect(.degrees(readableRotationDegrees))
                         .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
                         .position(dragState.location)
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 8)
@@ -44,16 +221,13 @@ struct ChessBoardView: View {
             .onChange(of: session.state.board) {
                 syncVisualPieces(animated: true)
             }
-            .onChange(of: session.boardOrientation) {
-                syncVisualPieces(animated: false)
-            }
         }
         .aspectRatio(1, contentMode: .fit)
     }
 
     private func board(side: CGFloat) -> some View {
-        let files = session.boardOrientation == .white ? Square.File.allCases : Square.File.allCases.reversed()
-        let ranks = session.boardOrientation == .white ? Array((1...8).reversed()) : Array(1...8)
+        let files = viewingAngle.files
+        let ranks = viewingAngle.ranks
 
         return Grid(horizontalSpacing: 0, verticalSpacing: 0) {
             ForEach(ranks, id: \.self) { rank in
@@ -108,6 +282,7 @@ struct ChessBoardView: View {
                             id: session.pieceAnimationID(for: visualPiece.piece, at: visualPiece.square),
                             in: captureNamespace
                         )
+                        .rotationEffect(.degrees(readableRotationDegrees))
                         .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
                         .position(center(of: visualPiece.square, side: side, origin: origin))
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
@@ -119,8 +294,8 @@ struct ChessBoardView: View {
     }
 
     private func coordinateLabels(for square: Square) -> some View {
-        let files = Array(session.boardOrientation == .white ? Square.File.allCases : Square.File.allCases.reversed())
-        let ranks = session.boardOrientation == .white ? Array((1...8).reversed()) : Array(1...8)
+        let files = viewingAngle.files
+        let ranks = viewingAngle.ranks
         let showsRank = square.file == files.first
         let showsFile = square.rank == ranks.last
 
@@ -205,15 +380,15 @@ struct ChessBoardView: View {
 
         let column = min(7, max(0, Int(localX / (side / 8))))
         let row = min(7, max(0, Int(localY / (side / 8))))
-        let visibleFiles = Array(session.boardOrientation == .white ? Square.File.allCases : Square.File.allCases.reversed())
-        let visibleRanks = session.boardOrientation == .white ? Array((1...8).reversed()) : Array(1...8)
+        let visibleFiles = viewingAngle.files
+        let visibleRanks = viewingAngle.ranks
 
         return Square(file: visibleFiles[column], rank: visibleRanks[row])
     }
 
     private func center(of square: Square, side: CGFloat, origin: CGPoint) -> CGPoint {
-        let visibleFiles = Array(session.boardOrientation == .white ? Square.File.allCases : Square.File.allCases.reversed())
-        let visibleRanks = session.boardOrientation == .white ? Array((1...8).reversed()) : Array(1...8)
+        let visibleFiles = viewingAngle.files
+        let visibleRanks = viewingAngle.ranks
         guard let column = visibleFiles.firstIndex(of: square.file),
               let row = visibleRanks.firstIndex(of: square.rank) else {
             return origin

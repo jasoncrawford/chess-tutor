@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import ChessTutor
 
 final class BoardTests: XCTestCase {
@@ -18,5 +19,92 @@ final class BoardTests: XCTestCase {
         XCTAssertNil(a1.offset(fileDelta: -1, rankDelta: 0))
         XCTAssertNil(a1.offset(fileDelta: 0, rankDelta: -1))
         XCTAssertEqual(a1.offset(fileDelta: 1, rankDelta: 1), Square(file: .b, rank: 2))
+    }
+
+    func testBoardViewingAngleKeepsThePhysicalBoardLayoutStable() {
+        XCTAssertEqual(BoardViewingAngle.normal.files, Square.File.allCases)
+        XCTAssertEqual(BoardViewingAngle.normal.ranks, Array((1...8).reversed()))
+        XCTAssertEqual(BoardViewingAngle.normal.tableRotationDegrees, 0)
+        XCTAssertEqual(BoardViewingAngle.normal.readableRotationDegrees, 0)
+
+        XCTAssertEqual(BoardViewingAngle.halfTurn.files, Square.File.allCases)
+        XCTAssertEqual(BoardViewingAngle.halfTurn.ranks, Array((1...8).reversed()))
+        XCTAssertEqual(BoardViewingAngle.halfTurn.tableRotationDegrees, 180)
+        XCTAssertEqual(BoardViewingAngle.halfTurn.readableRotationDegrees, -180)
+    }
+
+    func testBoardViewingAngleRotatesReadableItemsForPortraitTabletopPositions() {
+        XCTAssertEqual(
+            BoardViewingAngle(deviceOrientation: .portrait, baseline: .landscapeLeft),
+            .clockwiseQuarterTurn
+        )
+        XCTAssertEqual(
+            BoardViewingAngle(deviceOrientation: .portraitUpsideDown, baseline: .landscapeLeft),
+            .counterclockwiseQuarterTurn
+        )
+
+        XCTAssertEqual(BoardViewingAngle.clockwiseQuarterTurn.files, Square.File.allCases)
+        XCTAssertEqual(BoardViewingAngle.clockwiseQuarterTurn.ranks, Array((1...8).reversed()))
+        XCTAssertEqual(BoardViewingAngle.clockwiseQuarterTurn.tableRotationDegrees, 90)
+        XCTAssertEqual(BoardViewingAngle.clockwiseQuarterTurn.readableRotationDegrees, -90)
+        XCTAssertTrue(BoardViewingAngle.clockwiseQuarterTurn.presentsSidebarSegmentsHorizontally)
+        XCTAssertEqual(
+            BoardViewingAngle.clockwiseQuarterTurn.sidebarSegmentsInTabletopOrder,
+            [.newGame, .capturedPieces, .messageAndDone]
+        )
+        XCTAssertEqual(BoardViewingAngle.counterclockwiseQuarterTurn.tableRotationDegrees, -90)
+        XCTAssertEqual(BoardViewingAngle.counterclockwiseQuarterTurn.readableRotationDegrees, 90)
+        XCTAssertTrue(BoardViewingAngle.counterclockwiseQuarterTurn.presentsSidebarSegmentsHorizontally)
+        XCTAssertEqual(
+            BoardViewingAngle.counterclockwiseQuarterTurn.sidebarSegmentsInTabletopOrder,
+            [.messageAndDone, .capturedPieces, .newGame]
+        )
+    }
+
+    func testBoardViewingAngleCanInitializeFromInterfaceOrientationAtLaunch() {
+        XCTAssertEqual(
+            BoardViewingAngle(interfaceOrientation: .portrait, baseline: .landscapeLeft),
+            .clockwiseQuarterTurn
+        )
+        XCTAssertEqual(
+            BoardViewingAngle(interfaceOrientation: .landscapeRight, baseline: .landscapeLeft),
+            .halfTurn
+        )
+    }
+
+    func testBoardViewingAngleTreatsLandscapeAsBaselineNotSideways() {
+        XCTAssertEqual(
+            BoardViewingAngle(deviceOrientation: .landscapeLeft, baseline: .landscapeLeft),
+            .normal
+        )
+        XCTAssertEqual(
+            BoardViewingAngle(deviceOrientation: .landscapeRight, baseline: .landscapeLeft),
+            .halfTurn
+        )
+        XCTAssertFalse(BoardViewingAngle.normal.presentsSidebarSegmentsHorizontally)
+        XCTAssertFalse(BoardViewingAngle.halfTurn.presentsSidebarSegmentsHorizontally)
+        XCTAssertEqual(
+            BoardViewingAngle.normal.sidebarSegmentsInTabletopOrder,
+            [.messageAndDone, .capturedPieces, .newGame]
+        )
+        XCTAssertEqual(
+            BoardViewingAngle.halfTurn.sidebarSegmentsInTabletopOrder,
+            [.newGame, .capturedPieces, .messageAndDone]
+        )
+    }
+
+    func testBoardViewingAngleChoosesNearestEquivalentRotationForAnimation() {
+        XCTAssertEqual(
+            BoardViewingAngle.counterclockwiseQuarterTurn.tableRotationDegrees(closestTo: 180),
+            270
+        )
+        XCTAssertEqual(
+            BoardViewingAngle.counterclockwiseQuarterTurn.tableRotationDegrees(closestTo: 0),
+            -90
+        )
+        XCTAssertEqual(
+            BoardViewingAngle.normal.tableRotationDegrees(closestTo: 270),
+            360
+        )
     }
 }

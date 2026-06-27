@@ -22,7 +22,6 @@ final class GameSession {
     var assistSettings = BeginnerAssistSettings()
     var whitePlayer: PlayerSeat = .humanLocal
     var blackPlayer: PlayerSeat = .humanLocal
-    var boardOrientation: PieceColor = .white
     var message: String?
 
     var state: GameState {
@@ -200,10 +199,6 @@ final class GameSession {
         selectedSquare = nil
         legalMovesForSelection = []
         message = nil
-    }
-
-    func flipBoard() {
-        boardOrientation = boardOrientation.opposite
     }
 
     private func legalMoves(forSelectionAt square: Square) -> [Move] {
