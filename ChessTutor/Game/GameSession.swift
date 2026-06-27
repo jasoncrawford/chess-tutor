@@ -87,9 +87,6 @@ final class GameSession {
         if let message {
             return message
         }
-        if tentativeMove != nil {
-            return "Tap Done when you're ready."
-        }
         if LegalMoveGenerator.isKingInCheck(committedState.sideToMove, in: committedState.board) {
             return "Check! You must move to defend."
         }

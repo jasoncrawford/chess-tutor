@@ -93,7 +93,7 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.state.board[Square(file: .e, rank: 2)])
         XCTAssertEqual(session.state.sideToMove, .white)
         XCTAssertEqual(session.statusText, "White's turn")
-        XCTAssertEqual(session.guidanceText, "Tap Done when you're ready.")
+        XCTAssertNil(session.guidanceText)
         XCTAssertTrue(session.canFinishTurn)
 
         session.finishTurn()

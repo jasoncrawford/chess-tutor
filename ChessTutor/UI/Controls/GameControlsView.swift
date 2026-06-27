@@ -33,9 +33,6 @@ struct GameControlsView: View {
         VStack(spacing: 10) {
             Button {
                 guard session.canFinishTurn else {
-                    withoutAnimation {
-                        session.message = "Make a move first."
-                    }
                     return
                 }
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
@@ -46,6 +43,7 @@ struct GameControlsView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(!session.canFinishTurn)
 
             Button {
                 session.flipBoard()
@@ -73,12 +71,5 @@ struct GameControlsView: View {
         .labelStyle(.titleAndIcon)
         .buttonStyle(.borderless)
         .foregroundStyle(AppTheme.ink.opacity(0.72))
-    }
-
-    private func withoutAnimation(_ action: () -> Void) {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        transaction.animation = nil
-        withTransaction(transaction, action)
     }
 }
