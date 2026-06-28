@@ -113,7 +113,7 @@ struct ContentView: View {
             .padding(.vertical, session.guidanceText == nil ? 0 : 4)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(session.guidanceText == nil ? Color.clear : Color.white.opacity(0.58))
+                    .fill(session.guidanceText == nil ? Color.clear : AppTheme.panelInset)
             )
 
             Spacer(minLength: 0)
@@ -152,9 +152,13 @@ struct ContentView: View {
             .padding(16)
             .frame(width: 240, height: 240)
             .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(AppTheme.panel)
-                    .shadow(color: .black.opacity(0.08), radius: 20, y: 10)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(AppTheme.panelStroke, lineWidth: 1)
+                    }
+                    .shadow(color: AppTheme.panelShadow, radius: 18, y: 8)
             )
             .rotationEffect(.degrees(readableRotationDegrees))
             .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tableRotationDegrees)
@@ -190,8 +194,12 @@ struct ContentView: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(AppTheme.ink.opacity(pieces.isEmpty ? 0.04 : 0.07))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppTheme.panelInset.opacity(pieces.isEmpty ? 0.75 : 1.0))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AppTheme.panelStroke, lineWidth: 1)
+                }
         )
     }
 

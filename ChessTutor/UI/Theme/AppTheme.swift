@@ -2,7 +2,10 @@ import SwiftUI
 
 enum AppTheme {
     static let table = Color(red: 0.95, green: 0.93, blue: 0.88)
-    static let panel = Color.white.opacity(0.78)
+    static let panel = Color(red: 1.00, green: 0.98, blue: 0.92).opacity(0.80)
+    static let panelInset = Color(red: 0.38, green: 0.28, blue: 0.17).opacity(0.08)
+    static let panelStroke = Color(red: 0.35, green: 0.28, blue: 0.20).opacity(0.12)
+    static let panelShadow = Color.black.opacity(0.07)
     static let ink = Color(red: 0.13, green: 0.13, blue: 0.11)
     static let mutedInk = Color(red: 0.43, green: 0.42, blue: 0.36)
     static let boardFrame = Color(red: 0.35, green: 0.28, blue: 0.20)
