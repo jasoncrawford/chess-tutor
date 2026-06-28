@@ -1,4 +1,5 @@
 .superpowers/
+.worktrees/
 DerivedData/
 build/
 xcuserdata/
