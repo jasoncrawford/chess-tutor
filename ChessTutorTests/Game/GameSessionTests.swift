@@ -12,6 +12,31 @@ final class GameSessionTests: XCTestCase {
         XCTAssertTrue(session.legalDestinations.contains(Square(file: .e, rank: 4)))
     }
 
+    func testSelectedPieceInfoNamesSelectedPiece() {
+        let session = GameSession()
+
+        session.select(Square(file: .g, rank: 1))
+
+        XCTAssertEqual(
+            session.selectedPieceInfo,
+            SelectedPieceInfo(
+                piece: Piece(kind: .knight, color: .white),
+                square: Square(file: .g, rank: 1),
+                title: "White knight",
+                movementSummary: "Moves in an L shape."
+            )
+        )
+    }
+
+    func testSelectedPieceInfoClearsWhenSelectionClears() {
+        let session = GameSession()
+
+        session.select(Square(file: .g, rank: 1))
+        session.select(Square(file: .a, rank: 6))
+
+        XCTAssertNil(session.selectedPieceInfo)
+    }
+
     func testIllegalMoveReturnsFriendlyMessage() {
         let session = GameSession()
 

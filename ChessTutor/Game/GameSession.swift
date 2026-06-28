@@ -12,6 +12,13 @@ struct CapturedPiece: Equatable, Identifiable, Sendable {
     let state: State
 }
 
+struct SelectedPieceInfo: Equatable, Sendable {
+    let piece: Piece
+    let square: Square
+    let title: String
+    let movementSummary: String
+}
+
 @Observable
 final class GameSession {
     private var committedState: GameState
@@ -61,6 +68,20 @@ final class GameSession {
                 state: .tentative
             )
         ]
+    }
+
+    var selectedPieceInfo: SelectedPieceInfo? {
+        guard let selectedSquare,
+              let piece = state.board[selectedSquare] else {
+            return nil
+        }
+
+        return SelectedPieceInfo(
+            piece: piece,
+            square: selectedSquare,
+            title: "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue)",
+            movementSummary: movementSummary(for: piece.kind)
+        )
     }
 
     var legalDestinations: Set<Square> {
@@ -231,6 +252,23 @@ final class GameSession {
             return LegalMoveGenerator.allowedMoves(for: tentativeMove.from, in: committedState)
         }
         return LegalMoveGenerator.allowedMoves(for: square, in: committedState)
+    }
+
+    private func movementSummary(for kind: Piece.Kind) -> String {
+        switch kind {
+        case .king:
+            return "Moves one square in any direction."
+        case .queen:
+            return "Moves in straight lines and diagonals."
+        case .rook:
+            return "Moves in straight lines."
+        case .bishop:
+            return "Moves diagonally."
+        case .knight:
+            return "Moves in an L shape."
+        case .pawn:
+            return "Moves forward and captures diagonally."
+        }
     }
 
     private func isLegal(_ move: Move) -> Bool {
