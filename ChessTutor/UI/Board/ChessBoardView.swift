@@ -243,13 +243,12 @@ struct ChessBoardView: View {
     }
 
     private func squareView(_ square: Square) -> some View {
-        let isLight = (square.file.rawValue + square.rank).isMultiple(of: 2)
         let isLegalDestination = session.legalDestinations.contains(square)
         let isCaptureIndicator = session.captureIndicatorSquares.contains(square)
 
         return ZStack {
             Rectangle()
-                .fill(isLight ? AppTheme.lightSquare : AppTheme.darkSquare)
+                .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
             if session.selectedSquare == square {
                 Rectangle().fill(AppTheme.selectedSquare)
             }

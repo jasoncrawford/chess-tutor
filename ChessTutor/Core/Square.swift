@@ -12,6 +12,10 @@ struct Square: Equatable, Hashable, Sendable {
         self.rank = rank
     }
 
+    var isLightSquare: Bool {
+        !(file.rawValue + rank).isMultiple(of: 2)
+    }
+
     func offset(fileDelta: Int, rankDelta: Int) -> Square? {
         let nextFileValue = file.rawValue + fileDelta
         let nextRank = rank + rankDelta
