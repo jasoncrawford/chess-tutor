@@ -3,11 +3,12 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0189A710E8B33DE2836E8282 /* AboutAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 642A933C7346D807D67CED68 /* AboutAttribution.swift */; };
+		0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747E6891942AFE9A8B73651F /* SidebarPanelView.swift */; };
+		11627D10A1B16FF07697B2A2 /* AboutAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354DE434F0650CD3B105FBCD /* AboutAttribution.swift */; };
 		12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */; };
 		15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D53364C2471FF324E13201 /* GameStateTests.swift */; };
 		1C16BC492A550B600532F28F /* Move.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E571D9060609ECB4FB126C /* Move.swift */; };
@@ -15,21 +16,24 @@
 		1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3272E453609A9FD096EE431 /* ContentView.swift */; };
 		2120969DF513B09CC78E4B06 /* LegalMoveGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */; };
 		267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */; };
+		2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */; };
 		2F72B11FD646E7CB59CF60BC /* GameControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014400D67223F02798F38023 /* GameControlsView.swift */; };
 		39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */; };
+		4596A725A76CE902F744D826 /* ChessArt-MIT.txt in Resources */ = {isa = PBXBuildFile; fileRef = BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */; };
+		524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */; };
 		55CF4F3C57F42B3D1F3D9582 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858232DD64C12811E9351DF8 /* AppTheme.swift */; };
 		64C6845F93B878E7F3820D1C /* MoveHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65312F4367726826F552878 /* MoveHistoryView.swift */; };
+		65A46B140B9129690D7AE8BA /* TurnStatusPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */; };
 		72D18795F0896B6D5ABBBC18 /* GameResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C9B30C3E0E430A338D94D6 /* GameResult.swift */; };
-		76F25C74B4764E3F991EB8DA /* PieceAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F86B944F3524C3B99682C66 /* PieceAsset.swift */; };
-		784D232AC0F3CB7B7C5ED9E9 /* ChessArt-MIT.txt in Resources */ = {isa = PBXBuildFile; fileRef = C91B3E6BD25E4E06E1D882F2 /* ChessArt-MIT.txt */; };
 		791A0AB929E424A85CE1F615 /* ChessBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892B39ACE33796097240A052 /* ChessBoardView.swift */; };
 		791A8779A3FE2F5687789FF6 /* GameSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D517824035C75485AD4D712 /* GameSession.swift */; };
 		7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */; };
 		84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */; };
 		8497F717CD75D8D80EB9075A /* GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA0EFDD85959FE8902AA01 /* GameState.swift */; };
+		8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */; };
 		8F63639BDB9700501409AC9C /* BoardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB156EDC259546DEF345170 /* BoardTests.swift */; };
-		93A1ED93E2414A21817E4F7A /* PieceAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9454A4B7B31C4CB3BC9B5393 /* PieceAssetTests.swift */; };
 		9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */; };
+		AF854A0114766C352F4D8483 /* CapturedPiecesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
 		C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */; };
 		CA0390518BB87B51C26996ED /* Piece.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D93E7407EE5AA7D111C6A2 /* Piece.swift */; };
@@ -38,6 +42,7 @@
 		D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4471B31F5756F99709339DF /* MoveHistoryFormatterTests.swift */; };
 		E80A579D900A8593B26551B2 /* Board.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96F83E9475941E6AA79A599 /* Board.swift */; };
 		EB1D829BCA30B1D146B5A8A5 /* Square.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67BD6175E66BC35A9C4D85B /* Square.swift */; };
+		ECD7007B94C5DF6E15FF1FAB /* PieceAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C023C83EDC2217984A48D59 /* PieceAsset.swift */; };
 		F4D684FBA8255C666B2867D3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1FD039B8AE083CF7D10F392D /* Assets.xcassets */; };
 		F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D00A39AD12F2E4C69496C2 /* PlayerSeat.swift */; };
 /* End PBXBuildFile section */
@@ -56,35 +61,40 @@
 		014400D67223F02798F38023 /* GameControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameControlsView.swift; sourceTree = "<group>"; };
 		04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeginnerAssistSettings.swift; sourceTree = "<group>"; };
 		1FD039B8AE083CF7D10F392D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
+		2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPanelView.swift; sourceTree = "<group>"; };
+		354DE434F0650CD3B105FBCD /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
-		5F86B944F3524C3B99682C66 /* PieceAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAsset.swift; sourceTree = "<group>"; };
-		642A933C7346D807D67CED68 /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
 		6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceGlyph.swift; sourceTree = "<group>"; };
+		747E6891942AFE9A8B73651F /* SidebarPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPanelView.swift; sourceTree = "<group>"; };
+		7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPiecesPanelView.swift; sourceTree = "<group>"; };
+		7C023C83EDC2217984A48D59 /* PieceAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAsset.swift; sourceTree = "<group>"; };
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		892B39ACE33796097240A052 /* ChessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessBoardView.swift; sourceTree = "<group>"; };
-		9454A4B7B31C4CB3BC9B5393 /* PieceAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAssetTests.swift; sourceTree = "<group>"; };
 		9D517824035C75485AD4D712 /* GameSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSession.swift; sourceTree = "<group>"; };
 		9DF66E252A80BDA67538D11C /* GameSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionTests.swift; sourceTree = "<group>"; };
 		A1D00A39AD12F2E4C69496C2 /* PlayerSeat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerSeat.swift; sourceTree = "<group>"; };
 		A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceIconView.swift; sourceTree = "<group>"; };
 		A67BD6175E66BC35A9C4D85B /* Square.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Square.swift; sourceTree = "<group>"; };
 		B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessTutorApp.swift; sourceTree = "<group>"; };
+		BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChessArt-MIT.txt"; sourceTree = "<group>"; };
 		BFAA0EFDD85959FE8902AA01 /* GameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
-		C91B3E6BD25E4E06E1D882F2 /* ChessArt-MIT.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ThirdPartyNotices/ChessArt-MIT.txt"; sourceTree = "<group>"; };
 		C3C9B30C3E0E430A338D94D6 /* GameResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameResult.swift; sourceTree = "<group>"; };
 		C65312F4367726826F552878 /* MoveHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryView.swift; sourceTree = "<group>"; };
+		C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAssetTests.swift; sourceTree = "<group>"; };
 		C96F83E9475941E6AA79A599 /* Board.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Board.swift; sourceTree = "<group>"; };
 		CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveAttemptResult.swift; sourceTree = "<group>"; };
-		CEAF84C004414D1A30475620 /* ChessTutor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChessTutor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CEAF84C004414D1A30475620 /* ChessTutor.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ChessTutor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3272E453609A9FD096EE431 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		D4D93E7407EE5AA7D111C6A2 /* Piece.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Piece.swift; sourceTree = "<group>"; };
 		D6AB24F0D97ACE07C1C5E67E /* Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Color.swift; sourceTree = "<group>"; };
 		D9250CD456B192943686998F /* LegalMoveHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveHighlighter.swift; sourceTree = "<group>"; };
-		DBBCE3885F06B31979F4483D /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		DBBCE3885F06B31979F4483D /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
 		DEB156EDC259546DEF345170 /* BoardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardTests.swift; sourceTree = "<group>"; };
 		E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGeneratorTests.swift; sourceTree = "<group>"; };
+		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
 		F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatter.swift; sourceTree = "<group>"; };
 		F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialMoveTests.swift; sourceTree = "<group>"; };
 		F4471B31F5756F99709339DF /* MoveHistoryFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatterTests.swift; sourceTree = "<group>"; };
@@ -99,6 +109,7 @@
 				130DC77DF7EBCE3841EDF6D8 /* Controls */,
 				1B7B335D7FCA708D96BFCE95 /* History */,
 				842912F4F9E7831D88B04E5C /* Root */,
+				DAAE96ABAF970C27C027BD5D /* Sidebar */,
 				5620B9DA5A30AC514ACF1ECF /* Theme */,
 			);
 			path = UI;
@@ -116,7 +127,7 @@
 		130DC77DF7EBCE3841EDF6D8 /* Controls */ = {
 			isa = PBXGroup;
 			children = (
-				642A933C7346D807D67CED68 /* AboutAttribution.swift */,
+				354DE434F0650CD3B105FBCD /* AboutAttribution.swift */,
 				014400D67223F02798F38023 /* GameControlsView.swift */,
 			);
 			path = Controls;
@@ -136,9 +147,17 @@
 				DBBCE3885F06B31979F4483D /* .gitkeep */,
 				BD051940D35F2BD8CE5FA51A /* Core */,
 				F18F72C04FB114566541767D /* Game */,
-				EF8C6E66596B440F976FE406 /* UI */,
+				3870D8EA05DF92B0D1F40F9E /* UI */,
 			);
 			path = ChessTutorTests;
+			sourceTree = "<group>";
+		};
+		3870D8EA05DF92B0D1F40F9E /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */,
+			);
+			path = UI;
 			sourceTree = "<group>";
 		};
 		5620B9DA5A30AC514ACF1ECF /* Theme */ = {
@@ -197,6 +216,14 @@
 			path = Root;
 			sourceTree = "<group>";
 		};
+		895B2BBE9BA5745AC39D1BC1 /* ThirdPartyNotices */ = {
+			isa = PBXGroup;
+			children = (
+				BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */,
+			);
+			path = ThirdPartyNotices;
+			sourceTree = "<group>";
+		};
 		9480EA40179DF223C311D73B /* ChessTutor */ = {
 			isa = PBXGroup;
 			children = (
@@ -214,7 +241,7 @@
 			isa = PBXGroup;
 			children = (
 				892B39ACE33796097240A052 /* ChessBoardView.swift */,
-				5F86B944F3524C3B99682C66 /* PieceAsset.swift */,
+				7C023C83EDC2217984A48D59 /* PieceAsset.swift */,
 				6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */,
 				A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */,
 			);
@@ -244,12 +271,16 @@
 			path = Game;
 			sourceTree = "<group>";
 		};
-		EF8C6E66596B440F976FE406 /* UI */ = {
+		DAAE96ABAF970C27C027BD5D /* Sidebar */ = {
 			isa = PBXGroup;
 			children = (
-				9454A4B7B31C4CB3BC9B5393 /* PieceAssetTests.swift */,
+				7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */,
+				245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */,
+				747E6891942AFE9A8B73651F /* SidebarPanelView.swift */,
+				E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */,
+				2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */,
 			);
-			path = UI;
+			path = Sidebar;
 			sourceTree = "<group>";
 		};
 		F18F72C04FB114566541767D /* Game */ = {
@@ -265,7 +296,7 @@
 			isa = PBXGroup;
 			children = (
 				1FD039B8AE083CF7D10F392D /* Assets.xcassets */,
-				C91B3E6BD25E4E06E1D882F2 /* ChessArt-MIT.txt */,
+				895B2BBE9BA5745AC39D1BC1 /* ThirdPartyNotices */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -328,6 +359,7 @@
 			);
 			mainGroup = 111656FD3D1E492F8A08BD3A;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -343,7 +375,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F4D684FBA8255C666B2867D3 /* Assets.xcassets in Resources */,
-				784D232AC0F3CB7B7C5ED9E9 /* ChessArt-MIT.txt in Resources */,
+				4596A725A76CE902F744D826 /* ChessArt-MIT.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,10 +386,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0189A710E8B33DE2836E8282 /* AboutAttribution.swift in Sources */,
+				11627D10A1B16FF07697B2A2 /* AboutAttribution.swift in Sources */,
 				55CF4F3C57F42B3D1F3D9582 /* AppTheme.swift in Sources */,
 				12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */,
 				E80A579D900A8593B26551B2 /* Board.swift in Sources */,
+				AF854A0114766C352F4D8483 /* CapturedPiecesPanelView.swift in Sources */,
 				791A0AB929E424A85CE1F615 /* ChessBoardView.swift in Sources */,
 				C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */,
 				D067C5720A19D345CD3388A8 /* Color.swift in Sources */,
@@ -373,11 +406,15 @@
 				C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */,
 				64C6845F93B878E7F3820D1C /* MoveHistoryView.swift in Sources */,
 				CA0390518BB87B51C26996ED /* Piece.swift in Sources */,
-				76F25C74B4764E3F991EB8DA /* PieceAsset.swift in Sources */,
+				ECD7007B94C5DF6E15FF1FAB /* PieceAsset.swift in Sources */,
 				39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */,
 				84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */,
 				F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */,
+				8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */,
+				2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */,
+				0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */,
 				EB1D829BCA30B1D146B5A8A5 /* Square.swift in Sources */,
+				65A46B140B9129690D7AE8BA /* TurnStatusPanelView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -390,7 +427,7 @@
 				15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */,
 				7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */,
 				D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */,
-				93A1ED93E2414A21817E4F7A /* PieceAssetTests.swift in Sources */,
+				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
 				267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -428,7 +465,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = WK8R5Q5ABR;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -586,7 +622,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = WK8R5Q5ABR;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (

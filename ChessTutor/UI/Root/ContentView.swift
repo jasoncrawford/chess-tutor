@@ -81,134 +81,17 @@ struct ContentView: View {
     }
 
     private var sidePanelContainer: some View {
-        sidePanel
-            .frame(width: 260)
-            .frame(height: 760, alignment: .top)
-    }
-
-    private var sidePanel: some View {
-        VStack(spacing: 12) {
-            ForEach(viewingAngle.sidebarSegmentsInTabletopOrder, id: \.self) { segment in
-                sidebarTile(segment) {
-                    sidebarSegment(segment)
-                }
-            }
-        }
-        .frame(width: 260, height: 760, alignment: .top)
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewingAngle.sidebarSegmentsInTabletopOrder)
-    }
-
-    private var turnTile: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(session.statusText)
-                .font(.system(.title2, design: .rounded).weight(.bold))
-                .foregroundStyle(AppTheme.ink)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ZStack(alignment: .topLeading) {
-                if let guidanceText = session.guidanceText {
-                    Text(guidanceText)
-                        .font(.body)
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.vertical, session.guidanceText == nil ? 0 : 4)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(session.guidanceText == nil ? Color.clear : AppTheme.panelInset)
-            )
-
-            Spacer(minLength: 0)
-
-            GameControlsView(session: session, placement: .done)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var newGameTile: some View {
-        VStack {
-            Spacer()
-            GameControlsView(session: session, placement: .newGame, onAbout: {
+        SidePanelView(
+            session: session,
+            viewingAngle: viewingAngle,
+            readableRotationDegrees: readableRotationDegrees,
+            captureNamespace: captureNamespace,
+            onAbout: {
                 isShowingAbout = true
-            })
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private func sidebarSegment(_ segment: SidebarSegment) -> some View {
-        switch segment {
-        case .messageAndDone:
-            turnTile
-        case .capturedPieces:
-            captureTrays
-        case .selectedPiece:
-            newGameTile
-        }
-    }
-
-    private func sidebarTile<Content: View>(
-        _ segment: SidebarSegment,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .padding(16)
-            .frame(width: 240, height: 240)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppTheme.panel)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(AppTheme.panelStroke, lineWidth: 1)
-                    }
-                    .shadow(color: AppTheme.panelShadow, radius: 18, y: 8)
-            )
-            .rotationEffect(.degrees(readableRotationDegrees))
-            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tableRotationDegrees)
-    }
-
-    private var captureTrays: some View {
-        VStack(spacing: 6) {
-            captureTray(for: .black)
-            captureTray(for: .white)
-        }
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
-        .padding(.vertical, 2)
-    }
-
-    private func captureTray(for color: PieceColor) -> some View {
-        let pieces = session.capturedPieces.filter { $0.piece.color == color }
-
-        return LazyVGrid(
-            columns: Array(repeating: GridItem(.fixed(28), spacing: 4), count: 6),
-            alignment: .leading,
-            spacing: 4
-        ) {
-            ForEach(pieces) { capturedPiece in
-                PieceIconView(piece: capturedPiece.piece)
-                    .matchedGeometryEffect(id: capturedPiece.id, in: captureNamespace)
-                    .frame(width: 28, height: 28)
-                    .opacity(capturedPiece.state == .tentative ? 0.62 : 1)
-                    .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
             }
-        }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: pieces)
-        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(AppTheme.panelInset.opacity(pieces.isEmpty ? 0.75 : 1.0))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AppTheme.panelStroke, lineWidth: 1)
-                }
         )
+        .frame(width: 260)
+        .frame(height: 760, alignment: .top)
     }
 
     private func tabletopSize(for size: CGSize) -> CGSize {
