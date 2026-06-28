@@ -8,6 +8,9 @@ struct ContentView: View {
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
+    #if DEBUG
+    @State private var isCaptureTestModeEnabled = false
+    #endif
     @Namespace private var captureNamespace
 
     init() {
@@ -67,21 +70,50 @@ struct ContentView: View {
     }
 
     private var chessBoard: some View {
-        ChessBoardView(
-            session: session,
-            captureNamespace: captureNamespace,
-            viewingAngle: viewingAngle,
-            readableRotationDegrees: readableRotationDegrees
-        ) { result in
+        let handleMoveAttempt: (MoveAttemptResult) -> Void = { result in
             if case let .needsPromotion(from, to) = result {
                 pendingPromotion = PendingPromotion(from: from, to: to)
             }
         }
+
+        #if DEBUG
+        return ChessBoardView(
+            session: session,
+            captureNamespace: captureNamespace,
+            viewingAngle: viewingAngle,
+            readableRotationDegrees: readableRotationDegrees,
+            isCaptureTestModeEnabled: isCaptureTestModeEnabled,
+            onMoveAttempt: handleMoveAttempt
+        )
         .frame(maxWidth: 760)
+        #else
+        return ChessBoardView(
+            session: session,
+            captureNamespace: captureNamespace,
+            viewingAngle: viewingAngle,
+            readableRotationDegrees: readableRotationDegrees,
+            onMoveAttempt: handleMoveAttempt
+        )
+        .frame(maxWidth: 760)
+        #endif
     }
 
     private var sidePanelContainer: some View {
-        SidePanelView(
+        #if DEBUG
+        return SidePanelView(
+            session: session,
+            viewingAngle: viewingAngle,
+            readableRotationDegrees: readableRotationDegrees,
+            captureNamespace: captureNamespace,
+            isCaptureTestModeEnabled: $isCaptureTestModeEnabled,
+            onAbout: {
+                isShowingAbout = true
+            }
+        )
+        .frame(width: 260)
+        .frame(height: 760, alignment: .top)
+        #else
+        return SidePanelView(
             session: session,
             viewingAngle: viewingAngle,
             readableRotationDegrees: readableRotationDegrees,
@@ -92,6 +124,7 @@ struct ContentView: View {
         )
         .frame(width: 260)
         .frame(height: 760, alignment: .top)
+        #endif
     }
 
     private func tabletopSize(for size: CGSize) -> CGSize {

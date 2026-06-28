@@ -179,6 +179,9 @@ struct ChessBoardView: View {
     let captureNamespace: Namespace.ID
     let viewingAngle: BoardViewingAngle
     let readableRotationDegrees: Double
+    #if DEBUG
+    let isCaptureTestModeEnabled: Bool
+    #endif
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
@@ -319,6 +322,12 @@ struct ChessBoardView: View {
     private func dragGesture(side: CGFloat, origin: CGPoint) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
+                #if DEBUG
+                guard !isCaptureTestModeEnabled else {
+                    return
+                }
+                #endif
+
                 guard let from = square(at: value.startLocation, side: side, origin: origin),
                       let piece = session.state.board[from],
                       piece.color == session.state.sideToMove else {
@@ -464,6 +473,15 @@ struct ChessBoardView: View {
     }
 
     private func handleTap(_ square: Square) {
+        #if DEBUG
+        if isCaptureTestModeEnabled {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                session.captureForTesting(at: square)
+            }
+            return
+        }
+        #endif
+
         if session.selectedSquare == nil {
             session.select(square)
         } else {

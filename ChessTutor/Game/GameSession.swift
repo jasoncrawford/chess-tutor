@@ -240,6 +240,28 @@ final class GameSession {
         message = nil
     }
 
+    #if DEBUG
+    func captureForTesting(at square: Square) {
+        guard let piece = state.board[square] else {
+            return
+        }
+
+        tentativeMove = nil
+        committedState.board[square] = nil
+        committedCapturedPieces.append(
+            CapturedPiece(
+                id: capturedID(for: piece, at: square),
+                piece: piece,
+                capturedAt: square,
+                state: .committed
+            )
+        )
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = nil
+    }
+    #endif
+
     private func legalMoves(forSelectionAt square: Square) -> [Move] {
         if let tentativeMove, square == tentativeMove.to {
             return LegalMoveGenerator.legalMoves(for: tentativeMove.from, in: committedState)

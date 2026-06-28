@@ -2,6 +2,9 @@ import SwiftUI
 
 struct TurnStatusPanelView: View {
     @Bindable var session: GameSession
+    #if DEBUG
+    @Binding var isCaptureTestModeEnabled: Bool
+    #endif
     let onAbout: () -> Void
 
     var body: some View {
@@ -33,6 +36,18 @@ struct TurnStatusPanelView: View {
             GameControlsView(session: session, placement: .done)
 
             GameControlsView(session: session, placement: .newGame, onAbout: onAbout)
+
+            #if DEBUG
+            Toggle(isOn: $isCaptureTestModeEnabled) {
+                Label("Test Captures", systemImage: "hand.tap")
+                    .font(.system(.footnote, design: .rounded).weight(.semibold))
+            }
+            .toggleStyle(.switch)
+            .tint(AppTheme.boardFrame)
+            .foregroundStyle(AppTheme.ink.opacity(0.68))
+            .padding(.top, 2)
+            .accessibilityHint("When enabled, tapping a piece sends it to the capture tray.")
+            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }

@@ -223,6 +223,37 @@ final class GameSessionTests: XCTestCase {
         XCTAssertTrue(session.capturedPieces.isEmpty)
     }
 
+    #if DEBUG
+    func testCaptureForTestingRemovesPieceFromBoardAndAddsCommittedCapture() {
+        let session = GameSession()
+        let square = Square(file: .a, rank: 7)
+
+        session.captureForTesting(at: square)
+
+        XCTAssertNil(session.state.board[square])
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.capturedAt), [square])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.committed])
+    }
+
+    func testCaptureForTestingClearsTentativeMoveAndSelection() {
+        let session = GameSession()
+        let movedPawn = Square(file: .e, rank: 4)
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: movedPawn)
+        session.select(movedPawn)
+
+        session.captureForTesting(at: movedPawn)
+
+        XCTAssertNil(session.state.board[movedPawn])
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertTrue(session.legalMovesForSelection.isEmpty)
+        XCTAssertNil(session.message)
+    }
+    #endif
+
     func testCapturedPieceAnimationIDDiffersFromCapturingPieceOnSameSquare() {
         let whitePawn = Square(file: .e, rank: 4)
         let blackPawn = Square(file: .d, rank: 5)
