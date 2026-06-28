@@ -19,14 +19,14 @@ final class CaptureTrayLayoutTests: XCTestCase {
     func testCaptureTrayWrapsToAtLeastFourColumns() {
         let layout = CaptureTrayLayout.make(for: 6, in: CGSize(width: 204, height: 85))
 
-        XCTAssertEqual(layout.columns, 4)
-        XCTAssertEqual(layout.pieceSize, 40.5)
+        XCTAssertEqual(layout.columns, 6)
+        XCTAssertEqual(layout.pieceSize, 30.67, accuracy: 0.01)
     }
 
-    func testCaptureTrayWrapsToThreeRowsForManyCaptures() {
+    func testCaptureTrayFillsRowsBeforeWrappingAgain() {
         let layout = CaptureTrayLayout.make(for: 15, in: CGSize(width: 204, height: 85))
 
-        XCTAssertEqual(layout.columns, 5)
-        XCTAssertEqual(layout.pieceSize, 25.67, accuracy: 0.01)
+        XCTAssertEqual(layout.columns, 8)
+        XCTAssertEqual(layout.pieceSize, 22)
     }
 }
