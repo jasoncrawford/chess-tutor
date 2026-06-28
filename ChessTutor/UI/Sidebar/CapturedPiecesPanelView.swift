@@ -16,6 +16,7 @@ struct CapturedPiecesPanelView: View {
 
     private func captureBox(for color: PieceColor) -> some View {
         let pieces = capturedPieces.filter { $0.piece.color == color }
+        let groups = CaptureTrayGroup.groups(for: pieces)
 
         return ZStack {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -57,7 +58,7 @@ struct CapturedPiecesPanelView: View {
                 .shadow(color: .black.opacity(0.20), radius: 5, y: -1)
 
             GeometryReader { proxy in
-                let layout = CaptureTrayLayout.make(for: pieces.count, in: proxy.size)
+                let layout = CaptureTrayLayout.make(for: groups.count, in: proxy.size)
 
                 LazyVGrid(
                     columns: Array(
@@ -67,12 +68,12 @@ struct CapturedPiecesPanelView: View {
                     alignment: .leading,
                     spacing: CaptureTrayLayout.pieceSpacing
                 ) {
-                    ForEach(pieces) { capturedPiece in
-                        PieceIconView(piece: capturedPiece.piece)
-                            .matchedGeometryEffect(id: capturedPiece.id, in: captureNamespace)
-                            .frame(width: layout.pieceSize, height: layout.pieceSize)
-                            .opacity(capturedPiece.state == .tentative ? 0.62 : 1)
-                            .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
+                    ForEach(groups) { group in
+                        CapturedPieceStackView(
+                            group: group,
+                            pieceSize: layout.pieceSize,
+                            captureNamespace: captureNamespace
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -82,6 +83,89 @@ struct CapturedPiecesPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: pieces)
+    }
+}
+
+struct CapturedPieceStackView: View {
+    let group: CaptureTrayGroup
+    let pieceSize: CGFloat
+    let captureNamespace: Namespace.ID
+
+    private var stackOffset: CGFloat {
+        min(8, pieceSize * 0.16)
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            if group.pieces.count > 1 {
+                pieceView(group.pieces[1])
+                    .offset(x: stackOffset, y: -stackOffset)
+                    .zIndex(0)
+            }
+
+            pieceView(group.pieces[0])
+                .zIndex(1)
+
+            if let countText = group.countText {
+                Text(countText)
+                    .font(.system(size: max(10, pieceSize * 0.28), weight: .bold, design: .rounded))
+                    .foregroundStyle(AppTheme.ink)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        Capsule()
+                            .fill(AppTheme.lightSquare.opacity(0.90))
+                            .overlay {
+                                Capsule()
+                                    .stroke(AppTheme.boardFrame.opacity(0.22), lineWidth: 1)
+                            }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .padding(.trailing, 1)
+                    .offset(y: -pieceSize * 0.04)
+                    .zIndex(2)
+            }
+        }
+        .frame(width: pieceSize, height: pieceSize)
+    }
+
+    private func pieceView(_ capturedPiece: CapturedPiece) -> some View {
+        PieceIconView(piece: capturedPiece.piece)
+            .matchedGeometryEffect(id: capturedPiece.id, in: captureNamespace)
+            .frame(width: pieceSize, height: pieceSize)
+            .opacity(capturedPiece.state == .tentative ? 0.62 : 1)
+            .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
+    }
+}
+
+struct CaptureTrayGroup: Equatable, Identifiable {
+    let kind: Piece.Kind
+    let pieces: [CapturedPiece]
+
+    var id: String {
+        "\(pieces[0].piece.color.rawValue)-\(kind.rawValue)"
+    }
+
+    var countText: String? {
+        guard kind == .pawn, pieces.count > 2 else {
+            return nil
+        }
+
+        return "x\(pieces.count)"
+    }
+
+    static func groups(for pieces: [CapturedPiece]) -> [CaptureTrayGroup] {
+        var groupedPieces: [(kind: Piece.Kind, pieces: [CapturedPiece])] = []
+
+        for piece in pieces {
+            if let index = groupedPieces.firstIndex(where: { $0.kind == piece.piece.kind }) {
+                groupedPieces[index].pieces.append(piece)
+            } else {
+                groupedPieces.append((kind: piece.piece.kind, pieces: [piece]))
+            }
+        }
+
+        return groupedPieces.map { CaptureTrayGroup(kind: $0.kind, pieces: $0.pieces) }
     }
 }
 
