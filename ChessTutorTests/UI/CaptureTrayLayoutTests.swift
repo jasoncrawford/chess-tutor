@@ -32,14 +32,28 @@ final class CaptureTrayLayoutTests: XCTestCase {
 
     func testCaptureTrayReservesSpaceForCountBadge() {
         let layout = CaptureTrayLayout.make(
-            for: 5,
-            reservesCountBadgeSpace: true,
+            widthMultipliers: [
+                CaptureTrayGroup.countBadgeWidthMultiplier,
+                1,
+                1,
+                1,
+                1
+            ],
             in: CGSize(width: 204, height: 85)
         )
 
-        XCTAssertEqual(layout.columns, 5)
-        XCTAssertEqual(layout.itemWidth, 37.6, accuracy: 0.01)
-        XCTAssertEqual(layout.pieceSize, 27.25, accuracy: 0.01)
+        XCTAssertEqual(layout.pieceSize, 34.94, accuracy: 0.01)
+        XCTAssertEqualArray(layout.itemWidths, [48.22, 34.94, 34.94, 34.94, 34.94], accuracy: 0.01)
+    }
+
+    func testCaptureTrayKeepsTwoGroupsCompact() {
+        let layout = CaptureTrayLayout.make(
+            widthMultipliers: [1, 1],
+            in: CGSize(width: 204, height: 85)
+        )
+
+        XCTAssertEqual(layout.pieceSize, 56)
+        XCTAssertEqual(layout.itemWidths, [56, 56])
     }
 
     func testCaptureTrayGroupsDuplicatePieceKindsInFirstOccurrenceOrder() {
@@ -89,5 +103,18 @@ final class CaptureTrayLayoutTests: XCTestCase {
             capturedAt: Square(file: .a, rank: 1),
             state: .committed
         )
+    }
+
+    private func XCTAssertEqualArray(
+        _ actual: [CGFloat],
+        _ expected: [CGFloat],
+        accuracy: CGFloat,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.count, expected.count, file: file, line: line)
+        for (actualValue, expectedValue) in zip(actual, expected) {
+            XCTAssertEqual(actualValue, expectedValue, accuracy: accuracy, file: file, line: line)
+        }
     }
 }

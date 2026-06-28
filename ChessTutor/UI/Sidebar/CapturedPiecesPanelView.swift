@@ -59,25 +59,18 @@ struct CapturedPiecesPanelView: View {
 
             GeometryReader { proxy in
                 let layout = CaptureTrayLayout.make(
-                    for: groups.count,
-                    reservesCountBadgeSpace: groups.contains { $0.countText != nil },
+                    widthMultipliers: groups.map(\.widthMultiplier),
                     in: proxy.size
                 )
 
-                LazyVGrid(
-                    columns: Array(
-                        repeating: GridItem(.fixed(layout.itemWidth), spacing: CaptureTrayLayout.pieceSpacing),
-                        count: layout.columns
-                    ),
-                    alignment: .leading,
-                    spacing: CaptureTrayLayout.pieceSpacing
-                ) {
-                    ForEach(groups) { group in
+                HStack(alignment: .center, spacing: CaptureTrayLayout.pieceSpacing) {
+                    ForEach(Array(zip(groups.indices, groups)), id: \.1.id) { index, group in
                         CapturedPieceStackView(
                             group: group,
                             pieceSize: layout.pieceSize,
                             captureNamespace: captureNamespace
                         )
+                        .frame(width: layout.itemWidths[index], height: layout.pieceSize, alignment: .leading)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -190,7 +183,34 @@ struct CaptureTrayLayout: Equatable {
 
     let columns: Int
     let itemWidth: CGFloat
+    let itemWidths: [CGFloat]
     let pieceSize: CGFloat
+
+    static func make(widthMultipliers: [CGFloat], in size: CGSize) -> CaptureTrayLayout {
+        guard !widthMultipliers.isEmpty else {
+            return CaptureTrayLayout(
+                columns: 1,
+                itemWidth: maximumPieceSize,
+                itemWidths: [maximumPieceSize],
+                pieceSize: maximumPieceSize
+            )
+        }
+
+        let availableWidth = max(1, size.width)
+        let availableHeight = max(1, size.height)
+        let totalSpacing = CGFloat(widthMultipliers.count - 1) * pieceSpacing
+        let totalWidthMultiplier = widthMultipliers.reduce(0, +)
+        let widthBound = (availableWidth - totalSpacing) / totalWidthMultiplier
+        let pieceSize = max(minimumPieceSize, min(maximumPieceSize, availableHeight, widthBound))
+        let itemWidths = widthMultipliers.map { pieceSize * $0 }
+
+        return CaptureTrayLayout(
+            columns: widthMultipliers.count,
+            itemWidth: itemWidths.first ?? pieceSize,
+            itemWidths: itemWidths,
+            pieceSize: pieceSize
+        )
+    }
 
     static func make(
         for pieceCount: Int,
@@ -198,7 +218,12 @@ struct CaptureTrayLayout: Equatable {
         in size: CGSize
     ) -> CaptureTrayLayout {
         guard pieceCount > 0 else {
-            return CaptureTrayLayout(columns: 1, itemWidth: maximumPieceSize, pieceSize: maximumPieceSize)
+            return CaptureTrayLayout(
+                columns: 1,
+                itemWidth: maximumPieceSize,
+                itemWidths: [maximumPieceSize],
+                pieceSize: maximumPieceSize
+            )
         }
 
         let availableWidth = max(1, size.width)
@@ -218,6 +243,11 @@ struct CaptureTrayLayout: Equatable {
         let heightBound = (availableHeight - CGFloat(rows - 1) * pieceSpacing) / CGFloat(rows)
         let pieceSize = max(minimumPieceSize, min(maximumPieceSize, widthBound, heightBound))
 
-        return CaptureTrayLayout(columns: columns, itemWidth: itemWidth, pieceSize: pieceSize)
+        return CaptureTrayLayout(
+            columns: columns,
+            itemWidth: itemWidth,
+            itemWidths: Array(repeating: itemWidth, count: columns),
+            pieceSize: pieceSize
+        )
     }
 }
