@@ -13,6 +13,21 @@ final class BoardTests: XCTestCase {
         XCTAssertEqual(board.pieces.count, 32)
     }
 
+    func testStartingPositionPlacesQueensOnTheirOwnColor() {
+        let board = Board.startingPosition()
+
+        XCTAssertEqual(board[Square(file: .d, rank: 1)], Piece(kind: .queen, color: .white))
+        XCTAssertEqual(board[Square(file: .d, rank: 8)], Piece(kind: .queen, color: .black))
+        XCTAssertEqual(board[Square(file: .e, rank: 1)], Piece(kind: .king, color: .white))
+        XCTAssertEqual(board[Square(file: .e, rank: 8)], Piece(kind: .king, color: .black))
+    }
+
+    func testSquareColorsMatchConventionalChessboard() {
+        XCTAssertFalse(Square(file: .a, rank: 1).isLightSquare)
+        XCTAssertTrue(Square(file: .d, rank: 1).isLightSquare)
+        XCTAssertFalse(Square(file: .d, rank: 8).isLightSquare)
+    }
+
     func testSquareOffsetsRejectBoardEdges() {
         let a1 = Square(file: .a, rank: 1)
 
