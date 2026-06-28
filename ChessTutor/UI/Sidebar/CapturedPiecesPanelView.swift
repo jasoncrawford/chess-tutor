@@ -64,7 +64,7 @@ struct CapturedPiecesPanelView: View {
                         repeating: GridItem(.fixed(layout.pieceSize), spacing: CaptureTrayLayout.pieceSpacing),
                         count: layout.columns
                     ),
-                    alignment: .center,
+                    alignment: .leading,
                     spacing: CaptureTrayLayout.pieceSpacing
                 ) {
                     ForEach(pieces) { capturedPiece in
@@ -75,10 +75,10 @@ struct CapturedPiecesPanelView: View {
                             .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 15)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: pieces)
