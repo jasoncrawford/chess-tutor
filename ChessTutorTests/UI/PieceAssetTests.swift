@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import ChessTutor
 
@@ -18,5 +19,38 @@ final class PieceAssetTests: XCTestCase {
         XCTAssertEqual(Piece(kind: .bishop, color: .black).assetName, "PieceBlackBishop")
         XCTAssertEqual(Piece(kind: .knight, color: .black).assetName, "PieceBlackKnight")
         XCTAssertEqual(Piece(kind: .pawn, color: .black).assetName, "PieceBlackPawn")
+    }
+
+    func testPieceAssetsAreBundled() {
+        for piece in allPieces {
+            XCTAssertNotNil(
+                UIImage(named: piece.assetName, in: Bundle.main, compatibleWith: nil),
+                "Missing bundled image asset named \(piece.assetName)"
+            )
+        }
+    }
+
+    func testChessArtLicenseNoticeIsBundled() {
+        XCTAssertNotNil(
+            Bundle.main.url(forResource: "ChessArt-MIT", withExtension: "txt"),
+            "Missing bundled Chess Art MIT license notice"
+        )
+    }
+
+    private var allPieces: [Piece] {
+        [
+            Piece(kind: .king, color: .white),
+            Piece(kind: .queen, color: .white),
+            Piece(kind: .rook, color: .white),
+            Piece(kind: .bishop, color: .white),
+            Piece(kind: .knight, color: .white),
+            Piece(kind: .pawn, color: .white),
+            Piece(kind: .king, color: .black),
+            Piece(kind: .queen, color: .black),
+            Piece(kind: .rook, color: .black),
+            Piece(kind: .bishop, color: .black),
+            Piece(kind: .knight, color: .black),
+            Piece(kind: .pawn, color: .black),
+        ]
     }
 }
