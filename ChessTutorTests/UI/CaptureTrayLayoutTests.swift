@@ -22,4 +22,11 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertEqual(layout.columns, 4)
         XCTAssertEqual(layout.pieceSize, 40.5)
     }
+
+    func testCaptureTrayWrapsToThreeRowsForManyCaptures() {
+        let layout = CaptureTrayLayout.make(for: 15, in: CGSize(width: 204, height: 85))
+
+        XCTAssertEqual(layout.columns, 5)
+        XCTAssertEqual(layout.pieceSize, 25.67, accuracy: 0.01)
+    }
 }

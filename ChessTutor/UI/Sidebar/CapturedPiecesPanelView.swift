@@ -98,8 +98,9 @@ struct CaptureTrayLayout: Equatable {
             return CaptureTrayLayout(columns: 1, pieceSize: maximumPieceSize)
         }
 
-        let rows = pieceCount <= 5 ? 1 : 2
-        let columns = rows == 1 ? pieceCount : min(5, max(4, Int(ceil(Double(pieceCount) / Double(rows)))))
+        let rows = min(3, max(1, Int(ceil(Double(pieceCount) / 5.0))))
+        let minimumWrappedColumns = rows == 1 ? 1 : 4
+        let columns = min(5, max(minimumWrappedColumns, Int(ceil(Double(pieceCount) / Double(rows)))))
         let availableWidth = max(1, size.width)
         let availableHeight = max(1, size.height)
         let widthBound = (availableWidth - CGFloat(columns - 1) * pieceSpacing) / CGFloat(columns)
