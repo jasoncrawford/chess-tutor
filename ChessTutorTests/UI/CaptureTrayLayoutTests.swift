@@ -3,23 +3,23 @@ import XCTest
 
 final class CaptureTrayLayoutTests: XCTestCase {
     func testCaptureTrayStartsWithLargePieces() {
-        let layout = CaptureTrayLayout.make(for: 3, in: CGSize(width: 194, height: 73))
+        let layout = CaptureTrayLayout.make(for: 3, in: CGSize(width: 204, height: 85))
 
         XCTAssertEqual(layout.columns, 3)
         XCTAssertEqual(layout.pieceSize, 56)
     }
 
     func testCaptureTrayShrinksSingleRowBeforeWrapping() {
-        let layout = CaptureTrayLayout.make(for: 4, in: CGSize(width: 194, height: 73))
+        let layout = CaptureTrayLayout.make(for: 5, in: CGSize(width: 204, height: 85))
 
-        XCTAssertEqual(layout.columns, 4)
-        XCTAssertEqual(layout.pieceSize, 45.5)
+        XCTAssertEqual(layout.columns, 5)
+        XCTAssertEqual(layout.pieceSize, 37.6, accuracy: 0.01)
     }
 
-    func testCaptureTrayWrapsToTwoRowsWhenSingleRowWouldGetTooSmall() {
-        let layout = CaptureTrayLayout.make(for: 5, in: CGSize(width: 194, height: 73))
+    func testCaptureTrayWrapsToAtLeastFourColumns() {
+        let layout = CaptureTrayLayout.make(for: 6, in: CGSize(width: 204, height: 85))
 
-        XCTAssertEqual(layout.columns, 3)
-        XCTAssertEqual(layout.pieceSize, 34.5)
+        XCTAssertEqual(layout.columns, 4)
+        XCTAssertEqual(layout.pieceSize, 40.5)
     }
 }
