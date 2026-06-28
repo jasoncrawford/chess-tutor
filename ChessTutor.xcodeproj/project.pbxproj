@@ -25,6 +25,7 @@
 		64C6845F93B878E7F3820D1C /* MoveHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65312F4367726826F552878 /* MoveHistoryView.swift */; };
 		65A46B140B9129690D7AE8BA /* TurnStatusPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */; };
 		72D18795F0896B6D5ABBBC18 /* GameResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C9B30C3E0E430A338D94D6 /* GameResult.swift */; };
+		73E2A6171A4E73CD50C61F95 /* CaptureTrayLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */; };
 		791A0AB929E424A85CE1F615 /* ChessBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892B39ACE33796097240A052 /* ChessBoardView.swift */; };
 		791A8779A3FE2F5687789FF6 /* GameSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D517824035C75485AD4D712 /* GameSession.swift */; };
 		7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */; };
@@ -94,6 +95,7 @@
 		DBBCE3885F06B31979F4483D /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
 		DEB156EDC259546DEF345170 /* BoardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardTests.swift; sourceTree = "<group>"; };
 		E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGeneratorTests.swift; sourceTree = "<group>"; };
+		E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTrayLayoutTests.swift; sourceTree = "<group>"; };
 		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
 		F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatter.swift; sourceTree = "<group>"; };
 		F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialMoveTests.swift; sourceTree = "<group>"; };
@@ -155,6 +157,7 @@
 		3870D8EA05DF92B0D1F40F9E /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */,
 				C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */,
 			);
 			path = UI;
@@ -423,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8F63639BDB9700501409AC9C /* BoardTests.swift in Sources */,
+				73E2A6171A4E73CD50C61F95 /* CaptureTrayLayoutTests.swift in Sources */,
 				D6D68BC917FAB7DF523A348F /* GameSessionTests.swift in Sources */,
 				15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */,
 				7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */,

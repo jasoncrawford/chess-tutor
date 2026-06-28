@@ -4,12 +4,14 @@ struct CapturedPiecesPanelView: View {
     let capturedPieces: [CapturedPiece]
     let captureNamespace: Namespace.ID
 
+    private let panelSize: CGFloat = 240
+
     var body: some View {
         VStack(spacing: 10) {
             captureBox(for: .black)
             captureBox(for: .white)
         }
-        .frame(width: 240, height: 240)
+        .frame(width: panelSize, height: panelSize)
     }
 
     private func captureBox(for color: PieceColor) -> some View {
@@ -54,23 +56,56 @@ struct CapturedPiecesPanelView: View {
                 }
                 .shadow(color: .black.opacity(0.20), radius: 5, y: -1)
 
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.fixed(30), spacing: 4), count: 6),
-                alignment: .center,
-                spacing: 4
-            ) {
-                ForEach(pieces) { capturedPiece in
-                    PieceIconView(piece: capturedPiece.piece)
-                        .matchedGeometryEffect(id: capturedPiece.id, in: captureNamespace)
-                        .frame(width: 30, height: 30)
-                        .opacity(capturedPiece.state == .tentative ? 0.62 : 1)
-                        .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
+            GeometryReader { proxy in
+                let layout = CaptureTrayLayout.make(for: pieces.count, in: proxy.size)
+
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.fixed(layout.pieceSize), spacing: CaptureTrayLayout.pieceSpacing),
+                        count: layout.columns
+                    ),
+                    alignment: .center,
+                    spacing: CaptureTrayLayout.pieceSpacing
+                ) {
+                    ForEach(pieces) { capturedPiece in
+                        PieceIconView(piece: capturedPiece.piece)
+                            .matchedGeometryEffect(id: capturedPiece.id, in: captureNamespace)
+                            .frame(width: layout.pieceSize, height: layout.pieceSize)
+                            .opacity(capturedPiece.state == .tentative ? 0.62 : 1)
+                            .scaleEffect(capturedPiece.state == .tentative ? 0.92 : 1)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: pieces)
+    }
+}
+
+struct CaptureTrayLayout: Equatable {
+    static let pieceSpacing: CGFloat = 4
+    private static let maximumPieceSize: CGFloat = 56
+    private static let minimumPieceSize: CGFloat = 18
+
+    let columns: Int
+    let pieceSize: CGFloat
+
+    static func make(for pieceCount: Int, in size: CGSize) -> CaptureTrayLayout {
+        guard pieceCount > 0 else {
+            return CaptureTrayLayout(columns: 1, pieceSize: maximumPieceSize)
+        }
+
+        let rows = pieceCount <= 4 ? 1 : 2
+        let columns = max(1, Int(ceil(Double(pieceCount) / Double(rows))))
+        let availableWidth = max(1, size.width)
+        let availableHeight = max(1, size.height)
+        let widthBound = (availableWidth - CGFloat(columns - 1) * pieceSpacing) / CGFloat(columns)
+        let heightBound = (availableHeight - CGFloat(rows - 1) * pieceSpacing) / CGFloat(rows)
+        let pieceSize = max(minimumPieceSize, min(maximumPieceSize, widthBound, heightBound))
+
+        return CaptureTrayLayout(columns: columns, pieceSize: pieceSize)
     }
 }

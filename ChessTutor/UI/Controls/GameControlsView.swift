@@ -80,19 +80,25 @@ struct GameControlsView: View {
         .foregroundStyle(AppTheme.ink.opacity(0.72))
     }
 
+    private var aboutButton: some View {
+        Button {
+            onAbout?()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(AppTheme.ink.opacity(0.62))
+        .accessibilityLabel("About")
+    }
+
     private var newGameControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 6) {
             newGameButton
 
-            Button {
-                onAbout?()
-            } label: {
-                Label("About", systemImage: "info.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .labelStyle(.titleAndIcon)
-            .buttonStyle(.borderless)
-            .foregroundStyle(AppTheme.ink.opacity(0.62))
+            aboutButton
         }
     }
 }
