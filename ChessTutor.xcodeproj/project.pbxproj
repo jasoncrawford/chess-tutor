@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0189A710E8B33DE2836E8282 /* AboutAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 642A933C7346D807D67CED68 /* AboutAttribution.swift */; };
 		12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */; };
 		15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D53364C2471FF324E13201 /* GameStateTests.swift */; };
 		1C16BC492A550B600532F28F /* Move.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E571D9060609ECB4FB126C /* Move.swift */; };
@@ -58,6 +59,7 @@
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
 		5F86B944F3524C3B99682C66 /* PieceAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAsset.swift; sourceTree = "<group>"; };
+		642A933C7346D807D67CED68 /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
 		6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceGlyph.swift; sourceTree = "<group>"; };
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
@@ -114,6 +116,7 @@
 		130DC77DF7EBCE3841EDF6D8 /* Controls */ = {
 			isa = PBXGroup;
 			children = (
+				642A933C7346D807D67CED68 /* AboutAttribution.swift */,
 				014400D67223F02798F38023 /* GameControlsView.swift */,
 			);
 			path = Controls;
@@ -351,6 +354,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0189A710E8B33DE2836E8282 /* AboutAttribution.swift in Sources */,
 				55CF4F3C57F42B3D1F3D9582 /* AppTheme.swift in Sources */,
 				12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */,
 				E80A579D900A8593B26551B2 /* Board.swift in Sources */,

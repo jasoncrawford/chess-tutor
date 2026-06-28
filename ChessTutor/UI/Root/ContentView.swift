@@ -4,6 +4,7 @@ import UIKit
 struct ContentView: View {
     @State private var session = GameSession()
     @State private var pendingPromotion: PendingPromotion?
+    @State private var isShowingAbout = false
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
@@ -48,6 +49,11 @@ struct ContentView: View {
             }
             .presentationDetents([.height(340)])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingAbout) {
+            AboutSheetView()
+                .presentationDetents([.height(320)])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -126,7 +132,9 @@ struct ContentView: View {
     private var newGameTile: some View {
         VStack {
             Spacer()
-            GameControlsView(session: session, placement: .newGame)
+            GameControlsView(session: session, placement: .newGame, onAbout: {
+                isShowingAbout = true
+            })
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

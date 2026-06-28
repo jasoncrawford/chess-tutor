@@ -8,14 +8,21 @@ enum GameControlsPlacement {
 struct GameControlsView: View {
     @Bindable var session: GameSession
     let placement: GameControlsPlacement
+    let onAbout: (() -> Void)?
     @State private var isConfirmingNewGame = false
+
+    init(session: GameSession, placement: GameControlsPlacement, onAbout: (() -> Void)? = nil) {
+        self.session = session
+        self.placement = placement
+        self.onAbout = onAbout
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if placement == .done {
                 turnControls
             } else {
-                newGameButton
+                newGameControls
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,5 +78,69 @@ struct GameControlsView: View {
         .labelStyle(.titleAndIcon)
         .buttonStyle(.borderless)
         .foregroundStyle(AppTheme.ink.opacity(0.72))
+    }
+
+    private var newGameControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            newGameButton
+
+            Button {
+                onAbout?()
+            } label: {
+                Label("About", systemImage: "info.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(.borderless)
+            .foregroundStyle(AppTheme.ink.opacity(0.62))
+        }
+    }
+}
+
+struct AboutSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AboutAttribution.appName)
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundStyle(AppTheme.ink)
+
+                Text(AboutAttribution.appSummary)
+                    .font(.body)
+                    .foregroundStyle(AppTheme.ink.opacity(0.72))
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AboutAttribution.pieceCreditTitle)
+                    .font(.system(.headline, design: .rounded).weight(.semibold))
+                    .foregroundStyle(AppTheme.ink)
+
+                Text(AboutAttribution.pieceCredit)
+                    .font(.body)
+                    .foregroundStyle(AppTheme.ink.opacity(0.76))
+
+                Text("\(AboutAttribution.pieceSource), \(AboutAttribution.pieceLicense)")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.ink.opacity(0.62))
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                dismiss()
+            } label: {
+                Text("Done")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(AppTheme.boardFrame)
+        }
+        .padding(26)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppTheme.panel)
     }
 }

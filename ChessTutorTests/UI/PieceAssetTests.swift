@@ -37,6 +37,18 @@ final class PieceAssetTests: XCTestCase {
         )
     }
 
+    func testAboutAttributionNamesCelticPieceSource() {
+        let aboutText = [
+            AboutAttribution.pieceCredit,
+            AboutAttribution.pieceSource,
+            AboutAttribution.pieceLicense,
+        ].joined(separator: " ")
+
+        XCTAssertTrue(aboutText.contains("Maurizio Monge"))
+        XCTAssertTrue(aboutText.contains("Chess Art"))
+        XCTAssertTrue(aboutText.contains("MIT License"))
+    }
+
     private var allPieces: [Piece] {
         [
             Piece(kind: .king, color: .white),
