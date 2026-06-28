@@ -56,6 +56,7 @@ Recent checkpoints include:
 - staged check-rule guidance
 - en passant regression coverage
 - en passant capture indicator UI
+- Celtic vector piece set and warm side-panel visual polish
 
 Tests were passing at the last checkpoint with:
 
