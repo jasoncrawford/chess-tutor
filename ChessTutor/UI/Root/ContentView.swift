@@ -147,7 +147,7 @@ struct ContentView: View {
             turnTile
         case .capturedPieces:
             captureTrays
-        case .newGame:
+        case .selectedPiece:
             newGameTile
         }
     }

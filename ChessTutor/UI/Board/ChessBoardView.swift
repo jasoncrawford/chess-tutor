@@ -4,7 +4,7 @@ import UIKit
 enum SidebarSegment: Equatable, Hashable {
     case messageAndDone
     case capturedPieces
-    case newGame
+    case selectedPiece
 }
 
 enum BoardViewingAngle: Equatable {
@@ -58,9 +58,9 @@ enum BoardViewingAngle: Equatable {
     var sidebarSegmentsInTabletopOrder: [SidebarSegment] {
         switch self {
         case .normal, .counterclockwiseQuarterTurn:
-            return [.messageAndDone, .capturedPieces, .newGame]
+            return [.messageAndDone, .selectedPiece, .capturedPieces]
         case .clockwiseQuarterTurn, .halfTurn:
-            return [.newGame, .capturedPieces, .messageAndDone]
+            return [.capturedPieces, .selectedPiece, .messageAndDone]
         }
     }
 

@@ -65,14 +65,14 @@ final class BoardTests: XCTestCase {
         XCTAssertTrue(BoardViewingAngle.clockwiseQuarterTurn.presentsSidebarSegmentsHorizontally)
         XCTAssertEqual(
             BoardViewingAngle.clockwiseQuarterTurn.sidebarSegmentsInTabletopOrder,
-            [.newGame, .capturedPieces, .messageAndDone]
+            [.capturedPieces, .selectedPiece, .messageAndDone]
         )
         XCTAssertEqual(BoardViewingAngle.counterclockwiseQuarterTurn.tableRotationDegrees, -90)
         XCTAssertEqual(BoardViewingAngle.counterclockwiseQuarterTurn.readableRotationDegrees, 90)
         XCTAssertTrue(BoardViewingAngle.counterclockwiseQuarterTurn.presentsSidebarSegmentsHorizontally)
         XCTAssertEqual(
             BoardViewingAngle.counterclockwiseQuarterTurn.sidebarSegmentsInTabletopOrder,
-            [.messageAndDone, .capturedPieces, .newGame]
+            [.messageAndDone, .selectedPiece, .capturedPieces]
         )
     }
 
@@ -100,11 +100,11 @@ final class BoardTests: XCTestCase {
         XCTAssertFalse(BoardViewingAngle.halfTurn.presentsSidebarSegmentsHorizontally)
         XCTAssertEqual(
             BoardViewingAngle.normal.sidebarSegmentsInTabletopOrder,
-            [.messageAndDone, .capturedPieces, .newGame]
+            [.messageAndDone, .selectedPiece, .capturedPieces]
         )
         XCTAssertEqual(
             BoardViewingAngle.halfTurn.sidebarSegmentsInTabletopOrder,
-            [.newGame, .capturedPieces, .messageAndDone]
+            [.capturedPieces, .selectedPiece, .messageAndDone]
         )
     }
 
