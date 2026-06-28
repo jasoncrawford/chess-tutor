@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PIECES_DIR="$ROOT_DIR/ChessTutor/Resources/Assets.xcassets/Pieces"
-BASE_URL="https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/celtic"
+BASE_URL="https://raw.githubusercontent.com/lichess-org/lila/c9e837c94c27fa7fbefaead1f7f90ad3af586cc6/public/piece/celtic"
 
 mkdir -p "$PIECES_DIR"
 
@@ -57,6 +57,12 @@ elif color == "black":
     }
 else:
     raise ValueError(f"Unknown piece color: {color}")
+
+missing_tokens = [original for original in replacements if original not in svg]
+if missing_tokens:
+    for token in missing_tokens:
+        print(f"Missing expected source token {token!r} in {source_path}", file=sys.stderr)
+    sys.exit(1)
 
 for original, replacement in replacements.items():
     svg = svg.replace(original, replacement)
