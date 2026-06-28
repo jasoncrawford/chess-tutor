@@ -58,11 +58,15 @@ struct CapturedPiecesPanelView: View {
                 .shadow(color: .black.opacity(0.20), radius: 5, y: -1)
 
             GeometryReader { proxy in
-                let layout = CaptureTrayLayout.make(for: groups.count, in: proxy.size)
+                let layout = CaptureTrayLayout.make(
+                    for: groups.count,
+                    reservesCountBadgeSpace: groups.contains { $0.countText != nil },
+                    in: proxy.size
+                )
 
                 LazyVGrid(
                     columns: Array(
-                        repeating: GridItem(.fixed(layout.pieceSize), spacing: CaptureTrayLayout.pieceSpacing),
+                        repeating: GridItem(.fixed(layout.itemWidth), spacing: CaptureTrayLayout.pieceSpacing),
                         count: layout.columns
                     ),
                     alignment: .leading,
@@ -95,6 +99,10 @@ struct CapturedPieceStackView: View {
         min(8, pieceSize * 0.16)
     }
 
+    private var countBadgeFontSize: CGFloat {
+        max(12, pieceSize * 0.36)
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             if group.pieces.count > 1 {
@@ -108,10 +116,10 @@ struct CapturedPieceStackView: View {
 
             if let countText = group.countText {
                 Text(countText)
-                    .font(.system(size: max(10, pieceSize * 0.28), weight: .bold, design: .rounded))
+                    .font(.system(size: countBadgeFontSize, weight: .bold, design: .rounded))
                     .foregroundStyle(AppTheme.ink)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
                     .background(
                         Capsule()
                             .fill(AppTheme.lightSquare.opacity(0.90))
@@ -121,12 +129,12 @@ struct CapturedPieceStackView: View {
                             }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                    .padding(.trailing, 1)
+                    .padding(.trailing, 2)
                     .offset(y: -pieceSize * 0.04)
                     .zIndex(2)
             }
         }
-        .frame(width: pieceSize, height: pieceSize)
+        .frame(width: pieceSize * group.widthMultiplier, height: pieceSize)
     }
 
     private func pieceView(_ capturedPiece: CapturedPiece) -> some View {
@@ -139,6 +147,8 @@ struct CapturedPieceStackView: View {
 }
 
 struct CaptureTrayGroup: Equatable, Identifiable {
+    static let countBadgeWidthMultiplier: CGFloat = 1.38
+
     let kind: Piece.Kind
     let pieces: [CapturedPiece]
 
@@ -152,6 +162,10 @@ struct CaptureTrayGroup: Equatable, Identifiable {
         }
 
         return "x\(pieces.count)"
+    }
+
+    var widthMultiplier: CGFloat {
+        countText == nil ? 1 : Self.countBadgeWidthMultiplier
     }
 
     static func groups(for pieces: [CapturedPiece]) -> [CaptureTrayGroup] {
@@ -175,27 +189,35 @@ struct CaptureTrayLayout: Equatable {
     private static let minimumPieceSize: CGFloat = 18
 
     let columns: Int
+    let itemWidth: CGFloat
     let pieceSize: CGFloat
 
-    static func make(for pieceCount: Int, in size: CGSize) -> CaptureTrayLayout {
+    static func make(
+        for pieceCount: Int,
+        reservesCountBadgeSpace: Bool = false,
+        in size: CGSize
+    ) -> CaptureTrayLayout {
         guard pieceCount > 0 else {
-            return CaptureTrayLayout(columns: 1, pieceSize: maximumPieceSize)
+            return CaptureTrayLayout(columns: 1, itemWidth: maximumPieceSize, pieceSize: maximumPieceSize)
         }
 
         let availableWidth = max(1, size.width)
         let availableHeight = max(1, size.height)
+        let widthMultiplier: CGFloat = reservesCountBadgeSpace ? CaptureTrayGroup.countBadgeWidthMultiplier : 1
         let rows = (1...3).first { rowCount in
             let columnCount = Int(ceil(Double(pieceCount) / Double(rowCount)))
-            let widthBound = (availableWidth - CGFloat(columnCount - 1) * pieceSpacing) / CGFloat(columnCount)
+            let itemWidth = (availableWidth - CGFloat(columnCount - 1) * pieceSpacing) / CGFloat(columnCount)
+            let widthBound = itemWidth / widthMultiplier
             let heightBound = (availableHeight - CGFloat(rowCount - 1) * pieceSpacing) / CGFloat(rowCount)
 
             return min(widthBound, heightBound) >= minimumPieceSize
         } ?? 3
         let columns = max(1, Int(ceil(Double(pieceCount) / Double(rows))))
-        let widthBound = (availableWidth - CGFloat(columns - 1) * pieceSpacing) / CGFloat(columns)
+        let itemWidth = (availableWidth - CGFloat(columns - 1) * pieceSpacing) / CGFloat(columns)
+        let widthBound = itemWidth / widthMultiplier
         let heightBound = (availableHeight - CGFloat(rows - 1) * pieceSpacing) / CGFloat(rows)
         let pieceSize = max(minimumPieceSize, min(maximumPieceSize, widthBound, heightBound))
 
-        return CaptureTrayLayout(columns: columns, pieceSize: pieceSize)
+        return CaptureTrayLayout(columns: columns, itemWidth: itemWidth, pieceSize: pieceSize)
     }
 }

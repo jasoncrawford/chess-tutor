@@ -30,6 +30,18 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertEqual(layout.pieceSize, 22)
     }
 
+    func testCaptureTrayReservesSpaceForCountBadge() {
+        let layout = CaptureTrayLayout.make(
+            for: 5,
+            reservesCountBadgeSpace: true,
+            in: CGSize(width: 204, height: 85)
+        )
+
+        XCTAssertEqual(layout.columns, 5)
+        XCTAssertEqual(layout.itemWidth, 37.6, accuracy: 0.01)
+        XCTAssertEqual(layout.pieceSize, 27.25, accuracy: 0.01)
+    }
+
     func testCaptureTrayGroupsDuplicatePieceKindsInFirstOccurrenceOrder() {
         let groups = CaptureTrayGroup.groups(for: [
             captured(.bishop, id: "bishop-1"),
