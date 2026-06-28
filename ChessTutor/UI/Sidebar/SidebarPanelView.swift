@@ -1,12 +1,13 @@
 import SwiftUI
 
 struct SidebarPanelView<Content: View>: View {
+    let panelLength: CGFloat
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
             .padding(16)
-            .frame(width: 240, height: 240)
+            .frame(width: panelLength, height: panelLength)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(AppTheme.panelWarmth)

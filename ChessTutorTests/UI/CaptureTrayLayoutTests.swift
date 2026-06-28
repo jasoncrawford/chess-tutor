@@ -2,6 +2,31 @@ import XCTest
 @testable import ChessTutor
 
 final class CaptureTrayLayoutTests: XCTestCase {
+    func testPlaySurfaceUsesSameLayoutInBothDeviceOrientations() {
+        let landscape = PlaySurfaceLayout.make(for: CGSize(width: 1024, height: 768))
+        let portrait = PlaySurfaceLayout.make(for: CGSize(width: 768, height: 1024))
+
+        XCTAssertEqual(landscape.tabletopSize, CGSize(width: 1024, height: 768))
+        XCTAssertEqual(portrait.tabletopSize, landscape.tabletopSize)
+        XCTAssertEqual(landscape.boardSide, 676)
+        XCTAssertEqual(portrait.boardSide, landscape.boardSide)
+    }
+
+    func testPlaySurfaceKeepsBoardAndSidebarEdgesAligned() {
+        let layout = PlaySurfaceLayout.make(for: CGSize(width: 1180, height: 820))
+
+        XCTAssertEqual(layout.boardSide, 760)
+        XCTAssertEqual(layout.sidePanelHeight, layout.boardSide)
+        XCTAssertEqual(layout.contentSize, CGSize(width: 1048, height: 760))
+    }
+
+    func testSidebarSegmentsFillBoardHeightWithExistingGaps() {
+        let layout = SidebarColumnLayout.make(for: 760)
+
+        XCTAssertEqual(layout.columnHeight, 760)
+        XCTAssertEqual(layout.segmentLength, 245.33, accuracy: 0.01)
+    }
+
     func testCaptureTrayStartsWithLargePieces() {
         let layout = CaptureTrayLayout.make(for: 3, in: CGSize(width: 204, height: 85))
 

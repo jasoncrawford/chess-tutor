@@ -3,15 +3,14 @@ import SwiftUI
 struct CapturedPiecesPanelView: View {
     let capturedPieces: [CapturedPiece]
     let captureNamespace: Namespace.ID
-
-    private let panelSize: CGFloat = 240
+    let panelLength: CGFloat
 
     var body: some View {
         VStack(spacing: 10) {
             captureBox(for: .black)
             captureBox(for: .white)
         }
-        .frame(width: panelSize, height: panelSize)
+        .frame(width: panelLength, height: panelLength)
     }
 
     private func captureBox(for color: PieceColor) -> some View {

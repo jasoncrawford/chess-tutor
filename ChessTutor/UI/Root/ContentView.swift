@@ -21,12 +21,12 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let tabletopSize = tabletopSize(for: proxy.size)
+            let layout = PlaySurfaceLayout.make(for: proxy.size)
 
             ZStack {
                 AppTheme.table.ignoresSafeArea()
-                tabletop
-                    .frame(width: tabletopSize.width, height: tabletopSize.height)
+                tabletop(boardSide: layout.boardSide)
+                    .frame(width: layout.tabletopSize.width, height: layout.tabletopSize.height)
                     .rotationEffect(.degrees(tableRotationDegrees))
                     .frame(width: proxy.size.width, height: proxy.size.height)
             }
@@ -60,13 +60,16 @@ struct ContentView: View {
         }
     }
 
-    private var tabletop: some View {
-        HStack(alignment: .top, spacing: 28) {
+    private func tabletop(boardSide: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: PlaySurfaceLayout.boardPanelSpacing) {
             chessBoard
-            sidePanelContainer
+                .frame(width: boardSide, height: boardSide)
+            sidePanelContainer(sideLength: boardSide)
         }
-        .padding(.horizontal, 30)
-        .padding(.vertical, 24)
+        .frame(
+            width: boardSide + PlaySurfaceLayout.boardPanelSpacing + PlaySurfaceLayout.sidePanelWidth,
+            height: boardSide
+        )
     }
 
     private var chessBoard: some View {
@@ -85,7 +88,6 @@ struct ContentView: View {
             isCaptureTestModeEnabled: isCaptureTestModeEnabled,
             onMoveAttempt: handleMoveAttempt
         )
-        .frame(maxWidth: 760)
         #else
         return ChessBoardView(
             session: session,
@@ -94,41 +96,36 @@ struct ContentView: View {
             readableRotationDegrees: readableRotationDegrees,
             onMoveAttempt: handleMoveAttempt
         )
-        .frame(maxWidth: 760)
         #endif
     }
 
-    private var sidePanelContainer: some View {
+    private func sidePanelContainer(sideLength: CGFloat) -> some View {
         #if DEBUG
         return SidePanelView(
             session: session,
             viewingAngle: viewingAngle,
             readableRotationDegrees: readableRotationDegrees,
             captureNamespace: captureNamespace,
+            sideLength: sideLength,
             isCaptureTestModeEnabled: $isCaptureTestModeEnabled,
             onAbout: {
                 isShowingAbout = true
             }
         )
-        .frame(width: 260)
-        .frame(height: 760, alignment: .top)
+        .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
         #else
         return SidePanelView(
             session: session,
             viewingAngle: viewingAngle,
             readableRotationDegrees: readableRotationDegrees,
             captureNamespace: captureNamespace,
+            sideLength: sideLength,
             onAbout: {
                 isShowingAbout = true
             }
         )
-        .frame(width: 260)
-        .frame(height: 760, alignment: .top)
+        .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
         #endif
-    }
-
-    private func tabletopSize(for size: CGSize) -> CGSize {
-        CGSize(width: max(size.width, size.height), height: min(size.width, size.height))
     }
 
     private func syncToCurrentInterfaceOrientation(animated: Bool) {
@@ -170,6 +167,43 @@ struct ContentView: View {
 
     private var readableRotationDegrees: Double {
         -tableRotationDegrees
+    }
+}
+
+struct PlaySurfaceLayout: Equatable {
+    static let maximumBoardSide: CGFloat = 760
+    static let sidePanelWidth: CGFloat = 260
+    static let boardPanelSpacing: CGFloat = 28
+    static let horizontalPadding: CGFloat = 30
+    static let verticalPadding: CGFloat = 24
+
+    let tabletopSize: CGSize
+    let boardSide: CGFloat
+
+    var sidePanelHeight: CGFloat {
+        boardSide
+    }
+
+    var contentSize: CGSize {
+        CGSize(
+            width: boardSide + Self.boardPanelSpacing + Self.sidePanelWidth,
+            height: boardSide
+        )
+    }
+
+    static func make(for viewportSize: CGSize) -> PlaySurfaceLayout {
+        let tabletopSize = CGSize(
+            width: max(viewportSize.width, viewportSize.height),
+            height: min(viewportSize.width, viewportSize.height)
+        )
+        let availableHeight = max(1, tabletopSize.height - verticalPadding * 2)
+        let availableWidth = max(
+            1,
+            tabletopSize.width - horizontalPadding * 2 - sidePanelWidth - boardPanelSpacing
+        )
+        let boardSide = min(maximumBoardSide, availableWidth, availableHeight)
+
+        return PlaySurfaceLayout(tabletopSize: tabletopSize, boardSide: boardSide)
     }
 }
 
