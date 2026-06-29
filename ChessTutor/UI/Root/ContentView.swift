@@ -152,13 +152,22 @@ struct ContentView: View {
     }
 
     private static func currentViewingAngle() -> BoardViewingAngle {
-        if let orientation = UIApplication.shared.activeInterfaceOrientation {
-            return BoardViewingAngle(interfaceOrientation: orientation, baseline: .landscapeLeft)
+        resolvedInitialViewingAngle(
+            deviceOrientation: UIDevice.current.orientation,
+            interfaceOrientation: UIApplication.shared.activeInterfaceOrientation
+        )
+    }
+
+    static func resolvedInitialViewingAngle(
+        deviceOrientation: UIDeviceOrientation,
+        interfaceOrientation: UIInterfaceOrientation?
+    ) -> BoardViewingAngle {
+        if deviceOrientation.isValidBoardViewingOrientation {
+            return BoardViewingAngle(deviceOrientation: deviceOrientation, baseline: .landscapeLeft)
         }
 
-        let orientation = UIDevice.current.orientation
-        if orientation.isValidBoardViewingOrientation {
-            return BoardViewingAngle(deviceOrientation: orientation, baseline: .landscapeLeft)
+        if let interfaceOrientation, interfaceOrientation.isValidBoardViewingOrientation {
+            return BoardViewingAngle(interfaceOrientation: interfaceOrientation, baseline: .landscapeLeft)
         }
 
         return .normal

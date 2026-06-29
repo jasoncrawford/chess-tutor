@@ -40,6 +40,13 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertEqual(layout.segmentLength, 245.33, accuracy: 0.01)
     }
 
+    func testSelectedPiecePanelKeepsTwoLineSummariesWithinLandscapeSquare() {
+        let columnLayout = SidebarColumnLayout.make(for: 760)
+        let layout = SelectedPiecePanelLayout.current
+
+        XCTAssertGreaterThanOrEqual(layout.remainingSlack(inPanelLength: columnLayout.segmentLength), 12)
+    }
+
     func testCaptureTrayStartsWithLargePieces() {
         let layout = CaptureTrayLayout.make(for: 3, in: CGSize(width: 204, height: 85))
 

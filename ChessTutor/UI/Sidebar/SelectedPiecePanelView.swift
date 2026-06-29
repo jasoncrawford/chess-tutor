@@ -1,26 +1,57 @@
 import SwiftUI
 
+struct SelectedPiecePanelLayout: Equatable {
+    static let current = SelectedPiecePanelLayout(
+        iconSlotHeight: 112,
+        selectedPieceSpacing: 8,
+        titleLineHeight: 28,
+        titleSummarySpacing: 4,
+        twoLineSummaryHeight: 42
+    )
+
+    let iconSlotHeight: CGFloat
+    let selectedPieceSpacing: CGFloat
+    let titleLineHeight: CGFloat
+    let titleSummarySpacing: CGFloat
+    let twoLineSummaryHeight: CGFloat
+
+    var textSlotHeight: CGFloat {
+        titleLineHeight + titleSummarySpacing + twoLineSummaryHeight
+    }
+
+    var requiredContentHeight: CGFloat {
+        iconSlotHeight + selectedPieceSpacing + textSlotHeight
+    }
+
+    func remainingSlack(inPanelLength panelLength: CGFloat) -> CGFloat {
+        panelLength - SidebarPanelMetrics.contentPadding * 2 - requiredContentHeight
+    }
+}
+
 struct SelectedPiecePanelView: View {
     let selectedPieceInfo: SelectedPieceInfo?
+    private let layout = SelectedPiecePanelLayout.current
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: layout.selectedPieceSpacing) {
             if let selectedPieceInfo {
                 selectedPieceIcon(selectedPieceInfo.piece)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .frame(height: 128)
+                    .frame(height: layout.iconSlotHeight)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: layout.titleSummarySpacing) {
                     Text(selectedPieceInfo.title)
                         .font(AppTheme.pieceTitleFont)
                         .foregroundStyle(AppTheme.ink)
+                        .frame(height: layout.titleLineHeight, alignment: .leading)
 
                     Text(selectedPieceInfo.movementSummary)
                         .font(AppTheme.pieceBodyFont)
                         .foregroundStyle(AppTheme.mutedInk)
+                        .lineLimit(2, reservesSpace: true)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .frame(height: layout.textSlotHeight, alignment: .topLeading)
             } else {
                 Spacer(minLength: 0)
 

@@ -1,12 +1,16 @@
 import SwiftUI
 
+enum SidebarPanelMetrics {
+    static let contentPadding: CGFloat = 16
+}
+
 struct SidebarPanelView<Content: View>: View {
     let panelLength: CGFloat
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
-            .padding(16)
+            .padding(SidebarPanelMetrics.contentPadding)
             .frame(width: panelLength, height: panelLength)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)

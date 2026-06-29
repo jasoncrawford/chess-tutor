@@ -87,6 +87,23 @@ final class BoardTests: XCTestCase {
         )
     }
 
+    func testInitialViewingAnglePrefersDeviceOrientationForLandscapeLaunch() {
+        XCTAssertEqual(
+            ContentView.resolvedInitialViewingAngle(
+                deviceOrientation: .landscapeLeft,
+                interfaceOrientation: .landscapeRight
+            ),
+            .normal
+        )
+        XCTAssertEqual(
+            ContentView.resolvedInitialViewingAngle(
+                deviceOrientation: .landscapeRight,
+                interfaceOrientation: .landscapeLeft
+            ),
+            .halfTurn
+        )
+    }
+
     func testBoardViewingAngleTreatsLandscapeAsBaselineNotSideways() {
         XCTAssertEqual(
             BoardViewingAngle(deviceOrientation: .landscapeLeft, baseline: .landscapeLeft),
