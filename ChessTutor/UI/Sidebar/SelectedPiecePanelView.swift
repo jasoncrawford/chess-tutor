@@ -26,6 +26,10 @@ struct SelectedPiecePanelLayout: Equatable {
     func remainingSlack(inPanelLength panelLength: CGFloat) -> CGFloat {
         panelLength - SidebarPanelMetrics.contentPadding * 2 - requiredContentHeight
     }
+
+    func verticalInset(inPanelLength panelLength: CGFloat) -> CGFloat {
+        max(0, remainingSlack(inPanelLength: panelLength) / 2)
+    }
 }
 
 struct SelectedPiecePanelView: View {
@@ -33,39 +37,55 @@ struct SelectedPiecePanelView: View {
     private let layout = SelectedPiecePanelLayout.current
 
     var body: some View {
-        VStack(alignment: .leading, spacing: layout.selectedPieceSpacing) {
+        GeometryReader { proxy in
             if let selectedPieceInfo {
-                selectedPieceIcon(selectedPieceInfo.piece)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .frame(height: layout.iconSlotHeight)
+                let verticalInset = layout.verticalInset(
+                    inPanelLength: proxy.size.height + SidebarPanelMetrics.contentPadding * 2
+                )
 
-                VStack(alignment: .leading, spacing: layout.titleSummarySpacing) {
-                    Text(selectedPieceInfo.title)
-                        .font(AppTheme.pieceTitleFont)
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(height: layout.titleLineHeight, alignment: .leading)
+                VStack(alignment: .leading, spacing: layout.selectedPieceSpacing) {
+                    Spacer(minLength: verticalInset)
+                        .frame(height: verticalInset)
 
-                    Text(selectedPieceInfo.movementSummary)
-                        .font(AppTheme.pieceBodyFont)
-                        .foregroundStyle(AppTheme.mutedInk)
-                        .lineLimit(2, reservesSpace: true)
-                        .fixedSize(horizontal: false, vertical: true)
+                    selectedPieceIcon(selectedPieceInfo.piece)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .frame(height: layout.iconSlotHeight)
+
+                    VStack(alignment: .leading, spacing: layout.titleSummarySpacing) {
+                        Text(selectedPieceInfo.title)
+                            .font(AppTheme.pieceTitleFont)
+                            .foregroundStyle(AppTheme.ink)
+                            .frame(height: layout.titleLineHeight, alignment: .leading)
+
+                        Text(selectedPieceInfo.movementSummary)
+                            .font(AppTheme.pieceBodyFont)
+                            .foregroundStyle(AppTheme.mutedInk)
+                            .lineLimit(2, reservesSpace: true)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(height: layout.textSlotHeight, alignment: .topLeading)
+
+                    Spacer(minLength: verticalInset)
+                        .frame(height: verticalInset)
                 }
-                .frame(height: layout.textSlotHeight, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: layout.selectedPieceSpacing) {
+                    Spacer(minLength: 0)
 
-                Image(systemName: "hand.point.up.left")
-                    .font(.system(size: 34, weight: .regular))
-                    .foregroundStyle(AppTheme.mutedInk.opacity(0.42))
-                    .frame(maxWidth: .infinity)
+                    Image(systemName: "hand.point.up.left")
+                        .font(.system(size: 34, weight: .regular))
+                        .foregroundStyle(AppTheme.mutedInk.opacity(0.42))
+                        .frame(maxWidth: .infinity)
 
-                Text("Choose a piece")
-                    .font(AppTheme.emptyPanelFont)
-                    .foregroundStyle(AppTheme.mutedInk.opacity(0.78))
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    Text("Choose a piece")
+                        .font(AppTheme.emptyPanelFont)
+                        .foregroundStyle(AppTheme.mutedInk.opacity(0.78))
+                        .frame(maxWidth: .infinity, alignment: .center)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

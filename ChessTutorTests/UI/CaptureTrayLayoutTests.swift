@@ -47,6 +47,14 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(layout.remainingSlack(inPanelLength: columnLayout.segmentLength), 12)
     }
 
+    func testSelectedPiecePanelCentersSelectedPieceContentVertically() {
+        let columnLayout = SidebarColumnLayout.make(for: 760)
+        let layout = SelectedPiecePanelLayout.current
+        let expectedInset = layout.remainingSlack(inPanelLength: columnLayout.segmentLength) / 2
+
+        XCTAssertEqual(layout.verticalInset(inPanelLength: columnLayout.segmentLength), expectedInset, accuracy: 0.01)
+    }
+
     func testCaptureTrayStartsWithLargePieces() {
         let layout = CaptureTrayLayout.make(for: 3, in: CGSize(width: 204, height: 85))
 
