@@ -2,6 +2,19 @@ import XCTest
 @testable import ChessTutor
 
 final class CaptureTrayLayoutTests: XCTestCase {
+    func testCaptureGuidanceUsesPieceShapedGlowInsteadOfSquareHalo() {
+        XCTAssertTrue(CaptureGuidanceStyle.current.showsPieceGlow)
+        XCTAssertFalse(CaptureGuidanceStyle.current.showsSquareHalo)
+    }
+
+    func testCaptureGuidanceGlowUsesSoftUnderPieceRim() {
+        XCTAssertGreaterThan(CaptureGuidanceGlowStyle.current.scale, 1)
+        XCTAssertGreaterThan(CaptureGuidanceGlowStyle.current.blurRadius, 4)
+        XCTAssertGreaterThanOrEqual(CaptureGuidanceGlowStyle.current.opacity, 0.84)
+        XCTAssertGreaterThanOrEqual(CaptureGuidanceGlowStyle.current.rimOpacity, 0.34)
+        XCTAssertLessThan(CaptureGuidanceGlowStyle.current.rimOpacity, CaptureGuidanceGlowStyle.current.opacity)
+    }
+
     func testPlaySurfaceUsesSameLayoutInBothDeviceOrientations() {
         let landscape = PlaySurfaceLayout.make(for: CGSize(width: 1024, height: 768))
         let portrait = PlaySurfaceLayout.make(for: CGSize(width: 768, height: 1024))

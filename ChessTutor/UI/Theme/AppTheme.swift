@@ -21,6 +21,13 @@ enum AppTheme {
     static let legalMove = Color(red: 0.11, green: 0.39, blue: 0.66).opacity(0.38)
     static let captureMove = Color(red: 0.72, green: 0.23, blue: 0.17).opacity(0.62)
     static let check = Color(red: 0.85, green: 0.20, blue: 0.18).opacity(0.45)
+    static let selectedSquareCenter = Color(red: 1.00, green: 0.78, blue: 0.31).opacity(0.68)
+    static let selectedSquareEdge = Color(red: 0.75, green: 0.46, blue: 0.12).opacity(0.18)
+    static let moveInlayHighlight = Color(red: 1.00, green: 0.98, blue: 0.78).opacity(0.92)
+    static let moveInlayBrass = Color(red: 0.78, green: 0.58, blue: 0.30).opacity(0.72)
+    static let moveInlayVerdigris = Color(red: 0.37, green: 0.52, blue: 0.41).opacity(0.42)
+    static let captureHalo = Color(red: 0.80, green: 0.50, blue: 0.18).opacity(0.76)
+    static let captureHaloGlow = Color(red: 0.93, green: 0.63, blue: 0.22).opacity(0.42)
     static let whitePiece = Color(red: 0.98, green: 0.94, blue: 0.84)
     static let blackPiece = Color(red: 0.17, green: 0.19, blue: 0.18)
 

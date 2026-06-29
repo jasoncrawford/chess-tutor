@@ -253,18 +253,14 @@ struct ChessBoardView: View {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
             if session.selectedSquare == square {
-                Rectangle().fill(AppTheme.selectedSquare)
+                selectedSquareHighlight()
             }
-            if isCaptureIndicator {
-                Circle()
-                    .stroke(AppTheme.captureMove, lineWidth: 5)
-                    .padding(10)
+            if isCaptureIndicator, CaptureGuidanceStyle.current.showsSquareHalo {
+                captureGuidanceHalo()
             }
             if isLegalDestination {
                 if !isCaptureIndicator {
-                    Circle()
-                        .fill(AppTheme.legalMove)
-                        .frame(width: 22, height: 22)
+                    legalMoveInlay()
                 }
             }
             coordinateLabels(for: square)
@@ -275,10 +271,84 @@ struct ChessBoardView: View {
         }
     }
 
+    private func selectedSquareHighlight() -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(
+                RadialGradient(
+                    colors: [
+                        AppTheme.selectedSquareCenter,
+                        AppTheme.selectedSquare.opacity(0.34),
+                        AppTheme.selectedSquareEdge,
+                        .clear,
+                    ],
+                    center: .center,
+                    startRadius: 4,
+                    endRadius: 56
+                )
+            )
+            .padding(5)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(AppTheme.boardFrame.opacity(0.10), lineWidth: 1)
+                    .padding(5)
+            }
+    }
+
+    private func legalMoveInlay() -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        AppTheme.moveInlayHighlight,
+                        AppTheme.moveInlayBrass,
+                        AppTheme.moveInlayVerdigris,
+                    ],
+                    center: UnitPoint(x: 0.35, y: 0.30),
+                    startRadius: 1,
+                    endRadius: 13
+                )
+            )
+            .frame(width: 21, height: 21)
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.34), lineWidth: 1)
+            }
+            .shadow(color: AppTheme.boardFrame.opacity(0.18), radius: 3, y: 2)
+            .transition(.scale(scale: 0.72).combined(with: .opacity))
+    }
+
+    private func captureGuidanceHalo() -> some View {
+        ZStack {
+            Circle()
+                .stroke(AppTheme.captureHaloGlow, lineWidth: 10)
+                .blur(radius: 3)
+                .padding(8)
+
+            Circle()
+                .stroke(AppTheme.captureHalo, lineWidth: 5)
+                .padding(11)
+                .shadow(color: AppTheme.captureHaloGlow, radius: 7)
+
+            Circle()
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                .padding(15)
+        }
+        .transition(.scale(scale: 0.82).combined(with: .opacity))
+    }
+
     private func piecesOverlay(side: CGFloat, origin: CGPoint) -> some View {
         ZStack {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
+                    if CaptureGuidanceStyle.current.showsPieceGlow,
+                       session.captureIndicatorSquares.contains(visualPiece.square) {
+                        PieceCaptureGlowView(piece: visualPiece.piece)
+                            .rotationEffect(.degrees(readableRotationDegrees))
+                            .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
+                            .position(center(of: visualPiece.square, side: side, origin: origin))
+                            .transition(.scale(scale: 0.88).combined(with: .opacity))
+                    }
+
                     PieceIconView(piece: visualPiece.piece)
                         .matchedGeometryEffect(
                             id: session.pieceAnimationID(for: visualPiece.piece, at: visualPiece.square),
@@ -501,6 +571,57 @@ private struct DragState {
     let piece: Piece
     let visualPieceID: UUID?
     var location: CGPoint
+}
+
+struct CaptureGuidanceStyle: Equatable {
+    static let current = CaptureGuidanceStyle(showsPieceGlow: true, showsSquareHalo: false)
+
+    let showsPieceGlow: Bool
+    let showsSquareHalo: Bool
+}
+
+struct CaptureGuidanceGlowStyle: Equatable {
+    static let current = CaptureGuidanceGlowStyle(
+        scale: 1.15,
+        opacity: 0.86,
+        blurRadius: 5.25,
+        rimOpacity: 0.36
+    )
+
+    let scale: CGFloat
+    let opacity: Double
+    let blurRadius: CGFloat
+    let rimOpacity: Double
+}
+
+private struct PieceCaptureGlowView: View {
+    let piece: Piece
+    private let glowStyle = CaptureGuidanceGlowStyle.current
+
+    var body: some View {
+        ZStack {
+            pieceRim(scale: glowStyle.scale, opacity: glowStyle.opacity, blur: glowStyle.blurRadius)
+            pieceRim(scale: 1.04, opacity: glowStyle.rimOpacity, blur: 1.2)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func pieceRim(
+        scale: CGFloat,
+        opacity: Double,
+        blur: CGFloat
+    ) -> some View {
+        Image(piece.assetName)
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .padding(.vertical, 2)
+            .foregroundStyle(AppTheme.captureHalo)
+            .opacity(opacity)
+            .scaleEffect(scale)
+            .blur(radius: blur)
+            .shadow(color: AppTheme.captureHaloGlow.opacity(0.72), radius: 5)
+    }
 }
 
 private struct VisualPiece: Identifiable, Equatable, Comparable {
