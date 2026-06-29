@@ -110,11 +110,11 @@ struct AboutSheetView: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AboutAttribution.appName)
-                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .font(AppTheme.aboutTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
                 Text(AboutAttribution.appSummary)
-                    .font(.body)
+                    .font(AppTheme.panelBodyFont)
                     .foregroundStyle(AppTheme.ink.opacity(0.72))
             }
 
@@ -122,11 +122,11 @@ struct AboutSheetView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(AboutAttribution.pieceCreditTitle)
-                    .font(.system(.headline, design: .rounded).weight(.semibold))
+                    .font(AppTheme.aboutSectionTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
                 Text(AboutAttribution.pieceCredit)
-                    .font(.body)
+                    .font(AppTheme.panelBodyFont)
                     .foregroundStyle(AppTheme.ink.opacity(0.76))
 
                 Text("\(AboutAttribution.pieceSource), \(AboutAttribution.pieceLicense)")

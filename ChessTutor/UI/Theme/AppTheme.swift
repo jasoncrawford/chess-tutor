@@ -23,4 +23,12 @@ enum AppTheme {
     static let check = Color(red: 0.85, green: 0.20, blue: 0.18).opacity(0.45)
     static let whitePiece = Color(red: 0.98, green: 0.94, blue: 0.84)
     static let blackPiece = Color(red: 0.17, green: 0.19, blue: 0.18)
+
+    static let panelTitleFont = Font.system(size: 30, weight: .semibold, design: .serif)
+    static let panelBodyFont = Font.system(size: 18, weight: .regular, design: .rounded)
+    static let pieceTitleFont = Font.system(size: 23, weight: .semibold, design: .serif)
+    static let pieceBodyFont = Font.system(size: 17, weight: .regular, design: .rounded)
+    static let emptyPanelFont = Font.system(size: 18, weight: .semibold, design: .serif)
+    static let aboutTitleFont = Font.system(size: 26, weight: .semibold, design: .serif)
+    static let aboutSectionTitleFont = Font.system(size: 19, weight: .semibold, design: .serif)
 }

@@ -12,11 +12,11 @@ struct SelectedPiecePanelView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selectedPieceInfo.title)
-                        .font(.system(.title3, design: .rounded).weight(.semibold))
+                        .font(AppTheme.pieceTitleFont)
                         .foregroundStyle(AppTheme.ink)
 
                     Text(selectedPieceInfo.movementSummary)
-                        .font(.callout)
+                        .font(AppTheme.pieceBodyFont)
                         .foregroundStyle(AppTheme.mutedInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -30,7 +30,7 @@ struct SelectedPiecePanelView: View {
                     .frame(maxWidth: .infinity)
 
                 Text("Choose a piece")
-                    .font(.system(.headline, design: .rounded).weight(.semibold))
+                    .font(AppTheme.emptyPanelFont)
                     .foregroundStyle(AppTheme.mutedInk.opacity(0.78))
                     .frame(maxWidth: .infinity, alignment: .center)
 
