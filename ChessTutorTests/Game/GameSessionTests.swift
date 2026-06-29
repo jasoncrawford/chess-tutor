@@ -252,6 +252,24 @@ final class GameSessionTests: XCTestCase {
         XCTAssertTrue(session.legalMovesForSelection.isEmpty)
         XCTAssertNil(session.message)
     }
+
+    func testPromoteForTestingReplacesPawnOnItsCurrentSquare() {
+        let session = GameSession()
+        let square = Square(file: .e, rank: 2)
+
+        session.promoteForTesting(at: square, to: .queen)
+
+        XCTAssertEqual(session.state.board[square], Piece(kind: .queen, color: .white))
+    }
+
+    func testPromoteForTestingIgnoresNonPawns() {
+        let session = GameSession()
+        let square = Square(file: .a, rank: 1)
+
+        session.promoteForTesting(at: square, to: .queen)
+
+        XCTAssertEqual(session.state.board[square], Piece(kind: .rook, color: .white))
+    }
     #endif
 
     func testCapturedPieceAnimationIDDiffersFromCapturingPieceOnSameSquare() {

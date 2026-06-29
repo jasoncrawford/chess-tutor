@@ -260,6 +260,19 @@ final class GameSession {
         legalMovesForSelection = []
         message = nil
     }
+
+    func promoteForTesting(at square: Square, to kind: Piece.Kind) {
+        guard let piece = committedState.board[square],
+              piece.kind == .pawn else {
+            return
+        }
+
+        tentativeMove = nil
+        committedState.board[square] = Piece(kind: kind, color: piece.color)
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = nil
+    }
     #endif
 
     private func legalMoves(forSelectionAt square: Square) -> [Move] {

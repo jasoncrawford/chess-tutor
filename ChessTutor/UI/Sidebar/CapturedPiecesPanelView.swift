@@ -149,7 +149,7 @@ struct CaptureTrayGroup: Equatable, Identifiable {
     }
 
     var countText: String? {
-        guard kind == .pawn, pieces.count > 2 else {
+        guard pieces.count > 2 else {
             return nil
         }
 

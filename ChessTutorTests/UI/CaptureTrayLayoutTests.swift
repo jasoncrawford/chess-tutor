@@ -125,17 +125,17 @@ final class CaptureTrayLayoutTests: XCTestCase {
         ])
     }
 
-    func testCaptureTrayShowsPawnCountsAfterTwoPawns() {
+    func testCaptureTrayShowsCountsAfterTwoPiecesOfAnyKind() {
         let groups = CaptureTrayGroup.groups(for: [
-            captured(.pawn, id: "pawn-1"),
-            captured(.pawn, id: "pawn-2"),
-            captured(.pawn, id: "pawn-3")
+            captured(.queen, id: "queen-1"),
+            captured(.queen, id: "queen-2"),
+            captured(.queen, id: "queen-3")
         ])
 
         XCTAssertEqual(groups.first?.countText, "x3")
     }
 
-    func testCaptureTrayDoesNotShowCountsForTwoPawnsOrNonPawns() {
+    func testCaptureTrayDoesNotShowCountsForTwoPieces() {
         let twoPawnGroup = CaptureTrayGroup.groups(for: [
             captured(.pawn, id: "pawn-1"),
             captured(.pawn, id: "pawn-2")

@@ -2,6 +2,9 @@ import SwiftUI
 
 struct TurnStatusPanelView: View {
     @Bindable var session: GameSession
+    #if DEBUG
+    @Binding var isCaptureTestModeEnabled: Bool
+    #endif
     let onAbout: () -> Void
 
     var body: some View {
@@ -22,6 +25,14 @@ struct TurnStatusPanelView: View {
             }
 
             Spacer(minLength: 0)
+
+            #if DEBUG
+            Toggle("Capture Test", isOn: $isCaptureTestModeEnabled)
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("capture-test-toggle")
+            #endif
 
             GameControlsView(session: session, placement: .done)
 

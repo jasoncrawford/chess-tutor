@@ -181,6 +181,7 @@ struct ChessBoardView: View {
     let readableRotationDegrees: Double
     #if DEBUG
     let isCaptureTestModeEnabled: Bool
+    var onPromotionTestRequest: (Square, PieceColor) -> Void = { _, _ in }
     #endif
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
     @State private var dragState: DragState?
@@ -245,11 +246,12 @@ struct ChessBoardView: View {
         }
     }
 
+    @ViewBuilder
     private func squareView(_ square: Square) -> some View {
         let isLegalDestination = session.legalDestinations.contains(square)
         let isCaptureIndicator = session.captureIndicatorSquares.contains(square)
 
-        return ZStack {
+        let content = ZStack {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
             if session.selectedSquare == square {
@@ -265,11 +267,54 @@ struct ChessBoardView: View {
             }
             coordinateLabels(for: square)
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            handleTap(square)
+
+        #if DEBUG
+        if isCaptureTestModeEnabled {
+            content
+                .contentShape(Rectangle())
+                .gesture(captureTestTapGesture(for: square))
+        } else {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleTap(square)
+                }
         }
+        #else
+        content
+            .contentShape(Rectangle())
+            .onTapGesture {
+                handleTap(square)
+            }
+        #endif
     }
+
+    #if DEBUG
+    private func captureTestTapGesture(for square: Square) -> some Gesture {
+        TapGesture(count: 2)
+            .exclusively(before: TapGesture(count: 1))
+            .onEnded { value in
+                switch value {
+                case .first:
+                    handleDoubleTap(square)
+                case .second:
+                    handleTap(square)
+                }
+            }
+    }
+    #endif
+
+    #if DEBUG
+    private func handleDoubleTap(_ square: Square) {
+        guard isCaptureTestModeEnabled,
+              let piece = session.state.board[square],
+              piece.kind == .pawn else {
+            return
+        }
+
+        onPromotionTestRequest(square, piece.color)
+    }
+    #endif
 
     private func selectedSquareHighlight() -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -414,6 +459,12 @@ struct ChessBoardView: View {
             }
             .onEnded { value in
                 guard let dragState else {
+                    #if DEBUG
+                    if isCaptureTestModeEnabled {
+                        return
+                    }
+                    #endif
+
                     if let tappedSquare = square(at: value.location, side: side, origin: origin) {
                         handleTap(tappedSquare)
                     }
