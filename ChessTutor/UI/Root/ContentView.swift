@@ -46,7 +46,15 @@ struct ContentView: View {
             applyViewingAngle(nextAngle, animated: true)
         }
         .sheet(item: $pendingPromotion) { promotion in
-            PromotionPickerView(color: session.state.sideToMove) { kind in
+            PromotionPickerView(color: promotion.color) { kind in
+                #if DEBUG
+                if let testingSquare = promotion.testingSquare {
+                    session.promoteForTesting(at: testingSquare, to: kind)
+                    pendingPromotion = nil
+                    return
+                }
+                #endif
+
                 session.promote(from: promotion.from, to: promotion.to, to: kind)
                 pendingPromotion = nil
             }
@@ -75,7 +83,7 @@ struct ContentView: View {
     private var chessBoard: some View {
         let handleMoveAttempt: (MoveAttemptResult) -> Void = { result in
             if case let .needsPromotion(from, to) = result {
-                pendingPromotion = PendingPromotion(from: from, to: to)
+                pendingPromotion = PendingPromotion(from: from, to: to, color: session.state.sideToMove)
             }
         }
 
@@ -86,6 +94,9 @@ struct ContentView: View {
             viewingAngle: viewingAngle,
             readableRotationDegrees: readableRotationDegrees,
             isCaptureTestModeEnabled: isCaptureTestModeEnabled,
+            onPromotionTestRequest: { square, color in
+                pendingPromotion = PendingPromotion(testingSquare: square, color: color)
+            },
             onMoveAttempt: handleMoveAttempt
         )
         #else
@@ -107,6 +118,7 @@ struct ContentView: View {
             readableRotationDegrees: readableRotationDegrees,
             captureNamespace: captureNamespace,
             sideLength: sideLength,
+            isCaptureTestModeEnabled: $isCaptureTestModeEnabled,
             onAbout: {
                 isShowingAbout = true
             }
@@ -247,6 +259,28 @@ private struct PendingPromotion: Identifiable {
     let id = UUID()
     let from: Square
     let to: Square
+    let color: PieceColor
+    #if DEBUG
+    let testingSquare: Square?
+    #endif
+
+    init(from: Square, to: Square, color: PieceColor) {
+        self.from = from
+        self.to = to
+        self.color = color
+        #if DEBUG
+        self.testingSquare = nil
+        #endif
+    }
+
+    #if DEBUG
+    init(testingSquare: Square, color: PieceColor) {
+        self.from = testingSquare
+        self.to = testingSquare
+        self.color = color
+        self.testingSquare = testingSquare
+    }
+    #endif
 }
 
 private struct PromotionPickerView: View {

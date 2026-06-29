@@ -6,6 +6,9 @@ struct SidePanelView: View {
     let readableRotationDegrees: Double
     let captureNamespace: Namespace.ID
     let sideLength: CGFloat
+    #if DEBUG
+    let isCaptureTestModeEnabled: Binding<Bool>
+    #endif
     let onAbout: () -> Void
 
     var body: some View {
@@ -26,10 +29,18 @@ struct SidePanelView: View {
         switch segment {
         case .messageAndDone:
             SidebarPanelView(panelLength: panelLength) {
+                #if DEBUG
+                TurnStatusPanelView(
+                    session: session,
+                    isCaptureTestModeEnabled: isCaptureTestModeEnabled,
+                    onAbout: onAbout
+                )
+                #else
                 TurnStatusPanelView(
                     session: session,
                     onAbout: onAbout
                 )
+                #endif
             }
         case .selectedPiece:
             SidebarPanelView(panelLength: panelLength) {
