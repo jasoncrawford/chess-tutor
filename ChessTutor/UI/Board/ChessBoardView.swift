@@ -429,23 +429,34 @@ struct ChessBoardView: View {
         let ranks = viewingAngle.ranks
         let showsRank = square.file == files.first
         let showsFile = square.rank == ranks.last
+        let style = BoardCoordinateLabelStyle.current
+        let highlightsRank = session.selectedSquare?.rank == square.rank
+        let highlightsFile = session.selectedSquare?.file == square.file
 
         return ZStack {
             if showsRank {
                 Text("\(square.rank)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.boardFrame.opacity(0.60))
+                    .foregroundStyle(coordinateLabelColor(isHighlighted: highlightsRank))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(5)
+                    .padding(style.padding)
             }
             if showsFile {
                 Text(verbatim: "\(square.file)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.boardFrame.opacity(0.60))
+                    .foregroundStyle(coordinateLabelColor(isHighlighted: highlightsFile))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(5)
+                    .padding(style.padding)
             }
         }
+    }
+
+    private func coordinateLabelColor(isHighlighted: Bool) -> Color {
+        let style = BoardCoordinateLabelStyle.current
+        if isHighlighted {
+            return AppTheme.selectedSquareCenter.opacity(style.selectedOpacity)
+        }
+        return AppTheme.boardFrame.opacity(style.normalOpacity)
     }
 
     private func dragGesture(side: CGFloat, origin: CGPoint) -> some Gesture {
@@ -643,6 +654,18 @@ struct CaptureGuidanceStyle: Equatable {
 
     let showsPieceGlow: Bool
     let showsSquareHalo: Bool
+}
+
+struct BoardCoordinateLabelStyle: Equatable {
+    static let current = BoardCoordinateLabelStyle(
+        padding: 13,
+        normalOpacity: 0.60,
+        selectedOpacity: 0.95
+    )
+
+    let padding: CGFloat
+    let normalOpacity: Double
+    let selectedOpacity: Double
 }
 
 struct CaptureGuidanceGlowStyle: Equatable {

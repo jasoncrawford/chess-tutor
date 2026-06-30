@@ -15,6 +15,11 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertLessThan(CaptureGuidanceGlowStyle.current.rimOpacity, CaptureGuidanceGlowStyle.current.opacity)
     }
 
+    func testBoardCoordinateLabelsAreInsetClearOfFrame() {
+        XCTAssertEqual(BoardCoordinateLabelStyle.current.padding, 13, accuracy: 0.01)
+        XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.padding, 10)
+    }
+
     func testPlaySurfaceUsesSameLayoutInBothDeviceOrientations() {
         let landscape = PlaySurfaceLayout.make(for: CGSize(width: 1024, height: 768))
         let portrait = PlaySurfaceLayout.make(for: CGSize(width: 768, height: 1024))
@@ -62,6 +67,13 @@ final class CaptureTrayLayoutTests: XCTestCase {
         let layout = SelectedPiecePanelLayout.current
 
         XCTAssertGreaterThanOrEqual(layout.remainingSlack(inPanelLength: columnLayout.segmentLength), 12)
+    }
+
+    func testSelectedPiecePanelLayoutIncludesCoordinateRow() {
+        let layout = SelectedPiecePanelLayout.current
+
+        XCTAssertEqual(layout.coordinateRowHeight, 24, accuracy: 0.01)
+        XCTAssertEqual(layout.requiredContentHeight, 194, accuracy: 0.01)
     }
 
     func testSelectedPiecePanelCentersSelectedPieceContentVertically() {

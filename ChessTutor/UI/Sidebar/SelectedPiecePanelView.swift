@@ -2,15 +2,17 @@ import SwiftUI
 
 struct SelectedPiecePanelLayout: Equatable {
     static let current = SelectedPiecePanelLayout(
-        iconSlotHeight: 112,
-        selectedPieceSpacing: 8,
-        titleLineHeight: 28,
-        titleSummarySpacing: 4,
-        twoLineSummaryHeight: 42
+        iconSlotHeight: 96,
+        selectedPieceSpacing: 6,
+        coordinateRowHeight: 24,
+        titleLineHeight: 24,
+        titleSummarySpacing: 3,
+        twoLineSummaryHeight: 35
     )
 
     let iconSlotHeight: CGFloat
     let selectedPieceSpacing: CGFloat
+    let coordinateRowHeight: CGFloat
     let titleLineHeight: CGFloat
     let titleSummarySpacing: CGFloat
     let twoLineSummaryHeight: CGFloat
@@ -20,7 +22,7 @@ struct SelectedPiecePanelLayout: Equatable {
     }
 
     var requiredContentHeight: CGFloat {
-        iconSlotHeight + selectedPieceSpacing + textSlotHeight
+        iconSlotHeight + selectedPieceSpacing + coordinateRowHeight + selectedPieceSpacing + textSlotHeight
     }
 
     func remainingSlack(inPanelLength panelLength: CGFloat) -> CGFloat {
@@ -50,6 +52,8 @@ struct SelectedPiecePanelView: View {
                     selectedPieceIcon(selectedPieceInfo.piece)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .frame(height: layout.iconSlotHeight)
+
+                    coordinateRow(for: selectedPieceInfo)
 
                     VStack(alignment: .leading, spacing: layout.titleSummarySpacing) {
                         Text(selectedPieceInfo.title)
@@ -93,8 +97,8 @@ struct SelectedPiecePanelView: View {
 
     private func selectedPieceIcon(_ piece: Piece) -> some View {
         PieceIconView(piece: piece)
-            .frame(width: 100, height: 100)
-            .padding(9)
+            .frame(width: 78, height: 78)
+            .padding(7)
             .background {
                 Circle()
                     .fill(AppTheme.selectedPiecePlinth)
@@ -103,5 +107,26 @@ struct SelectedPiecePanelView: View {
                             .stroke(AppTheme.panelStroke, lineWidth: 1)
                     }
             }
+    }
+
+    private func coordinateRow(for selectedPieceInfo: SelectedPieceInfo) -> some View {
+        HStack(spacing: 8) {
+            Text(selectedPieceInfo.squareID)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(AppTheme.lightSquare)
+                .padding(.horizontal, 10)
+                .frame(height: layout.coordinateRowHeight)
+                .background {
+                    Capsule()
+                        .fill(AppTheme.boardFrame)
+                }
+
+            Text(selectedPieceInfo.squareCoordinateSummary)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppTheme.mutedInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(height: layout.coordinateRowHeight, alignment: .leading)
     }
 }
