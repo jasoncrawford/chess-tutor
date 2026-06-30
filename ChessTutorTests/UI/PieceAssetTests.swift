@@ -49,6 +49,20 @@ final class PieceAssetTests: XCTestCase {
         XCTAssertTrue(aboutText.contains("MIT License"))
     }
 
+    func testGameControlsPresentationKeepsRareActionsVisibleButSecondaryDuringPlay() {
+        let presentation = GameControlsPresentation(result: .ongoing)
+
+        XCTAssertEqual(presentation.primaryAction, .done)
+        XCTAssertEqual(presentation.secondaryActions, [.newGame, .about])
+    }
+
+    func testGameControlsPresentationPromotesNewGameAfterCheckmate() {
+        let presentation = GameControlsPresentation(result: .checkmate(winner: .black))
+
+        XCTAssertEqual(presentation.primaryAction, .newGame)
+        XCTAssertEqual(presentation.secondaryActions, [.about])
+    }
+
     private var allPieces: [Piece] {
         [
             Piece(kind: .king, color: .white),

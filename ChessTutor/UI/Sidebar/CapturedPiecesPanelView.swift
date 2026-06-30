@@ -1,16 +1,38 @@
 import SwiftUI
 
-struct CapturedPiecesPanelView: View {
+struct CapturedPiecesPanelView<Footer: View>: View {
     let capturedPieces: [CapturedPiece]
     let captureNamespace: Namespace.ID
-    let panelLength: CGFloat
+    let panelSize: CGSize
+    let footerHeight: CGFloat
+    @ViewBuilder let footer: () -> Footer
+
+    init(
+        capturedPieces: [CapturedPiece],
+        captureNamespace: Namespace.ID,
+        panelSize: CGSize,
+        footerHeight: CGFloat = 0,
+        @ViewBuilder footer: @escaping () -> Footer
+    ) {
+        self.capturedPieces = capturedPieces
+        self.captureNamespace = captureNamespace
+        self.panelSize = panelSize
+        self.footerHeight = footerHeight
+        self.footer = footer
+    }
 
     var body: some View {
         VStack(spacing: 10) {
             captureBox(for: .black)
             captureBox(for: .white)
+
+            if footerHeight > 0 {
+                footer()
+                    .frame(height: footerHeight)
+                    .padding(.top, 2)
+            }
         }
-        .frame(width: panelLength, height: panelLength)
+        .frame(width: panelSize.width, height: panelSize.height)
     }
 
     private func captureBox(for color: PieceColor) -> some View {
@@ -79,6 +101,23 @@ struct CapturedPiecesPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: pieces)
+    }
+}
+
+extension CapturedPiecesPanelView where Footer == EmptyView {
+    init(
+        capturedPieces: [CapturedPiece],
+        captureNamespace: Namespace.ID,
+        panelSize: CGSize
+    ) {
+        self.init(
+            capturedPieces: capturedPieces,
+            captureNamespace: captureNamespace,
+            panelSize: panelSize,
+            footerHeight: 0
+        ) {
+            EmptyView()
+        }
     }
 }
 

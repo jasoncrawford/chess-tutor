@@ -1,30 +1,42 @@
 import SwiftUI
 
-enum GameControlsPlacement {
-    case done
-    case newGame
+struct GameControlsPresentation: Equatable {
+    enum PrimaryAction: Equatable {
+        case done
+        case newGame
+    }
+
+    enum SecondaryAction: Equatable {
+        case newGame
+        case about
+    }
+
+    let primaryAction: PrimaryAction
+    let secondaryActions: [SecondaryAction]
+
+    init(result: GameResult) {
+        switch result {
+        case .ongoing:
+            primaryAction = .done
+            secondaryActions = [.newGame, .about]
+        case .checkmate, .stalemate:
+            primaryAction = .newGame
+            secondaryActions = [.about]
+        }
+    }
 }
 
 struct GameControlsView: View {
     @Bindable var session: GameSession
-    let placement: GameControlsPlacement
-    let onAbout: (() -> Void)?
-    @State private var isConfirmingNewGame = false
 
-    init(session: GameSession, placement: GameControlsPlacement, onAbout: (() -> Void)? = nil) {
+    init(session: GameSession) {
         self.session = session
-        self.placement = placement
-        self.onAbout = onAbout
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if placement == .done {
-                turnControls
-            } else {
-                newGameControls
-            }
-        }
+        let presentation = GameControlsPresentation(result: session.state.result)
+
+        primaryButton(for: presentation.primaryAction)
         .frame(maxWidth: .infinity, alignment: .leading)
         .lineLimit(1)
         .minimumScaleFactor(0.85)
@@ -32,20 +44,16 @@ struct GameControlsView: View {
         .transaction { transaction in
             transaction.animation = nil
         }
-        .alert("Start a new game?", isPresented: $isConfirmingNewGame) {
-            Button("Keep Playing", role: .cancel) {}
-            Button("New Game", role: .destructive) {
-                session.newGame()
-            }
-        } message: {
-            Text("This will abandon the current game.")
-        }
     }
 
-    private var turnControls: some View {
-        doneButton
-        .labelStyle(.titleAndIcon)
-        .tint(AppTheme.boardFrame)
+    @ViewBuilder
+    private func primaryButton(for action: GameControlsPresentation.PrimaryAction) -> some View {
+        switch action {
+        case .done:
+            doneButton
+        case .newGame:
+            primaryNewGameButton
+        }
     }
 
     private var doneButton: some View {
@@ -59,47 +67,51 @@ struct GameControlsView: View {
         } label: {
             Label("Done", systemImage: "checkmark.circle.fill")
                 .frame(maxWidth: .infinity)
+                .frame(height: 46)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PrimaryGameButtonStyle(isEnabled: session.canFinishTurn))
+        .font(.system(size: 19, weight: .semibold, design: .rounded))
+        .labelStyle(.titleAndIcon)
         .disabled(!session.canFinishTurn)
     }
 
-    private var newGameButton: some View {
+    private var primaryNewGameButton: some View {
         Button {
-            if session.hasGameInProgress {
-                isConfirmingNewGame = true
-            } else {
-                session.newGame()
-            }
+            session.newGame()
         } label: {
-            Label("New Game...", systemImage: "arrow.counterclockwise")
+            Label("New Game", systemImage: "arrow.counterclockwise")
                 .frame(maxWidth: .infinity)
+                .frame(height: 46)
         }
+        .buttonStyle(PrimaryGameButtonStyle(isEnabled: true))
+        .font(.system(size: 19, weight: .semibold, design: .rounded))
         .labelStyle(.titleAndIcon)
-        .buttonStyle(.borderless)
-        .foregroundStyle(AppTheme.ink.opacity(0.72))
     }
 
-    private var aboutButton: some View {
-        Button {
-            onAbout?()
-        } label: {
-            Image(systemName: "info.circle")
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 36, height: 36)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.borderless)
-        .foregroundStyle(AppTheme.ink.opacity(0.62))
-        .accessibilityLabel("About")
-    }
+}
 
-    private var newGameControls: some View {
-        HStack(spacing: 6) {
-            newGameButton
+private struct PrimaryGameButtonStyle: ButtonStyle {
+    let isEnabled: Bool
 
-            aboutButton
-        }
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? AppTheme.whitePiece : AppTheme.mutedInk.opacity(0.54))
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(isEnabled ? AppTheme.boardFrame : AppTheme.panelInset)
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(AppTheme.panelTopLight.opacity(isEnabled ? 0.36 : 0.18))
+                            .frame(height: 18)
+                    }
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(AppTheme.panelStroke, lineWidth: 1)
+            }
+            .shadow(color: isEnabled ? AppTheme.panelShadow : .clear, radius: 8, y: 4)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.24, dampingFraction: 0.82), value: configuration.isPressed)
     }
 }
 

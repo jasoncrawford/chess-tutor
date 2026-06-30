@@ -7,6 +7,11 @@ enum SidebarSegment: Equatable, Hashable {
     case selectedPiece
 }
 
+enum SidebarColumnUtilityPlacement: Equatable {
+    case beforeSegments
+    case afterSegments
+}
+
 enum BoardViewingAngle: Equatable {
     case normal
     case clockwiseQuarterTurn
@@ -61,6 +66,15 @@ enum BoardViewingAngle: Equatable {
             return [.messageAndDone, .selectedPiece, .capturedPieces]
         case .clockwiseQuarterTurn, .halfTurn:
             return [.capturedPieces, .selectedPiece, .messageAndDone]
+        }
+    }
+
+    var sidebarColumnUtilityPlacement: SidebarColumnUtilityPlacement {
+        switch self {
+        case .halfTurn:
+            return .beforeSegments
+        case .normal, .clockwiseQuarterTurn, .counterclockwiseQuarterTurn:
+            return .afterSegments
         }
     }
 

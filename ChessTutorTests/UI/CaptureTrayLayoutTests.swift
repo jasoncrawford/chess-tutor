@@ -33,22 +33,39 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertEqual(layout.contentSize, CGSize(width: 1048, height: 760))
     }
 
-    func testSidebarSegmentsFillBoardHeightWithExistingGaps() {
-        let layout = SidebarColumnLayout.make(for: 760)
+    func testSidebarSegmentsLeaveRoomForUtilityStripWithinBoardHeight() {
+        let layout = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
 
         XCTAssertEqual(layout.columnHeight, 760)
-        XCTAssertEqual(layout.segmentLength, 245.33, accuracy: 0.01)
+        XCTAssertEqual(layout.size(for: .messageAndDone).height, 192.64, accuracy: 0.01)
+        XCTAssertEqual(layout.size(for: .selectedPiece).height, 238, accuracy: 0.01)
+        XCTAssertEqual(layout.size(for: .capturedPieces).height, 257.36, accuracy: 0.01)
+        XCTAssertEqual(layout.utilityStripHeight, 40)
+        XCTAssertTrue(layout.showsColumnUtilityStrip)
+        XCTAssertFalse(layout.showsCapturedPanelUtilityFooter)
+    }
+
+    func testHorizontalSidebarPutsUtilityActionsInsideCapturedPanel() {
+        let layout = SidebarColumnLayout.make(for: 760, presentation: .horizontalSegments)
+
+        XCTAssertEqual(layout.columnHeight, 760)
+        XCTAssertEqual(layout.size(for: .capturedPieces).width, 246.67, accuracy: 0.01)
+        XCTAssertEqual(layout.size(for: .capturedPieces).height, 246.67, accuracy: 0.01)
+        XCTAssertEqual(layout.utilityStripHeight, 0)
+        XCTAssertFalse(layout.showsColumnUtilityStrip)
+        XCTAssertTrue(layout.showsCapturedPanelUtilityFooter)
+        XCTAssertEqual(layout.capturedPanelUtilityFooterHeight, 36)
     }
 
     func testSelectedPiecePanelKeepsTwoLineSummariesWithinLandscapeSquare() {
-        let columnLayout = SidebarColumnLayout.make(for: 760)
+        let columnLayout = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
         let layout = SelectedPiecePanelLayout.current
 
         XCTAssertGreaterThanOrEqual(layout.remainingSlack(inPanelLength: columnLayout.segmentLength), 12)
     }
 
     func testSelectedPiecePanelCentersSelectedPieceContentVertically() {
-        let columnLayout = SidebarColumnLayout.make(for: 760)
+        let columnLayout = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
         let layout = SelectedPiecePanelLayout.current
         let expectedInset = layout.remainingSlack(inPanelLength: columnLayout.segmentLength) / 2
 

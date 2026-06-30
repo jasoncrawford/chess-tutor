@@ -5,13 +5,23 @@ enum SidebarPanelMetrics {
 }
 
 struct SidebarPanelView<Content: View>: View {
-    let panelLength: CGFloat
+    let panelSize: CGSize
     @ViewBuilder var content: () -> Content
+
+    init(panelLength: CGFloat, @ViewBuilder content: @escaping () -> Content) {
+        self.panelSize = CGSize(width: panelLength, height: panelLength)
+        self.content = content
+    }
+
+    init(panelSize: CGSize, @ViewBuilder content: @escaping () -> Content) {
+        self.panelSize = panelSize
+        self.content = content
+    }
 
     var body: some View {
         content()
             .padding(SidebarPanelMetrics.contentPadding)
-            .frame(width: panelLength, height: panelLength)
+            .frame(width: panelSize.width, height: panelSize.height)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(AppTheme.panelWarmth)

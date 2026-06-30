@@ -118,7 +118,6 @@ struct ContentView: View {
             readableRotationDegrees: readableRotationDegrees,
             captureNamespace: captureNamespace,
             sideLength: sideLength,
-            isCaptureTestModeEnabled: $isCaptureTestModeEnabled,
             onAbout: {
                 isShowingAbout = true
             }

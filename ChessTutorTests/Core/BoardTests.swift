@@ -119,10 +119,12 @@ final class BoardTests: XCTestCase {
             BoardViewingAngle.normal.sidebarSegmentsInTabletopOrder,
             [.messageAndDone, .selectedPiece, .capturedPieces]
         )
+        XCTAssertEqual(BoardViewingAngle.normal.sidebarColumnUtilityPlacement, .afterSegments)
         XCTAssertEqual(
             BoardViewingAngle.halfTurn.sidebarSegmentsInTabletopOrder,
             [.capturedPieces, .selectedPiece, .messageAndDone]
         )
+        XCTAssertEqual(BoardViewingAngle.halfTurn.sidebarColumnUtilityPlacement, .beforeSegments)
     }
 
     func testBoardViewingAngleChoosesNearestEquivalentRotationForAnimation() {
