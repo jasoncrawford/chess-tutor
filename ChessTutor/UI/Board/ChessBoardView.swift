@@ -437,24 +437,27 @@ struct ChessBoardView: View {
             if showsRank {
                 Text("\(square.rank)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(coordinateLabelColor(isHighlighted: highlightsRank))
+                    .foregroundStyle(coordinateLabelColor(isHighlighted: highlightsRank, isLightSquare: square.isLightSquare))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(style.padding)
             }
             if showsFile {
                 Text(verbatim: "\(square.file)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(coordinateLabelColor(isHighlighted: highlightsFile))
+                    .foregroundStyle(coordinateLabelColor(isHighlighted: highlightsFile, isLightSquare: square.isLightSquare))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(style.padding)
             }
         }
     }
 
-    private func coordinateLabelColor(isHighlighted: Bool) -> Color {
+    private func coordinateLabelColor(isHighlighted: Bool, isLightSquare: Bool) -> Color {
         let style = BoardCoordinateLabelStyle.current
         if isHighlighted {
-            return AppTheme.selectedSquareCenter.opacity(style.selectedOpacity)
+            if isLightSquare {
+                return AppTheme.boardFrame.opacity(style.selectedLightSquareOpacity)
+            }
+            return AppTheme.selectedSquareCenter.opacity(style.selectedDarkSquareOpacity)
         }
         return AppTheme.boardFrame.opacity(style.normalOpacity)
     }
@@ -658,14 +661,16 @@ struct CaptureGuidanceStyle: Equatable {
 
 struct BoardCoordinateLabelStyle: Equatable {
     static let current = BoardCoordinateLabelStyle(
-        padding: 13,
+        padding: 9,
         normalOpacity: 0.60,
-        selectedOpacity: 0.95
+        selectedLightSquareOpacity: 0.95,
+        selectedDarkSquareOpacity: 0.95
     )
 
     let padding: CGFloat
     let normalOpacity: Double
-    let selectedOpacity: Double
+    let selectedLightSquareOpacity: Double
+    let selectedDarkSquareOpacity: Double
 }
 
 struct CaptureGuidanceGlowStyle: Equatable {

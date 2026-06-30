@@ -158,8 +158,15 @@ Add a test:
 
 ```swift
 func testBoardCoordinateLabelsAreInsetClearOfFrame() {
-    XCTAssertEqual(BoardCoordinateLabelStyle.current.padding, 13, accuracy: 0.01)
-    XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.padding, 10)
+    XCTAssertEqual(BoardCoordinateLabelStyle.current.padding, 9, accuracy: 0.01)
+    XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.padding, 5)
+    XCTAssertLessThan(BoardCoordinateLabelStyle.current.padding, 13)
+}
+
+func testBoardCoordinateHighlightsUseSeparateLightSquareContrast() {
+    XCTAssertEqual(BoardCoordinateLabelStyle.current.normalOpacity, 0.60, accuracy: 0.01)
+    XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.selectedLightSquareOpacity, 0.88)
+    XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.selectedDarkSquareOpacity, 0.88)
 }
 ```
 
@@ -171,7 +178,7 @@ Run:
 xcodebuild test -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/CaptureTrayLayoutTests/testBoardCoordinateLabelsAreInsetClearOfFrame
 ```
 
-Expected: fails because `BoardCoordinateLabelStyle` does not exist.
+Expected: fails because `BoardCoordinateLabelStyle` does not exist or does not have adaptive highlight fields.
 
 - [ ] **Step 3: Add style and highlight selected rank/file**
 
@@ -180,18 +187,20 @@ Add a small style struct near `CaptureGuidanceStyle`:
 ```swift
 struct BoardCoordinateLabelStyle: Equatable {
     static let current = BoardCoordinateLabelStyle(
-        padding: 13,
+        padding: 9,
         normalOpacity: 0.60,
-        selectedOpacity: 0.95
+        selectedLightSquareOpacity: 0.95,
+        selectedDarkSquareOpacity: 0.95
     )
 
     let padding: CGFloat
     let normalOpacity: Double
-    let selectedOpacity: Double
+    let selectedLightSquareOpacity: Double
+    let selectedDarkSquareOpacity: Double
 }
 ```
 
-Update `coordinateLabels(for:)` to compute whether each visible edge label belongs to `session.selectedSquare`, use `BoardCoordinateLabelStyle.current.padding`, and switch the foreground color from muted frame opacity to the selected-square color when active.
+Update `coordinateLabels(for:)` to compute whether each visible edge label belongs to `session.selectedSquare`, use `BoardCoordinateLabelStyle.current.padding`, and switch highlighted labels to dark board-frame ink on light squares and warm selected-square color on dark squares.
 
 - [ ] **Step 4: Run focused tests**
 

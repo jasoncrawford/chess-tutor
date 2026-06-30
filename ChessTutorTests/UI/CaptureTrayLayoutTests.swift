@@ -16,8 +16,15 @@ final class CaptureTrayLayoutTests: XCTestCase {
     }
 
     func testBoardCoordinateLabelsAreInsetClearOfFrame() {
-        XCTAssertEqual(BoardCoordinateLabelStyle.current.padding, 13, accuracy: 0.01)
-        XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.padding, 10)
+        XCTAssertEqual(BoardCoordinateLabelStyle.current.padding, 9, accuracy: 0.01)
+        XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.padding, 5)
+        XCTAssertLessThan(BoardCoordinateLabelStyle.current.padding, 13)
+    }
+
+    func testBoardCoordinateHighlightsUseSeparateLightSquareContrast() {
+        XCTAssertEqual(BoardCoordinateLabelStyle.current.normalOpacity, 0.60, accuracy: 0.01)
+        XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.selectedLightSquareOpacity, 0.88)
+        XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.selectedDarkSquareOpacity, 0.88)
     }
 
     func testPlaySurfaceUsesSameLayoutInBothDeviceOrientations() {
