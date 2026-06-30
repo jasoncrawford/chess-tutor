@@ -23,7 +23,6 @@ final class GameSessionTests: XCTestCase {
                 piece: Piece(kind: .knight, color: .white),
                 square: Square(file: .g, rank: 1),
                 squareID: "g1",
-                squareCoordinateSummary: "file g, rank 1",
                 title: "White knight",
                 movementSummary: "Moves in an L shape."
             )
@@ -45,7 +44,6 @@ final class GameSessionTests: XCTestCase {
         session.select(Square(file: .e, rank: 2))
 
         XCTAssertEqual(session.selectedPieceInfo?.squareID, "e2")
-        XCTAssertEqual(session.selectedPieceInfo?.squareCoordinateSummary, "file e, rank 2")
     }
 
     func testIllegalMoveReturnsFriendlyMessage() {

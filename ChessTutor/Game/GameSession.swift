@@ -16,7 +16,6 @@ struct SelectedPieceInfo: Equatable, Sendable {
     let piece: Piece
     let square: Square
     let squareID: String
-    let squareCoordinateSummary: String
     let title: String
     let movementSummary: String
 }
@@ -82,7 +81,6 @@ final class GameSession {
             piece: piece,
             square: selectedSquare,
             squareID: "\(selectedSquare.file)\(selectedSquare.rank)",
-            squareCoordinateSummary: "file \(selectedSquare.file), rank \(selectedSquare.rank)",
             title: "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue)",
             movementSummary: movementSummary(for: piece.kind)
         )

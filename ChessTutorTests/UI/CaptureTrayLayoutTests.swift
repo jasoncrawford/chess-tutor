@@ -23,6 +23,8 @@ final class CaptureTrayLayoutTests: XCTestCase {
 
     func testBoardCoordinateHighlightsUseSeparateLightSquareContrast() {
         XCTAssertEqual(BoardCoordinateLabelStyle.current.normalOpacity, 0.60, accuracy: 0.01)
+        XCTAssertEqual(BoardCoordinateLabelStyle.current.selectedLightSquareColor, .darkSquare)
+        XCTAssertEqual(BoardCoordinateLabelStyle.current.selectedDarkSquareColor, .selectedSquare)
         XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.selectedLightSquareOpacity, 0.88)
         XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.selectedDarkSquareOpacity, 0.88)
     }
@@ -76,11 +78,11 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(layout.remainingSlack(inPanelLength: columnLayout.segmentLength), 12)
     }
 
-    func testSelectedPiecePanelLayoutIncludesCoordinateRow() {
+    func testSelectedPiecePanelLayoutUsesInlineSquareBadge() {
         let layout = SelectedPiecePanelLayout.current
 
-        XCTAssertEqual(layout.coordinateRowHeight, 24, accuracy: 0.01)
-        XCTAssertEqual(layout.requiredContentHeight, 194, accuracy: 0.01)
+        XCTAssertEqual(layout.squareBadgeHeight, 22, accuracy: 0.01)
+        XCTAssertEqual(layout.requiredContentHeight, 164, accuracy: 0.01)
     }
 
     func testSelectedPiecePanelCentersSelectedPieceContentVertically() {

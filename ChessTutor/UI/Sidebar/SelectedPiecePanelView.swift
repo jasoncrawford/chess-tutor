@@ -4,7 +4,7 @@ struct SelectedPiecePanelLayout: Equatable {
     static let current = SelectedPiecePanelLayout(
         iconSlotHeight: 96,
         selectedPieceSpacing: 6,
-        coordinateRowHeight: 24,
+        squareBadgeHeight: 22,
         titleLineHeight: 24,
         titleSummarySpacing: 3,
         twoLineSummaryHeight: 35
@@ -12,7 +12,7 @@ struct SelectedPiecePanelLayout: Equatable {
 
     let iconSlotHeight: CGFloat
     let selectedPieceSpacing: CGFloat
-    let coordinateRowHeight: CGFloat
+    let squareBadgeHeight: CGFloat
     let titleLineHeight: CGFloat
     let titleSummarySpacing: CGFloat
     let twoLineSummaryHeight: CGFloat
@@ -22,7 +22,7 @@ struct SelectedPiecePanelLayout: Equatable {
     }
 
     var requiredContentHeight: CGFloat {
-        iconSlotHeight + selectedPieceSpacing + coordinateRowHeight + selectedPieceSpacing + textSlotHeight
+        iconSlotHeight + selectedPieceSpacing + textSlotHeight
     }
 
     func remainingSlack(inPanelLength panelLength: CGFloat) -> CGFloat {
@@ -53,13 +53,8 @@ struct SelectedPiecePanelView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .frame(height: layout.iconSlotHeight)
 
-                    coordinateRow(for: selectedPieceInfo)
-
                     VStack(alignment: .leading, spacing: layout.titleSummarySpacing) {
-                        Text(selectedPieceInfo.title)
-                            .font(AppTheme.pieceTitleFont)
-                            .foregroundStyle(AppTheme.ink)
-                            .frame(height: layout.titleLineHeight, alignment: .leading)
+                        titleRow(for: selectedPieceInfo)
 
                         Text(selectedPieceInfo.movementSummary)
                             .font(AppTheme.pieceBodyFont)
@@ -109,24 +104,24 @@ struct SelectedPiecePanelView: View {
             }
     }
 
-    private func coordinateRow(for selectedPieceInfo: SelectedPieceInfo) -> some View {
+    private func titleRow(for selectedPieceInfo: SelectedPieceInfo) -> some View {
         HStack(spacing: 8) {
             Text(selectedPieceInfo.squareID)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(AppTheme.lightSquare)
                 .padding(.horizontal, 10)
-                .frame(height: layout.coordinateRowHeight)
+                .frame(height: layout.squareBadgeHeight)
                 .background {
                     Capsule()
                         .fill(AppTheme.boardFrame)
                 }
 
-            Text(selectedPieceInfo.squareCoordinateSummary)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.mutedInk)
+            Text(selectedPieceInfo.title)
+                .font(AppTheme.pieceTitleFont)
+                .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
         }
-        .frame(height: layout.coordinateRowHeight, alignment: .leading)
+        .frame(height: layout.titleLineHeight, alignment: .leading)
     }
 }

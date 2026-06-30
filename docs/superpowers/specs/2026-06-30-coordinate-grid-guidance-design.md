@@ -10,11 +10,11 @@ Keep rank/file labels inside the board, but move them only slightly inward from 
 
 When a square is selected, highlight the selected square's file and rank labels. Prefer a color/contrast treatment on the existing labels first, because it is quieter than adding large edge rails and easier to judge in the app. Use adaptive highlight colors so highlighted labels remain visible on both light and dark board squares. If the color-only treatment is too subtle, add compact edge accents that sit inside the frame and align with the selected file/rank.
 
-Show the selected square ID in the selected-piece side panel while a piece is selected. The panel should use compact wording such as `e6` and `file e, rank 6`, paired with the existing selected-piece name and movement summary. The empty panel state stays unchanged.
+Show the selected square ID in the selected-piece side panel while a piece is selected. Keep it compact by rendering the ID, such as `e6`, inline with the existing selected-piece name and movement summary. Do not show a separate `file e, rank 6` explanation in the live panel. The empty panel state stays unchanged.
 
 ## Architecture
 
-Keep chess rules unchanged. Add presentation-only coordinate text to `SelectedPieceInfo` in `GameSession`, then let SwiftUI render it in `SelectedPiecePanelView`. Keep board coordinate highlighting inside `ChessBoardView`, driven only by `session.selectedSquare` and the existing `BoardViewingAngle`.
+Keep chess rules unchanged. Add the presentation-only square ID to `SelectedPieceInfo` in `GameSession`, then let SwiftUI render it in `SelectedPiecePanelView`. Keep board coordinate highlighting inside `ChessBoardView`, driven only by `session.selectedSquare` and the existing `BoardViewingAngle`.
 
 ## Testing
 

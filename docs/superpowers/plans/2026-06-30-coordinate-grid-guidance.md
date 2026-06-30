@@ -4,7 +4,7 @@
 
 **Goal:** Make board coordinate labels readable and add quiet selected-square guidance for beginners.
 
-**Architecture:** Keep rules in `Core` unchanged. Add square-coordinate presentation fields to `SelectedPieceInfo`, render them in `SelectedPiecePanelView`, and style coordinate labels in `ChessBoardView` based on `session.selectedSquare`.
+**Architecture:** Keep rules in `Core` unchanged. Add a square ID presentation field to `SelectedPieceInfo`, render it inline with the selected-piece name in `SelectedPiecePanelView`, and style coordinate labels in `ChessBoardView` based on `session.selectedSquare`.
 
 **Tech Stack:** Swift 6, SwiftUI, Observation, XCTest, iPad simulator.
 
@@ -13,11 +13,11 @@
 ## File Structure
 
 - Modify: `ChessTutor/Game/GameSession.swift`
-  - Add `squareID` and `squareCoordinateSummary` to `SelectedPieceInfo`.
+  - Add `squareID` to `SelectedPieceInfo`.
 - Modify: `ChessTutorTests/Game/GameSessionTests.swift`
-  - Cover selected square ID and beginner coordinate summary.
+  - Cover selected square ID.
 - Modify: `ChessTutor/UI/Sidebar/SelectedPiecePanelView.swift`
-  - Show selected square ID and "file/rank" summary in the selected-piece panel.
+  - Show selected square ID inline with the selected-piece name.
 - Modify: `ChessTutor/UI/Board/ChessBoardView.swift`
   - Nudge coordinate labels inward and color-highlight the selected file/rank labels.
 - Modify: `ChessTutorTests/UI/CaptureTrayLayoutTests.swift`
@@ -40,7 +40,6 @@ func testSelectedPieceInfoIncludesSquareCoordinates() {
     session.select(Square(file: .e, rank: 2))
 
     XCTAssertEqual(session.selectedPieceInfo?.squareID, "e2")
-    XCTAssertEqual(session.selectedPieceInfo?.squareCoordinateSummary, "file e, rank 2")
 }
 ```
 
@@ -63,7 +62,6 @@ struct SelectedPieceInfo: Equatable, Sendable {
     let piece: Piece
     let square: Square
     let squareID: String
-    let squareCoordinateSummary: String
     let title: String
     let movementSummary: String
 }
@@ -76,7 +74,6 @@ return SelectedPieceInfo(
     piece: piece,
     square: selectedSquare,
     squareID: "\(selectedSquare.file)\(selectedSquare.rank)",
-    squareCoordinateSummary: "file \(selectedSquare.file), rank \(selectedSquare.rank)",
     title: "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue)",
     movementSummary: movementSummary(for: piece.kind)
 )
@@ -96,14 +93,14 @@ Run the same `xcodebuild test` command. Expected: pass.
 
 - [ ] **Step 1: Add layout coverage**
 
-Add a test that ensures the selected-piece panel has enough planned height for icon, coordinate row, title, and two-line summary:
+Add a test that ensures the selected-piece panel has enough planned height for the icon, inline square badge, title, and two-line summary:
 
 ```swift
-func testSelectedPiecePanelLayoutIncludesCoordinateRow() {
+func testSelectedPiecePanelLayoutUsesInlineSquareBadge() {
     let layout = SelectedPiecePanelLayout.current
 
-    XCTAssertEqual(layout.coordinateRowHeight, 24, accuracy: 0.01)
-    XCTAssertEqual(layout.requiredContentHeight, 194, accuracy: 0.01)
+    XCTAssertEqual(layout.squareBadgeHeight, 22, accuracy: 0.01)
+    XCTAssertEqual(layout.requiredContentHeight, 164, accuracy: 0.01)
 }
 ```
 
@@ -112,34 +109,34 @@ func testSelectedPiecePanelLayoutIncludesCoordinateRow() {
 Run:
 
 ```bash
-xcodebuild test -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/CaptureTrayLayoutTests/testSelectedPiecePanelLayoutIncludesCoordinateRow
+xcodebuild test -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/CaptureTrayLayoutTests/testSelectedPiecePanelLayoutUsesInlineSquareBadge
 ```
 
-Expected: fails because `coordinateRowHeight` does not exist.
+Expected: fails because `squareBadgeHeight` does not exist.
 
-- [ ] **Step 3: Render selected square ID**
+- [ ] **Step 3: Render inline selected square ID**
 
-Add `coordinateRowHeight: 24` to `SelectedPiecePanelLayout.current`, store it as a property, and include it in `requiredContentHeight`. Reduce the icon slot and text metrics so `requiredContentHeight` remains 194, preserving the current square-panel fit. In the selected state, render a compact row between the icon and title:
+Add `squareBadgeHeight: 22` to `SelectedPiecePanelLayout.current`, store it as a property, and keep `requiredContentHeight` based on the icon slot plus text slot. In the selected state, render the square ID as a compact badge inline with the piece title:
 
 ```swift
 HStack(spacing: 8) {
     Text(selectedPieceInfo.squareID)
         .font(.system(size: 15, weight: .bold, design: .rounded))
-        .foregroundStyle(AppTheme.panelBackground)
+        .foregroundStyle(AppTheme.lightSquare)
         .padding(.horizontal, 10)
-        .frame(height: layout.coordinateRowHeight)
+        .frame(height: layout.squareBadgeHeight)
         .background {
             Capsule()
                 .fill(AppTheme.boardFrame)
         }
 
-    Text(selectedPieceInfo.squareCoordinateSummary)
-        .font(.system(size: 12, weight: .semibold, design: .rounded))
-        .foregroundStyle(AppTheme.mutedInk)
+    Text(selectedPieceInfo.title)
+        .font(AppTheme.pieceTitleFont)
+        .foregroundStyle(AppTheme.ink)
         .lineLimit(1)
         .minimumScaleFactor(0.82)
 }
-.frame(height: layout.coordinateRowHeight, alignment: .leading)
+.frame(height: layout.titleLineHeight, alignment: .leading)
 ```
 
 - [ ] **Step 4: Run focused tests**
@@ -189,18 +186,22 @@ struct BoardCoordinateLabelStyle: Equatable {
     static let current = BoardCoordinateLabelStyle(
         padding: 9,
         normalOpacity: 0.60,
+        selectedLightSquareColor: .darkSquare,
         selectedLightSquareOpacity: 0.95,
+        selectedDarkSquareColor: .selectedSquare,
         selectedDarkSquareOpacity: 0.95
     )
 
     let padding: CGFloat
     let normalOpacity: Double
+    let selectedLightSquareColor: BoardCoordinateHighlightColor
     let selectedLightSquareOpacity: Double
+    let selectedDarkSquareColor: BoardCoordinateHighlightColor
     let selectedDarkSquareOpacity: Double
 }
 ```
 
-Update `coordinateLabels(for:)` to compute whether each visible edge label belongs to `session.selectedSquare`, use `BoardCoordinateLabelStyle.current.padding`, and switch highlighted labels to dark board-frame ink on light squares and warm selected-square color on dark squares.
+Update `coordinateLabels(for:)` to compute whether each visible edge label belongs to `session.selectedSquare`, use `BoardCoordinateLabelStyle.current.padding`, and switch highlighted labels to green dark-square color on light squares and warm selected-square color on dark squares.
 
 - [ ] **Step 4: Run focused tests**
 

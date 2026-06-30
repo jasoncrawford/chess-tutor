@@ -455,9 +455,9 @@ struct ChessBoardView: View {
         let style = BoardCoordinateLabelStyle.current
         if isHighlighted {
             if isLightSquare {
-                return AppTheme.boardFrame.opacity(style.selectedLightSquareOpacity)
+                return style.selectedLightSquareColor.color.opacity(style.selectedLightSquareOpacity)
             }
-            return AppTheme.selectedSquareCenter.opacity(style.selectedDarkSquareOpacity)
+            return style.selectedDarkSquareColor.color.opacity(style.selectedDarkSquareOpacity)
         }
         return AppTheme.boardFrame.opacity(style.normalOpacity)
     }
@@ -663,14 +663,32 @@ struct BoardCoordinateLabelStyle: Equatable {
     static let current = BoardCoordinateLabelStyle(
         padding: 9,
         normalOpacity: 0.60,
+        selectedLightSquareColor: .darkSquare,
         selectedLightSquareOpacity: 0.95,
+        selectedDarkSquareColor: .selectedSquare,
         selectedDarkSquareOpacity: 0.95
     )
 
     let padding: CGFloat
     let normalOpacity: Double
+    let selectedLightSquareColor: BoardCoordinateHighlightColor
     let selectedLightSquareOpacity: Double
+    let selectedDarkSquareColor: BoardCoordinateHighlightColor
     let selectedDarkSquareOpacity: Double
+}
+
+enum BoardCoordinateHighlightColor: Equatable {
+    case darkSquare
+    case selectedSquare
+
+    var color: Color {
+        switch self {
+        case .darkSquare:
+            return AppTheme.darkSquare
+        case .selectedSquare:
+            return AppTheme.selectedSquareCenter
+        }
+    }
 }
 
 struct CaptureGuidanceGlowStyle: Equatable {
