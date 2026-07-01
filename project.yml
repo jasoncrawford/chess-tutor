@@ -1,6 +1,6 @@
 name: ChessTutor
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: org.jasoncrawford
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -13,10 +13,15 @@ targets:
     platform: iOS
     sources:
       - ChessTutor
+    attributes:
+      SystemCapabilities:
+        com.apple.iCloud:
+          enabled: 1
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.ChessTutor
+        PRODUCT_BUNDLE_IDENTIFIER: org.jasoncrawford.chesstutor
+        CODE_SIGN_ENTITLEMENTS: ChessTutor/Config/ChessTutor.entitlements
         TARGETED_DEVICE_FAMILY: "2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
