@@ -76,7 +76,9 @@ The code should be easy to say over a call and type into another iPad. A six-dig
 
 Codes are short-lived and only valid while the invite modal is open. This makes random guessing impractical and keeps the product model synchronous.
 
-When the invitee accepts:
+When the invitee joins by link or code, the inviter's modal shows who wants to join. The game starts only after the inviter approves the join.
+
+When the inviter approves:
 
 - The game starts as a remote game.
 - Each device saves the other participant as a known player.
@@ -93,6 +95,8 @@ The accept screen tells the invitee who invited them and how White will be assig
 - If the inviter chose "let them choose", the invitee chooses who plays White before accepting.
 
 If the app does not know the invitee's display name yet, it asks for a first name or handle during acceptance.
+
+After the invitee confirms the join, they wait for the inviter to approve. This keeps a guessed or mistyped code from creating a game without the inviter's consent.
 
 ## Known Players
 
