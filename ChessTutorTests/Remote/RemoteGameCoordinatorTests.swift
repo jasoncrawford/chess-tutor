@@ -47,7 +47,32 @@ final class RemoteGameCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.syncStatus, .current)
     }
 
-    private func makeCoordinator(localPlayerID: RemotePlayerID) -> RemoteGameCoordinator {
+    func testUploadPendingMoveFailureLeavesEventRetryableForLaterUpload() async throws {
+        let transport = FailOnceRemoteGameTransport()
+        var coordinator = makeCoordinator(localPlayerID: whiteID, transport: transport)
+        let move = Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4))
+        let event = try coordinator.recordLocalMove(move, createdAt: Date(timeIntervalSince1970: 10))
+
+        do {
+            try await coordinator.uploadPendingMoves()
+            XCTFail("Expected first upload to fail.")
+        } catch {
+            XCTAssertEqual(error as? RemoteGameCoordinator.Error, .transportFailed)
+        }
+
+        XCTAssertEqual(coordinator.outbox.items, [RemoteOutboxItem(event: event, state: .failedRetrying)])
+        XCTAssertEqual(coordinator.syncStatus, .failed(.transportFailed))
+
+        try await coordinator.uploadPendingMoves()
+
+        XCTAssertEqual(coordinator.outbox.items, [RemoteOutboxItem(event: event, state: .uploaded)])
+        XCTAssertEqual(coordinator.syncStatus, .current)
+    }
+
+    private func makeCoordinator(
+        localPlayerID: RemotePlayerID,
+        transport: any RemoteGameTransport = InMemoryRemoteGameTransport()
+    ) -> RemoteGameCoordinator {
         RemoteGameCoordinator(
             descriptor: RemoteGameDescriptor(
                 id: gameID,
@@ -57,8 +82,29 @@ final class RemoteGameCoordinatorTests: XCTestCase {
                 blackPlayer: RemotePlayerRef(id: blackID, displayName: "Black"),
                 localPlayerID: localPlayerID
             ),
-            transport: InMemoryRemoteGameTransport(),
+            transport: transport,
             initialState: .startingPosition()
         )
+    }
+}
+
+private actor FailOnceRemoteGameTransport: RemoteGameTransport {
+    private let backing = InMemoryRemoteGameTransport()
+    private var shouldFailNextSend = true
+
+    func sendMove(_ event: RemoteMoveEvent) async throws -> RemoteMoveAck {
+        if shouldFailNextSend {
+            shouldFailNextSend = false
+            throw Error.intentionalFailure
+        }
+        return try await backing.sendMove(event)
+    }
+
+    func fetchMoves(gameID: RemoteGameID, after sequenceNumber: Int) async throws -> [RemoteMoveEvent] {
+        try await backing.fetchMoves(gameID: gameID, after: sequenceNumber)
+    }
+
+    enum Error: Swift.Error {
+        case intentionalFailure
     }
 }

@@ -43,6 +43,12 @@ struct RemoteOutbox: Equatable, Sendable {
         }
     }
 
+    mutating func markFailedRetrying(_ eventID: RemoteMoveEventID) throws {
+        try update(eventID) { item in
+            item.state = .failedRetrying
+        }
+    }
+
     var pendingEvents: [RemoteMoveEvent] {
         items.compactMap { item in
             switch item.state {

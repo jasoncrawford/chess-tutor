@@ -18,6 +18,17 @@ final class RemoteOutboxTests: XCTestCase {
         XCTAssertEqual(outbox.items.first?.state, .uploaded)
     }
 
+    func testMarksFailedEventRetryable() throws {
+        let event = makeEvent(sequence: 1)
+        var outbox = RemoteOutbox(events: [event])
+
+        try outbox.markUploading(event.id)
+        try outbox.markFailedRetrying(event.id)
+
+        XCTAssertEqual(outbox.items.first?.state, .failedRetrying)
+        XCTAssertEqual(outbox.pendingEvents, [event])
+    }
+
     func testRejectsMismatchedAck() {
         let event = makeEvent(sequence: 1)
         var outbox = RemoteOutbox(events: [event])
