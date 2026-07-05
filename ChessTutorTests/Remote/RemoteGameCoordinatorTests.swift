@@ -36,6 +36,17 @@ final class RemoteGameCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.syncStatus, .failed(.localMoveRejected))
     }
 
+    func testUploadPendingMovesMarksAcknowledgedEventUploaded() async throws {
+        var coordinator = makeCoordinator(localPlayerID: whiteID)
+        let move = Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4))
+        let event = try coordinator.recordLocalMove(move, createdAt: Date(timeIntervalSince1970: 10))
+
+        try await coordinator.uploadPendingMoves()
+
+        XCTAssertEqual(coordinator.outbox.items, [RemoteOutboxItem(event: event, state: .uploaded)])
+        XCTAssertEqual(coordinator.syncStatus, .current)
+    }
+
     private func makeCoordinator(localPlayerID: RemotePlayerID) -> RemoteGameCoordinator {
         RemoteGameCoordinator(
             descriptor: RemoteGameDescriptor(

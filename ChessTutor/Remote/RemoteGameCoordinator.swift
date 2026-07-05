@@ -77,6 +77,22 @@ struct RemoteGameCoordinator {
         return event
     }
 
+    mutating func uploadPendingMoves() async throws {
+        syncStatus = .uploading
+
+        do {
+            for event in outbox.pendingEvents {
+                try outbox.markUploading(event.id)
+                let ack = try await transport.sendMove(event)
+                try outbox.markUploaded(ack)
+            }
+            syncStatus = .current
+        } catch {
+            syncStatus = .failed(.transportFailed)
+            throw Error.transportFailed
+        }
+    }
+
     private func expectedActor(for color: PieceColor) -> RemotePlayerID {
         switch color {
         case .white:
