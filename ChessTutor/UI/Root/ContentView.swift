@@ -5,6 +5,11 @@ struct ContentView: View {
     @State private var session = GameSession()
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
+    @State private var remotePlayFlow = RemotePlayFlow(
+        knownPlayers: [
+            KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        ]
+    )
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
@@ -67,6 +72,17 @@ struct ContentView: View {
                 .presentationDetents([.height(320)])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: remotePlaySheetBinding) {
+            #if DEBUG
+            RemotePlaySheetView(flow: remotePlayFlow, session: session, fakeRemoteLab: fakeRemoteLab)
+                .presentationDetents([.height(430)])
+                .presentationDragIndicator(.visible)
+            #else
+            RemotePlaySheetView(flow: remotePlayFlow, session: session)
+                .presentationDetents([.height(430)])
+                .presentationDragIndicator(.visible)
+            #endif
+        }
     }
 
     private func tabletop(boardSide: CGFloat) -> some View {
@@ -119,8 +135,12 @@ struct ContentView: View {
             readableRotationDegrees: readableRotationDegrees,
             captureNamespace: captureNamespace,
             sideLength: sideLength,
+            remotePlayFlow: remotePlayFlow,
             onAbout: {
                 isShowingAbout = true
+            },
+            onPlayRemotely: {
+                remotePlayFlow.open()
             },
             fakeRemoteLab: fakeRemoteLab
         )
@@ -132,8 +152,12 @@ struct ContentView: View {
             readableRotationDegrees: readableRotationDegrees,
             captureNamespace: captureNamespace,
             sideLength: sideLength,
+            remotePlayFlow: remotePlayFlow,
             onAbout: {
                 isShowingAbout = true
+            },
+            onPlayRemotely: {
+                remotePlayFlow.open()
             }
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
@@ -188,6 +212,16 @@ struct ContentView: View {
 
     private var readableRotationDegrees: Double {
         -tableRotationDegrees
+    }
+
+    private var remotePlaySheetBinding: Binding<Bool> {
+        Binding {
+            remotePlayFlow.stage != .closed
+        } set: { isPresented in
+            if !isPresented {
+                remotePlayFlow.cancel()
+            }
+        }
     }
 }
 

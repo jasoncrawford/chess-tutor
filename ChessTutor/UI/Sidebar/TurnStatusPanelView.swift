@@ -2,11 +2,20 @@ import SwiftUI
 
 struct TurnStatusPanelView: View {
     @Bindable var session: GameSession
+    let remotePlayFlow: RemotePlayFlow?
+    let onPlayRemotely: () -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
 
-    init(session: GameSession, fakeRemoteLab: FakeRemoteGameLab? = nil) {
+    init(
+        session: GameSession,
+        remotePlayFlow: RemotePlayFlow? = nil,
+        onPlayRemotely: @escaping () -> Void = {},
+        fakeRemoteLab: FakeRemoteGameLab? = nil
+    ) {
         self.session = session
+        self.remotePlayFlow = remotePlayFlow
+        self.onPlayRemotely = onPlayRemotely
         self.fakeRemoteLab = fakeRemoteLab
     }
     #endif
@@ -30,19 +39,24 @@ struct TurnStatusPanelView: View {
 
             Spacer(minLength: 0)
 
-            GameControlsView(session: session) { move in
+            GameControlsView(
+                session: session,
+                isRemotePlayAvailable: remotePlayFlow?.canShowEntryPoint(for: session) ?? false,
+                onPlayRemotely: onPlayRemotely,
+                onCommittedMove: { move in
                 #if DEBUG
-                guard let fakeRemoteLab else {
-                    return
-                }
-                Task { @MainActor in
-                    try? await fakeRemoteLab.recordCommittedLocalMove(move)
-                }
+                    guard let fakeRemoteLab else {
+                        return
+                    }
+                    Task { @MainActor in
+                        try? await fakeRemoteLab.recordCommittedLocalMove(move)
+                    }
                 #endif
-            }
+                }
+            )
 
             #if DEBUG
-            if let fakeRemoteLab {
+            if let fakeRemoteLab, fakeRemoteLab.isActive {
                 FakeRemoteLabControlsView(session: session, lab: fakeRemoteLab)
                     .padding(.top, 2)
             }
@@ -59,16 +73,6 @@ private struct FakeRemoteLabControlsView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button {
-                if lab.isActive {
-                    lab.stop(session: session)
-                } else {
-                    lab.start(session: session)
-                }
-            } label: {
-                Label(lab.isActive ? "Local" : "Remote", systemImage: lab.isActive ? "xmark.circle" : "antenna.radiowaves.left.and.right")
-            }
-
             Button {
                 Task { @MainActor in
                     try? await lab.remotePlaysNextMove(session: session)

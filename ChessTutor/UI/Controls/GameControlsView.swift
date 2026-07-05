@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GameControlsPresentation: Equatable {
     enum PrimaryAction: Equatable {
+        case playRemotely
         case done
         case newGame
     }
@@ -14,10 +15,10 @@ struct GameControlsPresentation: Equatable {
     let primaryAction: PrimaryAction
     let secondaryActions: [SecondaryAction]
 
-    init(result: GameResult) {
+    init(result: GameResult, isRemotePlayAvailable: Bool = false) {
         switch result {
         case .ongoing:
-            primaryAction = .done
+            primaryAction = isRemotePlayAvailable ? .playRemotely : .done
             secondaryActions = [.newGame, .about]
         case .checkmate, .stalemate:
             primaryAction = .newGame
@@ -28,15 +29,27 @@ struct GameControlsPresentation: Equatable {
 
 struct GameControlsView: View {
     @Bindable var session: GameSession
+    let isRemotePlayAvailable: Bool
+    let onPlayRemotely: () -> Void
     let onCommittedMove: (Move) -> Void
 
-    init(session: GameSession, onCommittedMove: @escaping (Move) -> Void = { _ in }) {
+    init(
+        session: GameSession,
+        isRemotePlayAvailable: Bool = false,
+        onPlayRemotely: @escaping () -> Void = {},
+        onCommittedMove: @escaping (Move) -> Void = { _ in }
+    ) {
         self.session = session
+        self.isRemotePlayAvailable = isRemotePlayAvailable
+        self.onPlayRemotely = onPlayRemotely
         self.onCommittedMove = onCommittedMove
     }
 
     var body: some View {
-        let presentation = GameControlsPresentation(result: session.state.result)
+        let presentation = GameControlsPresentation(
+            result: session.state.result,
+            isRemotePlayAvailable: isRemotePlayAvailable
+        )
 
         primaryButton(for: presentation.primaryAction)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -51,11 +64,24 @@ struct GameControlsView: View {
     @ViewBuilder
     private func primaryButton(for action: GameControlsPresentation.PrimaryAction) -> some View {
         switch action {
+        case .playRemotely:
+            playRemotelyButton
         case .done:
             doneButton
         case .newGame:
             primaryNewGameButton
         }
+    }
+
+    private var playRemotelyButton: some View {
+        Button(action: onPlayRemotely) {
+            Label("Play Remotely", systemImage: "person.2")
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+        }
+        .buttonStyle(PrimaryGameButtonStyle(isEnabled: true))
+        .font(.system(size: 19, weight: .semibold, design: .rounded))
+        .labelStyle(.titleAndIcon)
     }
 
     private var doneButton: some View {

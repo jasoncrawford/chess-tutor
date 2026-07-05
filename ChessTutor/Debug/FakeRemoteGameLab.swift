@@ -17,6 +17,7 @@ final class FakeRemoteGameLab {
     private let remotePlayerID = RemotePlayerID(rawValue: "maya")
     private let transport = InMemoryRemoteGameTransport()
     private var coordinator: RemoteGameCoordinator?
+    private var localPlayerColor: PieceColor = .white
 
     private(set) var isActive = false
     private(set) var statusText = "Local game"
@@ -26,13 +27,20 @@ final class FakeRemoteGameLab {
         guard let coordinator else {
             return false
         }
-        return isActive && coordinator.projectedState.sideToMove == .black
+        return isActive && coordinator.projectedState.sideToMove != localPlayerColor
     }
 
-    func start(session: GameSession) {
+    func start(session: GameSession, localPlayerColor: PieceColor = .white) {
         session.newGame()
-        session.whitePlayer = .humanLocal
-        session.blackPlayer = .remote(playerID: "maya")
+        self.localPlayerColor = localPlayerColor
+        switch localPlayerColor {
+        case .white:
+            session.whitePlayer = .humanLocal
+            session.blackPlayer = .remote(playerID: "maya")
+        case .black:
+            session.whitePlayer = .remote(playerID: "maya")
+            session.blackPlayer = .humanLocal
+        }
         coordinator = RemoteGameCoordinator(
             descriptor: descriptor(),
             transport: transport,
@@ -47,6 +55,7 @@ final class FakeRemoteGameLab {
         session.whitePlayer = .humanLocal
         session.blackPlayer = .humanLocal
         coordinator = nil
+        localPlayerColor = .white
         isActive = false
         statusText = "Local game"
         lastRemoteMove = nil
@@ -113,22 +122,42 @@ final class FakeRemoteGameLab {
     }
 
     private func descriptor() -> RemoteGameDescriptor {
-        RemoteGameDescriptor(
+        let whitePlayer: RemotePlayerRef
+        let blackPlayer: RemotePlayerRef
+        switch localPlayerColor {
+        case .white:
+            whitePlayer = RemotePlayerRef(id: localPlayerID, displayName: "You")
+            blackPlayer = RemotePlayerRef(id: remotePlayerID, displayName: "Maya")
+        case .black:
+            whitePlayer = RemotePlayerRef(id: remotePlayerID, displayName: "Maya")
+            blackPlayer = RemotePlayerRef(id: localPlayerID, displayName: "You")
+        }
+
+        return RemoteGameDescriptor(
             id: gameID,
             protocolVersion: 1,
             status: .active,
-            whitePlayer: RemotePlayerRef(id: localPlayerID, displayName: "You"),
-            blackPlayer: RemotePlayerRef(id: remotePlayerID, displayName: "Maya"),
+            whitePlayer: whitePlayer,
+            blackPlayer: blackPlayer,
             localPlayerID: localPlayerID
         )
     }
 
     private func preferredRemoteMove(from legalMoves: [Move]) -> Move? {
-        let commonReply = Move(
-            from: Square(file: .e, rank: 7),
-            to: Square(file: .e, rank: 5)
-        )
-        return legalMoves.first { $0 == commonReply } ?? legalMoves.first
+        let preferredMove: Move
+        switch localPlayerColor {
+        case .white:
+            preferredMove = Move(
+                from: Square(file: .e, rank: 7),
+                to: Square(file: .e, rank: 5)
+            )
+        case .black:
+            preferredMove = Move(
+                from: Square(file: .e, rank: 2),
+                to: Square(file: .e, rank: 4)
+            )
+        }
+        return legalMoves.first { $0 == preferredMove } ?? legalMoves.first
     }
 
     private func makeRemoteEvent(

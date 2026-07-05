@@ -6,7 +6,9 @@ struct SidePanelView: View {
     let readableRotationDegrees: Double
     let captureNamespace: Namespace.ID
     let sideLength: CGFloat
+    let remotePlayFlow: RemotePlayFlow?
     let onAbout: () -> Void
+    let onPlayRemotely: () -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -92,9 +94,18 @@ struct SidePanelView: View {
         case .messageAndDone:
             SidebarPanelView(panelSize: panelSize) {
                 #if DEBUG
-                TurnStatusPanelView(session: session, fakeRemoteLab: fakeRemoteLab)
+                TurnStatusPanelView(
+                    session: session,
+                    remotePlayFlow: remotePlayFlow,
+                    onPlayRemotely: onPlayRemotely,
+                    fakeRemoteLab: fakeRemoteLab
+                )
                 #else
-                TurnStatusPanelView(session: session)
+                TurnStatusPanelView(
+                    session: session,
+                    remotePlayFlow: remotePlayFlow,
+                    onPlayRemotely: onPlayRemotely
+                )
                 #endif
             }
         case .selectedPiece:
