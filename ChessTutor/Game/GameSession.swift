@@ -51,6 +51,10 @@ final class GameSession {
         return isLegal(tentativeMove)
     }
 
+    var localCanActForCurrentTurn: Bool {
+        playerSeat(for: committedState.sideToMove).isLocal
+    }
+
     var hasGameInProgress: Bool {
         tentativeMove != nil || !committedState.moveHistory.isEmpty
     }
@@ -153,7 +157,7 @@ final class GameSession {
         }
 
         selectedSquare = square
-        legalMovesForSelection = assistSettings.showLegalMovesOnSelection
+        legalMovesForSelection = assistSettings.showLegalMovesOnSelection && localCanActForCurrentTurn
             ? allowedMoves(forSelectionAt: square)
             : []
         message = nil
@@ -170,6 +174,11 @@ final class GameSession {
         guard let selectedSquare else {
             message = "Choose a piece first."
             return .illegal("Choose a piece first.")
+        }
+
+        guard localCanActForCurrentTurn else {
+            message = "It's not your turn."
+            return .illegal("It's not your turn.")
         }
 
         if let tentativeMove, selectedSquare == tentativeMove.to, destination == tentativeMove.from {
@@ -206,14 +215,15 @@ final class GameSession {
         message = nil
     }
 
-    func finishTurn() {
+    @discardableResult
+    func finishTurn() -> Move? {
         guard let tentativeMove else {
             message = "Make a move first."
-            return
+            return nil
         }
         guard isLegal(tentativeMove) else {
             message = checkRuleViolationMessage
-            return
+            return nil
         }
 
         if let capturedPiece = capturedPiece(for: tentativeMove, in: committedState) {
@@ -231,6 +241,7 @@ final class GameSession {
         selectedSquare = nil
         legalMovesForSelection = []
         message = committedState.result == .ongoing ? nil : statusText
+        return tentativeMove
     }
 
     func newGame() {
@@ -289,6 +300,15 @@ final class GameSession {
             return LegalMoveGenerator.allowedMoves(for: tentativeMove.from, in: committedState)
         }
         return LegalMoveGenerator.allowedMoves(for: square, in: committedState)
+    }
+
+    private func playerSeat(for color: PieceColor) -> PlayerSeat {
+        switch color {
+        case .white:
+            return whitePlayer
+        case .black:
+            return blackPlayer
+        }
     }
 
     private func movementSummary(for kind: Piece.Kind) -> String {

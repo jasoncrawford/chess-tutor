@@ -564,6 +564,38 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.state.board[Square(file: .e, rank: 2)])
     }
 
+    func testRemotePlayerPieceCanBeInspectedWithoutMoveAffordances() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+
+        session.select(Square(file: .e, rank: 2))
+
+        XCTAssertEqual(session.selectedPieceInfo?.title, "White pawn")
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertNil(session.message)
+    }
+
+    func testRemotePlayerCannotMovePieceOnTheirTurn() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+
+        session.select(Square(file: .e, rank: 2))
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertEqual(result, .illegal("It's not your turn."))
+        XCTAssertEqual(session.message, "It's not your turn.")
+    }
+
+    func testFinishTurnReturnsCommittedMove() {
+        let session = GameSession()
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        let committedMove = session.finishTurn()
+
+        XCTAssertEqual(committedMove, Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)))
+    }
+
     func testCheckmateMoveShowsGameOverMessageAndBlocksFurtherSelection() {
         var board = Board()
         board[Square(file: .h, rank: 1)] = Piece(kind: .king, color: .white)
