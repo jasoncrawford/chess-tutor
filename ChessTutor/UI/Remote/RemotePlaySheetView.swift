@@ -40,31 +40,33 @@ struct RemotePlaySheetView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            if showsBackButton {
-                Button {
-                    flow.goBack()
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
+        ZStack {
+            Text("Play Remotely")
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppTheme.ink)
+
+            HStack {
+                if showsBackButton {
+                    Button {
+                        flow.goBack()
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.mutedInk)
+                    .labelStyle(.titleAndIcon)
+                }
+
+                Spacer()
+
+                Button("Cancel") {
+                    flow.cancel()
                 }
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(AppTheme.mutedInk)
-                .labelStyle(.titleAndIcon)
             }
-
-            Text("Play Remotely")
-                .font(AppTheme.aboutTitleFont)
-                .foregroundStyle(AppTheme.ink)
-                .padding(.leading, showsBackButton ? 4 : 0)
-
-            Spacer()
-
-            Button("Cancel") {
-                flow.cancel()
-            }
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
-            .foregroundStyle(AppTheme.mutedInk)
         }
+        .frame(height: 32)
     }
 
     private var showsBackButton: Bool {
@@ -169,16 +171,9 @@ struct RemotePlaySheetView: View {
                     .foregroundStyle(flow.selectedWhiteChoice == choice ? AppTheme.boardFrame : AppTheme.mutedInk)
                     .frame(width: 24)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(whiteChoiceTitle(choice, target: target))
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppTheme.ink)
-
-                    Text(whiteChoiceSubtitle(choice, target: target))
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(AppTheme.ink.opacity(0.62))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(whiteChoiceTitle(choice, target: target))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.ink)
 
                 Spacer(minLength: 0)
             }
@@ -246,30 +241,6 @@ struct RemotePlaySheetView: View {
             return inviteeName(for: target)
         case .inviteeChooses:
             return "Let them choose"
-        }
-    }
-
-    private func whiteChoiceSubtitle(
-        _ choice: RemotePlayFlow.WhiteChoice,
-        target: RemotePlayFlow.InviteTarget
-    ) -> String {
-        switch choice {
-        case .localPlayer:
-            return "You play White and make the first move."
-        case .invitee:
-            switch target {
-            case .known:
-                return "\(inviteeName(for: target)) plays White and makes the first move."
-            case .newPlayer:
-                return "The other player plays White and makes the first move."
-            }
-        case .inviteeChooses:
-            switch target {
-            case .known:
-                return "\(inviteeName(for: target)) chooses a side when accepting."
-            case .newPlayer:
-                return "The other player chooses a side when accepting."
-            }
         }
     }
 
