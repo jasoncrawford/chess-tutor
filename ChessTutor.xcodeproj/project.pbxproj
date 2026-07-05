@@ -34,8 +34,10 @@
 		84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */; };
 		8497F717CD75D8D80EB9075A /* GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA0EFDD85959FE8902AA01 /* GameState.swift */; };
 		8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */; };
+		8A7C4A956E93B021B8CB95C2 /* PositionFingerprinting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89761D36FCBA29D960341883 /* PositionFingerprinting.swift */; };
 		8F63639BDB9700501409AC9C /* BoardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB156EDC259546DEF345170 /* BoardTests.swift */; };
 		9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */; };
+		AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */; };
 		AF854A0114766C352F4D8483 /* CapturedPiecesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */; };
 		BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
@@ -78,12 +80,14 @@
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		892B39ACE33796097240A052 /* ChessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessBoardView.swift; sourceTree = "<group>"; };
+		89761D36FCBA29D960341883 /* PositionFingerprinting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionFingerprinting.swift; sourceTree = "<group>"; };
 		96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveCodec.swift; sourceTree = "<group>"; };
 		9D517824035C75485AD4D712 /* GameSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSession.swift; sourceTree = "<group>"; };
 		9DF66E252A80BDA67538D11C /* GameSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionTests.swift; sourceTree = "<group>"; };
 		A1D00A39AD12F2E4C69496C2 /* PlayerSeat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerSeat.swift; sourceTree = "<group>"; };
 		A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceIconView.swift; sourceTree = "<group>"; };
 		A67BD6175E66BC35A9C4D85B /* Square.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Square.swift; sourceTree = "<group>"; };
+		B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionFingerprintingTests.swift; sourceTree = "<group>"; };
 		B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessTutorApp.swift; sourceTree = "<group>"; };
 		BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChessArt-MIT.txt"; sourceTree = "<group>"; };
 		BFAA0EFDD85959FE8902AA01 /* GameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
@@ -221,6 +225,7 @@
 		6D0EC12254A9A9918BD5A27B /* Remote */ = {
 			isa = PBXGroup;
 			children = (
+				B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */,
 				6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */,
 			);
 			path = Remote;
@@ -229,6 +234,7 @@
 		7B3D78A530845AD724D352D8 /* Remote */ = {
 			isa = PBXGroup;
 			children = (
+				89761D36FCBA29D960341883 /* PositionFingerprinting.swift */,
 				F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */,
 				96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */,
 			);
@@ -438,6 +444,7 @@
 				39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */,
 				84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */,
 				F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */,
+				8A7C4A956E93B021B8CB95C2 /* PositionFingerprinting.swift in Sources */,
 				482A0538F7EA6222D4AA557D /* RemoteGameModels.swift in Sources */,
 				BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */,
 				8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */,
@@ -459,6 +466,7 @@
 				7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */,
 				D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */,
 				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
+				AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */,
 				16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */,
 				267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */,
 			);
