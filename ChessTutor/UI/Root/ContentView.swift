@@ -142,6 +142,7 @@ struct ContentView: View {
             onPlayRemotely: {
                 remotePlayFlow.open()
             },
+            onNewGame: startNewGame,
             fakeRemoteLab: fakeRemoteLab
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
@@ -158,9 +159,22 @@ struct ContentView: View {
             },
             onPlayRemotely: {
                 remotePlayFlow.open()
-            }
+            },
+            onNewGame: startNewGame
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
+        #endif
+    }
+
+    private func startNewGame() {
+        #if DEBUG
+        GameLifecycle.startNewGame(
+            session: session,
+            remotePlayFlow: remotePlayFlow,
+            fakeRemoteLab: fakeRemoteLab
+        )
+        #else
+        GameLifecycle.startNewGame(session: session, remotePlayFlow: remotePlayFlow)
         #endif
     }
 

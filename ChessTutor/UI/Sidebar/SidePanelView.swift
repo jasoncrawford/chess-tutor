@@ -9,6 +9,7 @@ struct SidePanelView: View {
     let remotePlayFlow: RemotePlayFlow?
     let onAbout: () -> Void
     let onPlayRemotely: () -> Void
+    let onNewGame: () -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -41,7 +42,7 @@ struct SidePanelView: View {
         .alert("Start a new game?", isPresented: $isConfirmingNewGame) {
             Button("Keep Playing", role: .cancel) {}
             Button("New Game", role: .destructive) {
-                session.newGame()
+                onNewGame()
             }
         } message: {
             Text("This will abandon the current game.")
@@ -78,7 +79,7 @@ struct SidePanelView: View {
         if session.hasGameInProgress {
             isConfirmingNewGame = true
         } else {
-            session.newGame()
+            onNewGame()
         }
     }
 
@@ -98,13 +99,15 @@ struct SidePanelView: View {
                     session: session,
                     remotePlayFlow: remotePlayFlow,
                     onPlayRemotely: onPlayRemotely,
+                    onNewGame: onNewGame,
                     fakeRemoteLab: fakeRemoteLab
                 )
                 #else
                 TurnStatusPanelView(
                     session: session,
                     remotePlayFlow: remotePlayFlow,
-                    onPlayRemotely: onPlayRemotely
+                    onPlayRemotely: onPlayRemotely,
+                    onNewGame: onNewGame
                 )
                 #endif
             }

@@ -31,17 +31,20 @@ struct GameControlsView: View {
     @Bindable var session: GameSession
     let isRemotePlayAvailable: Bool
     let onPlayRemotely: () -> Void
+    let onNewGame: () -> Void
     let onCommittedMove: (Move) -> Void
 
     init(
         session: GameSession,
         isRemotePlayAvailable: Bool = false,
         onPlayRemotely: @escaping () -> Void = {},
+        onNewGame: @escaping () -> Void = {},
         onCommittedMove: @escaping (Move) -> Void = { _ in }
     ) {
         self.session = session
         self.isRemotePlayAvailable = isRemotePlayAvailable
         self.onPlayRemotely = onPlayRemotely
+        self.onNewGame = onNewGame
         self.onCommittedMove = onCommittedMove
     }
 
@@ -106,9 +109,7 @@ struct GameControlsView: View {
     }
 
     private var primaryNewGameButton: some View {
-        Button {
-            session.newGame()
-        } label: {
+        Button(action: onNewGame) {
             Label("New Game", systemImage: "arrow.counterclockwise")
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)

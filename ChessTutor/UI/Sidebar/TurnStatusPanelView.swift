@@ -4,6 +4,7 @@ struct TurnStatusPanelView: View {
     @Bindable var session: GameSession
     let remotePlayFlow: RemotePlayFlow?
     let onPlayRemotely: () -> Void
+    let onNewGame: () -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
 
@@ -11,11 +12,13 @@ struct TurnStatusPanelView: View {
         session: GameSession,
         remotePlayFlow: RemotePlayFlow? = nil,
         onPlayRemotely: @escaping () -> Void = {},
+        onNewGame: @escaping () -> Void = {},
         fakeRemoteLab: FakeRemoteGameLab? = nil
     ) {
         self.session = session
         self.remotePlayFlow = remotePlayFlow
         self.onPlayRemotely = onPlayRemotely
+        self.onNewGame = onNewGame
         self.fakeRemoteLab = fakeRemoteLab
     }
     #endif
@@ -43,6 +46,7 @@ struct TurnStatusPanelView: View {
                 session: session,
                 isRemotePlayAvailable: remotePlayFlow?.canShowEntryPoint(for: session) ?? false,
                 onPlayRemotely: onPlayRemotely,
+                onNewGame: onNewGame,
                 onCommittedMove: { move in
                 #if DEBUG
                     guard let fakeRemoteLab else {
