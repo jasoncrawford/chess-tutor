@@ -75,11 +75,11 @@ struct ContentView: View {
         .sheet(isPresented: remotePlaySheetBinding) {
             #if DEBUG
             RemotePlaySheetView(flow: remotePlayFlow, session: session, fakeRemoteLab: fakeRemoteLab)
-                .presentationDetents([.height(430)])
+                .presentationDetents([.height(500)])
                 .presentationDragIndicator(.visible)
             #else
             RemotePlaySheetView(flow: remotePlayFlow, session: session)
-                .presentationDetents([.height(430)])
+                .presentationDetents([.height(500)])
                 .presentationDragIndicator(.visible)
             #endif
         }

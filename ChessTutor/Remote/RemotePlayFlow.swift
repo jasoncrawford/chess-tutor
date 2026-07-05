@@ -93,6 +93,16 @@ final class RemotePlayFlow {
         return pendingInvite
     }
 
+    func goBack() {
+        switch stage {
+        case .choosingWhite, .waitingForInvitee:
+            selectedWhiteChoice = .localPlayer
+            stage = .choosing
+        case .closed, .choosing:
+            break
+        }
+    }
+
     func cancel() {
         selectedWhiteChoice = .localPlayer
         stage = .closed

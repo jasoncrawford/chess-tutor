@@ -41,9 +41,21 @@ struct RemotePlaySheetView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
+            if showsBackButton {
+                Button {
+                    flow.goBack()
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppTheme.mutedInk)
+                .labelStyle(.titleAndIcon)
+            }
+
             Text("Play Remotely")
                 .font(AppTheme.aboutTitleFont)
                 .foregroundStyle(AppTheme.ink)
+                .padding(.leading, showsBackButton ? 4 : 0)
 
             Spacer()
 
@@ -52,6 +64,15 @@ struct RemotePlaySheetView: View {
             }
             .font(.system(size: 16, weight: .semibold, design: .rounded))
             .foregroundStyle(AppTheme.mutedInk)
+        }
+    }
+
+    private var showsBackButton: Bool {
+        switch flow.stage {
+        case .choosingWhite:
+            return true
+        case .closed, .choosing, .waitingForInvitee:
+            return false
         }
     }
 
@@ -108,16 +129,21 @@ struct RemotePlaySheetView: View {
 
     private func choosingWhiteView(for target: RemotePlayFlow.InviteTarget) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(targetTitle(for: target))
-                .font(AppTheme.aboutSectionTitleFont)
-                .foregroundStyle(AppTheme.ink)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(targetTitle(for: target))
+                    .font(AppTheme.aboutSectionTitleFont)
+                    .foregroundStyle(AppTheme.ink)
 
-            Picker("White", selection: $flow.selectedWhiteChoice) {
-                Text("Me").tag(RemotePlayFlow.WhiteChoice.localPlayer)
-                Text(inviteeName(for: target)).tag(RemotePlayFlow.WhiteChoice.invitee)
-                Text("Let them choose").tag(RemotePlayFlow.WhiteChoice.inviteeChooses)
+                Text("Who plays White and goes first?")
+                    .font(AppTheme.panelBodyFont)
+                    .foregroundStyle(AppTheme.ink.opacity(0.72))
             }
-            .pickerStyle(.segmented)
+
+            VStack(spacing: 8) {
+                whiteChoiceButton(.localPlayer, target: target)
+                whiteChoiceButton(.invitee, target: target)
+                whiteChoiceButton(.inviteeChooses, target: target)
+            }
 
             Button {
                 _ = flow.sendInvite()
@@ -128,6 +154,37 @@ struct RemotePlaySheetView: View {
             }
             .buttonStyle(RemotePlaySheetPrimaryButtonStyle())
         }
+    }
+
+    private func whiteChoiceButton(
+        _ choice: RemotePlayFlow.WhiteChoice,
+        target: RemotePlayFlow.InviteTarget
+    ) -> some View {
+        Button {
+            flow.chooseWhite(choice)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: flow.selectedWhiteChoice == choice ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(flow.selectedWhiteChoice == choice ? AppTheme.boardFrame : AppTheme.mutedInk)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(whiteChoiceTitle(choice, target: target))
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppTheme.ink)
+
+                    Text(whiteChoiceSubtitle(choice, target: target))
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(AppTheme.ink.opacity(0.62))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(WhiteChoiceButtonStyle(isSelected: flow.selectedWhiteChoice == choice))
     }
 
     private func waitingView(for pendingInvite: RemotePlayFlow.PendingInvite) -> some View {
@@ -174,7 +231,45 @@ struct RemotePlaySheetView: View {
         case .known(let player):
             return player.displayName
         case .newPlayer:
-            return "Them"
+            return "Other Player"
+        }
+    }
+
+    private func whiteChoiceTitle(
+        _ choice: RemotePlayFlow.WhiteChoice,
+        target: RemotePlayFlow.InviteTarget
+    ) -> String {
+        switch choice {
+        case .localPlayer:
+            return "Me"
+        case .invitee:
+            return inviteeName(for: target)
+        case .inviteeChooses:
+            return "Let them choose"
+        }
+    }
+
+    private func whiteChoiceSubtitle(
+        _ choice: RemotePlayFlow.WhiteChoice,
+        target: RemotePlayFlow.InviteTarget
+    ) -> String {
+        switch choice {
+        case .localPlayer:
+            return "You play White and make the first move."
+        case .invitee:
+            switch target {
+            case .known:
+                return "\(inviteeName(for: target)) plays White and makes the first move."
+            case .newPlayer:
+                return "The other player plays White and makes the first move."
+            }
+        case .inviteeChooses:
+            switch target {
+            case .known:
+                return "\(inviteeName(for: target)) chooses a side when accepting."
+            case .newPlayer:
+                return "The other player chooses a side when accepting."
+            }
         }
     }
 
@@ -215,6 +310,26 @@ private struct RemotePlaySheetPrimaryButtonStyle: ButtonStyle {
                     .fill(AppTheme.boardFrame)
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+private struct WhiteChoiceButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? AppTheme.panelWarmth.opacity(0.95) : AppTheme.panelInset.opacity(0.78))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isSelected ? AppTheme.boardFrame.opacity(0.72) : AppTheme.panelStroke, lineWidth: 1)
+            }
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.86), value: configuration.isPressed)
     }
 }
 

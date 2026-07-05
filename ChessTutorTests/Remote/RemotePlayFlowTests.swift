@@ -31,6 +31,20 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.stage, .closed)
     }
 
+    func testBackFromWhiteChoiceReturnsToInviteeSelection() {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(knownPlayers: [maya], nextInviteCode: "428193")
+
+        flow.open()
+        flow.invite(maya)
+        flow.chooseWhite(.invitee)
+
+        flow.goBack()
+
+        XCTAssertEqual(flow.stage, .choosing)
+        XCTAssertEqual(flow.selectedWhiteChoice, .localPlayer)
+    }
+
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {
         let flow = RemotePlayFlow()
         let session = GameSession()
