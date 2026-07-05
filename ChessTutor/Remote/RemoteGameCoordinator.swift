@@ -95,6 +95,48 @@ struct RemoteGameCoordinator {
         syncStatus = .current
     }
 
+    @discardableResult
+    mutating func fetchAndApplyRemoteMoves() async throws -> [RemoteMoveEvent] {
+        syncStatus = .fetching
+
+        let fetchedEvents: [RemoteMoveEvent]
+        do {
+            fetchedEvents = try await transport.fetchMoves(
+                gameID: descriptor.id,
+                after: lastAppliedSequence
+            )
+        } catch {
+            syncStatus = .failed(.transportFailed)
+            throw Error.transportFailed
+        }
+
+        guard !fetchedEvents.isEmpty else {
+            syncStatus = .current
+            return []
+        }
+
+        do {
+            let result = try RemoteMoveLog.apply(
+                events: fetchedEvents,
+                to: projectedState,
+                gameID: descriptor.id,
+                protocolVersion: descriptor.protocolVersion,
+                whitePlayerID: descriptor.whitePlayer.id,
+                blackPlayerID: descriptor.blackPlayer.id,
+                startingAfter: lastAppliedSequence
+            )
+
+            acceptedEvents.append(contentsOf: fetchedEvents.sorted { $0.sequenceNumber < $1.sequenceNumber })
+            projectedState = result.state
+            lastAppliedSequence = result.lastAppliedSequence
+            syncStatus = .current
+            return fetchedEvents
+        } catch {
+            syncStatus = .failed(.moveLogRejected)
+            throw Error.moveLogRejected
+        }
+    }
+
     private func expectedActor(for color: PieceColor) -> RemotePlayerID {
         switch color {
         case .white:

@@ -30,6 +30,16 @@ actor InMemoryRemoteGameTransport: RemoteGameTransport {
             .filter { $0.sequenceNumber > sequenceNumber }
             .sorted { $0.sequenceNumber < $1.sequenceNumber }
     }
+
+    #if DEBUG
+    func storeForTesting(_ event: RemoteMoveEvent) {
+        var events = eventsByGame[event.gameID, default: []]
+        events.removeAll { $0.sequenceNumber == event.sequenceNumber }
+        events.append(event)
+        events.sort { $0.sequenceNumber < $1.sequenceNumber }
+        eventsByGame[event.gameID] = events
+    }
+    #endif
 }
 
 enum InMemoryRemoteGameTransportError: Swift.Error, Equatable {

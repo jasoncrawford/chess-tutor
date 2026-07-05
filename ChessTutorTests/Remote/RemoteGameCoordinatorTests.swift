@@ -69,21 +69,102 @@ final class RemoteGameCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.syncStatus, .current)
     }
 
+    func testFetchAndApplyRemoteMoveAdvancesProjectedState() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        var coordinator = RemoteGameCoordinator(
+            descriptor: descriptor(localPlayerID: whiteID),
+            transport: transport,
+            initialState: .startingPosition()
+        )
+        let localMove = Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4))
+        _ = try coordinator.recordLocalMove(localMove, createdAt: Date(timeIntervalSince1970: 10))
+        let remoteMove = Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5))
+        let remoteEvent = makeEvent(
+            sequence: 2,
+            actor: blackID,
+            move: remoteMove,
+            from: coordinator.projectedState
+        )
+        await transport.storeForTesting(remoteEvent)
+
+        let fetched = try await coordinator.fetchAndApplyRemoteMoves()
+
+        XCTAssertEqual(fetched, [remoteEvent])
+        XCTAssertEqual(coordinator.lastAppliedSequence, 2)
+        XCTAssertEqual(coordinator.acceptedEvents.last, remoteEvent)
+        XCTAssertEqual(coordinator.projectedState.board[Square(file: .e, rank: 5)], Piece(kind: .pawn, color: .black))
+        XCTAssertEqual(coordinator.syncStatus, .current)
+    }
+
+    func testInvalidFetchedMoveDoesNotMutateCoordinatorState() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        var coordinator = RemoteGameCoordinator(
+            descriptor: descriptor(localPlayerID: whiteID),
+            transport: transport,
+            initialState: .startingPosition()
+        )
+        let invalidEvent = makeEvent(
+            sequence: 2,
+            actor: blackID,
+            move: Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5)),
+            from: coordinator.projectedState
+        )
+        await transport.storeForTesting(invalidEvent)
+
+        do {
+            _ = try await coordinator.fetchAndApplyRemoteMoves()
+            XCTFail("Expected fetch to reject the non-contiguous event.")
+        } catch {
+            XCTAssertEqual(error as? RemoteGameCoordinator.Error, .moveLogRejected)
+        }
+
+        XCTAssertEqual(coordinator.lastAppliedSequence, 0)
+        XCTAssertTrue(coordinator.acceptedEvents.isEmpty)
+        XCTAssertEqual(coordinator.projectedState, GameState.startingPosition())
+        XCTAssertEqual(coordinator.syncStatus, .failed(.moveLogRejected))
+    }
+
     private func makeCoordinator(
         localPlayerID: RemotePlayerID,
         transport: any RemoteGameTransport = InMemoryRemoteGameTransport()
     ) -> RemoteGameCoordinator {
         RemoteGameCoordinator(
-            descriptor: RemoteGameDescriptor(
-                id: gameID,
-                protocolVersion: 1,
-                status: .active,
-                whitePlayer: RemotePlayerRef(id: whiteID, displayName: "White"),
-                blackPlayer: RemotePlayerRef(id: blackID, displayName: "Black"),
-                localPlayerID: localPlayerID
-            ),
+            descriptor: descriptor(localPlayerID: localPlayerID),
             transport: transport,
             initialState: .startingPosition()
+        )
+    }
+
+    private func descriptor(localPlayerID: RemotePlayerID) -> RemoteGameDescriptor {
+        RemoteGameDescriptor(
+            id: gameID,
+            protocolVersion: 1,
+            status: .active,
+            whitePlayer: RemotePlayerRef(id: whiteID, displayName: "White"),
+            blackPlayer: RemotePlayerRef(id: blackID, displayName: "Black"),
+            localPlayerID: localPlayerID
+        )
+    }
+
+    private func makeEvent(
+        sequence: Int,
+        actor: RemotePlayerID,
+        move: Move,
+        from state: GameState
+    ) -> RemoteMoveEvent {
+        var next = state
+        next.apply(move)
+        return RemoteMoveEvent(
+            id: RemoteMoveEventID(rawValue: "event-\(sequence)"),
+            gameID: gameID,
+            sequenceNumber: sequence,
+            actorPlayerID: actor,
+            move: RemoteMoveCodec.encode(move),
+            createdAt: Date(timeIntervalSince1970: Double(sequence)),
+            protocolVersion: 1,
+            previousPositionFingerprint: PositionFingerprinting.fingerprint(for: state),
+            resultingPositionFingerprint: PositionFingerprinting.fingerprint(for: next),
+            notificationSummary: "Move \(sequence)"
         )
     }
 }
