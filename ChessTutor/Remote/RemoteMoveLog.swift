@@ -5,6 +5,8 @@ enum RemoteMoveLog {
     }
 
     enum Error: Swift.Error, Equatable {
+        case wrongGame(expected: RemoteGameID, actual: RemoteGameID)
+        case unsupportedProtocolVersion(Int)
         case unexpectedSequence(expected: Int, actual: Int)
         case wrongActor(expected: RemotePlayerID, actual: RemotePlayerID)
         case previousFingerprintMismatch
@@ -15,6 +17,8 @@ enum RemoteMoveLog {
     static func apply(
         events: [RemoteMoveEvent],
         to initialState: GameState,
+        gameID: RemoteGameID,
+        protocolVersion: Int,
         whitePlayerID: RemotePlayerID,
         blackPlayerID: RemotePlayerID,
         startingAfter lastAppliedSequence: Int = 0
@@ -23,6 +27,14 @@ enum RemoteMoveLog {
         var expectedSequence = lastAppliedSequence + 1
 
         for event in events.sorted(by: { $0.sequenceNumber < $1.sequenceNumber }) {
+            guard event.gameID == gameID else {
+                throw Error.wrongGame(expected: gameID, actual: event.gameID)
+            }
+
+            guard event.protocolVersion == protocolVersion else {
+                throw Error.unsupportedProtocolVersion(event.protocolVersion)
+            }
+
             guard event.sequenceNumber == expectedSequence else {
                 throw Error.unexpectedSequence(expected: expectedSequence, actual: event.sequenceNumber)
             }
