@@ -17,6 +17,7 @@
 		1C16BC492A550B600532F28F /* Move.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E571D9060609ECB4FB126C /* Move.swift */; };
 		1CB06F0430E219CB8DA57644 /* LegalMoveHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9250CD456B192943686998F /* LegalMoveHighlighter.swift */; };
 		1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3272E453609A9FD096EE431 /* ContentView.swift */; };
+		1E1B30E41EA62A9E99F15934 /* RemoteGameTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */; };
 		2120969DF513B09CC78E4B06 /* LegalMoveGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */; };
 		267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */; };
 		2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */; };
@@ -45,6 +46,7 @@
 		AF854A0114766C352F4D8483 /* CapturedPiecesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */; };
 		BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
+		C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */; };
 		C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */; };
 		CA0390518BB87B51C26996ED /* Piece.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D93E7407EE5AA7D111C6A2 /* Piece.swift */; };
 		D067C5720A19D345CD3388A8 /* Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6AB24F0D97ACE07C1C5E67E /* Color.swift */; };
@@ -74,6 +76,8 @@
 		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
 		2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPanelView.swift; sourceTree = "<group>"; };
 		354DE434F0650CD3B105FBCD /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
+		3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryRemoteGameTransportTests.swift; sourceTree = "<group>"; };
+		534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameTransport.swift; sourceTree = "<group>"; };
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
 		6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveLogTests.swift; sourceTree = "<group>"; };
@@ -233,6 +237,7 @@
 		6D0EC12254A9A9918BD5A27B /* Remote */ = {
 			isa = PBXGroup;
 			children = (
+				3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */,
 				B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */,
 				6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */,
 				6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */,
@@ -246,6 +251,7 @@
 			children = (
 				89761D36FCBA29D960341883 /* PositionFingerprinting.swift */,
 				F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */,
+				534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */,
 				96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */,
 				69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */,
 				F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */,
@@ -458,6 +464,7 @@
 				F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */,
 				8A7C4A956E93B021B8CB95C2 /* PositionFingerprinting.swift in Sources */,
 				482A0538F7EA6222D4AA557D /* RemoteGameModels.swift in Sources */,
+				1E1B30E41EA62A9E99F15934 /* RemoteGameTransport.swift in Sources */,
 				BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */,
 				83DC3C726FC02EF74E3695E6 /* RemoteMoveLog.swift in Sources */,
 				160DCD32DCAC413D2B188998 /* RemoteOutbox.swift in Sources */,
@@ -477,6 +484,7 @@
 				73E2A6171A4E73CD50C61F95 /* CaptureTrayLayoutTests.swift in Sources */,
 				D6D68BC917FAB7DF523A348F /* GameSessionTests.swift in Sources */,
 				15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */,
+				C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */,
 				7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */,
 				D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */,
 				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
