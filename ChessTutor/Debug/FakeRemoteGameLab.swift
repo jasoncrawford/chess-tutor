@@ -15,7 +15,7 @@ final class FakeRemoteGameLab {
     private let gameID = RemoteGameID(rawValue: "fake-remote-game")
     private let localPlayerID = RemotePlayerID(rawValue: "local")
     private let remotePlayerID = RemotePlayerID(rawValue: "maya")
-    private let transport = InMemoryRemoteGameTransport()
+    private var transport = InMemoryRemoteGameTransport()
     private var coordinator: RemoteGameCoordinator?
     private var localPlayerColor: PieceColor = .white
 
@@ -32,6 +32,7 @@ final class FakeRemoteGameLab {
 
     func start(session: GameSession, localPlayerColor: PieceColor = .white) {
         session.newGame()
+        transport = InMemoryRemoteGameTransport()
         self.localPlayerColor = localPlayerColor
         switch localPlayerColor {
         case .white:
