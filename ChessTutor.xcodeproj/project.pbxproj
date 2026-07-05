@@ -20,6 +20,7 @@
 		2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */; };
 		2F72B11FD646E7CB59CF60BC /* GameControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014400D67223F02798F38023 /* GameControlsView.swift */; };
 		39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */; };
+		3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */; };
 		4596A725A76CE902F744D826 /* ChessArt-MIT.txt in Resources */ = {isa = PBXBuildFile; fileRef = BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */; };
 		482A0538F7EA6222D4AA557D /* RemoteGameModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */; };
 		524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */; };
@@ -31,6 +32,7 @@
 		791A0AB929E424A85CE1F615 /* ChessBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892B39ACE33796097240A052 /* ChessBoardView.swift */; };
 		791A8779A3FE2F5687789FF6 /* GameSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D517824035C75485AD4D712 /* GameSession.swift */; };
 		7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */; };
+		83DC3C726FC02EF74E3695E6 /* RemoteMoveLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */; };
 		84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */; };
 		8497F717CD75D8D80EB9075A /* GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA0EFDD85959FE8902AA01 /* GameState.swift */; };
 		8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */; };
@@ -72,6 +74,8 @@
 		354DE434F0650CD3B105FBCD /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
+		6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveLogTests.swift; sourceTree = "<group>"; };
+		69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveLog.swift; sourceTree = "<group>"; };
 		6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveCodecTests.swift; sourceTree = "<group>"; };
 		6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceGlyph.swift; sourceTree = "<group>"; };
 		747E6891942AFE9A8B73651F /* SidebarPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPanelView.swift; sourceTree = "<group>"; };
@@ -227,6 +231,7 @@
 			children = (
 				B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */,
 				6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */,
+				6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */,
 			);
 			path = Remote;
 			sourceTree = "<group>";
@@ -237,6 +242,7 @@
 				89761D36FCBA29D960341883 /* PositionFingerprinting.swift */,
 				F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */,
 				96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */,
+				69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */,
 			);
 			path = Remote;
 			sourceTree = "<group>";
@@ -447,6 +453,7 @@
 				8A7C4A956E93B021B8CB95C2 /* PositionFingerprinting.swift in Sources */,
 				482A0538F7EA6222D4AA557D /* RemoteGameModels.swift in Sources */,
 				BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */,
+				83DC3C726FC02EF74E3695E6 /* RemoteMoveLog.swift in Sources */,
 				8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */,
 				2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */,
 				0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */,
@@ -468,6 +475,7 @@
 				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
 				AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */,
 				16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */,
+				3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */,
 				267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
