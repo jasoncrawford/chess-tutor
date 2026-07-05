@@ -149,7 +149,7 @@ final class GameSession {
             self.tentativeMove = nil
         }
 
-        guard state.board[square]?.color == committedState.sideToMove else {
+        guard let piece = state.board[square] else {
             selectedSquare = nil
             legalMovesForSelection = []
             message = "Choose a \(committedState.sideToMove.rawValue) piece."
@@ -157,7 +157,9 @@ final class GameSession {
         }
 
         selectedSquare = square
-        legalMovesForSelection = assistSettings.showLegalMovesOnSelection && localCanActForCurrentTurn
+        legalMovesForSelection = piece.color == committedState.sideToMove
+            && localCanActForCurrentTurn
+            && assistSettings.showLegalMovesOnSelection
             ? allowedMoves(forSelectionAt: square)
             : []
         message = nil

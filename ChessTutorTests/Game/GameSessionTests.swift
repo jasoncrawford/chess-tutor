@@ -575,6 +575,18 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.message)
     }
 
+    func testLocalWaitingPlayerCanInspectOwnPieceDuringRemoteTurn() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+        session.blackPlayer = .humanLocal
+
+        session.select(Square(file: .e, rank: 7))
+
+        XCTAssertEqual(session.selectedPieceInfo?.title, "Black pawn")
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertNil(session.message)
+    }
+
     func testRemotePlayerCannotMovePieceOnTheirTurn() {
         let session = GameSession()
         session.whitePlayer = .remote(playerID: "maya")
