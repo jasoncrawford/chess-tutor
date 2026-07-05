@@ -114,19 +114,53 @@ struct RemotePlaySheetView: View {
                     .foregroundStyle(AppTheme.ink)
 
                 HStack(spacing: 10) {
-                    TextField("Code", text: .constant(""))
+                    TextField("Code", text: joinCodeBinding)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.numberPad)
                         .padding(.horizontal, 12)
                         .frame(height: 42)
                         .background(AppTheme.panelInset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                    Button("Join") {}
-                        .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: false))
-                        .disabled(true)
+                    Button("Join") {
+                        joinWithCode()
+                    }
+                    .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: canJoinWithCode))
+                    .disabled(!canJoinWithCode)
+                }
+
+                if let joinErrorMessage = flow.joinErrorMessage {
+                    Text(joinErrorMessage)
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(AppTheme.ink.opacity(0.68))
                 }
             }
         }
+    }
+
+    private var joinCodeBinding: Binding<String> {
+        Binding {
+            flow.joinCode
+        } set: { nextCode in
+            flow.updateJoinCode(nextCode)
+        }
+    }
+
+    private var canJoinWithCode: Bool {
+        #if DEBUG
+        flow.canSubmitJoinCode
+        #else
+        false
+        #endif
+    }
+
+    private func joinWithCode() {
+        #if DEBUG
+        guard flow.acceptJoinCode() else {
+            return
+        }
+
+        fakeRemoteLab?.start(session: session, localPlayerColor: .black)
+        #endif
     }
 
     private func choosingWhiteView(for target: RemotePlayFlow.InviteTarget) -> some View {

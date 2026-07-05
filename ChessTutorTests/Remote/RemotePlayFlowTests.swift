@@ -45,6 +45,35 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.selectedWhiteChoice, .localPlayer)
     }
 
+    func testJoinCodeEnablesAtSixDigitsAndRejectsWrongCode() {
+        let flow = RemotePlayFlow(nextInviteCode: "428193")
+
+        flow.open()
+        flow.updateJoinCode("12a34 5")
+
+        XCTAssertEqual(flow.joinCode, "12345")
+        XCTAssertFalse(flow.canSubmitJoinCode)
+
+        flow.updateJoinCode("12a34 56")
+
+        XCTAssertEqual(flow.joinCode, "123456")
+        XCTAssertTrue(flow.canSubmitJoinCode)
+        XCTAssertFalse(flow.acceptJoinCode())
+        XCTAssertEqual(flow.joinErrorMessage, "That code did not match an open invite.")
+    }
+
+    func testAcceptJoinCodeClearsFlowForMatchingCode() {
+        let flow = RemotePlayFlow(nextInviteCode: "428193")
+
+        flow.open()
+        flow.updateJoinCode("428 193")
+
+        XCTAssertTrue(flow.acceptJoinCode())
+        XCTAssertEqual(flow.stage, .closed)
+        XCTAssertEqual(flow.joinCode, "")
+        XCTAssertNil(flow.joinErrorMessage)
+    }
+
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {
         let flow = RemotePlayFlow()
         let session = GameSession()

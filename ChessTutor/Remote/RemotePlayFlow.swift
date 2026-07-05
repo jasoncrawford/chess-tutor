@@ -43,6 +43,12 @@ final class RemotePlayFlow {
     private(set) var knownPlayers: [KnownRemotePlayer]
     private(set) var stage: Stage = .closed
     var selectedWhiteChoice: WhiteChoice = .localPlayer
+    private(set) var joinCode = ""
+    private(set) var joinErrorMessage: String?
+
+    var canSubmitJoinCode: Bool {
+        joinCode.count == 6
+    }
 
     init(knownPlayers: [KnownRemotePlayer] = [], nextInviteCode: String = "428193") {
         self.knownPlayers = knownPlayers
@@ -58,6 +64,7 @@ final class RemotePlayFlow {
 
     func open() {
         selectedWhiteChoice = .localPlayer
+        joinErrorMessage = nil
         stage = .choosing
     }
 
@@ -73,6 +80,24 @@ final class RemotePlayFlow {
 
     func chooseWhite(_ choice: WhiteChoice) {
         selectedWhiteChoice = choice
+    }
+
+    func updateJoinCode(_ code: String) {
+        joinCode = String(code.filter(\.isNumber).prefix(6))
+        joinErrorMessage = nil
+    }
+
+    @discardableResult
+    func acceptJoinCode() -> Bool {
+        guard canSubmitJoinCode, joinCode == nextInviteCode else {
+            joinErrorMessage = "That code did not match an open invite."
+            return false
+        }
+
+        joinCode = ""
+        joinErrorMessage = nil
+        stage = .closed
+        return true
     }
 
     @discardableResult
@@ -105,6 +130,8 @@ final class RemotePlayFlow {
 
     func cancel() {
         selectedWhiteChoice = .localPlayer
+        joinCode = ""
+        joinErrorMessage = nil
         stage = .closed
     }
 }
