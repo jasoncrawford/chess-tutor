@@ -7,6 +7,9 @@ struct SidePanelView: View {
     let captureNamespace: Namespace.ID
     let sideLength: CGFloat
     let onAbout: () -> Void
+    #if DEBUG
+    let fakeRemoteLab: FakeRemoteGameLab?
+    #endif
     @State private var isConfirmingNewGame = false
 
     var body: some View {
@@ -88,7 +91,11 @@ struct SidePanelView: View {
         switch segment {
         case .messageAndDone:
             SidebarPanelView(panelSize: panelSize) {
+                #if DEBUG
+                TurnStatusPanelView(session: session, fakeRemoteLab: fakeRemoteLab)
+                #else
                 TurnStatusPanelView(session: session)
+                #endif
             }
         case .selectedPiece:
             SidebarPanelView(panelSize: panelSize) {

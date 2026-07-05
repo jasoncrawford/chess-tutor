@@ -608,6 +608,24 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(committedMove, Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)))
     }
 
+    func testCommitRemoteMoveAppliesMoveOnRemoteTurn() {
+        let session = GameSession()
+        session.blackPlayer = .remote(playerID: "maya")
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        session.finishTurn()
+
+        let remoteMove = Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5))
+        let didCommit = session.commitRemoteMove(remoteMove)
+
+        XCTAssertTrue(didCommit)
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 5)], Piece(kind: .pawn, color: .black))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 7)])
+        XCTAssertEqual(session.state.sideToMove, .white)
+        XCTAssertNil(session.message)
+    }
+
     func testCheckmateMoveShowsGameOverMessageAndBlocksFurtherSelection() {
         var board = Board()
         board[Square(file: .h, rank: 1)] = Piece(kind: .king, color: .white)

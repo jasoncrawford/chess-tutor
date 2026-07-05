@@ -22,6 +22,7 @@
 		267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */; };
 		2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */; };
 		2F72B11FD646E7CB59CF60BC /* GameControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014400D67223F02798F38023 /* GameControlsView.swift */; };
+		2FC07340BB84B9819AE3E68C /* FakeRemoteGameLabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42A350660E86E3A3B590AD2C /* FakeRemoteGameLabTests.swift */; };
 		39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */; };
 		3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */; };
 		4596A725A76CE902F744D826 /* ChessArt-MIT.txt in Resources */ = {isa = PBXBuildFile; fileRef = BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */; };
@@ -46,6 +47,7 @@
 		AF854A0114766C352F4D8483 /* CapturedPiecesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */; };
 		BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
+		C28AABFA7D36AEEE1DDB975D /* FakeRemoteGameLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */; };
 		C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */; };
 		C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */; };
 		C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */; };
@@ -76,10 +78,12 @@
 		04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeginnerAssistSettings.swift; sourceTree = "<group>"; };
 		178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameCoordinatorTests.swift; sourceTree = "<group>"; };
 		1FD039B8AE083CF7D10F392D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeRemoteGameLab.swift; sourceTree = "<group>"; };
 		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
 		2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPanelView.swift; sourceTree = "<group>"; };
 		354DE434F0650CD3B105FBCD /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
 		3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryRemoteGameTransportTests.swift; sourceTree = "<group>"; };
+		42A350660E86E3A3B590AD2C /* FakeRemoteGameLabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeRemoteGameLabTests.swift; sourceTree = "<group>"; };
 		534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameTransport.swift; sourceTree = "<group>"; };
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
@@ -169,11 +173,20 @@
 			path = History;
 			sourceTree = "<group>";
 		};
+		2E9200B06BCD5CF193136FF5 /* Debug */ = {
+			isa = PBXGroup;
+			children = (
+				20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */,
+			);
+			path = Debug;
+			sourceTree = "<group>";
+		};
 		338012C1CB044A5CBACB10AD /* ChessTutorTests */ = {
 			isa = PBXGroup;
 			children = (
 				DBBCE3885F06B31979F4483D /* .gitkeep */,
 				BD051940D35F2BD8CE5FA51A /* Core */,
+				D57A041C1C5D5668273CF381 /* Debug */,
 				F18F72C04FB114566541767D /* Game */,
 				6D0EC12254A9A9918BD5A27B /* Remote */,
 				3870D8EA05DF92B0D1F40F9E /* UI */,
@@ -286,6 +299,7 @@
 			children = (
 				59D4B980F3B4D416419B2779 /* App */,
 				640B8EB034B7847829CB32EA /* Core */,
+				2E9200B06BCD5CF193136FF5 /* Debug */,
 				D9C187F744389890191BBC10 /* Game */,
 				59F383E58E7C83FE80D68426 /* Learning */,
 				7B3D78A530845AD724D352D8 /* Remote */,
@@ -315,6 +329,14 @@
 				F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		D57A041C1C5D5668273CF381 /* Debug */ = {
+			isa = PBXGroup;
+			children = (
+				42A350660E86E3A3B590AD2C /* FakeRemoteGameLabTests.swift */,
+			);
+			path = Debug;
 			sourceTree = "<group>";
 		};
 		D9C187F744389890191BBC10 /* Game */ = {
@@ -453,6 +475,7 @@
 				C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */,
 				D067C5720A19D345CD3388A8 /* Color.swift in Sources */,
 				1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */,
+				C28AABFA7D36AEEE1DDB975D /* FakeRemoteGameLab.swift in Sources */,
 				2F72B11FD646E7CB59CF60BC /* GameControlsView.swift in Sources */,
 				72D18795F0896B6D5ABBBC18 /* GameResult.swift in Sources */,
 				791A8779A3FE2F5687789FF6 /* GameSession.swift in Sources */,
@@ -489,6 +512,7 @@
 			files = (
 				8F63639BDB9700501409AC9C /* BoardTests.swift in Sources */,
 				73E2A6171A4E73CD50C61F95 /* CaptureTrayLayoutTests.swift in Sources */,
+				2FC07340BB84B9819AE3E68C /* FakeRemoteGameLabTests.swift in Sources */,
 				D6D68BC917FAB7DF523A348F /* GameSessionTests.swift in Sources */,
 				15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */,
 				C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */,

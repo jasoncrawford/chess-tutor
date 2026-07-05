@@ -246,6 +246,39 @@ final class GameSession {
         return tentativeMove
     }
 
+    @discardableResult
+    func commitRemoteMove(_ move: Move) -> Bool {
+        guard committedState.result == .ongoing else {
+            selectedSquare = nil
+            legalMovesForSelection = []
+            message = statusText
+            return false
+        }
+
+        guard !localCanActForCurrentTurn,
+              LegalMoveGenerator.allLegalMoves(in: committedState).contains(move) else {
+            message = "Something went wrong syncing this game."
+            return false
+        }
+
+        if let capturedPiece = capturedPiece(for: move, in: committedState) {
+            committedCapturedPieces.append(
+                CapturedPiece(
+                    id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
+                    piece: capturedPiece.piece,
+                    capturedAt: capturedPiece.square,
+                    state: .committed
+                )
+            )
+        }
+        committedState.apply(move)
+        tentativeMove = nil
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = committedState.result == .ongoing ? nil : statusText
+        return true
+    }
+
     func newGame() {
         committedState = .startingPosition()
         tentativeMove = nil

@@ -1,4 +1,4 @@
-protocol RemoteGameTransport {
+protocol RemoteGameTransport: Sendable {
     func sendMove(_ event: RemoteMoveEvent) async throws -> RemoteMoveAck
     func fetchMoves(gameID: RemoteGameID, after sequenceNumber: Int) async throws -> [RemoteMoveEvent]
 }

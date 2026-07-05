@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var tableRotationDegrees: Double
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
+    @State private var fakeRemoteLab = FakeRemoteGameLab()
     #endif
     @Namespace private var captureNamespace
 
@@ -120,7 +121,8 @@ struct ContentView: View {
             sideLength: sideLength,
             onAbout: {
                 isShowingAbout = true
-            }
+            },
+            fakeRemoteLab: fakeRemoteLab
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
         #else

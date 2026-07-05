@@ -28,9 +28,11 @@ struct GameControlsPresentation: Equatable {
 
 struct GameControlsView: View {
     @Bindable var session: GameSession
+    let onCommittedMove: (Move) -> Void
 
-    init(session: GameSession) {
+    init(session: GameSession, onCommittedMove: @escaping (Move) -> Void = { _ in }) {
         self.session = session
+        self.onCommittedMove = onCommittedMove
     }
 
     var body: some View {
@@ -62,7 +64,9 @@ struct GameControlsView: View {
                 return
             }
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                session.finishTurn()
+                if let move = session.finishTurn() {
+                    onCommittedMove(move)
+                }
             }
         } label: {
             Label("Done", systemImage: "checkmark.circle.fill")
