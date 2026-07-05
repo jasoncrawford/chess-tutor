@@ -11,7 +11,9 @@
 		11627D10A1B16FF07697B2A2 /* AboutAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354DE434F0650CD3B105FBCD /* AboutAttribution.swift */; };
 		12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */; };
 		15B793133DAA9254A20EF448 /* GameStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D53364C2471FF324E13201 /* GameStateTests.swift */; };
+		160DCD32DCAC413D2B188998 /* RemoteOutbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */; };
 		16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */; };
+		1788A08929C2E9314D8016EE /* RemoteOutboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */; };
 		1C16BC492A550B600532F28F /* Move.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E571D9060609ECB4FB126C /* Move.swift */; };
 		1CB06F0430E219CB8DA57644 /* LegalMoveHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9250CD456B192943686998F /* LegalMoveHighlighter.swift */; };
 		1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3272E453609A9FD096EE431 /* ContentView.swift */; };
@@ -85,6 +87,7 @@
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		892B39ACE33796097240A052 /* ChessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessBoardView.swift; sourceTree = "<group>"; };
 		89761D36FCBA29D960341883 /* PositionFingerprinting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionFingerprinting.swift; sourceTree = "<group>"; };
+		945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutboxTests.swift; sourceTree = "<group>"; };
 		96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveCodec.swift; sourceTree = "<group>"; };
 		9D517824035C75485AD4D712 /* GameSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSession.swift; sourceTree = "<group>"; };
 		9DF66E252A80BDA67538D11C /* GameSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionTests.swift; sourceTree = "<group>"; };
@@ -110,6 +113,7 @@
 		E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGeneratorTests.swift; sourceTree = "<group>"; };
 		E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTrayLayoutTests.swift; sourceTree = "<group>"; };
 		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
+		F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutbox.swift; sourceTree = "<group>"; };
 		F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatter.swift; sourceTree = "<group>"; };
 		F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialMoveTests.swift; sourceTree = "<group>"; };
 		F4471B31F5756F99709339DF /* MoveHistoryFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatterTests.swift; sourceTree = "<group>"; };
@@ -232,6 +236,7 @@
 				B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */,
 				6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */,
 				6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */,
+				945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */,
 			);
 			path = Remote;
 			sourceTree = "<group>";
@@ -243,6 +248,7 @@
 				F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */,
 				96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */,
 				69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */,
+				F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */,
 			);
 			path = Remote;
 			sourceTree = "<group>";
@@ -454,6 +460,7 @@
 				482A0538F7EA6222D4AA557D /* RemoteGameModels.swift in Sources */,
 				BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */,
 				83DC3C726FC02EF74E3695E6 /* RemoteMoveLog.swift in Sources */,
+				160DCD32DCAC413D2B188998 /* RemoteOutbox.swift in Sources */,
 				8730933871AA3F546FE257F1 /* SelectedPiecePanelView.swift in Sources */,
 				2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */,
 				0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */,
@@ -476,6 +483,7 @@
 				AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */,
 				16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */,
 				3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */,
+				1788A08929C2E9314D8016EE /* RemoteOutboxTests.swift in Sources */,
 				267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
