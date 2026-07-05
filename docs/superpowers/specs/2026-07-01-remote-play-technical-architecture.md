@@ -18,6 +18,24 @@ The architecture should make remote play feel synchronous when both players are 
 - Keep public CloudKit data minimal and temporary.
 - Treat notifications and presence as convenience channels, not correctness mechanisms.
 
+## CKShare Spike Result
+
+The CKShare spike completed successfully on 2026-07-05 with bundle ID `org.jasoncrawford.chesstutor` and container `iCloud.org.jasoncrawford.chesstutor`.
+
+The manual test used one physical iPad, switching between two iCloud accounts to simulate owner and participant. The iPad simulator was not used for the participant path because simulator iCloud sign-in rejected multiple known-good Apple Account credentials.
+
+Observed result:
+
+1. Owner iCloud account reported available.
+2. Owner created a shared game root and received a share URL.
+3. Owner wrote a move and fetched it from the private database.
+4. Participant iCloud account accepted the same share URL through the spike UI.
+5. Participant wrote a move through the shared database.
+6. Participant fetched moves and saw both the owner move and participant move.
+7. Owner iCloud account fetched moves again and saw both moves.
+
+This validates the core CKShare data path for private two-player game state. Production remote play can use CKShare for accepted games, with CloudKit isolated behind a transport boundary so a future custom server can replace it.
+
 ## Module Layout
 
 Add a new `Remote` area:
@@ -45,6 +63,18 @@ ChessTutor/
 `Remote` owns remote game lifecycle, local remote-play persistence, move event encoding, sync state, outbox processing, invite flow state, presence, notifications, and transport abstraction.
 
 `Remote/CloudKit` is the only area that imports CloudKit.
+
+The first production implementation should split `Remote` into small cohesive modules rather than a single remote manager. The stable concepts are:
+
+- local identity and known-player persistence
+- invite state machine
+- active remote game state
+- move event codec and log projection
+- send outbox and receive cursor
+- transport protocol and CloudKit adapter
+- sync status and user-facing status mapping
+
+Those concepts can live in separate files once implementation begins. The exact filenames may change, but CloudKit types must remain inside the CloudKit adapter.
 
 ## Runtime Ownership
 
@@ -139,6 +169,16 @@ Concrete implementation names and method grouping can change during implementati
 
 No caller outside `Remote/CloudKit` should see `CKRecord`, `CKShare`, `CKDatabase`, or CloudKit errors directly.
 
+Implementation note: if this single protocol becomes too broad, split it by lifecycle:
+
+```text
+RemoteInviteTransport
+RemoteSharedGameTransport
+RemotePresenceTransport
+```
+
+Start with the split only if implementation pressure proves the single boundary is awkward. The important rule is conceptual ownership, not a specific protocol count.
+
 ## Invite Rendezvous
 
 Use app-managed invites.
@@ -175,9 +215,11 @@ The link carries a longer random token. Link-based joining should use the token,
 
 No manual code-attempt throttling is required in V1. The safety model is short expiry, minimal data, native app access, and inviter approval before the game is created.
 
+Invite records are not the durable game. They are only rendezvous records. Once the inviter approves the join and the accepted shared game exists, the pending invite should be expired or deleted.
+
 ## Accepted Game Storage
 
-Preferred direction: use `CKShare` for accepted game records if a spike confirms it can support the desired UX.
+Use `CKShare` for accepted game records in V1.
 
 CloudKit storage split:
 
@@ -186,7 +228,7 @@ PendingInvite
   Minimal app-managed rendezvous data.
 
 Shared RemoteGame records
-  Private to the accepted participants through CKShare if viable.
+  Private to the accepted participants through CKShare.
 
 Local storage
   Resume cache, known players, local identity, move log, outbox.
@@ -194,22 +236,22 @@ Local storage
 
 The app should never store actual move history or durable player relationships in public invite records.
 
-If `CKShare` cannot support the intended flow without intrusive UI or permission limitations, revisit the backend choice before implementing remote play. Do not silently fall back to public game records without an explicit design decision.
+The CloudKit adapter should create a shared root game record in the owner's private database. The participant writes child move records through the shared database after accepting the share. The owner reads through the private database; the participant reads through the shared database.
 
-## CKShare Spike Requirements
+The local remote layer should not care which database is used. It asks the transport to send or fetch move events for a logical game ID.
 
-Before implementation planning, build a small spike to answer:
+## CKShare Follow-Up Tests
 
-- Can the app create and accept the share through the app-managed invite flow?
-- Does the user see generic iCloud sharing UI?
-- Can the invitee join via code/link without receiving a separate Apple share invitation?
-- Can both participants create `MoveEvent` records under the accepted game?
+The spike validated create, accept, write, and fetch on the core shared-record path. Remaining follow-up tests should happen before or during the first production implementation:
+
+- Test on two simultaneous physical devices without switching accounts.
+- Confirm whether accepting by opening the share URL directly invokes any OS-level UI we would want to avoid.
 - Do record-change notifications/subscriptions work for the shared records?
 - Can the app observe or poll shared game changes reliably after app relaunch?
-- Can the CloudKit-specific identifiers be hidden behind `RemoteGameTransport`?
-- What CloudKit account/sign-in errors must the product handle?
+- What exact CloudKit account/sign-in errors appear for no account, restricted account, offline launch, and declined or invalid share acceptance?
+- Does `publicPermission = .readWrite` remain acceptable for the invite security model, or should the production share use narrower participant permissions after acceptance?
 
-The spike should not implement the full chess feature. It only needs enough records and UI scaffolding to validate sharing, writes, reads, subscriptions, and relaunch behavior.
+These are not blockers for the core architecture. They shape product copy, notification behavior, and edge-case handling.
 
 ## Remote Game Records
 
@@ -256,6 +298,8 @@ special: none | castleKingside | castleQueenside | enPassant | promotion(kind)
 
 `PositionFingerprint` is a deterministic consistency check, not a security primitive. It should be derived from canonical chess state, including board contents, side to move, castling rights, en passant target, result, and move history length or sequence.
 
+V1 does not need a general CRDT. Chess turns naturally serialize the event stream. The only accepted durable game mutation is the next move event from the player whose turn it is, plus explicit lifecycle events such as game ended or replacement game requested.
+
 ## Move Sequencing And Idempotency
 
 Move sequence starts at 1 and increments by 1 for each committed move.
@@ -271,6 +315,8 @@ The local sender computes:
 Send retries are idempotent by `gameID + sequenceNumber + actorPlayerID`. If the same event is observed twice and the payload matches, treat it as already accepted.
 
 If the same identity attempts a different payload for an already accepted sequence, treat it as a serious sync error.
+
+Out-of-order delivery is handled by fetching the missing range. A move with sequence `n + 1` is not applied until sequence `n` has been accepted locally.
 
 ## Validation And Recovery
 
@@ -300,6 +346,8 @@ Something went wrong syncing this game.
 
 Do not merge divergent board states.
 
+The receiver should treat CloudKit delivery as advisory. Subscriptions, notifications, foreground refresh, and manual retry all converge on the same fetch-and-validate path.
+
 ## Outbox And Sync State
 
 Outbox states:
@@ -327,6 +375,13 @@ The coordinator maps these states to the product copy defined in the product des
 Upload retry uses backoff and resumes on app foreground, network availability, and new local commits. Exact retry timing can be tuned during implementation.
 
 The UI should not show a sync warning until a grace period has elapsed or an explicit offline/error state is known.
+
+For V1, persistence should be conservative:
+
+- Append the committed local move to the local log before upload.
+- Keep the move in the outbox until the transport acknowledges the exact event.
+- On app launch, replay the local log, restore the active remote game, then resume outbox upload and remote fetch.
+- If the local log and remote log disagree, stop the remote game and show the sync error rather than trying to repair silently.
 
 ## Presence
 
@@ -421,16 +476,27 @@ Use an in-memory `RemoteGameTransport` fake for coordinator tests.
 
 CloudKit tests should be limited to integration/spike coverage because they require Apple services and entitlements.
 
+The first implementation plan should start with transport-independent tests:
+
+1. Encode/decode a committed local move to a `RemoteMoveEvent`.
+2. Project a remote move log into `GameState`.
+3. Reject duplicate sequence numbers with different payloads.
+4. Queue a committed local move in the outbox and mark it uploaded by matching acknowledgment.
+5. Apply remote moves only when actor, sequence, and previous fingerprint match.
+6. Verify `GameSession` can deny local movement when it is the remote player's turn while still allowing piece inspection.
+
+Only after these pass should the CloudKit adapter be wired to real records.
+
 ## Open Risks
 
-- CKShare may force UX or permission flows that conflict with the product design.
+- Opening a share URL directly may force UX that conflicts with the product design, even though app-managed paste-and-accept worked in the spike.
 - CloudKit shared-record subscriptions may not provide the notification behavior we want.
 - iCloud account availability and parental device settings may need product handling.
 - JSON persistence may need migration support once remote game history expands beyond one active game.
+- Pending invite rendezvous records still need validation in CloudKit public database or an equivalent CloudKit-only approach.
 
-## Decisions To Revisit After CKShare Spike
+## Remaining Decisions
 
-- Whether CKShare is viable for accepted game records.
 - Whether notifications need a different mechanism.
 - Whether invite records need a different CloudKit location or a small custom server.
 - Whether known-player transport references are stable enough across reinstall/data transfer.
