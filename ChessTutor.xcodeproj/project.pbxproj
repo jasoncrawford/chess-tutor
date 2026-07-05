@@ -46,6 +46,7 @@
 		AF854A0114766C352F4D8483 /* CapturedPiecesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */; };
 		BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
+		C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */; };
 		C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */; };
 		C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */; };
 		CA0390518BB87B51C26996ED /* Piece.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D93E7407EE5AA7D111C6A2 /* Piece.swift */; };
@@ -57,6 +58,7 @@
 		ECD7007B94C5DF6E15FF1FAB /* PieceAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C023C83EDC2217984A48D59 /* PieceAsset.swift */; };
 		F4D684FBA8255C666B2867D3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1FD039B8AE083CF7D10F392D /* Assets.xcassets */; };
 		F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D00A39AD12F2E4C69496C2 /* PlayerSeat.swift */; };
+		FA028842BCC17A5BF340E241 /* RemoteGameCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E134EABED5BC244A5466A161 /* RemoteGameCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +74,7 @@
 /* Begin PBXFileReference section */
 		014400D67223F02798F38023 /* GameControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameControlsView.swift; sourceTree = "<group>"; };
 		04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeginnerAssistSettings.swift; sourceTree = "<group>"; };
+		178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameCoordinatorTests.swift; sourceTree = "<group>"; };
 		1FD039B8AE083CF7D10F392D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
 		2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPanelView.swift; sourceTree = "<group>"; };
@@ -115,6 +118,7 @@
 		DBBCE3885F06B31979F4483D /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
 		DEB156EDC259546DEF345170 /* BoardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardTests.swift; sourceTree = "<group>"; };
 		E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGeneratorTests.swift; sourceTree = "<group>"; };
+		E134EABED5BC244A5466A161 /* RemoteGameCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameCoordinator.swift; sourceTree = "<group>"; };
 		E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTrayLayoutTests.swift; sourceTree = "<group>"; };
 		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
 		F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutbox.swift; sourceTree = "<group>"; };
@@ -239,6 +243,7 @@
 			children = (
 				3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */,
 				B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */,
+				178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */,
 				6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */,
 				6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */,
 				945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */,
@@ -250,6 +255,7 @@
 			isa = PBXGroup;
 			children = (
 				89761D36FCBA29D960341883 /* PositionFingerprinting.swift */,
+				E134EABED5BC244A5466A161 /* RemoteGameCoordinator.swift */,
 				F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */,
 				534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */,
 				96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */,
@@ -463,6 +469,7 @@
 				84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */,
 				F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */,
 				8A7C4A956E93B021B8CB95C2 /* PositionFingerprinting.swift in Sources */,
+				FA028842BCC17A5BF340E241 /* RemoteGameCoordinator.swift in Sources */,
 				482A0538F7EA6222D4AA557D /* RemoteGameModels.swift in Sources */,
 				1E1B30E41EA62A9E99F15934 /* RemoteGameTransport.swift in Sources */,
 				BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */,
@@ -489,6 +496,7 @@
 				D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */,
 				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
 				AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */,
+				C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */,
 				16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */,
 				3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */,
 				1788A08929C2E9314D8016EE /* RemoteOutboxTests.swift in Sources */,
