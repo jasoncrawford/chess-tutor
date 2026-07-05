@@ -633,15 +633,47 @@ struct ChessBoardView: View {
 
         if session.selectedSquare == nil {
             session.select(square)
-        } else {
-            let result = session.moveSelectedPiece(to: square)
-            onMoveAttempt(result)
+            return
+        }
 
-            if case .illegal = result,
-               session.state.board[square]?.color == session.state.sideToMove {
+        if session.legalDestinations.contains(square) {
+            attemptMove(to: square)
+            return
+        }
+
+        guard let tappedPiece = session.state.board[square] else {
+            attemptMove(to: square)
+            return
+        }
+
+        if shouldAttemptMoveWithoutVisibleHint(to: tappedPiece) {
+            let result = attemptMove(to: square)
+            if case .illegal = result {
                 session.select(square)
             }
+            return
         }
+
+        session.select(square)
+    }
+
+    @discardableResult
+    private func attemptMove(to square: Square) -> MoveAttemptResult {
+        let result = session.moveSelectedPiece(to: square)
+        onMoveAttempt(result)
+        return result
+    }
+
+    private func shouldAttemptMoveWithoutVisibleHint(to tappedPiece: Piece) -> Bool {
+        guard !session.assistSettings.showLegalMovesOnSelection,
+              session.localCanActForCurrentTurn,
+              let selectedSquare = session.selectedSquare,
+              let selectedPiece = session.state.board[selectedSquare],
+              selectedPiece.color == session.state.sideToMove else {
+            return false
+        }
+
+        return tappedPiece.color != selectedPiece.color
     }
 }
 
