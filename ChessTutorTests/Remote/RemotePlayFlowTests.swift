@@ -19,6 +19,18 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(pendingInvite.formattedCode, "428 193")
     }
 
+    func testRememberKnownPlayerUpdatesExistingPlayer() {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(knownPlayers: [maya])
+
+        flow.rememberKnownPlayer(KnownRemotePlayer(id: maya.id, displayName: "Maya Crawford"))
+
+        XCTAssertEqual(
+            flow.knownPlayers,
+            [KnownRemotePlayer(id: maya.id, displayName: "Maya Crawford")]
+        )
+    }
+
     func testCancelClosesFlowAndClearsPendingInvite() {
         let flow = RemotePlayFlow(knownPlayers: [], nextInviteCode: "428193")
 

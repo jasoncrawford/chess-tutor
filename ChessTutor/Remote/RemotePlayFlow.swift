@@ -1,6 +1,6 @@
 import Observation
 
-struct KnownRemotePlayer: Equatable, Hashable, Identifiable, Sendable {
+struct KnownRemotePlayer: Codable, Equatable, Hashable, Identifiable, Sendable {
     let id: RemotePlayerID
     let displayName: String
 }
@@ -80,6 +80,15 @@ final class RemotePlayFlow {
 
     func chooseWhite(_ choice: WhiteChoice) {
         selectedWhiteChoice = choice
+    }
+
+    func rememberKnownPlayer(_ player: KnownRemotePlayer) {
+        if let existingIndex = knownPlayers.firstIndex(where: { $0.id == player.id }) {
+            knownPlayers[existingIndex] = player
+        } else {
+            knownPlayers.append(player)
+        }
+        knownPlayers.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     func updateJoinCode(_ code: String) {

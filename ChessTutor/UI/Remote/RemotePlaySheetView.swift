@@ -3,19 +3,35 @@ import SwiftUI
 struct RemotePlaySheetView: View {
     @Bindable var flow: RemotePlayFlow
     @Bindable var session: GameSession
+    let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
+
+    init(
+        flow: RemotePlayFlow,
+        session: GameSession,
+        onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
+    ) {
+        self.flow = flow
+        self.session = session
+        self.onKnownPlayerAccepted = onKnownPlayerAccepted
+        #if DEBUG
+        self.fakeRemoteLab = nil
+        #endif
+    }
 
     #if DEBUG
     init(
         flow: RemotePlayFlow,
         session: GameSession,
-        fakeRemoteLab: FakeRemoteGameLab? = nil
+        fakeRemoteLab: FakeRemoteGameLab? = nil,
+        onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
         self.fakeRemoteLab = fakeRemoteLab
+        self.onKnownPlayerAccepted = onKnownPlayerAccepted
     }
     #endif
 
@@ -160,6 +176,7 @@ struct RemotePlaySheetView: View {
         }
 
         fakeRemoteLab?.start(session: session, localPlayerColor: .black)
+        onKnownPlayerAccepted(Self.fakeMayaPlayer)
         #endif
     }
 
@@ -282,11 +299,16 @@ struct RemotePlaySheetView: View {
     private func acceptPendingInvite(_ pendingInvite: RemotePlayFlow.PendingInvite) {
         let localPlayerColor = localPlayerColor(for: pendingInvite)
         fakeRemoteLab?.start(session: session, localPlayerColor: localPlayerColor)
+        onKnownPlayerAccepted(Self.fakeMayaPlayer)
         flow.cancel()
     }
 
     private func localPlayerColor(for pendingInvite: RemotePlayFlow.PendingInvite) -> PieceColor {
         pendingInvite.whiteChoice == .invitee ? .black : .white
+    }
+
+    private static var fakeMayaPlayer: KnownRemotePlayer {
+        KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
     }
     #endif
 }

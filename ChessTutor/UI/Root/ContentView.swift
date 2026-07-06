@@ -5,14 +5,11 @@ struct ContentView: View {
     @State private var session = GameSession()
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
-    @State private var remotePlayFlow = RemotePlayFlow(
-        knownPlayers: [
-            KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
-        ]
-    )
+    @State private var remotePlayFlow: RemotePlayFlow
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
+    private let remoteIdentityStore: RemoteIdentityStore
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
     @State private var fakeRemoteLab = FakeRemoteGameLab()
@@ -20,6 +17,15 @@ struct ContentView: View {
     @Namespace private var captureNamespace
 
     init() {
+        let remoteIdentityStore = RemoteIdentityStore()
+        self.remoteIdentityStore = remoteIdentityStore
+        _ = try? remoteIdentityStore.loadLocalProfile()
+        _remotePlayFlow = State(
+            initialValue: RemotePlayFlow(
+                knownPlayers: (try? remoteIdentityStore.loadKnownPlayers()) ?? []
+            )
+        )
+
         let initialViewingAngle = Self.currentViewingAngle()
         _viewingAngle = State(initialValue: initialViewingAngle)
         _tableRotationDegrees = State(initialValue: initialViewingAngle.tableRotationDegrees)
@@ -74,11 +80,20 @@ struct ContentView: View {
         }
         .sheet(isPresented: remotePlaySheetBinding) {
             #if DEBUG
-            RemotePlaySheetView(flow: remotePlayFlow, session: session, fakeRemoteLab: fakeRemoteLab)
+            RemotePlaySheetView(
+                flow: remotePlayFlow,
+                session: session,
+                fakeRemoteLab: fakeRemoteLab,
+                onKnownPlayerAccepted: rememberKnownPlayer
+            )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
             #else
-            RemotePlaySheetView(flow: remotePlayFlow, session: session)
+            RemotePlaySheetView(
+                flow: remotePlayFlow,
+                session: session,
+                onKnownPlayerAccepted: rememberKnownPlayer
+            )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
             #endif
@@ -176,6 +191,11 @@ struct ContentView: View {
         #else
         GameLifecycle.startNewGame(session: session, remotePlayFlow: remotePlayFlow)
         #endif
+    }
+
+    private func rememberKnownPlayer(_ player: KnownRemotePlayer) {
+        try? remoteIdentityStore.saveKnownPlayer(player)
+        remotePlayFlow.rememberKnownPlayer(player)
     }
 
     private func syncToCurrentInterfaceOrientation(animated: Bool) {
