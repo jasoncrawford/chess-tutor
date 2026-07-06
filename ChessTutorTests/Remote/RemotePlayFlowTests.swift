@@ -62,16 +62,55 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.joinErrorMessage, "That code did not match an open invite.")
     }
 
-    func testAcceptJoinCodeClearsFlowForMatchingCode() {
+    func testAcceptJoinCodeWaitsForInviterApproval() {
         let flow = RemotePlayFlow(nextInviteCode: "428193")
 
         flow.open()
         flow.updateJoinCode("428 193")
 
         XCTAssertTrue(flow.acceptJoinCode())
-        XCTAssertEqual(flow.stage, .closed)
+        XCTAssertEqual(
+            flow.stage,
+            .waitingForInviterApproval(
+                RemotePlayFlow.OutgoingJoinRequest(code: "428193", inviterDisplayName: "the inviter")
+            )
+        )
         XCTAssertEqual(flow.joinCode, "")
         XCTAssertNil(flow.joinErrorMessage)
+    }
+
+    func testJoinRequestRequiresInviterApproval() {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(knownPlayers: [maya], nextInviteCode: "428193")
+
+        flow.open()
+        flow.invite(maya)
+        let pendingInvite = flow.sendInvite()
+
+        let pendingJoinRequest = flow.receiveJoinRequest(displayName: "Maya")
+
+        XCTAssertEqual(
+            flow.stage,
+            .reviewingJoinRequest(pendingJoinRequest)
+        )
+        XCTAssertEqual(pendingJoinRequest.invite, pendingInvite)
+        XCTAssertEqual(pendingJoinRequest.joinerDisplayName, "Maya")
+
+        XCTAssertEqual(flow.approveJoinRequest(), pendingJoinRequest)
+        XCTAssertEqual(flow.stage, .closed)
+    }
+
+    func testDecliningJoinRequestReturnsToWaitingForInvitee() {
+        let flow = RemotePlayFlow(nextInviteCode: "428193")
+
+        flow.open()
+        flow.inviteSomeoneNew()
+        let pendingInvite = flow.sendInvite()
+        _ = flow.receiveJoinRequest(displayName: "Maya")
+
+        flow.declineJoinRequest()
+
+        XCTAssertEqual(flow.stage, .waitingForInvitee(pendingInvite))
     }
 
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {

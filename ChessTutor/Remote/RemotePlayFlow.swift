@@ -32,11 +32,23 @@ final class RemotePlayFlow {
         }
     }
 
+    struct PendingJoinRequest: Equatable, Hashable {
+        let invite: PendingInvite
+        let joinerDisplayName: String
+    }
+
+    struct OutgoingJoinRequest: Equatable, Hashable {
+        let code: String
+        let inviterDisplayName: String
+    }
+
     enum Stage: Equatable, Hashable {
         case closed
         case choosing
         case choosingWhite(InviteTarget)
         case waitingForInvitee(PendingInvite)
+        case reviewingJoinRequest(PendingJoinRequest)
+        case waitingForInviterApproval(OutgoingJoinRequest)
     }
 
     private let nextInviteCode: String
@@ -94,9 +106,13 @@ final class RemotePlayFlow {
             return false
         }
 
+        let outgoingJoinRequest = OutgoingJoinRequest(
+            code: joinCode,
+            inviterDisplayName: "the inviter"
+        )
         joinCode = ""
         joinErrorMessage = nil
-        stage = .closed
+        stage = .waitingForInviterApproval(outgoingJoinRequest)
         return true
     }
 
@@ -118,12 +134,51 @@ final class RemotePlayFlow {
         return pendingInvite
     }
 
+    @discardableResult
+    func receiveJoinRequest(displayName: String) -> PendingJoinRequest {
+        let pendingInvite: PendingInvite
+        if case .waitingForInvitee(let invite) = stage {
+            pendingInvite = invite
+        } else {
+            pendingInvite = PendingInvite(
+                target: .newPlayer,
+                whiteChoice: selectedWhiteChoice,
+                code: nextInviteCode
+            )
+        }
+
+        let pendingJoinRequest = PendingJoinRequest(
+            invite: pendingInvite,
+            joinerDisplayName: displayName
+        )
+        stage = .reviewingJoinRequest(pendingJoinRequest)
+        return pendingJoinRequest
+    }
+
+    @discardableResult
+    func approveJoinRequest() -> PendingJoinRequest? {
+        guard case .reviewingJoinRequest(let pendingJoinRequest) = stage else {
+            return nil
+        }
+
+        stage = .closed
+        return pendingJoinRequest
+    }
+
+    func declineJoinRequest() {
+        guard case .reviewingJoinRequest(let pendingJoinRequest) = stage else {
+            return
+        }
+
+        stage = .waitingForInvitee(pendingJoinRequest.invite)
+    }
+
     func goBack() {
         switch stage {
         case .choosingWhite, .waitingForInvitee:
             selectedWhiteChoice = .localPlayer
             stage = .choosing
-        case .closed, .choosing:
+        case .closed, .choosing, .reviewingJoinRequest, .waitingForInviterApproval:
             break
         }
     }
