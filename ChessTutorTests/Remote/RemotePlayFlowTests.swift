@@ -2,7 +2,27 @@ import XCTest
 @testable import ChessTutor
 
 final class RemotePlayFlowTests: XCTestCase {
-    func testKnownPlayerInviteCreatesPendingInviteWithWhiteChoice() {
+    func testKnownPlayerInviteCreatesPendingInviteWithWhiteChoice() throws {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(
+            knownPlayers: [maya],
+            localDisplayName: "Jason",
+            nextInviteCode: "428193"
+        )
+
+        flow.open()
+        flow.invite(maya)
+        flow.chooseWhite(.invitee)
+
+        let pendingInvite = try XCTUnwrap(flow.requestSendInvite())
+        XCTAssertEqual(flow.stage, .waitingForInvitee(pendingInvite))
+        XCTAssertEqual(pendingInvite.target, .known(maya))
+        XCTAssertEqual(pendingInvite.whiteChoice, .invitee)
+        XCTAssertEqual(pendingInvite.code, "428193")
+        XCTAssertEqual(pendingInvite.formattedCode, "428 193")
+    }
+
+    func testSendInviteRequiresLocalDisplayName() {
         let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
         let flow = RemotePlayFlow(knownPlayers: [maya], nextInviteCode: "428193")
 
@@ -10,13 +30,23 @@ final class RemotePlayFlowTests: XCTestCase {
         flow.invite(maya)
         flow.chooseWhite(.invitee)
 
-        let pendingInvite = flow.sendInvite()
+        XCTAssertNil(flow.requestSendInvite())
+        XCTAssertEqual(flow.stage, .enteringLocalName(.sendInvite))
 
-        XCTAssertEqual(flow.stage, .waitingForInvitee(pendingInvite))
-        XCTAssertEqual(pendingInvite.target, .known(maya))
-        XCTAssertEqual(pendingInvite.whiteChoice, .invitee)
-        XCTAssertEqual(pendingInvite.code, "428193")
-        XCTAssertEqual(pendingInvite.formattedCode, "428 193")
+        flow.updateLocalNameDraft("  Jason  ")
+        let result = flow.saveLocalNameAndContinue()
+
+        XCTAssertEqual(flow.localDisplayName, "Jason")
+        XCTAssertEqual(
+            result,
+            .sentInvite(
+                RemotePlayFlow.PendingInvite(
+                    target: .known(maya),
+                    whiteChoice: .invitee,
+                    code: "428193"
+                )
+            )
+        )
     }
 
     func testRememberKnownPlayerUpdatesExistingPlayer() {
@@ -32,11 +62,15 @@ final class RemotePlayFlowTests: XCTestCase {
     }
 
     func testCancelClosesFlowAndClearsPendingInvite() {
-        let flow = RemotePlayFlow(knownPlayers: [], nextInviteCode: "428193")
+        let flow = RemotePlayFlow(
+            knownPlayers: [],
+            localDisplayName: "Jason",
+            nextInviteCode: "428193"
+        )
 
         flow.open()
         flow.inviteSomeoneNew()
-        _ = flow.sendInvite()
+        _ = flow.requestSendInvite()
 
         flow.cancel()
 
@@ -58,7 +92,7 @@ final class RemotePlayFlowTests: XCTestCase {
     }
 
     func testJoinCodeEnablesAtSixDigitsAndRejectsWrongCode() {
-        let flow = RemotePlayFlow(nextInviteCode: "428193")
+        let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
 
         flow.open()
         flow.updateJoinCode("12a34 5")
@@ -70,20 +104,36 @@ final class RemotePlayFlowTests: XCTestCase {
 
         XCTAssertEqual(flow.joinCode, "123456")
         XCTAssertTrue(flow.canSubmitJoinCode)
-        XCTAssertFalse(flow.acceptJoinCode())
+        XCTAssertFalse(flow.requestJoinCode())
         XCTAssertEqual(flow.joinErrorMessage, "That code did not match an open invite.")
     }
 
     func testAcceptJoinCodeClearsFlowForMatchingCode() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
+
+        flow.open()
+        flow.updateJoinCode("428 193")
+
+        XCTAssertTrue(flow.requestJoinCode())
+        XCTAssertEqual(flow.stage, .closed)
+        XCTAssertEqual(flow.joinCode, "")
+        XCTAssertNil(flow.joinErrorMessage)
+    }
+
+    func testJoinCodeRequiresLocalDisplayName() {
         let flow = RemotePlayFlow(nextInviteCode: "428193")
 
         flow.open()
         flow.updateJoinCode("428 193")
 
-        XCTAssertTrue(flow.acceptJoinCode())
+        XCTAssertFalse(flow.requestJoinCode())
+        XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
+
+        flow.updateLocalNameDraft("Jason")
+
+        XCTAssertEqual(flow.saveLocalNameAndContinue(), .joined)
         XCTAssertEqual(flow.stage, .closed)
-        XCTAssertEqual(flow.joinCode, "")
-        XCTAssertNil(flow.joinErrorMessage)
+        XCTAssertEqual(flow.localDisplayName, "Jason")
     }
 
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {

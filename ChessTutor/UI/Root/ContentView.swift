@@ -19,10 +19,11 @@ struct ContentView: View {
     init() {
         let remoteIdentityStore = RemoteIdentityStore()
         self.remoteIdentityStore = remoteIdentityStore
-        _ = try? remoteIdentityStore.loadLocalProfile()
+        let localProfile = try? remoteIdentityStore.loadLocalProfile()
         _remotePlayFlow = State(
             initialValue: RemotePlayFlow(
-                knownPlayers: (try? remoteIdentityStore.loadKnownPlayers()) ?? []
+                knownPlayers: (try? remoteIdentityStore.loadKnownPlayers()) ?? [],
+                localDisplayName: localProfile?.displayName
             )
         )
 
@@ -84,6 +85,7 @@ struct ContentView: View {
                 flow: remotePlayFlow,
                 session: session,
                 fakeRemoteLab: fakeRemoteLab,
+                onLocalDisplayNameSaved: saveLocalDisplayName,
                 onKnownPlayerAccepted: rememberKnownPlayer
             )
                 .presentationDetents([.height(430)])
@@ -92,6 +94,7 @@ struct ContentView: View {
             RemotePlaySheetView(
                 flow: remotePlayFlow,
                 session: session,
+                onLocalDisplayNameSaved: saveLocalDisplayName,
                 onKnownPlayerAccepted: rememberKnownPlayer
             )
                 .presentationDetents([.height(430)])
@@ -196,6 +199,12 @@ struct ContentView: View {
     private func rememberKnownPlayer(_ player: KnownRemotePlayer) {
         try? remoteIdentityStore.saveKnownPlayer(player)
         remotePlayFlow.rememberKnownPlayer(player)
+    }
+
+    private func saveLocalDisplayName(_ displayName: String) {
+        if let profile = try? remoteIdentityStore.saveLocalDisplayName(displayName) {
+            remotePlayFlow.updateLocalDisplayName(profile.displayName)
+        }
     }
 
     private func syncToCurrentInterfaceOrientation(animated: Bool) {

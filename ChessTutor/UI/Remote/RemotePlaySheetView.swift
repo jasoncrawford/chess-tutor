@@ -3,6 +3,7 @@ import SwiftUI
 struct RemotePlaySheetView: View {
     @Bindable var flow: RemotePlayFlow
     @Bindable var session: GameSession
+    let onLocalDisplayNameSaved: (String) -> Void
     let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
@@ -11,10 +12,12 @@ struct RemotePlaySheetView: View {
     init(
         flow: RemotePlayFlow,
         session: GameSession,
+        onLocalDisplayNameSaved: @escaping (String) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
+        self.onLocalDisplayNameSaved = onLocalDisplayNameSaved
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
         #if DEBUG
         self.fakeRemoteLab = nil
@@ -26,11 +29,13 @@ struct RemotePlaySheetView: View {
         flow: RemotePlayFlow,
         session: GameSession,
         fakeRemoteLab: FakeRemoteGameLab? = nil,
+        onLocalDisplayNameSaved: @escaping (String) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
         self.fakeRemoteLab = fakeRemoteLab
+        self.onLocalDisplayNameSaved = onLocalDisplayNameSaved
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
     }
     #endif
@@ -48,6 +53,8 @@ struct RemotePlaySheetView: View {
                 choosingWhiteView(for: target)
             case .waitingForInvitee(let pendingInvite):
                 waitingView(for: pendingInvite)
+            case .enteringLocalName:
+                localNameView
             }
         }
         .padding(26)
@@ -89,7 +96,7 @@ struct RemotePlaySheetView: View {
         switch flow.stage {
         case .choosingWhite:
             return true
-        case .closed, .choosing, .waitingForInvitee:
+        case .closed, .choosing, .waitingForInvitee, .enteringLocalName:
             return false
         }
     }
@@ -171,7 +178,7 @@ struct RemotePlaySheetView: View {
 
     private func joinWithCode() {
         #if DEBUG
-        guard flow.acceptJoinCode() else {
+        guard flow.requestJoinCode() else {
             return
         }
 
@@ -199,7 +206,7 @@ struct RemotePlaySheetView: View {
             }
 
             Button {
-                _ = flow.sendInvite()
+                _ = flow.requestSendInvite()
             } label: {
                 Label("Send Invite", systemImage: "paperplane")
                     .frame(maxWidth: .infinity)
@@ -207,6 +214,61 @@ struct RemotePlaySheetView: View {
             }
             .buttonStyle(RemotePlaySheetPrimaryButtonStyle())
         }
+    }
+
+    private var localNameView: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("What's your name?")
+                    .font(AppTheme.aboutSectionTitleFont)
+                    .foregroundStyle(AppTheme.ink)
+
+                Text("The other player will see this when you play remotely.")
+                    .font(AppTheme.panelBodyFont)
+                    .foregroundStyle(AppTheme.ink.opacity(0.72))
+            }
+
+            TextField("First name or handle", text: localNameBinding)
+                .textInputAutocapitalization(.words)
+                .padding(.horizontal, 12)
+                .frame(height: 42)
+                .background(AppTheme.panelInset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Button {
+                saveLocalNameAndContinue()
+            } label: {
+                Label("Continue", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(RemotePlaySheetPrimaryButtonStyle())
+            .disabled(!flow.canSubmitLocalName)
+            .opacity(flow.canSubmitLocalName ? 1 : 0.55)
+        }
+    }
+
+    private var localNameBinding: Binding<String> {
+        Binding {
+            flow.localNameDraft
+        } set: { nextName in
+            flow.updateLocalNameDraft(nextName)
+        }
+    }
+
+    private func saveLocalNameAndContinue() {
+        guard let result = flow.saveLocalNameAndContinue(),
+              let localDisplayName = flow.localDisplayName else {
+            return
+        }
+
+        onLocalDisplayNameSaved(localDisplayName)
+
+        #if DEBUG
+        if result == .joined {
+            fakeRemoteLab?.start(session: session, localPlayerColor: .black)
+            onKnownPlayerAccepted(Self.fakeMayaPlayer)
+        }
+        #endif
     }
 
     private func whiteChoiceButton(

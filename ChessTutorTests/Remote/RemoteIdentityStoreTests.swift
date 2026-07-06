@@ -17,7 +17,7 @@ final class RemoteIdentityStoreTests: XCTestCase {
         storeURL = nil
     }
 
-    func testLoadsStableLocalPlayerProfile() throws {
+    func testLoadsStableUnnamedLocalPlayerProfile() throws {
         let store = RemoteIdentityStore(fileURL: storeURL)
 
         let firstProfile = try store.loadLocalProfile()
@@ -25,7 +25,51 @@ final class RemoteIdentityStoreTests: XCTestCase {
 
         XCTAssertEqual(firstProfile, secondProfile)
         XCTAssertFalse(firstProfile.id.rawValue.isEmpty)
-        XCTAssertEqual(firstProfile.displayName, "Me")
+        XCTAssertNil(firstProfile.displayName)
+    }
+
+    func testSavesTrimmedLocalDisplayName() throws {
+        let store = RemoteIdentityStore(fileURL: storeURL)
+        let unnamedProfile = try store.loadLocalProfile()
+
+        let namedProfile = try store.saveLocalDisplayName("  Jason  ")
+
+        XCTAssertEqual(namedProfile.id, unnamedProfile.id)
+        XCTAssertEqual(namedProfile.displayName, "Jason")
+        XCTAssertEqual(try RemoteIdentityStore(fileURL: storeURL).loadLocalProfile(), namedProfile)
+    }
+
+    func testMigratesPreviousMeDefaultToUnsetName() throws {
+        let legacyState = """
+        {
+          "localProfile": {
+            "id": {
+              "rawValue": "legacy-local-player"
+            },
+            "displayName": "Me"
+          },
+          "knownPlayers": []
+        }
+        """
+        try legacyState.write(to: storeURL, atomically: true, encoding: .utf8)
+
+        XCTAssertNil(try RemoteIdentityStore(fileURL: storeURL).loadLocalProfile().displayName)
+    }
+
+    func testPreservesExplicitMeDisplayName() throws {
+        let store = RemoteIdentityStore(fileURL: storeURL)
+
+        _ = try store.saveLocalDisplayName("Me")
+
+        XCTAssertEqual(try RemoteIdentityStore(fileURL: storeURL).loadLocalProfile().displayName, "Me")
+    }
+
+    func testRejectsEmptyLocalDisplayName() throws {
+        let store = RemoteIdentityStore(fileURL: storeURL)
+
+        XCTAssertThrowsError(try store.saveLocalDisplayName("   ")) { error in
+            XCTAssertEqual(error as? RemoteIdentityStore.Error, .emptyDisplayName)
+        }
     }
 
     func testPersistsKnownPlayersByID() throws {
