@@ -32,10 +32,6 @@ struct RemotePlaySheetView: View {
                 choosingWhiteView(for: target)
             case .waitingForInvitee(let pendingInvite):
                 waitingView(for: pendingInvite)
-            case .reviewingJoinRequest(let pendingJoinRequest):
-                reviewingJoinRequestView(pendingJoinRequest)
-            case .waitingForInviterApproval(let outgoingJoinRequest):
-                waitingForInviterApprovalView(outgoingJoinRequest)
             }
         }
         .padding(26)
@@ -77,7 +73,7 @@ struct RemotePlaySheetView: View {
         switch flow.stage {
         case .choosingWhite:
             return true
-        case .closed, .choosing, .waitingForInvitee, .reviewingJoinRequest, .waitingForInviterApproval:
+        case .closed, .choosing, .waitingForInvitee:
             return false
         }
     }
@@ -240,75 +236,13 @@ struct RemotePlaySheetView: View {
 
                 #if DEBUG
                 if fakeRemoteLab != nil {
-                    Button("Maya Joins") {
-                        flow.receiveJoinRequest(displayName: "Maya")
+                    Button("Maya Accepts") {
+                        acceptPendingInvite(pendingInvite)
                     }
                     .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
                 }
                 #endif
             }
-        }
-    }
-
-    private func reviewingJoinRequestView(
-        _ pendingJoinRequest: RemotePlayFlow.PendingJoinRequest
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(pendingJoinRequest.joinerDisplayName) wants to join")
-                    .font(AppTheme.aboutSectionTitleFont)
-                    .foregroundStyle(AppTheme.ink)
-
-                Text("Approve to start this remote game.")
-                    .font(AppTheme.panelBodyFont)
-                    .foregroundStyle(AppTheme.ink.opacity(0.72))
-            }
-
-            HStack(spacing: 10) {
-                Button("Decline") {
-                    flow.declineJoinRequest()
-                }
-                .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
-
-                Button {
-                    approveJoinRequest()
-                } label: {
-                    Label("Approve", systemImage: "checkmark")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                }
-                .buttonStyle(RemotePlaySheetPrimaryButtonStyle())
-            }
-        }
-    }
-
-    private func waitingForInviterApprovalView(
-        _ outgoingJoinRequest: RemotePlayFlow.OutgoingJoinRequest
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Waiting for approval")
-                    .font(AppTheme.aboutSectionTitleFont)
-                    .foregroundStyle(AppTheme.ink)
-
-                Text("The game will start when \(outgoingJoinRequest.inviterDisplayName) approves.")
-                    .font(AppTheme.panelBodyFont)
-                    .foregroundStyle(AppTheme.ink.opacity(0.72))
-            }
-
-            #if DEBUG
-            if fakeRemoteLab != nil {
-                Button {
-                    fakeRemoteLab?.start(session: session, localPlayerColor: .black)
-                    flow.cancel()
-                } label: {
-                    Label("Inviter Approves", systemImage: "checkmark")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                }
-                .buttonStyle(RemotePlaySheetPrimaryButtonStyle())
-            }
-            #endif
         }
     }
 
@@ -344,18 +278,13 @@ struct RemotePlaySheetView: View {
         }
     }
 
-    private func approveJoinRequest() {
-        guard let pendingJoinRequest = flow.approveJoinRequest() else {
-            return
-        }
-
-        #if DEBUG
-        let localPlayerColor = localPlayerColor(for: pendingJoinRequest.invite)
+    #if DEBUG
+    private func acceptPendingInvite(_ pendingInvite: RemotePlayFlow.PendingInvite) {
+        let localPlayerColor = localPlayerColor(for: pendingInvite)
         fakeRemoteLab?.start(session: session, localPlayerColor: localPlayerColor)
-        #endif
+        flow.cancel()
     }
 
-    #if DEBUG
     private func localPlayerColor(for pendingInvite: RemotePlayFlow.PendingInvite) -> PieceColor {
         pendingInvite.whiteChoice == .invitee ? .black : .white
     }
