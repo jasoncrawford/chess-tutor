@@ -13,6 +13,13 @@ targets:
     platform: iOS
     sources:
       - ChessTutor
+    info:
+      path: ChessTutor/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: org.jasoncrawford.chesstutor
+            CFBundleURLSchemes:
+              - chesstutor
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true

@@ -243,10 +243,44 @@ final class RemotePlayFlowTests: XCTestCase {
         )
         XCTAssertEqual(presentation.linkSectionTitle, "Invite link")
         XCTAssertEqual(presentation.copyLinkButtonTitle, "Copy link")
+        XCTAssertEqual(presentation.inviteURL.absoluteString, "chesstutor://invite?code=428193")
         XCTAssertEqual(
             presentation.linkInstructions,
             "You can send the link by Messages, Mail, or another app."
         )
+    }
+
+    func testJoinInviteLinkUsesSameCodePath() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
+
+        XCTAssertTrue(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!))
+        XCTAssertEqual(flow.stage, .closed)
+        XCTAssertEqual(flow.joinCode, "")
+        XCTAssertNil(flow.joinErrorMessage)
+    }
+
+    func testJoinInviteLinkRequiresLocalDisplayName() {
+        let flow = RemotePlayFlow(nextInviteCode: "428193")
+
+        XCTAssertFalse(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!))
+        XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
+
+        flow.updateLocalNameDraft("Jason")
+
+        XCTAssertEqual(flow.saveLocalNameAndContinue(), .joined)
+        XCTAssertEqual(flow.stage, .closed)
+    }
+
+    func testRejectsInvalidInviteLink() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
+
+        XCTAssertFalse(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=111111")!))
+        XCTAssertEqual(flow.stage, .choosing)
+        XCTAssertEqual(flow.joinErrorMessage, "That code did not match an open invite.")
+
+        XCTAssertFalse(flow.requestJoinInvite(from: URL(string: "https://example.com/invite?code=428193")!))
+        XCTAssertEqual(flow.stage, .choosing)
+        XCTAssertEqual(flow.joinErrorMessage, "That link did not match an open invite.")
     }
 
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {

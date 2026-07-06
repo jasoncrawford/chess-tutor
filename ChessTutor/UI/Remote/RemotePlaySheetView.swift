@@ -4,6 +4,7 @@ struct RemotePlaySheetView: View {
     @Bindable var flow: RemotePlayFlow
     @Bindable var session: GameSession
     let onLocalDisplayNameSaved: (String) -> Void
+    let onInviteLinkCopied: (URL) -> Void
     let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
@@ -13,11 +14,13 @@ struct RemotePlaySheetView: View {
         flow: RemotePlayFlow,
         session: GameSession,
         onLocalDisplayNameSaved: @escaping (String) -> Void = { _ in },
+        onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
         self.onLocalDisplayNameSaved = onLocalDisplayNameSaved
+        self.onInviteLinkCopied = onInviteLinkCopied
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
         #if DEBUG
         self.fakeRemoteLab = nil
@@ -30,12 +33,14 @@ struct RemotePlaySheetView: View {
         session: GameSession,
         fakeRemoteLab: FakeRemoteGameLab? = nil,
         onLocalDisplayNameSaved: @escaping (String) -> Void = { _ in },
+        onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
         self.fakeRemoteLab = fakeRemoteLab
         self.onLocalDisplayNameSaved = onLocalDisplayNameSaved
+        self.onInviteLinkCopied = onInviteLinkCopied
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
     }
     #endif
@@ -369,9 +374,10 @@ struct RemotePlaySheetView: View {
                     .font(AppTheme.aboutSectionTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
-                Button(presentation.copyLinkButtonTitle) {}
-                    .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: false))
-                    .disabled(true)
+                Button(presentation.copyLinkButtonTitle) {
+                    onInviteLinkCopied(presentation.inviteURL)
+                }
+                .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
 
                 Text(presentation.linkInstructions)
                     .font(.system(size: 14, weight: .medium, design: .rounded))

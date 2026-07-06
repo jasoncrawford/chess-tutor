@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 struct KnownRemotePlayer: Codable, Equatable, Hashable, Identifiable, Sendable {
@@ -50,6 +51,7 @@ final class RemotePlayFlow {
         let codeInstructions: String
         let linkSectionTitle: String
         let copyLinkButtonTitle: String
+        let inviteURL: URL
         let linkInstructions: String
     }
 
@@ -104,6 +106,7 @@ final class RemotePlayFlow {
             codeInstructions: "\(inviteeName) can join by tapping Play Remotely and entering this code.",
             linkSectionTitle: "Invite link",
             copyLinkButtonTitle: "Copy link",
+            inviteURL: Self.inviteURL(for: pendingInvite.code),
             linkInstructions: "You can send the link by Messages, Mail, or another app."
         )
     }
@@ -228,6 +231,21 @@ final class RemotePlayFlow {
         joinErrorMessage = nil
     }
 
+    @discardableResult
+    func requestJoinInvite(from url: URL) -> Bool {
+        guard let code = Self.inviteCode(from: url) else {
+            open()
+            joinErrorMessage = "That link did not match an open invite."
+            return false
+        }
+
+        if stage == .closed {
+            open()
+        }
+        updateJoinCode(code)
+        return requestJoinCode()
+    }
+
     private func acceptJoinCode() -> Bool {
         guard canSubmitJoinCode, joinCode == nextInviteCode else {
             joinErrorMessage = "That code did not match an open invite."
@@ -277,6 +295,28 @@ final class RemotePlayFlow {
         case .newPlayer:
             return "The other player"
         }
+    }
+
+    private static func inviteURL(for code: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "chesstutor"
+        components.host = "invite"
+        components.queryItems = [
+            URLQueryItem(name: "code", value: code)
+        ]
+        return components.url!
+    }
+
+    private static func inviteCode(from url: URL) -> String? {
+        guard url.scheme == "chesstutor",
+              url.host == "invite",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let rawCode = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+            return nil
+        }
+
+        let code = String(rawCode.filter(\.isNumber).prefix(6))
+        return code.count == 6 ? code : nil
     }
 
     func goBack() {

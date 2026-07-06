@@ -86,6 +86,7 @@ struct ContentView: View {
                 session: session,
                 fakeRemoteLab: fakeRemoteLab,
                 onLocalDisplayNameSaved: saveLocalDisplayName,
+                onInviteLinkCopied: copyInviteLink,
                 onKnownPlayerAccepted: rememberKnownPlayer
             )
                 .presentationDetents([.height(430)])
@@ -95,11 +96,15 @@ struct ContentView: View {
                 flow: remotePlayFlow,
                 session: session,
                 onLocalDisplayNameSaved: saveLocalDisplayName,
+                onInviteLinkCopied: copyInviteLink,
                 onKnownPlayerAccepted: rememberKnownPlayer
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
             #endif
+        }
+        .onOpenURL { url in
+            handleInviteURL(url)
         }
     }
 
@@ -206,6 +211,27 @@ struct ContentView: View {
             remotePlayFlow.updateLocalDisplayName(profile.displayName)
         }
     }
+
+    private func copyInviteLink(_ inviteURL: URL) {
+        UIPasteboard.general.string = inviteURL.absoluteString
+    }
+
+    private func handleInviteURL(_ url: URL) {
+        guard remotePlayFlow.requestJoinInvite(from: url) else {
+            return
+        }
+
+        #if DEBUG
+        startFakeRemoteJoin()
+        #endif
+    }
+
+    #if DEBUG
+    private func startFakeRemoteJoin() {
+        fakeRemoteLab.start(session: session, localPlayerColor: .black)
+        rememberKnownPlayer(KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya"))
+    }
+    #endif
 
     private func syncToCurrentInterfaceOrientation(animated: Bool) {
         applyViewingAngle(Self.currentViewingAngle(), animated: animated)
