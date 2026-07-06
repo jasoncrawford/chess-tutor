@@ -44,6 +44,10 @@ struct RemotePlaySheetView: View {
         VStack(alignment: .leading, spacing: 22) {
             header
 
+            if showsIdentityRow {
+                identityRow
+            }
+
             switch flow.stage {
             case .closed:
                 EmptyView()
@@ -64,7 +68,7 @@ struct RemotePlaySheetView: View {
 
     private var header: some View {
         ZStack {
-            Text("Play Remotely")
+            Text(flow.sheetTitle)
                 .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .foregroundStyle(AppTheme.ink)
 
@@ -90,6 +94,41 @@ struct RemotePlaySheetView: View {
             }
         }
         .frame(height: 32)
+    }
+
+    private var showsIdentityRow: Bool {
+        flow.showsLocalIdentitySummary
+    }
+
+    private var identityRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person.crop.circle")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AppTheme.mutedInk)
+                .frame(width: 24, height: 24)
+
+            Text("Playing as \(flow.localDisplayName ?? "")")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(AppTheme.ink.opacity(0.78))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button {
+                flow.editLocalDisplayName()
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppTheme.mutedInk)
+            .accessibilityLabel("Edit your name")
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .frame(height: 42)
+        .background(AppTheme.panelInset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var showsBackButton: Bool {
@@ -189,15 +228,9 @@ struct RemotePlaySheetView: View {
 
     private func choosingWhiteView(for target: RemotePlayFlow.InviteTarget) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(targetTitle(for: target))
-                    .font(AppTheme.aboutSectionTitleFont)
-                    .foregroundStyle(AppTheme.ink)
-
-                Text("Who plays White and goes first?")
-                    .font(AppTheme.panelBodyFont)
-                    .foregroundStyle(AppTheme.ink.opacity(0.72))
-            }
+            Text(flow.whiteChoicePromptTitle)
+                .font(AppTheme.panelBodyFont)
+                .foregroundStyle(AppTheme.ink.opacity(0.72))
 
             VStack(spacing: 8) {
                 whiteChoiceButton(.localPlayer, target: target)
@@ -219,7 +252,7 @@ struct RemotePlaySheetView: View {
     private var localNameView: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("What's your name?")
+                Text(localNameTitle)
                     .font(AppTheme.aboutSectionTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
@@ -237,7 +270,7 @@ struct RemotePlaySheetView: View {
             Button {
                 saveLocalNameAndContinue()
             } label: {
-                Label("Continue", systemImage: "checkmark")
+                Label(localNameButtonTitle, systemImage: "checkmark")
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
             }
@@ -245,6 +278,22 @@ struct RemotePlaySheetView: View {
             .disabled(!flow.canSubmitLocalName)
             .opacity(flow.canSubmitLocalName ? 1 : 0.55)
         }
+    }
+
+    private var localNameTitle: String {
+        if case .enteringLocalName(.edit) = flow.stage {
+            return "Your name"
+        }
+
+        return "What's your name?"
+    }
+
+    private var localNameButtonTitle: String {
+        if case .enteringLocalName(.edit) = flow.stage {
+            return "Save"
+        }
+
+        return "Continue"
     }
 
     private var localNameBinding: Binding<String> {
@@ -296,41 +345,50 @@ struct RemotePlaySheetView: View {
     }
 
     private func waitingView(for pendingInvite: RemotePlayFlow.PendingInvite) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        let presentation = flow.inviteSharePresentation(for: pendingInvite)
+
+        return VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Invite Sent")
+                Text(presentation.codeSectionTitle)
                     .font(AppTheme.aboutSectionTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
-                Text(pendingInvite.formattedCode)
+                Text(presentation.code)
                     .font(.system(size: 36, weight: .semibold, design: .rounded))
                     .foregroundStyle(AppTheme.ink)
                     .monospacedDigit()
+
+                Text(presentation.codeInstructions)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(AppTheme.ink.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: 10) {
-                Button("Copy Link") {}
+            VStack(alignment: .leading, spacing: 8) {
+                Text(presentation.linkSectionTitle)
+                    .font(AppTheme.aboutSectionTitleFont)
+                    .foregroundStyle(AppTheme.ink)
+
+                Button(presentation.copyLinkButtonTitle) {}
                     .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: false))
                     .disabled(true)
 
-                #if DEBUG
+                Text(presentation.linkInstructions)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(AppTheme.ink.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            #if DEBUG
+            HStack(spacing: 10) {
                 if fakeRemoteLab != nil {
                     Button("Maya Accepts") {
                         acceptPendingInvite(pendingInvite)
                     }
                     .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
                 }
-                #endif
             }
-        }
-    }
-
-    private func targetTitle(for target: RemotePlayFlow.InviteTarget) -> String {
-        switch target {
-        case .known(let player):
-            return "Invite \(player.displayName)"
-        case .newPlayer:
-            return "Invite Someone New"
+            #endif
         }
     }
 

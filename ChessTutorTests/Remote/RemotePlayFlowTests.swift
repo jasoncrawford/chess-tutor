@@ -136,6 +136,119 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.localDisplayName, "Jason")
     }
 
+    func testEditLocalDisplayNamePrefillsCurrentNameAndReturnsToChoosing() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+
+        flow.open()
+        flow.editLocalDisplayName()
+
+        XCTAssertEqual(flow.stage, .enteringLocalName(.edit))
+        XCTAssertEqual(flow.localNameDraft, "Jason")
+
+        flow.updateLocalNameDraft("  Jay  ")
+
+        XCTAssertEqual(flow.saveLocalNameAndContinue(), .saved)
+        XCTAssertEqual(flow.localDisplayName, "Jay")
+        XCTAssertEqual(flow.stage, .choosing)
+    }
+
+    func testEditLocalDisplayNameReturnsToWhiteChoice() {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(
+            knownPlayers: [maya],
+            localDisplayName: "Jason",
+            nextInviteCode: "428193"
+        )
+
+        flow.open()
+        flow.invite(maya)
+        flow.chooseWhite(.invitee)
+        flow.editLocalDisplayName()
+
+        XCTAssertEqual(flow.stage, .enteringLocalName(.edit))
+
+        flow.updateLocalNameDraft("Jay")
+
+        XCTAssertEqual(flow.saveLocalNameAndContinue(), .saved)
+        XCTAssertEqual(flow.localDisplayName, "Jay")
+        XCTAssertEqual(flow.stage, .choosingWhite(.known(maya)))
+        XCTAssertEqual(flow.selectedWhiteChoice, .invitee)
+    }
+
+    func testLocalIdentitySummaryOnlyShowsBeforeChoosingInvitee() {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(knownPlayers: [maya], localDisplayName: "Jason")
+
+        XCTAssertFalse(flow.showsLocalIdentitySummary)
+
+        flow.open()
+
+        XCTAssertTrue(flow.showsLocalIdentitySummary)
+
+        flow.invite(maya)
+
+        XCTAssertFalse(flow.showsLocalIdentitySummary)
+    }
+
+    func testSheetTitleFocusesOnInviteeWhileChoosingWhite() {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(knownPlayers: [maya], localDisplayName: "Jason")
+
+        XCTAssertEqual(flow.sheetTitle, "Play Remotely")
+
+        flow.open()
+
+        XCTAssertEqual(flow.sheetTitle, "Play Remotely")
+
+        flow.invite(maya)
+
+        XCTAssertEqual(flow.sheetTitle, "Invite Maya")
+
+        flow.goBack()
+        flow.inviteSomeoneNew()
+
+        XCTAssertEqual(flow.sheetTitle, "Invite Someone New")
+    }
+
+    func testWhiteChoicePromptDoesNotRepeatInviteeTitle() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+
+        flow.open()
+        flow.inviteSomeoneNew()
+
+        XCTAssertEqual(flow.sheetTitle, "Invite Someone New")
+        XCTAssertEqual(flow.whiteChoicePromptTitle, "Who plays White and goes first?")
+    }
+
+    func testInviteSharePresentationExplainsCodeAndLink() throws {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(
+            knownPlayers: [maya],
+            localDisplayName: "Jason",
+            nextInviteCode: "428193"
+        )
+
+        flow.open()
+        flow.invite(maya)
+
+        let pendingInvite = try XCTUnwrap(flow.requestSendInvite())
+        let presentation = flow.inviteSharePresentation(for: pendingInvite)
+
+        XCTAssertEqual(flow.sheetTitle, "Share invite")
+        XCTAssertEqual(presentation.codeSectionTitle, "Join code")
+        XCTAssertEqual(presentation.code, "428 193")
+        XCTAssertEqual(
+            presentation.codeInstructions,
+            "Maya can join by tapping Play Remotely and entering this code."
+        )
+        XCTAssertEqual(presentation.linkSectionTitle, "Invite link")
+        XCTAssertEqual(presentation.copyLinkButtonTitle, "Copy link")
+        XCTAssertEqual(
+            presentation.linkInstructions,
+            "You can send the link by Messages, Mail, or another app."
+        )
+    }
+
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {
         let flow = RemotePlayFlow()
         let session = GameSession()

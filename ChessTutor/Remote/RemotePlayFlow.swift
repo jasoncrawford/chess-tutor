@@ -21,11 +21,13 @@ final class RemotePlayFlow {
     enum LocalNameAction: Equatable, Hashable {
         case sendInvite
         case joinWithCode
+        case edit
     }
 
     enum LocalNameSaveResult: Equatable {
         case sentInvite(PendingInvite)
         case joined
+        case saved
     }
 
     struct PendingInvite: Equatable, Hashable {
@@ -42,6 +44,15 @@ final class RemotePlayFlow {
         }
     }
 
+    struct InviteSharePresentation: Equatable {
+        let codeSectionTitle: String
+        let code: String
+        let codeInstructions: String
+        let linkSectionTitle: String
+        let copyLinkButtonTitle: String
+        let linkInstructions: String
+    }
+
     enum Stage: Equatable, Hashable {
         case closed
         case choosing
@@ -52,6 +63,7 @@ final class RemotePlayFlow {
 
     private let nextInviteCode: String
     private var pendingLocalNameInviteTarget: InviteTarget?
+    private var localNameEditReturnStage: Stage?
     private(set) var knownPlayers: [KnownRemotePlayer]
     private(set) var stage: Stage = .closed
     private(set) var localDisplayName: String?
@@ -62,6 +74,38 @@ final class RemotePlayFlow {
 
     var canSubmitLocalName: Bool {
         Self.trimmedNonEmptyName(localNameDraft) != nil
+    }
+
+    var showsLocalIdentitySummary: Bool {
+        localDisplayName != nil && stage == .choosing
+    }
+
+    var sheetTitle: String {
+        if case .choosingWhite(let target) = stage {
+            return title(for: target)
+        }
+
+        if case .waitingForInvitee = stage {
+            return "Share invite"
+        }
+
+        return "Play Remotely"
+    }
+
+    var whiteChoicePromptTitle: String {
+        "Who plays White and goes first?"
+    }
+
+    func inviteSharePresentation(for pendingInvite: PendingInvite) -> InviteSharePresentation {
+        let inviteeName = shareInviteeName(for: pendingInvite.target)
+        return InviteSharePresentation(
+            codeSectionTitle: "Join code",
+            code: pendingInvite.formattedCode,
+            codeInstructions: "\(inviteeName) can join by tapping Play Remotely and entering this code.",
+            linkSectionTitle: "Invite link",
+            copyLinkButtonTitle: "Copy link",
+            linkInstructions: "You can send the link by Messages, Mail, or another app."
+        )
     }
 
     var canSubmitJoinCode: Bool {
@@ -88,6 +132,7 @@ final class RemotePlayFlow {
     func open() {
         selectedWhiteChoice = .localPlayer
         pendingLocalNameInviteTarget = nil
+        localNameEditReturnStage = nil
         joinErrorMessage = nil
         stage = .choosing
     }
@@ -112,6 +157,12 @@ final class RemotePlayFlow {
 
     func updateLocalNameDraft(_ draft: String) {
         localNameDraft = draft
+    }
+
+    func editLocalDisplayName() {
+        localNameDraft = localDisplayName ?? ""
+        localNameEditReturnStage = stage
+        stage = .enteringLocalName(.edit)
     }
 
     @discardableResult
@@ -156,6 +207,10 @@ final class RemotePlayFlow {
         case .joinWithCode:
             stage = .choosing
             return acceptJoinCode() ? .joined : nil
+        case .edit:
+            stage = localNameEditReturnStage ?? .choosing
+            localNameEditReturnStage = nil
+            return .saved
         }
     }
 
@@ -206,6 +261,24 @@ final class RemotePlayFlow {
         }
     }
 
+    private func title(for target: InviteTarget) -> String {
+        switch target {
+        case .known(let player):
+            return "Invite \(player.displayName)"
+        case .newPlayer:
+            return "Invite Someone New"
+        }
+    }
+
+    private func shareInviteeName(for target: InviteTarget) -> String {
+        switch target {
+        case .known(let player):
+            return player.displayName
+        case .newPlayer:
+            return "The other player"
+        }
+    }
+
     func goBack() {
         switch stage {
         case .choosingWhite, .waitingForInvitee:
@@ -219,6 +292,7 @@ final class RemotePlayFlow {
     func cancel() {
         selectedWhiteChoice = .localPlayer
         pendingLocalNameInviteTarget = nil
+        localNameEditReturnStage = nil
         localNameDraft = ""
         joinCode = ""
         joinErrorMessage = nil
