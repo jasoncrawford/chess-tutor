@@ -50,15 +50,18 @@ final class PieceAssetTests: XCTestCase {
     }
 
     func testAboutAttributionUsesReleaseProductName() {
-        XCTAssertEqual(AboutAttribution.appName, "Chess for Beginners")
-        XCTAssertTrue(AboutAttribution.appSummary.contains("beginners"))
+        XCTAssertEqual(AboutAttribution.appName, "Chess Tutor")
+        XCTAssertTrue(AboutAttribution.appSummary.contains("learning through play"))
     }
 
-    func testHomeScreenDisplayNameStaysShortForIconLabel() throws {
-        let projectYAML = try String(contentsOf: projectYAMLURL, encoding: .utf8)
+    func testAppInfoPlistUsesReleaseProductName() throws {
+        let data = try Data(contentsOf: appInfoPlistURL)
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+        )
 
-        XCTAssertTrue(projectYAML.contains("INFOPLIST_KEY_CFBundleDisplayName: Chess\n"))
-        XCTAssertFalse(projectYAML.contains("INFOPLIST_KEY_CFBundleDisplayName: Chess for Beginners"))
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Chess Tutor")
+        XCTAssertEqual(plist["CFBundleName"] as? String, "Chess Tutor")
     }
 
     func testGameControlsPresentationKeepsRareActionsVisibleButSecondaryDuringPlay() {
@@ -92,11 +95,11 @@ final class PieceAssetTests: XCTestCase {
         ]
     }
 
-    private var projectYAMLURL: URL {
+    private var appInfoPlistURL: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("project.yml")
+            .appendingPathComponent("ChessTutor/Info.plist")
     }
 }
