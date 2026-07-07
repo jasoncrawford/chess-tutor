@@ -49,6 +49,18 @@ final class PieceAssetTests: XCTestCase {
         XCTAssertTrue(aboutText.contains("MIT License"))
     }
 
+    func testAboutAttributionUsesReleaseProductName() {
+        XCTAssertEqual(AboutAttribution.appName, "Chess for Beginners")
+        XCTAssertTrue(AboutAttribution.appSummary.contains("beginners"))
+    }
+
+    func testHomeScreenDisplayNameStaysShortForIconLabel() throws {
+        let projectYAML = try String(contentsOf: projectYAMLURL, encoding: .utf8)
+
+        XCTAssertTrue(projectYAML.contains("INFOPLIST_KEY_CFBundleDisplayName: Chess\n"))
+        XCTAssertFalse(projectYAML.contains("INFOPLIST_KEY_CFBundleDisplayName: Chess for Beginners"))
+    }
+
     func testGameControlsPresentationKeepsRareActionsVisibleButSecondaryDuringPlay() {
         let presentation = GameControlsPresentation(result: .ongoing)
 
@@ -78,5 +90,13 @@ final class PieceAssetTests: XCTestCase {
             Piece(kind: .knight, color: .black),
             Piece(kind: .pawn, color: .black),
         ]
+    }
+
+    private var projectYAMLURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("project.yml")
     }
 }

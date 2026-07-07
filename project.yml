@@ -19,7 +19,7 @@ targets:
       base:
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: true
-        INFOPLIST_KEY_CFBundleDisplayName: Chess for Beginners
+        INFOPLIST_KEY_CFBundleDisplayName: Chess
         PRODUCT_BUNDLE_IDENTIFIER: org.jasoncrawford.chesstutor
         TARGETED_DEVICE_FAMILY: "2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
