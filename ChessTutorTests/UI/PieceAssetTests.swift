@@ -50,7 +50,7 @@ final class PieceAssetTests: XCTestCase {
     }
 
     func testAboutAttributionUsesReleaseProductName() {
-        XCTAssertEqual(AboutAttribution.appName, "Chess Tutor")
+        XCTAssertEqual(AboutAttribution.appName, "Beginners Chess")
         XCTAssertTrue(AboutAttribution.appSummary.contains("learning through play"))
     }
 
@@ -60,8 +60,8 @@ final class PieceAssetTests: XCTestCase {
             PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
         )
 
-        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Chess Tutor")
-        XCTAssertEqual(plist["CFBundleName"] as? String, "Chess Tutor")
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Beginners Chess")
+        XCTAssertEqual(plist["CFBundleName"] as? String, "Beginners Chess")
     }
 
     func testGameControlsPresentationKeepsRareActionsVisibleButSecondaryDuringPlay() {
