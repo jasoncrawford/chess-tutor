@@ -355,6 +355,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					6A716FFF3AA67ABE8A7992B0 = {
+						DevelopmentTeam = T2YLUCCPQ3;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -477,6 +478,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = T2YLUCCPQ3;
 				INFOPLIST_FILE = ChessTutor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -638,6 +640,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = T2YLUCCPQ3;
 				INFOPLIST_FILE = ChessTutor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
