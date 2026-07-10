@@ -356,11 +356,9 @@ final class RemotePlayFlow {
     }
 
     func showJoinInviteLookupError(_ lookup: InviteLookup, message: String) {
-        if stage == .closed {
-            open()
-        }
         updateJoinCode(lookup.code.rawValue)
         joinErrorMessage = message
+        stage = .choosing
     }
 
     private func acceptJoinCode(whiteChoice: WhiteChoice) -> JoinCodeResult? {

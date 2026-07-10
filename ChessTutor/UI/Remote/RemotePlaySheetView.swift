@@ -254,6 +254,7 @@ struct RemotePlaySheetView: View {
             flow.joinCode
         } set: { nextCode in
             flow.updateJoinCode(nextCode)
+            remoteInviteErrorMessage = nil
         }
     }
 

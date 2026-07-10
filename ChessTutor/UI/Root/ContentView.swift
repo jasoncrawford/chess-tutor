@@ -351,7 +351,11 @@ struct ContentView: View {
             return
         }
 
-        let request = InviteLinkRequest(lookup: lookupToFetch)
+        let request = InviteLinkRequest(
+            lookup: lookupToFetch,
+            expectedStage: remotePlayFlow.stage,
+            expectedJoinCode: remotePlayFlow.joinCode
+        )
         activeInviteLinkRequest = request
         inviteLinkFetchTask?.cancel()
         inviteLinkFetchTask = Task { @MainActor in
@@ -391,7 +395,10 @@ struct ContentView: View {
     }
 
     private func isCurrentInviteLinkRequest(_ request: InviteLinkRequest) -> Bool {
-        activeInviteLinkRequest == request && !Task.isCancelled
+        activeInviteLinkRequest == request
+            && !Task.isCancelled
+            && remotePlayFlow.stage == request.expectedStage
+            && remotePlayFlow.joinCode == request.expectedJoinCode
     }
 
     #if DEBUG
@@ -456,9 +463,16 @@ struct ContentView: View {
             remotePlayFlow.stage != .closed
         } set: { isPresented in
             if !isPresented {
+                cancelInviteLinkFetch()
                 remotePlayFlow.cancel()
             }
         }
+    }
+
+    private func cancelInviteLinkFetch() {
+        activeInviteLinkRequest = nil
+        inviteLinkFetchTask?.cancel()
+        inviteLinkFetchTask = nil
     }
 }
 
@@ -558,6 +572,8 @@ private struct PendingPromotion: Identifiable {
 private struct InviteLinkRequest: Equatable {
     let id = UUID()
     let lookup: RemotePlayFlow.InviteLookup
+    let expectedStage: RemotePlayFlow.Stage
+    let expectedJoinCode: String
 }
 
 private struct PromotionPickerView: View {

@@ -580,6 +580,31 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.joinErrorMessage, "That link did not match an open invite.")
     }
 
+    func testFailedInviteLinkLookupReturnsFromInviteScreensToJoinSection() throws {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let choosingWhiteFlow = RemotePlayFlow(knownPlayers: [maya], localDisplayName: "Jason")
+        let waitingFlow = RemotePlayFlow(knownPlayers: [maya], localDisplayName: "Jason")
+        let lookup = RemotePlayFlow.InviteLookup(
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1")
+        )
+
+        choosingWhiteFlow.open()
+        choosingWhiteFlow.invite(maya)
+
+        waitingFlow.open()
+        waitingFlow.invite(maya)
+        _ = try XCTUnwrap(waitingFlow.requestSendInvite())
+
+        for flow in [choosingWhiteFlow, waitingFlow] {
+            flow.showJoinInviteLookupError(lookup, message: "That link did not match an open invite.")
+
+            XCTAssertEqual(flow.stage, .choosing)
+            XCTAssertEqual(flow.joinCode, "428193")
+            XCTAssertEqual(flow.joinErrorMessage, "That link did not match an open invite.")
+        }
+    }
+
     func testInviteEntryPointIsOnlyAvailableBeforeLocalPlayBegins() {
         let flow = RemotePlayFlow()
         let session = GameSession()
