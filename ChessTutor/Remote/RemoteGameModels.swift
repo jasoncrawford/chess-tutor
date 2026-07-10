@@ -139,3 +139,10 @@ struct ActiveRemoteGameSnapshot: Codable, Equatable, Sendable {
     let outbox: RemoteOutbox
     let lastAppliedSequence: Int
 }
+
+struct RemoteGameStatusUpdate: Codable, Equatable, Sendable {
+    let gameID: RemoteGameID
+    let status: RemoteGameStatus
+    let updatedByPlayerID: RemotePlayerID
+    let updatedAt: Date
+}

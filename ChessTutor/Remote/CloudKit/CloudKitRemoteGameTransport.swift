@@ -22,7 +22,10 @@ protocol CloudKitGameDatabase: Sendable {
 
 extension CKDatabase: CloudKitGameDatabase {}
 
-actor CloudKitRemoteGameTransport: RemoteGameTransport, RemoteGameMoveNotificationPreparing {
+actor CloudKitRemoteGameTransport: RemoteGameTransport,
+    RemoteGameMoveNotificationPreparing,
+    RemoteGameLifecycleTransport,
+    RemoteGameLifecycleNotificationPreparing {
     enum Error: Swift.Error, Equatable {
         case conflictingSequence(Int)
         case missingSavedRecord
@@ -32,6 +35,7 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport, RemoteGameMoveNotificati
     private let database: any CloudKitGameDatabase
     private let fetchBatchSize: Int
     static let moveSubscriptionIDPrefix = "remote-game-moves-"
+    static let statusSubscriptionIDPrefix = "remote-game-status-"
 
     init(
         database: any CloudKitGameDatabase = CKContainer(identifier: "iCloud.org.jasoncrawford.chesstutor").publicCloudDatabase,
@@ -93,6 +97,36 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport, RemoteGameMoveNotificati
         }
     }
 
+    func updateGameStatus(_ status: RemoteGameStatusUpdate) async throws {
+        let record = CloudKitRemoteGameStatusRecordCodec.record(from: status)
+        let result = try await database.modifyRecords(
+            saving: [record],
+            deleting: [],
+            savePolicy: .changedKeys,
+            atomically: true
+        )
+        guard savedRecord(record.recordID, in: result.saveResults) != nil else {
+            throw Error.missingSavedRecord
+        }
+    }
+
+    func fetchGameStatus(gameID: RemoteGameID) async throws -> RemoteGameStatusUpdate? {
+        let recordID = CloudKitRemoteGameStatusRecordCodec.recordID(gameID: gameID)
+        let results = try await database.records(for: [recordID], desiredKeys: nil)
+        guard let result = results[recordID] else {
+            return nil
+        }
+        switch result {
+        case .success(let record):
+            return try CloudKitRemoteGameStatusRecordCodec.status(from: record)
+        case .failure(let error):
+            guard isMissingRecord(error) else {
+                throw Error.fetchFailed
+            }
+            return nil
+        }
+    }
+
     func prepareMoveNotification(for descriptor: RemoteGameDescriptor) async throws {
         let subscription = CKQuerySubscription(
             recordType: CloudKitRemoteMoveRecordCodec.recordType,
@@ -112,6 +146,23 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport, RemoteGameMoveNotificati
         _ = try await database.saveSubscription(subscription)
     }
 
+    func prepareGameStatusNotification(gameID: RemoteGameID) async throws {
+        let subscription = CKQuerySubscription(
+            recordType: CloudKitRemoteGameStatusRecordCodec.recordType,
+            predicate: NSPredicate(
+                format: "%K == %@",
+                CloudKitRemoteGameStatusRecordCodec.Field.gameID,
+                gameID.rawValue
+            ),
+            subscriptionID: Self.statusSubscriptionID(for: gameID),
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
+        )
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+        _ = try await database.saveSubscription(subscription)
+    }
+
     static func moveSubscriptionID(for gameID: RemoteGameID) -> String {
         "\(moveSubscriptionIDPrefix)\(gameID.rawValue)"
     }
@@ -121,6 +172,21 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport, RemoteGameMoveNotificati
             return nil
         }
         let rawValue = String(subscriptionID.dropFirst(moveSubscriptionIDPrefix.count))
+        guard !rawValue.isEmpty else {
+            return nil
+        }
+        return RemoteGameID(rawValue: rawValue)
+    }
+
+    static func statusSubscriptionID(for gameID: RemoteGameID) -> String {
+        "\(statusSubscriptionIDPrefix)\(gameID.rawValue)"
+    }
+
+    static func gameID(fromStatusSubscriptionID subscriptionID: String) -> RemoteGameID? {
+        guard subscriptionID.hasPrefix(statusSubscriptionIDPrefix) else {
+            return nil
+        }
+        let rawValue = String(subscriptionID.dropFirst(statusSubscriptionIDPrefix.count))
         guard !rawValue.isEmpty else {
             return nil
         }

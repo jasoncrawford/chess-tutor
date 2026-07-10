@@ -25,6 +25,21 @@ final class InMemoryRemoteGameTransportTests: XCTestCase {
         XCTAssertEqual(fetched, [second])
     }
 
+    func testUpdateGameStatusCanBeFetched() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        let status = RemoteGameStatusUpdate(
+            gameID: RemoteGameID(rawValue: "game"),
+            status: .ended,
+            updatedByPlayerID: RemotePlayerID(rawValue: "player"),
+            updatedAt: Date(timeIntervalSince1970: 20)
+        )
+
+        try await transport.updateGameStatus(status)
+
+        let fetchedStatus = try await transport.fetchGameStatus(gameID: RemoteGameID(rawValue: "game"))
+        XCTAssertEqual(fetchedStatus, status)
+    }
+
     private func makeEvent(sequence: Int) -> RemoteMoveEvent {
         RemoteMoveEvent(
             id: RemoteMoveEventID(rawValue: "event-\(sequence)"),

@@ -615,6 +615,29 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.message, "It's not your turn.")
     }
 
+    func testEndedRemoteGameAllowsInspectionButPreventsMovement() {
+        let session = GameSession()
+        session.endRemoteGame(message: "Maya ended this game.")
+
+        session.select(Square(file: .e, rank: 2))
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertEqual(session.selectedPieceInfo?.title, "White pawn")
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertEqual(result, .illegal("Maya ended this game."))
+        XCTAssertEqual(session.guidanceText, "Maya ended this game.")
+    }
+
+    func testNewGameClearsEndedRemoteGameLock() {
+        let session = GameSession()
+        session.endRemoteGame(message: "Maya ended this game.")
+
+        session.newGame()
+
+        XCTAssertTrue(session.localCanActForCurrentTurn)
+        XCTAssertNil(session.guidanceText)
+    }
+
     func testFinishTurnReturnsCommittedMove() {
         let session = GameSession()
 

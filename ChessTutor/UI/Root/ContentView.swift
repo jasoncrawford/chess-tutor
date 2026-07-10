@@ -130,6 +130,12 @@ struct ContentView: View {
             }
             fetchRemoteMovesAfterPush(gameID: RemoteGameID(rawValue: rawGameID))
         }
+        .onReceive(NotificationCenter.default.publisher(for: .remoteGameStatusMayHaveChanged)) { notification in
+            guard let rawGameID = notification.userInfo?[RemoteGameStatusPushUserInfoKey.gameID] as? String else {
+                return
+            }
+            fetchRemoteGameStatusAfterPush(gameID: RemoteGameID(rawValue: rawGameID))
+        }
         .sheet(item: $pendingPromotion) { promotion in
             PromotionPickerView(color: promotion.color) { kind in
                 #if DEBUG
@@ -276,6 +282,7 @@ struct ContentView: View {
     }
 
     private func startNewGame() {
+        publishRemoteGameEndedIfNeeded()
         cancelRemoteGameSync(clearSavedGame: true)
         #if DEBUG
         GameLifecycle.startNewGame(
@@ -559,6 +566,7 @@ struct ContentView: View {
         )
         persistActiveRemoteGame()
         prepareRemoteMoveNotification(for: context.descriptor)
+        prepareRemoteGameStatusNotification(for: context.descriptor.id)
         remotePlayFlow.cancel()
         return RemoteGameStartAnnouncement(
             opponentName: context.opponent.displayName,
@@ -600,6 +608,7 @@ struct ContentView: View {
         }
         if let descriptor = activeRemoteGameController?.snapshot.descriptor {
             prepareRemoteMoveNotification(for: descriptor)
+            prepareRemoteGameStatusNotification(for: descriptor.id)
         }
 
         Task { @MainActor in
@@ -613,6 +622,7 @@ struct ContentView: View {
                 persistActiveRemoteGame()
                 session.message = "Could not sync move. Check your connection."
             }
+            await fetchRemoteGameStatusIfNeeded()
             startRemoteMoveFetchLoopIfNeeded()
         }
     }
@@ -627,11 +637,30 @@ struct ContentView: View {
         }
     }
 
+    private func prepareRemoteGameStatusNotification(for gameID: RemoteGameID) {
+        guard let notificationPreparing = remoteGameTransport as? any RemoteGameLifecycleNotificationPreparing else {
+            return
+        }
+
+        Task {
+            try? await notificationPreparing.prepareGameStatusNotification(gameID: gameID)
+        }
+    }
+
     private func fetchRemoteMovesAfterPush(gameID: RemoteGameID) {
         guard activeRemoteGameController?.gameID == gameID else {
             return
         }
         startRemoteMoveFetchLoopIfNeeded()
+    }
+
+    private func fetchRemoteGameStatusAfterPush(gameID: RemoteGameID) {
+        guard activeRemoteGameController?.gameID == gameID else {
+            return
+        }
+        Task { @MainActor in
+            await fetchRemoteGameStatusIfNeeded()
+        }
     }
 
     private func startRemoteMoveFetchLoopIfNeeded() {
@@ -647,6 +676,12 @@ struct ContentView: View {
                     return
                 }
                 guard !session.localCanActForCurrentTurn else {
+                    remoteMoveFetchTask = nil
+                    return
+                }
+
+                let didEnd = await fetchRemoteGameStatusIfNeeded()
+                if didEnd {
                     remoteMoveFetchTask = nil
                     return
                 }
@@ -667,6 +702,55 @@ struct ContentView: View {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
+    }
+
+    @discardableResult
+    private func fetchRemoteGameStatusIfNeeded() async -> Bool {
+        guard let activeRemoteGameController,
+              let lifecycleTransport = remoteGameTransport as? any RemoteGameLifecycleTransport else {
+            return false
+        }
+
+        let descriptor = activeRemoteGameController.snapshot.descriptor
+        do {
+            guard let status = try await lifecycleTransport.fetchGameStatus(gameID: descriptor.id),
+                  status.status == .ended,
+                  status.updatedByPlayerID != descriptor.localPlayerID else {
+                return false
+            }
+            endRemoteGameAfterOpponentEnded(descriptor: descriptor)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func publishRemoteGameEndedIfNeeded() {
+        guard let activeRemoteGameController,
+              let lifecycleTransport = remoteGameTransport as? any RemoteGameLifecycleTransport else {
+            return
+        }
+
+        let descriptor = activeRemoteGameController.snapshot.descriptor
+        Task {
+            try? await lifecycleTransport.updateGameStatus(
+                RemoteGameStatusUpdate(
+                    gameID: descriptor.id,
+                    status: .ended,
+                    updatedByPlayerID: descriptor.localPlayerID,
+                    updatedAt: Date()
+                )
+            )
+        }
+    }
+
+    private func endRemoteGameAfterOpponentEnded(descriptor: RemoteGameDescriptor) {
+        let opponentName = Self.opponentName(from: descriptor)
+        remoteMoveFetchTask?.cancel()
+        remoteMoveFetchTask = nil
+        activeRemoteGameController = nil
+        try? activeRemoteGameStore.clear()
+        session.endRemoteGame(message: "\(opponentName) ended this game.")
     }
 
     private func persistActiveRemoteGame() {
@@ -705,6 +789,13 @@ struct ContentView: View {
             throw RemoteGameSessionController.Error.invalidSnapshot
         }
         return session
+    }
+
+    private static func opponentName(from descriptor: RemoteGameDescriptor) -> String {
+        if descriptor.localPlayerID == descriptor.whitePlayer.id {
+            return descriptor.blackPlayer.displayName
+        }
+        return descriptor.whitePlayer.displayName
     }
 
     private static func remoteInviteTransport(for mode: RemotePlayRuntimeMode) -> any RemoteInviteTransport {

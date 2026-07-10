@@ -31,6 +31,7 @@ final class GameSession {
     var whitePlayer: PlayerSeat = .humanLocal
     var blackPlayer: PlayerSeat = .humanLocal
     var message: String?
+    private var boardLockMessage: String?
 
     var state: GameState {
         guard let tentativeMove else {
@@ -52,7 +53,10 @@ final class GameSession {
     }
 
     var localCanActForCurrentTurn: Bool {
-        playerSeat(for: committedState.sideToMove).isLocal
+        guard boardLockMessage == nil else {
+            return false
+        }
+        return playerSeat(for: committedState.sideToMove).isLocal
     }
 
     var hasGameInProgress: Bool {
@@ -121,6 +125,9 @@ final class GameSession {
         guard committedState.result == .ongoing else {
             return nil
         }
+        if let boardLockMessage {
+            return boardLockMessage
+        }
         if let checkRuleViolationMessage {
             return checkRuleViolationMessage
         }
@@ -169,7 +176,7 @@ final class GameSession {
             && assistSettings.showLegalMovesOnSelection
             ? allowedMoves(forSelectionAt: square)
             : []
-        message = nil
+        message = boardLockMessage
     }
 
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
@@ -183,6 +190,11 @@ final class GameSession {
         guard let selectedSquare else {
             message = "Choose a piece first."
             return .illegal("Choose a piece first.")
+        }
+
+        if let boardLockMessage {
+            message = boardLockMessage
+            return .illegal(boardLockMessage)
         }
 
         guard localCanActForCurrentTurn else {
@@ -292,7 +304,15 @@ final class GameSession {
         committedCapturedPieces = []
         selectedSquare = nil
         legalMovesForSelection = []
+        boardLockMessage = nil
         message = nil
+    }
+
+    func endRemoteGame(message: String) {
+        boardLockMessage = message
+        tentativeMove = nil
+        legalMovesForSelection = []
+        self.message = message
     }
 
     private func commitRestoredMove(_ move: Move) {

@@ -7,8 +7,18 @@ protocol RemoteGameMoveNotificationPreparing: Sendable {
     func prepareMoveNotification(for descriptor: RemoteGameDescriptor) async throws
 }
 
-actor InMemoryRemoteGameTransport: RemoteGameTransport {
+protocol RemoteGameLifecycleTransport: Sendable {
+    func updateGameStatus(_ status: RemoteGameStatusUpdate) async throws
+    func fetchGameStatus(gameID: RemoteGameID) async throws -> RemoteGameStatusUpdate?
+}
+
+protocol RemoteGameLifecycleNotificationPreparing: Sendable {
+    func prepareGameStatusNotification(gameID: RemoteGameID) async throws
+}
+
+actor InMemoryRemoteGameTransport: RemoteGameTransport, RemoteGameLifecycleTransport {
     private var eventsByGame: [RemoteGameID: [RemoteMoveEvent]] = [:]
+    private var statusByGame: [RemoteGameID: RemoteGameStatusUpdate] = [:]
 
     func sendMove(_ event: RemoteMoveEvent) async throws -> RemoteMoveAck {
         var events = eventsByGame[event.gameID, default: []]
@@ -33,6 +43,14 @@ actor InMemoryRemoteGameTransport: RemoteGameTransport {
         eventsByGame[gameID, default: []]
             .filter { $0.sequenceNumber > sequenceNumber }
             .sorted { $0.sequenceNumber < $1.sequenceNumber }
+    }
+
+    func updateGameStatus(_ status: RemoteGameStatusUpdate) async throws {
+        statusByGame[status.gameID] = status
+    }
+
+    func fetchGameStatus(gameID: RemoteGameID) async throws -> RemoteGameStatusUpdate? {
+        statusByGame[gameID]
     }
 
     #if DEBUG

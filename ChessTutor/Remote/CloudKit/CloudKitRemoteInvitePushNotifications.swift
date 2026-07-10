@@ -5,6 +5,7 @@ import UIKit
 extension Notification.Name {
     static let remoteInviteAcceptanceMayHaveChanged = Notification.Name("RemoteInviteAcceptanceMayHaveChanged")
     static let remoteGameMovesMayHaveChanged = Notification.Name("RemoteGameMovesMayHaveChanged")
+    static let remoteGameStatusMayHaveChanged = Notification.Name("RemoteGameStatusMayHaveChanged")
 }
 
 enum RemoteInviteAcceptancePushUserInfoKey {
@@ -12,6 +13,10 @@ enum RemoteInviteAcceptancePushUserInfoKey {
 }
 
 enum RemoteGameMovePushUserInfoKey {
+    static let gameID = "gameID"
+}
+
+enum RemoteGameStatusPushUserInfoKey {
     static let gameID = "gameID"
 }
 
@@ -32,6 +37,16 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         guard let queryNotification = CKNotification(fromRemoteNotificationDictionary: userInfo) as? CKQueryNotification,
               let subscriptionID = queryNotification.subscriptionID else {
             completionHandler(.noData)
+            return
+        }
+
+        if let gameID = CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscriptionID) {
+            NotificationCenter.default.post(
+                name: .remoteGameStatusMayHaveChanged,
+                object: nil,
+                userInfo: [RemoteGameStatusPushUserInfoKey.gameID: gameID.rawValue]
+            )
+            completionHandler(.newData)
             return
         }
 

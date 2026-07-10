@@ -85,6 +85,42 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         )
     }
 
+    func testUpdateGameStatusSavesAndFetchesStatusRecord() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        let transport = CloudKitRemoteGameTransport(database: database)
+        let status = RemoteGameStatusUpdate(
+            gameID: Self.gameID,
+            status: .ended,
+            updatedByPlayerID: Self.whiteID,
+            updatedAt: Date(timeIntervalSince1970: 20)
+        )
+
+        try await transport.updateGameStatus(status)
+
+        let fetchedStatus = try await transport.fetchGameStatus(gameID: Self.gameID)
+        XCTAssertEqual(fetchedStatus, status)
+        let savedRequest = await database.lastModifyRequest()
+        let lastRequest = try XCTUnwrap(savedRequest)
+        XCTAssertEqual(lastRequest.savedRecordIDs, [CKRecord.ID(recordName: "game-status-game-1")])
+    }
+
+    func testPrepareGameStatusNotificationSubscribesToGameStatusChanges() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        let transport = CloudKitRemoteGameTransport(database: database)
+
+        try await transport.prepareGameStatusNotification(gameID: Self.gameID)
+
+        let savedSubscription = await database.lastSubscription()
+        let subscription = try XCTUnwrap(savedSubscription as? CKQuerySubscription)
+        XCTAssertEqual(subscription.subscriptionID, "remote-game-status-game-1")
+        XCTAssertEqual(subscription.recordType, CloudKitRemoteGameStatusRecordCodec.recordType)
+        XCTAssertEqual(subscription.notificationInfo?.shouldSendContentAvailable, true)
+        XCTAssertEqual(
+            CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscription.subscriptionID),
+            Self.gameID
+        )
+    }
+
     private static let gameID = RemoteGameID(rawValue: "game-1")
     private static let whiteID = RemotePlayerID(rawValue: "white")
     private static let blackID = RemotePlayerID(rawValue: "black")
