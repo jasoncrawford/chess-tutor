@@ -6,6 +6,7 @@ struct TurnStatusPanelView: View {
     let onPlayRemotely: () -> Void
     let onNewGame: () -> Void
     let onCommittedMove: (Move) -> Void
+    let remoteOpponentName: String?
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
 
@@ -15,6 +16,7 @@ struct TurnStatusPanelView: View {
         onPlayRemotely: @escaping () -> Void = {},
         onNewGame: @escaping () -> Void = {},
         onCommittedMove: @escaping (Move) -> Void = { _ in },
+        remoteOpponentName: String? = nil,
         fakeRemoteLab: FakeRemoteGameLab? = nil
     ) {
         self.session = session
@@ -22,20 +24,22 @@ struct TurnStatusPanelView: View {
         self.onPlayRemotely = onPlayRemotely
         self.onNewGame = onNewGame
         self.onCommittedMove = onCommittedMove
+        self.remoteOpponentName = remoteOpponentName
         self.fakeRemoteLab = fakeRemoteLab
     }
     #endif
 
     var body: some View {
+        let presentation = TurnStatusPresentation(session: session, remoteOpponentName: remoteOpponentName)
         VStack(alignment: .leading, spacing: 8) {
-            Text(session.statusText)
+            Text(presentation.headline)
                 .font(AppTheme.panelTitleFont)
                 .foregroundStyle(AppTheme.ink)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let guidanceText = session.guidanceText {
-                Text(guidanceText)
+            if let detail = presentation.detail {
+                Text(detail)
                     .font(AppTheme.panelBodyFont)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)

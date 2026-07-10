@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747E6891942AFE9A8B73651F /* SidebarPanelView.swift */; };
+		0746FACA8781C7FFB19FB001 /* TurnStatusPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */; };
 		0BBAC9DA3293C60DB15BE7BE /* RemoteInviteConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C2424C22CF6B5348610FF9 /* RemoteInviteConfirmation.swift */; };
 		11627D10A1B16FF07697B2A2 /* AboutAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354DE434F0650CD3B105FBCD /* AboutAttribution.swift */; };
 		12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */; };
@@ -71,6 +72,7 @@
 		BC7E29F782216A261AC62043 /* RemoteInviteConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED78066AE168AF6D4963A85 /* RemoteInviteConfirmationView.swift */; };
 		BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */; };
 		BE0D9F5491B6B49A86397C9C /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = FEC8610C587C4B765FE74339 /* Localizable.strings */; };
+		BFA1767ADF598670E769F791 /* TurnStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAFF4074C210B6163B8CFCA2 /* TurnStatusPresentation.swift */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
 		C28AABFA7D36AEEE1DDB975D /* FakeRemoteGameLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */; };
 		C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */; };
@@ -136,6 +138,7 @@
 		53EBAF4FE1AC9E15E1C68FFE /* RemotePlayRuntimeModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlayRuntimeModeTests.swift; sourceTree = "<group>"; };
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
+		61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPresentationTests.swift; sourceTree = "<group>"; };
 		62C65BB76751EB9AD3B6B142 /* CloudKitRemoteInviteTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteInviteTransportTests.swift; sourceTree = "<group>"; };
 		6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveLogTests.swift; sourceTree = "<group>"; };
 		69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveLog.swift; sourceTree = "<group>"; };
@@ -165,6 +168,7 @@
 		A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceIconView.swift; sourceTree = "<group>"; };
 		A67BD6175E66BC35A9C4D85B /* Square.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Square.swift; sourceTree = "<group>"; };
 		A74C6E2BAF6CCA621D32B749 /* GameControlsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameControlsPresentationTests.swift; sourceTree = "<group>"; };
+		AAFF4074C210B6163B8CFCA2 /* TurnStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPresentation.swift; sourceTree = "<group>"; };
 		AB65C5819A7B114A81E68439 /* RemoteInviteTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteTransport.swift; sourceTree = "<group>"; };
 		AC9B8D8BA56FC7EB2E867D6F /* RemoteGameStartAnnouncement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartAnnouncement.swift; sourceTree = "<group>"; };
 		B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionFingerprintingTests.swift; sourceTree = "<group>"; };
@@ -278,6 +282,7 @@
 				A74C6E2BAF6CCA621D32B749 /* GameControlsPresentationTests.swift */,
 				C9308E7E1B991F5BB293B8F6 /* NewGameConfirmationPresentationTests.swift */,
 				C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */,
+				61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -484,6 +489,7 @@
 				747E6891942AFE9A8B73651F /* SidebarPanelView.swift */,
 				E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */,
 				2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */,
+				AAFF4074C210B6163B8CFCA2 /* TurnStatusPresentation.swift */,
 			);
 			path = Sidebar;
 			sourceTree = "<group>";
@@ -669,6 +675,7 @@
 				0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */,
 				EB1D829BCA30B1D146B5A8A5 /* Square.swift in Sources */,
 				65A46B140B9129690D7AE8BA /* TurnStatusPanelView.swift in Sources */,
+				BFA1767ADF598670E769F791 /* TurnStatusPresentation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -707,6 +714,7 @@
 				78872E854EC494500A64436F /* RemotePlayFlowTests.swift in Sources */,
 				ABE2F418D252E8DFDEE1A9F1 /* RemotePlayRuntimeModeTests.swift in Sources */,
 				267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */,
+				0746FACA8781C7FFB19FB001 /* TurnStatusPresentationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

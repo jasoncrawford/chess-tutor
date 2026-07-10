@@ -116,6 +116,7 @@ struct SidePanelView: View {
                     onPlayRemotely: onPlayRemotely,
                     onNewGame: onNewGame,
                     onCommittedMove: onCommittedMove,
+                    remoteOpponentName: remoteNewGameOpponentName,
                     fakeRemoteLab: fakeRemoteLab
                 )
                 #else
@@ -124,7 +125,8 @@ struct SidePanelView: View {
                     remotePlayFlow: remotePlayFlow,
                     onPlayRemotely: onPlayRemotely,
                     onNewGame: onNewGame,
-                    onCommittedMove: onCommittedMove
+                    onCommittedMove: onCommittedMove,
+                    remoteOpponentName: remoteNewGameOpponentName
                 )
                 #endif
             }
