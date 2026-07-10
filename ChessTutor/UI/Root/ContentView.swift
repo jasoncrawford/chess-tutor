@@ -10,6 +10,8 @@ struct ContentView: View {
     @State private var pendingRemoteInviteConfirmation: RemoteInviteConfirmation?
     @State private var pendingRemoteInviteAcceptance: PendingRemoteInviteAcceptance?
     @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
+    @State private var activeRemoteGameController: RemoteGameSessionController?
+    @State private var remoteMoveFetchTask: Task<Void, Never>?
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
@@ -17,6 +19,7 @@ struct ContentView: View {
     @State private var tableRotationDegrees: Double
     private let remoteIdentityStore: RemoteIdentityStore
     private let remoteInviteTransport: any RemoteInviteTransport
+    private let remoteGameTransport: any RemoteGameTransport
     private let remotePlayRuntimeMode: RemotePlayRuntimeMode
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
@@ -30,6 +33,7 @@ struct ContentView: View {
         let runtimeMode = RemotePlayRuntimeMode.resolve()
         self.remotePlayRuntimeMode = runtimeMode
         self.remoteInviteTransport = Self.remoteInviteTransport(for: runtimeMode)
+        self.remoteGameTransport = Self.remoteGameTransport(for: runtimeMode)
         let localProfile = try? remoteIdentityStore.loadLocalProfile()
         _remotePlayFlow = State(
             initialValue: RemotePlayFlow(
@@ -102,6 +106,12 @@ struct ContentView: View {
                 return
             }
             fetchAcceptedInviteAfterPush(id: RemoteInviteID(rawValue: rawInviteID))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .remoteGameMovesMayHaveChanged)) { notification in
+            guard let rawGameID = notification.userInfo?[RemoteGameMovePushUserInfoKey.gameID] as? String else {
+                return
+            }
+            fetchRemoteMovesAfterPush(gameID: RemoteGameID(rawValue: rawGameID))
         }
         .sheet(item: $pendingPromotion) { promotion in
             PromotionPickerView(color: promotion.color) { kind in
@@ -223,6 +233,7 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
+            onCommittedMove: handleCommittedMove,
             fakeRemoteLab: activeFakeRemoteLab
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
@@ -240,13 +251,15 @@ struct ContentView: View {
             onPlayRemotely: {
                 remotePlayFlow.open()
             },
-            onNewGame: startNewGame
+            onNewGame: startNewGame,
+            onCommittedMove: handleCommittedMove
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
         #endif
     }
 
     private func startNewGame() {
+        cancelRemoteGameSync()
         #if DEBUG
         GameLifecycle.startNewGame(
             session: session,
@@ -362,6 +375,7 @@ struct ContentView: View {
 
     private func dismissRemoteStartAnnouncement() {
         pendingRemoteStartAnnouncement = nil
+        startRemoteMoveFetchLoopIfNeeded()
     }
 
     private func selectRemoteInviteColor(_ color: PieceColor) {
@@ -504,12 +518,7 @@ struct ContentView: View {
                 displayName: acceptedInvite.invite.inviter.displayName
             )
         )
-        showRemoteStartAnnouncement(
-            startRemoteGame(
-                opponent: acceptedInvite.invite.inviter,
-                localPlayerColor: acceptedInvite.joinerColor
-            )
-        )
+        showRemoteStartAnnouncement(startRemoteGame(context: .joiner(from: acceptedInvite)))
     }
 
     private func startInviterRemoteGame(_ acceptedInvite: RemoteAcceptedInvite) {
@@ -519,32 +528,113 @@ struct ContentView: View {
                 displayName: acceptedInvite.joiner.displayName
             )
         )
-        showRemoteStartAnnouncement(
-            startRemoteGame(
-                opponent: acceptedInvite.joiner,
-                localPlayerColor: acceptedInvite.joinerColor.opposite
-            )
+        showRemoteStartAnnouncement(startRemoteGame(context: .inviter(from: acceptedInvite)))
+    }
+
+    private func startRemoteGame(context: RemoteGameStartContext) -> RemoteGameStartAnnouncement {
+        cancelRemoteGameSync()
+        session.newGame()
+        switch context.localPlayerColor {
+        case .white:
+            session.whitePlayer = .humanLocal
+            session.blackPlayer = .remote(playerID: context.opponent.id.rawValue)
+        case .black:
+            session.whitePlayer = .remote(playerID: context.opponent.id.rawValue)
+            session.blackPlayer = .humanLocal
+        }
+        activeRemoteGameController = RemoteGameSessionController(
+            descriptor: context.descriptor,
+            transport: remoteGameTransport,
+            initialState: .startingPosition()
+        )
+        prepareRemoteMoveNotification(for: context.descriptor)
+        remotePlayFlow.cancel()
+        return RemoteGameStartAnnouncement(
+            opponentName: context.opponent.displayName,
+            localPlayerColor: context.localPlayerColor
         )
     }
 
-    private func startRemoteGame(
-        opponent: RemotePlayerRef,
-        localPlayerColor: PieceColor
-    ) -> RemoteGameStartAnnouncement {
-        session.newGame()
-        switch localPlayerColor {
-        case .white:
-            session.whitePlayer = .humanLocal
-            session.blackPlayer = .remote(playerID: opponent.id.rawValue)
-        case .black:
-            session.whitePlayer = .remote(playerID: opponent.id.rawValue)
-            session.blackPlayer = .humanLocal
+    private func handleCommittedMove(_ move: Move) {
+        #if DEBUG
+        if let fakeRemoteLab = activeFakeRemoteLab, fakeRemoteLab.isActive {
+            Task { @MainActor in
+                try? await fakeRemoteLab.recordCommittedLocalMove(move)
+            }
+            return
         }
-        remotePlayFlow.cancel()
-        return RemoteGameStartAnnouncement(
-            opponentName: opponent.displayName,
-            localPlayerColor: localPlayerColor
-        )
+        #endif
+
+        guard let activeRemoteGameController else {
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                try activeRemoteGameController.recordCommittedLocalMove(move)
+                try await activeRemoteGameController.uploadPendingMoves()
+                startRemoteMoveFetchLoopIfNeeded()
+            } catch {
+                session.message = "Could not sync move. Check your connection."
+            }
+        }
+    }
+
+    private func prepareRemoteMoveNotification(for descriptor: RemoteGameDescriptor) {
+        guard let notificationPreparing = remoteGameTransport as? any RemoteGameMoveNotificationPreparing else {
+            return
+        }
+
+        Task {
+            try? await notificationPreparing.prepareMoveNotification(for: descriptor)
+        }
+    }
+
+    private func fetchRemoteMovesAfterPush(gameID: RemoteGameID) {
+        guard activeRemoteGameController?.gameID == gameID else {
+            return
+        }
+        startRemoteMoveFetchLoopIfNeeded()
+    }
+
+    private func startRemoteMoveFetchLoopIfNeeded() {
+        guard activeRemoteGameController != nil,
+              !session.localCanActForCurrentTurn else {
+            return
+        }
+        remoteMoveFetchTask?.cancel()
+        remoteMoveFetchTask = Task { @MainActor in
+            while !Task.isCancelled {
+                guard let activeRemoteGameController else {
+                    remoteMoveFetchTask = nil
+                    return
+                }
+                guard !session.localCanActForCurrentTurn else {
+                    remoteMoveFetchTask = nil
+                    return
+                }
+
+                do {
+                    let appliedMoves = try await activeRemoteGameController.fetchAndApplyRemoteMoves(to: session)
+                    if !appliedMoves.isEmpty {
+                        remoteMoveFetchTask = nil
+                        return
+                    }
+                } catch {
+                    if !Task.isCancelled {
+                        session.message = "Could not sync remote move. Check your connection."
+                    }
+                }
+
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    private func cancelRemoteGameSync() {
+        remoteMoveFetchTask?.cancel()
+        remoteMoveFetchTask = nil
+        activeRemoteGameController = nil
     }
 
     private static func remoteInviteTransport(for mode: RemotePlayRuntimeMode) -> any RemoteInviteTransport {
@@ -553,6 +643,15 @@ struct ContentView: View {
             return InMemoryRemoteInviteTransport()
         case .cloudKit:
             return CloudKitRemoteInviteTransport()
+        }
+    }
+
+    private static func remoteGameTransport(for mode: RemotePlayRuntimeMode) -> any RemoteGameTransport {
+        switch mode {
+        case .fakeLocal:
+            return InMemoryRemoteGameTransport()
+        case .cloudKit:
+            return CloudKitRemoteGameTransport()
         }
     }
 

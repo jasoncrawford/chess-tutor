@@ -5,6 +5,7 @@ struct TurnStatusPanelView: View {
     let remotePlayFlow: RemotePlayFlow?
     let onPlayRemotely: () -> Void
     let onNewGame: () -> Void
+    let onCommittedMove: (Move) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
 
@@ -13,12 +14,14 @@ struct TurnStatusPanelView: View {
         remotePlayFlow: RemotePlayFlow? = nil,
         onPlayRemotely: @escaping () -> Void = {},
         onNewGame: @escaping () -> Void = {},
+        onCommittedMove: @escaping (Move) -> Void = { _ in },
         fakeRemoteLab: FakeRemoteGameLab? = nil
     ) {
         self.session = session
         self.remotePlayFlow = remotePlayFlow
         self.onPlayRemotely = onPlayRemotely
         self.onNewGame = onNewGame
+        self.onCommittedMove = onCommittedMove
         self.fakeRemoteLab = fakeRemoteLab
     }
     #endif
@@ -47,16 +50,7 @@ struct TurnStatusPanelView: View {
                 isRemotePlayAvailable: remotePlayFlow?.canShowEntryPoint(for: session) ?? false,
                 onPlayRemotely: onPlayRemotely,
                 onNewGame: onNewGame,
-                onCommittedMove: { move in
-                #if DEBUG
-                    guard let fakeRemoteLab else {
-                        return
-                    }
-                    Task { @MainActor in
-                        try? await fakeRemoteLab.recordCommittedLocalMove(move)
-                    }
-                #endif
-                }
+                onCommittedMove: onCommittedMove
             )
 
             #if DEBUG

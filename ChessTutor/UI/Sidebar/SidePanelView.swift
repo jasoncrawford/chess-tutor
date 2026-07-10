@@ -10,6 +10,7 @@ struct SidePanelView: View {
     let onAbout: () -> Void
     let onPlayRemotely: () -> Void
     let onNewGame: () -> Void
+    let onCommittedMove: (Move) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -100,6 +101,7 @@ struct SidePanelView: View {
                     remotePlayFlow: remotePlayFlow,
                     onPlayRemotely: onPlayRemotely,
                     onNewGame: onNewGame,
+                    onCommittedMove: onCommittedMove,
                     fakeRemoteLab: fakeRemoteLab
                 )
                 #else
@@ -107,7 +109,8 @@ struct SidePanelView: View {
                     session: session,
                     remotePlayFlow: remotePlayFlow,
                     onPlayRemotely: onPlayRemotely,
-                    onNewGame: onNewGame
+                    onNewGame: onNewGame,
+                    onCommittedMove: onCommittedMove
                 )
                 #endif
             }

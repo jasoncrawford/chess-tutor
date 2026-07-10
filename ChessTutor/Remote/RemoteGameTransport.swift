@@ -3,6 +3,10 @@ protocol RemoteGameTransport: Sendable {
     func fetchMoves(gameID: RemoteGameID, after sequenceNumber: Int) async throws -> [RemoteMoveEvent]
 }
 
+protocol RemoteGameMoveNotificationPreparing: Sendable {
+    func prepareMoveNotification(for descriptor: RemoteGameDescriptor) async throws
+}
+
 actor InMemoryRemoteGameTransport: RemoteGameTransport {
     private var eventsByGame: [RemoteGameID: [RemoteMoveEvent]] = [:]
 
