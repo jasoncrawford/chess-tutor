@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 struct ContentView: View {
     @State private var session = GameSession()
@@ -605,6 +606,7 @@ struct ContentView: View {
         persistActiveRemoteGame()
         prepareRemoteMoveNotification(for: context.descriptor)
         prepareRemoteGameStatusNotification(for: context.descriptor.id)
+        requestRemoteNotificationAuthorizationIfNeeded()
         remotePlayFlow.cancel()
         return RemoteGameStartAnnouncement(
             opponentName: context.opponent.displayName,
@@ -687,6 +689,19 @@ struct ContentView: View {
 
         Task {
             try? await notificationPreparing.prepareGameStatusNotification(gameID: gameID)
+        }
+    }
+
+    private func requestRemoteNotificationAuthorizationIfNeeded() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            guard RemoteNotificationPermissionPolicy.shouldRequestAuthorization(
+                for: settings.authorizationStatus
+            ) else {
+                return
+            }
+            _ = try? await center.requestAuthorization(options: [.alert])
         }
     }
 
