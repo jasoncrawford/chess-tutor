@@ -17,6 +17,8 @@
 		1788A08929C2E9314D8016EE /* RemoteOutboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */; };
 		18F2A3C4D5E60718293A4B5C /* CloudKitPendingInviteRecordCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A3B4C5D6E708192A3B4C5D /* CloudKitPendingInviteRecordCodecTests.swift */; };
 		19F2A3C4D5E60718293A4B5C /* CloudKitPendingInviteRecordCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA3B4C5D6E708192A3B4C5D /* CloudKitPendingInviteRecordCodec.swift */; };
+		1AF2A3C4D5E60718293A4B5C /* CloudKitRemoteInviteTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA3B4C5D6E708192A3B4C5D /* CloudKitRemoteInviteTransportTests.swift */; };
+		1BF2A3C4D5E60718293A4B5C /* CloudKitRemoteInviteTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA3B4C5D6E708192A3B4C5D /* CloudKitRemoteInviteTransport.swift */; };
 		1A40427580D75267928EE49F /* GameLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13E0EE4C35EED64A264EF55 /* GameLifecycleTests.swift */; };
 		1C16BC492A550B600532F28F /* Move.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E571D9060609ECB4FB126C /* Move.swift */; };
 		1CB06F0430E219CB8DA57644 /* LegalMoveHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9250CD456B192943686998F /* LegalMoveHighlighter.swift */; };
@@ -103,6 +105,8 @@
 		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
 		29A3B4C5D6E708192A3B4C5D /* CloudKitPendingInviteRecordCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPendingInviteRecordCodecTests.swift; sourceTree = "<group>"; };
 		2AA3B4C5D6E708192A3B4C5D /* CloudKitPendingInviteRecordCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPendingInviteRecordCodec.swift; sourceTree = "<group>"; };
+		2BA3B4C5D6E708192A3B4C5D /* CloudKitRemoteInviteTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteInviteTransportTests.swift; sourceTree = "<group>"; };
+		2CA3B4C5D6E708192A3B4C5D /* CloudKitRemoteInviteTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteInviteTransport.swift; sourceTree = "<group>"; };
 		2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPanelView.swift; sourceTree = "<group>"; };
 		35043CEFFECDB685BCD9254A /* RemoteIdentityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdentityStore.swift; sourceTree = "<group>"; };
 		354DE434F0650CD3B105FBCD /* AboutAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAttribution.swift; sourceTree = "<group>"; };
@@ -317,6 +321,7 @@
 			isa = PBXGroup;
 			children = (
 				29A3B4C5D6E708192A3B4C5D /* CloudKitPendingInviteRecordCodecTests.swift */,
+				2BA3B4C5D6E708192A3B4C5D /* CloudKitRemoteInviteTransportTests.swift */,
 			);
 			path = CloudKit;
 			sourceTree = "<group>";
@@ -345,6 +350,7 @@
 			isa = PBXGroup;
 			children = (
 				2AA3B4C5D6E708192A3B4C5D /* CloudKitPendingInviteRecordCodec.swift */,
+				2CA3B4C5D6E708192A3B4C5D /* CloudKitRemoteInviteTransport.swift */,
 			);
 			path = CloudKit;
 			sourceTree = "<group>";
@@ -588,6 +594,7 @@
 				BC7E29F782216A261AC62043 /* RemoteInviteConfirmationView.swift in Sources */,
 				AB97CF19E16DEA81097C05D1 /* RemoteInviteTransport.swift in Sources */,
 				19F2A3C4D5E60718293A4B5C /* CloudKitPendingInviteRecordCodec.swift in Sources */,
+				1BF2A3C4D5E60718293A4B5C /* CloudKitRemoteInviteTransport.swift in Sources */,
 				BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */,
 				83DC3C726FC02EF74E3695E6 /* RemoteMoveLog.swift in Sources */,
 				160DCD32DCAC413D2B188998 /* RemoteOutbox.swift in Sources */,
@@ -624,6 +631,7 @@
 				3194365AAE619FDD740212E8 /* RemoteInviteTransportModelTests.swift in Sources */,
 				95900C448E1F1D0D3F027C21 /* RemoteInviteTransportTests.swift in Sources */,
 				18F2A3C4D5E60718293A4B5C /* CloudKitPendingInviteRecordCodecTests.swift in Sources */,
+				1AF2A3C4D5E60718293A4B5C /* CloudKitRemoteInviteTransportTests.swift in Sources */,
 				16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */,
 				3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */,
 				1788A08929C2E9314D8016EE /* RemoteOutboxTests.swift in Sources */,
