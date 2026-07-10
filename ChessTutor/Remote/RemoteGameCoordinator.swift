@@ -159,6 +159,16 @@ struct RemoteGameCoordinator {
         guard let piece = state.board[move.from] else {
             return "Move"
         }
-        return "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue) to \(RemoteMoveCodec.encodeSquare(move.to))"
+        let playerName = playerName(for: piece.color)
+        return "\(playerName) moved \(piece.color.rawValue.capitalized) \(piece.kind.rawValue) to \(RemoteMoveCodec.encodeSquare(move.to))"
+    }
+
+    private func playerName(for color: PieceColor) -> String {
+        switch color {
+        case .white:
+            return descriptor.whitePlayer.displayName
+        case .black:
+            return descriptor.blackPlayer.displayName
+        }
     }
 }

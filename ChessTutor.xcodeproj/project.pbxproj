@@ -70,6 +70,7 @@
 		B1D8CEA60129F7D6D7E2E590 /* RemoteGameStartAnnouncement.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9B8D8BA56FC7EB2E867D6F /* RemoteGameStartAnnouncement.swift */; };
 		BC7E29F782216A261AC62043 /* RemoteInviteConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED78066AE168AF6D4963A85 /* RemoteInviteConfirmationView.swift */; };
 		BDB70E01C836A47856E05B2D /* RemoteMoveCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */; };
+		BE0D9F5491B6B49A86397C9C /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = FEC8610C587C4B765FE74339 /* Localizable.strings */; };
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
 		C28AABFA7D36AEEE1DDB975D /* FakeRemoteGameLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */; };
 		C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */; };
@@ -205,6 +206,7 @@
 		F476FE327EB86F6C3714E880 /* NewGameConfirmationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewGameConfirmationPresentation.swift; sourceTree = "<group>"; };
 		F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameModels.swift; sourceTree = "<group>"; };
 		FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ChessTutorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FEC8610C587C4B765FE74339 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -407,6 +409,7 @@
 			children = (
 				471DD2B1085A1111D4C3723A /* ChessTutor.entitlements */,
 				743E2F9D0A9B836A2641FB93 /* Info.plist */,
+				FEC8610C587C4B765FE74339 /* Localizable.strings */,
 				59D4B980F3B4D416419B2779 /* App */,
 				640B8EB034B7847829CB32EA /* Core */,
 				2E9200B06BCD5CF193136FF5 /* Debug */,
@@ -598,6 +601,7 @@
 			files = (
 				F4D684FBA8255C666B2867D3 /* Assets.xcassets in Resources */,
 				4596A725A76CE902F744D826 /* ChessArt-MIT.txt in Resources */,
+				BE0D9F5491B6B49A86397C9C /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -142,6 +142,8 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         )
         let notificationInfo = CKSubscription.NotificationInfo()
         notificationInfo.shouldSendContentAvailable = true
+        notificationInfo.alertLocalizationKey = "REMOTE_MOVE_NOTIFICATION_BODY"
+        notificationInfo.alertLocalizationArgs = [CloudKitRemoteMoveRecordCodec.Field.notificationSummary]
         subscription.notificationInfo = notificationInfo
         _ = try await database.saveSubscription(subscription)
     }

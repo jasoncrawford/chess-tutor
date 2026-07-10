@@ -16,6 +16,7 @@ final class RemoteGameCoordinatorTests: XCTestCase {
         XCTAssertEqual(event.sequenceNumber, 1)
         XCTAssertEqual(event.actorPlayerID, whiteID)
         XCTAssertEqual(event.move, RemoteMoveCodec.encode(move))
+        XCTAssertEqual(event.notificationSummary, "White moved White pawn to e4")
         XCTAssertEqual(event.previousPositionFingerprint, PositionFingerprinting.fingerprint(for: .startingPosition()))
         XCTAssertEqual(coordinator.lastAppliedSequence, 1)
         XCTAssertEqual(coordinator.acceptedEvents, [event])
