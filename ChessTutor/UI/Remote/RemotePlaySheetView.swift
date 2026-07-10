@@ -4,11 +4,16 @@ struct RemotePlaySheetView: View {
     @Bindable var flow: RemotePlayFlow
     @Bindable var session: GameSession
     @State private var copyFeedbackTask: Task<Void, Never>?
+    @State private var remoteInviteTask: Task<Void, Never>?
+    @State private var remoteInviteErrorMessage: String?
+    @State private var isWorkingWithRemoteInvite = false
     let onLocalDisplayNameSaved: (String) -> Void
     let onInviteLinkCopied: (URL) -> Void
     let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
     let onRemoteGameStarted: (RemoteGameStartAnnouncement) -> Void
     let onRemoteInviteConfirmationNeeded: (RemoteInviteConfirmation) -> Void
+    let onCreateRemoteInvite: (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite
+    let onFetchRemoteInvite: (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -20,7 +25,13 @@ struct RemotePlaySheetView: View {
         onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
         onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
-        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in }
+        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in },
+        onCreateRemoteInvite: @escaping (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite = { _, _ in
+            throw RemoteInviteTransportError.notFound
+        },
+        onFetchRemoteInvite: @escaping (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite = { _, _ in
+            throw RemoteInviteTransportError.notFound
+        }
     ) {
         self.flow = flow
         self.session = session
@@ -29,6 +40,8 @@ struct RemotePlaySheetView: View {
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
         self.onRemoteGameStarted = onRemoteGameStarted
         self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
+        self.onCreateRemoteInvite = onCreateRemoteInvite
+        self.onFetchRemoteInvite = onFetchRemoteInvite
         #if DEBUG
         self.fakeRemoteLab = nil
         #endif
@@ -43,7 +56,13 @@ struct RemotePlaySheetView: View {
         onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
         onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
-        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in }
+        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in },
+        onCreateRemoteInvite: @escaping (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite = { _, _ in
+            throw RemoteInviteTransportError.notFound
+        },
+        onFetchRemoteInvite: @escaping (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite = { _, _ in
+            throw RemoteInviteTransportError.notFound
+        }
     ) {
         self.flow = flow
         self.session = session
@@ -53,6 +72,8 @@ struct RemotePlaySheetView: View {
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
         self.onRemoteGameStarted = onRemoteGameStarted
         self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
+        self.onCreateRemoteInvite = onCreateRemoteInvite
+        self.onFetchRemoteInvite = onFetchRemoteInvite
     }
     #endif
 
@@ -80,6 +101,11 @@ struct RemotePlaySheetView: View {
         .padding(26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppTheme.panel)
+        .onDisappear {
+            remoteInviteTask?.cancel()
+            remoteInviteTask = nil
+            isWorkingWithRemoteInvite = false
+        }
     }
 
     private var header: some View {
@@ -254,13 +280,21 @@ struct RemotePlaySheetView: View {
             }
 
             Button {
-                _ = flow.requestSendInvite()
+                sendInvite(target: target)
             } label: {
                 Label("Send Invite", systemImage: "paperplane")
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
             }
             .buttonStyle(RemotePlaySheetPrimaryButtonStyle())
+            .disabled(isWorkingWithRemoteInvite)
+            .opacity(isWorkingWithRemoteInvite ? 0.55 : 1)
+
+            if let remoteInviteErrorMessage {
+                Text(remoteInviteErrorMessage)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(AppTheme.ink.opacity(0.68))
+            }
         }
     }
 
@@ -331,10 +365,71 @@ struct RemotePlaySheetView: View {
         switch result {
         case .needsConfirmation(let confirmation):
             onRemoteInviteConfirmationNeeded(confirmation)
-        case .sentInvite, .saved:
+        case .sentInvite(let pendingInvite):
+            createRemoteInvite(target: pendingInvite.target, whiteChoice: pendingInvite.whiteChoice)
+        case .saved:
             break
         }
+        #else
+        if case .sentInvite(let pendingInvite) = result {
+            createRemoteInvite(target: pendingInvite.target, whiteChoice: pendingInvite.whiteChoice)
+        }
         #endif
+    }
+
+    private func sendInvite(target: RemotePlayFlow.InviteTarget) {
+        remoteInviteErrorMessage = nil
+        let whiteChoice = flow.selectedWhiteChoice
+
+        guard flow.localDisplayName != nil else {
+            _ = flow.requestSendInvite()
+            return
+        }
+
+        createRemoteInvite(target: target, whiteChoice: whiteChoice)
+    }
+
+    private func createRemoteInvite(
+        target: RemotePlayFlow.InviteTarget,
+        whiteChoice: RemotePlayFlow.WhiteChoice
+    ) {
+        showInviteChoice(target: target, whiteChoice: whiteChoice)
+        isWorkingWithRemoteInvite = true
+        remoteInviteErrorMessage = nil
+        remoteInviteTask?.cancel()
+        remoteInviteTask = Task { @MainActor in
+            defer {
+                isWorkingWithRemoteInvite = false
+                remoteInviteTask = nil
+            }
+
+            do {
+                let invite = try await onCreateRemoteInvite(target, whiteChoice)
+                guard !Task.isCancelled else {
+                    return
+                }
+                flow.showCreatedRemoteInvite(invite, target: target)
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                showInviteChoice(target: target, whiteChoice: whiteChoice)
+                remoteInviteErrorMessage = "Could not create invite. Check your connection and try again."
+            }
+        }
+    }
+
+    private func showInviteChoice(
+        target: RemotePlayFlow.InviteTarget,
+        whiteChoice: RemotePlayFlow.WhiteChoice
+    ) {
+        switch target {
+        case .known(let player):
+            flow.invite(player)
+        case .newPlayer:
+            flow.inviteSomeoneNew()
+        }
+        flow.chooseWhite(whiteChoice)
     }
 
     private func whiteChoiceButton(

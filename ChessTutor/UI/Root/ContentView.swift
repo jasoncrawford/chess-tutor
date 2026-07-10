@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
     private let remoteIdentityStore: RemoteIdentityStore
+    private let remoteInviteTransport: any RemoteInviteTransport
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
     @State private var fakeRemoteLab = FakeRemoteGameLab()
@@ -21,6 +22,11 @@ struct ContentView: View {
     init() {
         let remoteIdentityStore = RemoteIdentityStore()
         self.remoteIdentityStore = remoteIdentityStore
+        #if DEBUG
+        self.remoteInviteTransport = InMemoryRemoteInviteTransport()
+        #else
+        self.remoteInviteTransport = CloudKitRemoteInviteTransport()
+        #endif
         let localProfile = try? remoteIdentityStore.loadLocalProfile()
         _remotePlayFlow = State(
             initialValue: RemotePlayFlow(
@@ -119,7 +125,9 @@ struct ContentView: View {
                 onInviteLinkCopied: copyInviteLink,
                 onKnownPlayerAccepted: rememberKnownPlayer,
                 onRemoteGameStarted: showRemoteStartAnnouncement,
-                onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation
+                onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation,
+                onCreateRemoteInvite: createRemoteInvite,
+                onFetchRemoteInvite: fetchRemoteInvite
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -131,7 +139,9 @@ struct ContentView: View {
                 onInviteLinkCopied: copyInviteLink,
                 onKnownPlayerAccepted: rememberKnownPlayer,
                 onRemoteGameStarted: showRemoteStartAnnouncement,
-                onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation
+                onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation,
+                onCreateRemoteInvite: createRemoteInvite,
+                onFetchRemoteInvite: fetchRemoteInvite
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -243,6 +253,54 @@ struct ContentView: View {
     private func saveLocalDisplayName(_ displayName: String) {
         if let profile = try? remoteIdentityStore.saveLocalDisplayName(displayName) {
             remotePlayFlow.updateLocalDisplayName(profile.displayName)
+        }
+    }
+
+    private func createRemoteInvite(
+        target: RemotePlayFlow.InviteTarget,
+        whiteChoice: RemotePlayFlow.WhiteChoice
+    ) async throws -> RemotePendingInvite {
+        let profile = try remoteIdentityStore.loadLocalProfile()
+        guard let displayName = profile.displayName else {
+            throw RemoteInviteTransportError.notFound
+        }
+
+        let now = Date()
+        return try await remoteInviteTransport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: RemotePlayerRef(id: profile.id, displayName: displayName),
+                inviteeDisplayName: remoteInviteeDisplayName(for: target),
+                whiteAssignment: remoteWhiteAssignment(from: whiteChoice),
+                now: now,
+                expiresAt: now.addingTimeInterval(10 * 60)
+            )
+        )
+    }
+
+    private func fetchRemoteInvite(
+        code: InviteCode,
+        token: RemoteInviteToken?
+    ) async throws -> RemotePendingInvite {
+        try await remoteInviteTransport.fetchInvite(code: code, token: token, now: Date())
+    }
+
+    private func remoteInviteeDisplayName(for target: RemotePlayFlow.InviteTarget) -> String? {
+        switch target {
+        case .known(let player):
+            return player.displayName
+        case .newPlayer:
+            return nil
+        }
+    }
+
+    private func remoteWhiteAssignment(from choice: RemotePlayFlow.WhiteChoice) -> RemoteInviteWhiteAssignment {
+        switch choice {
+        case .localPlayer:
+            return .inviter
+        case .invitee:
+            return .invitee
+        case .inviteeChooses:
+            return .inviteeChooses
         }
     }
 
