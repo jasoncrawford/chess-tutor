@@ -63,6 +63,24 @@ final class RemoteInviteTransportTests: XCTestCase {
         )
     }
 
+    func testAcceptedInviteCanBeFetchedByInviter() async throws {
+        let transport = makeTransport()
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        let request = JoinRemoteInviteRequest(
+            code: invite.code,
+            token: invite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let beforeAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertNil(beforeAcceptance)
+        let accepted = try await transport.acceptInvite(request, chosenColor: .white)
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+
+        XCTAssertEqual(fetchedAcceptance, accepted)
+    }
+
     func testFixedWhiteAssignmentRejectsIncompatibleChosenColor() async throws {
         let transport = makeTransport()
         let invite = try await createInvite(on: transport, whiteAssignment: .invitee)

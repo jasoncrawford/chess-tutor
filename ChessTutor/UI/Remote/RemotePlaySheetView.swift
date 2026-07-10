@@ -12,9 +12,11 @@ struct RemotePlaySheetView: View {
     let onInviteLinkCopied: (URL) -> Void
     let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
     let onRemoteGameStarted: (RemoteGameStartAnnouncement) -> Void
-    let onRemoteInviteConfirmationNeeded: (RemoteInviteConfirmation) -> Void
+    let onRemoteInviteConfirmationNeeded: (RemoteInviteConfirmation, RemotePendingInvite?) -> Void
     let onCreateRemoteInvite: @Sendable (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite
     let onFetchRemoteInvite: @Sendable (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite
+    let onFetchAcceptedRemoteInvite: @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite?
+    let onRemoteInviteAccepted: (RemoteAcceptedInvite) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -26,13 +28,15 @@ struct RemotePlaySheetView: View {
         onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
         onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
-        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in },
+        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation, RemotePendingInvite?) -> Void = { _, _ in },
         onCreateRemoteInvite: @escaping @Sendable (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite = { _, _ in
             throw RemoteInviteTransportError.notFound
         },
         onFetchRemoteInvite: @escaping @Sendable (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite = { _, _ in
             throw RemoteInviteTransportError.notFound
-        }
+        },
+        onFetchAcceptedRemoteInvite: @escaping @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite? = { _ in nil },
+        onRemoteInviteAccepted: @escaping (RemoteAcceptedInvite) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
@@ -43,6 +47,8 @@ struct RemotePlaySheetView: View {
         self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
         self.onCreateRemoteInvite = onCreateRemoteInvite
         self.onFetchRemoteInvite = onFetchRemoteInvite
+        self.onFetchAcceptedRemoteInvite = onFetchAcceptedRemoteInvite
+        self.onRemoteInviteAccepted = onRemoteInviteAccepted
         #if DEBUG
         self.fakeRemoteLab = nil
         #endif
@@ -57,13 +63,15 @@ struct RemotePlaySheetView: View {
         onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
         onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
-        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in },
+        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation, RemotePendingInvite?) -> Void = { _, _ in },
         onCreateRemoteInvite: @escaping @Sendable (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite = { _, _ in
             throw RemoteInviteTransportError.notFound
         },
         onFetchRemoteInvite: @escaping @Sendable (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite = { _, _ in
             throw RemoteInviteTransportError.notFound
-        }
+        },
+        onFetchAcceptedRemoteInvite: @escaping @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite? = { _ in nil },
+        onRemoteInviteAccepted: @escaping (RemoteAcceptedInvite) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
@@ -75,6 +83,8 @@ struct RemotePlaySheetView: View {
         self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
         self.onCreateRemoteInvite = onCreateRemoteInvite
         self.onFetchRemoteInvite = onFetchRemoteInvite
+        self.onFetchAcceptedRemoteInvite = onFetchAcceptedRemoteInvite
+        self.onRemoteInviteAccepted = onRemoteInviteAccepted
     }
     #endif
 
@@ -298,7 +308,8 @@ struct RemotePlaySheetView: View {
                     RemoteInviteConfirmation(
                         opponentName: invite.inviter.displayName,
                         localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner
-                    )
+                    ),
+                    invite
                 )
             } catch {
                 guard isCurrentRemoteInviteRequest(request) else {
@@ -419,7 +430,7 @@ struct RemotePlaySheetView: View {
         #if DEBUG
         switch result {
         case .needsConfirmation(let confirmation):
-            onRemoteInviteConfirmationNeeded(confirmation)
+            onRemoteInviteConfirmationNeeded(confirmation, nil)
         case .sentInvite(let pendingInvite):
             createRemoteInvite(target: pendingInvite.target, whiteChoice: pendingInvite.whiteChoice)
         case .saved:
@@ -586,6 +597,14 @@ struct RemotePlaySheetView: View {
             }
             #endif
         }
+        .task(id: pendingInvite.remoteInviteID) {
+            #if DEBUG
+            guard fakeRemoteLab == nil else {
+                return
+            }
+            #endif
+            await pollForAcceptedInvite(pendingInvite)
+        }
     }
 
     private func copyInviteLink(_ inviteURL: URL) {
@@ -653,6 +672,32 @@ struct RemotePlaySheetView: View {
         KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
     }
     #endif
+
+    private func pollForAcceptedInvite(_ pendingInvite: RemotePlayFlow.PendingInvite) async {
+        guard let inviteID = pendingInvite.remoteInviteID else {
+            return
+        }
+
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(for: .seconds(2))
+                guard case .waitingForInvitee(let currentInvite) = flow.stage,
+                      currentInvite.remoteInviteID == inviteID else {
+                    return
+                }
+                guard let acceptedInvite = try await onFetchAcceptedRemoteInvite(inviteID) else {
+                    continue
+                }
+                flow.cancel()
+                onRemoteInviteAccepted(acceptedInvite)
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                continue
+            }
+        }
+    }
 }
 
 private struct RemoteInviteRequest: Equatable {

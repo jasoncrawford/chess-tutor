@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var remotePlayFlow: RemotePlayFlow
     @State private var pendingRemoteStartAnnouncement: RemoteGameStartAnnouncement?
     @State private var pendingRemoteInviteConfirmation: RemoteInviteConfirmation?
+    @State private var pendingRemoteInviteAcceptance: PendingRemoteInviteAcceptance?
+    @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
@@ -15,6 +17,7 @@ struct ContentView: View {
     @State private var tableRotationDegrees: Double
     private let remoteIdentityStore: RemoteIdentityStore
     private let remoteInviteTransport: any RemoteInviteTransport
+    private let remotePlayRuntimeMode: RemotePlayRuntimeMode
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
     @State private var fakeRemoteLab = FakeRemoteGameLab()
@@ -24,11 +27,9 @@ struct ContentView: View {
     init() {
         let remoteIdentityStore = RemoteIdentityStore()
         self.remoteIdentityStore = remoteIdentityStore
-        #if DEBUG
-        self.remoteInviteTransport = InMemoryRemoteInviteTransport()
-        #else
-        self.remoteInviteTransport = CloudKitRemoteInviteTransport()
-        #endif
+        let runtimeMode = RemotePlayRuntimeMode.resolve()
+        self.remotePlayRuntimeMode = runtimeMode
+        self.remoteInviteTransport = Self.remoteInviteTransport(for: runtimeMode)
         let localProfile = try? remoteIdentityStore.loadLocalProfile()
         _remotePlayFlow = State(
             initialValue: RemotePlayFlow(
@@ -122,14 +123,16 @@ struct ContentView: View {
             RemotePlaySheetView(
                 flow: remotePlayFlow,
                 session: session,
-                fakeRemoteLab: fakeRemoteLab,
+                fakeRemoteLab: activeFakeRemoteLab,
                 onLocalDisplayNameSaved: saveLocalDisplayName,
                 onInviteLinkCopied: copyInviteLink,
                 onKnownPlayerAccepted: rememberKnownPlayer,
                 onRemoteGameStarted: showRemoteStartAnnouncement,
                 onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation,
                 onCreateRemoteInvite: createRemoteInvite,
-                onFetchRemoteInvite: fetchRemoteInvite
+                onFetchRemoteInvite: fetchRemoteInvite,
+                onFetchAcceptedRemoteInvite: fetchAcceptedRemoteInvite,
+                onRemoteInviteAccepted: startInviterRemoteGame
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -143,7 +146,9 @@ struct ContentView: View {
                 onRemoteGameStarted: showRemoteStartAnnouncement,
                 onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation,
                 onCreateRemoteInvite: createRemoteInvite,
-                onFetchRemoteInvite: fetchRemoteInvite
+                onFetchRemoteInvite: fetchRemoteInvite,
+                onFetchAcceptedRemoteInvite: fetchAcceptedRemoteInvite,
+                onRemoteInviteAccepted: startInviterRemoteGame
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -212,7 +217,7 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
-            fakeRemoteLab: fakeRemoteLab
+            fakeRemoteLab: activeFakeRemoteLab
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
         #else
@@ -240,7 +245,7 @@ struct ContentView: View {
         GameLifecycle.startNewGame(
             session: session,
             remotePlayFlow: remotePlayFlow,
-            fakeRemoteLab: fakeRemoteLab
+            fakeRemoteLab: activeFakeRemoteLab
         )
         #else
         GameLifecycle.startNewGame(session: session, remotePlayFlow: remotePlayFlow)
@@ -286,6 +291,10 @@ struct ContentView: View {
         try await remoteInviteTransport.fetchInvite(code: code, token: token, now: Date())
     }
 
+    private func fetchAcceptedRemoteInvite(id: RemoteInviteID) async throws -> RemoteAcceptedInvite? {
+        try await remoteInviteTransport.acceptedInvite(id: id, now: Date())
+    }
+
     private func remoteInviteeDisplayName(for target: RemotePlayFlow.InviteTarget) -> String? {
         switch target {
         case .known(let player):
@@ -314,8 +323,12 @@ struct ContentView: View {
         pendingRemoteStartAnnouncement = announcement
     }
 
-    private func showRemoteInviteConfirmation(_ confirmation: RemoteInviteConfirmation) {
+    private func showRemoteInviteConfirmation(
+        _ confirmation: RemoteInviteConfirmation,
+        invite: RemotePendingInvite? = nil
+    ) {
         pendingRemoteInviteConfirmation = confirmation
+        pendingRemoteInviteAcceptance = invite.map(PendingRemoteInviteAcceptance.init(invite:))
     }
 
     private func dismissRemoteStartAnnouncement() {
@@ -328,6 +341,9 @@ struct ContentView: View {
 
     private func cancelRemoteInvite() {
         pendingRemoteInviteConfirmation = nil
+        pendingRemoteInviteAcceptance = nil
+        remoteInviteAcceptanceTask?.cancel()
+        remoteInviteAcceptanceTask = nil
     }
 
     private func confirmRemoteInvite() {
@@ -335,9 +351,16 @@ struct ContentView: View {
             return
         }
 
+        if let pendingRemoteInviteAcceptance {
+            acceptRemoteInvite(pendingRemoteInviteAcceptance.invite, localPlayerColor: localPlayerColor)
+            return
+        }
+
         pendingRemoteInviteConfirmation = nil
         #if DEBUG
-        startFakeRemoteJoin(localPlayerColor: localPlayerColor)
+        if remotePlayRuntimeMode == .fakeLocal {
+            startFakeRemoteJoin(localPlayerColor: localPlayerColor)
+        }
         #endif
     }
 
@@ -380,7 +403,8 @@ struct ContentView: View {
                     RemoteInviteConfirmation(
                         opponentName: invite.inviter.displayName,
                         localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner
-                    )
+                    ),
+                    invite: invite
                 )
             } catch {
                 guard isCurrentInviteLinkRequest(request) else {
@@ -406,7 +430,102 @@ struct ContentView: View {
         fakeRemoteLab.start(session: session, localPlayerColor: localPlayerColor)
         rememberKnownPlayer(KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya"))
     }
+
+    private var activeFakeRemoteLab: FakeRemoteGameLab? {
+        remotePlayRuntimeMode == .fakeLocal ? fakeRemoteLab : nil
+    }
     #endif
+
+    private func acceptRemoteInvite(_ invite: RemotePendingInvite, localPlayerColor: PieceColor) {
+        remoteInviteAcceptanceTask?.cancel()
+        remoteInviteAcceptanceTask = Task { @MainActor in
+            do {
+                let localPlayer = try localRemotePlayer()
+                let acceptedInvite = try await remoteInviteTransport.acceptInvite(
+                    JoinRemoteInviteRequest(
+                        code: invite.code,
+                        token: invite.token,
+                        joiner: localPlayer,
+                        now: Date()
+                    ),
+                    chosenColor: localPlayerColor
+                )
+                pendingRemoteInviteConfirmation = nil
+                pendingRemoteInviteAcceptance = nil
+                startJoinerRemoteGame(acceptedInvite)
+            } catch {
+                session.message = "Could not start remote game. Check your connection and try again."
+            }
+            remoteInviteAcceptanceTask = nil
+        }
+    }
+
+    private func localRemotePlayer() throws -> RemotePlayerRef {
+        let profile = try remoteIdentityStore.loadLocalProfile()
+        guard let displayName = profile.displayName else {
+            throw RemoteInviteTransportError.notFound
+        }
+        return RemotePlayerRef(id: profile.id, displayName: displayName)
+    }
+
+    private func startJoinerRemoteGame(_ acceptedInvite: RemoteAcceptedInvite) {
+        rememberKnownPlayer(
+            KnownRemotePlayer(
+                id: acceptedInvite.invite.inviter.id,
+                displayName: acceptedInvite.invite.inviter.displayName
+            )
+        )
+        showRemoteStartAnnouncement(
+            startRemoteGame(
+                opponent: acceptedInvite.invite.inviter,
+                localPlayerColor: acceptedInvite.joinerColor
+            )
+        )
+    }
+
+    private func startInviterRemoteGame(_ acceptedInvite: RemoteAcceptedInvite) {
+        rememberKnownPlayer(
+            KnownRemotePlayer(
+                id: acceptedInvite.joiner.id,
+                displayName: acceptedInvite.joiner.displayName
+            )
+        )
+        showRemoteStartAnnouncement(
+            startRemoteGame(
+                opponent: acceptedInvite.joiner,
+                localPlayerColor: acceptedInvite.joinerColor.opposite
+            )
+        )
+    }
+
+    private func startRemoteGame(
+        opponent: RemotePlayerRef,
+        localPlayerColor: PieceColor
+    ) -> RemoteGameStartAnnouncement {
+        session.newGame()
+        switch localPlayerColor {
+        case .white:
+            session.whitePlayer = .humanLocal
+            session.blackPlayer = .remote(playerID: opponent.id.rawValue)
+        case .black:
+            session.whitePlayer = .remote(playerID: opponent.id.rawValue)
+            session.blackPlayer = .humanLocal
+        }
+        remotePlayFlow.cancel()
+        return RemoteGameStartAnnouncement(
+            opponentName: opponent.displayName,
+            localPlayerColor: localPlayerColor
+        )
+    }
+
+    private static func remoteInviteTransport(for mode: RemotePlayRuntimeMode) -> any RemoteInviteTransport {
+        switch mode {
+        case .fakeLocal:
+            return InMemoryRemoteInviteTransport()
+        case .cloudKit:
+            return CloudKitRemoteInviteTransport()
+        }
+    }
 
     private func syncToCurrentInterfaceOrientation(animated: Bool) {
         applyViewingAngle(Self.currentViewingAngle(), animated: animated)
@@ -574,6 +693,10 @@ private struct InviteLinkRequest: Equatable {
     let lookup: RemotePlayFlow.InviteLookup
     let expectedStage: RemotePlayFlow.Stage
     let expectedJoinCode: String
+}
+
+private struct PendingRemoteInviteAcceptance: Equatable {
+    let invite: RemotePendingInvite
 }
 
 private struct PromotionPickerView: View {

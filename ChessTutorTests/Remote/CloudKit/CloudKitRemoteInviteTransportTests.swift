@@ -117,6 +117,25 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertTrue(requestMetadata.atomically)
     }
 
+    func testAcceptedInviteCanBeFetchedAfterJoinerAccepts() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        let request = JoinRemoteInviteRequest(
+            code: invite.code,
+            token: invite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let beforeAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertNil(beforeAcceptance)
+        let accepted = try await transport.acceptInvite(request, chosenColor: .black)
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+
+        XCTAssertEqual(fetchedAcceptance, accepted)
+    }
+
     func testAcceptInviteRecordLevelSaveFailureMapsToNotPending() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)

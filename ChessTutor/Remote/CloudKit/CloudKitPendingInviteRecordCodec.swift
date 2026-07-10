@@ -6,6 +6,7 @@ enum CloudKitPendingInviteRecordCodec {
         case missingField(String)
         case invalidWhiteAssignment(String)
         case invalidStatus(String)
+        case invalidJoinerColor(String)
     }
 
     static let recordType = "PendingInvite"
@@ -17,6 +18,9 @@ enum CloudKitPendingInviteRecordCodec {
         static let inviteeDisplayName = "inviteeDisplayName"
         static let whiteAssignment = "whiteAssignment"
         static let status = "status"
+        static let acceptedJoinerPlayerID = "acceptedJoinerPlayerID"
+        static let acceptedJoinerDisplayName = "acceptedJoinerDisplayName"
+        static let acceptedJoinerColor = "acceptedJoinerColor"
         static let createdAt = "createdAt"
         static let expiresAt = "expiresAt"
         static let protocolVersion = "protocolVersion"
@@ -39,6 +43,13 @@ enum CloudKitPendingInviteRecordCodec {
         record[Field.createdAt] = invite.createdAt as CKRecordValue
         record[Field.expiresAt] = invite.expiresAt as CKRecordValue
         record[Field.protocolVersion] = invite.protocolVersion as CKRecordValue
+    }
+
+    static func apply(_ acceptedInvite: RemoteAcceptedInvite, to record: CKRecord) {
+        apply(acceptedInvite.invite, to: record)
+        record[Field.acceptedJoinerPlayerID] = acceptedInvite.joiner.id.rawValue as CKRecordValue
+        record[Field.acceptedJoinerDisplayName] = acceptedInvite.joiner.displayName as CKRecordValue
+        record[Field.acceptedJoinerColor] = acceptedInvite.joinerColor.rawValue as CKRecordValue
     }
 
     static func invite(from record: CKRecord) throws -> RemotePendingInvite {
@@ -66,6 +77,23 @@ enum CloudKitPendingInviteRecordCodec {
             createdAt: try date(Field.createdAt, from: record),
             expiresAt: try date(Field.expiresAt, from: record),
             protocolVersion: try int(Field.protocolVersion, from: record)
+        )
+    }
+
+    static func acceptedInvite(from record: CKRecord) throws -> RemoteAcceptedInvite {
+        let invite = try invite(from: record)
+        let joinerColorRaw = try string(Field.acceptedJoinerColor, from: record)
+        guard let joinerColor = PieceColor(rawValue: joinerColorRaw) else {
+            throw Error.invalidJoinerColor(joinerColorRaw)
+        }
+
+        return RemoteAcceptedInvite(
+            invite: invite,
+            joiner: RemotePlayerRef(
+                id: RemotePlayerID(rawValue: try string(Field.acceptedJoinerPlayerID, from: record)),
+                displayName: try string(Field.acceptedJoinerDisplayName, from: record)
+            ),
+            joinerColor: joinerColor
         )
     }
 

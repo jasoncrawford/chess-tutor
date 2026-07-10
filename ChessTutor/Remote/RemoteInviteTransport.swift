@@ -4,6 +4,7 @@ protocol RemoteInviteTransport: Sendable {
     func createInvite(_ request: CreateRemoteInviteRequest) async throws -> RemotePendingInvite
     func fetchInvite(code: InviteCode, token: RemoteInviteToken?, now: Date) async throws -> RemotePendingInvite
     func acceptInvite(_ request: JoinRemoteInviteRequest, chosenColor: PieceColor?) async throws -> RemoteAcceptedInvite
+    func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite?
     func cancelInvite(id: RemoteInviteID) async throws
 }
 
@@ -19,6 +20,7 @@ enum RemoteInviteTransportError: Error, Equatable {
 
 actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
     private var invitesByCode: [InviteCode: RemotePendingInvite] = [:]
+    private var acceptedInvitesByID: [RemoteInviteID: RemoteAcceptedInvite] = [:]
     private let codeGenerator: @Sendable () -> InviteCode
     private let tokenGenerator: @Sendable () -> RemoteInviteToken
 
@@ -99,7 +101,19 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
             protocolVersion: invite.protocolVersion
         )
         invitesByCode[request.code] = accepted
-        return RemoteAcceptedInvite(invite: accepted, joiner: request.joiner, joinerColor: joinerColor)
+        let acceptedInvite = RemoteAcceptedInvite(invite: accepted, joiner: request.joiner, joinerColor: joinerColor)
+        acceptedInvitesByID[accepted.id] = acceptedInvite
+        return acceptedInvite
+    }
+
+    func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite? {
+        guard let acceptedInvite = acceptedInvitesByID[id] else {
+            return nil
+        }
+        guard acceptedInvite.invite.expiresAt > now else {
+            throw RemoteInviteTransportError.expired
+        }
+        return acceptedInvite
     }
 
     func cancelInvite(id: RemoteInviteID) async throws {

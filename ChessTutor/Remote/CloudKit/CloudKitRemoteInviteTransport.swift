@@ -109,7 +109,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             joinerColor = chosenColor
         }
 
-        let accepted = RemotePendingInvite(
+        let acceptedInviteRecord = RemotePendingInvite(
             id: invite.id,
             code: invite.code,
             token: invite.token,
@@ -121,7 +121,12 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             expiresAt: invite.expiresAt,
             protocolVersion: invite.protocolVersion
         )
-        CloudKitPendingInviteRecordCodec.apply(accepted, to: fetched.record)
+        let acceptedInvite = RemoteAcceptedInvite(
+            invite: acceptedInviteRecord,
+            joiner: request.joiner,
+            joinerColor: joinerColor
+        )
+        CloudKitPendingInviteRecordCodec.apply(acceptedInvite, to: fetched.record)
         let result = try await database.modifyRecords(
             saving: [fetched.record],
             deleting: [],
@@ -131,7 +136,23 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         guard savedRecord(fetched.record.recordID, in: result.saveResults) != nil else {
             throw RemoteInviteTransportError.notPending
         }
-        return RemoteAcceptedInvite(invite: accepted, joiner: request.joiner, joinerColor: joinerColor)
+        return acceptedInvite
+    }
+
+    func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite? {
+        let recordID = CKRecord.ID(recordName: id.rawValue)
+        let results = try await database.records(for: [recordID], desiredKeys: nil)
+        guard case .success(let record) = results[recordID] else {
+            throw RemoteInviteTransportError.notFound
+        }
+        let invite = try CloudKitPendingInviteRecordCodec.invite(from: record)
+        guard invite.status == .accepted else {
+            return nil
+        }
+        guard invite.expiresAt > now else {
+            throw RemoteInviteTransportError.expired
+        }
+        return try CloudKitPendingInviteRecordCodec.acceptedInvite(from: record)
     }
 
     func cancelInvite(id: RemoteInviteID) async throws {

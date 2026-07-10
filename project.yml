@@ -4,7 +4,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    TARGETED_DEVICE_FAMILY: "2"
+    TARGETED_DEVICE_FAMILY: "1,2"
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
     INFOPLIST_KEY_UILaunchScreen_Generation: true
 targets:
@@ -25,7 +25,7 @@ targets:
         GENERATE_INFOPLIST_FILE: true
         PRODUCT_BUNDLE_IDENTIFIER: org.jasoncrawford.chesstutor
         CODE_SIGN_ENTITLEMENTS: ChessTutor/ChessTutor.entitlements
-        TARGETED_DEVICE_FAMILY: "2"
+        TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
   ChessTutorTests:
@@ -38,3 +38,17 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  ChessTutor:
+    build:
+      targets:
+        ChessTutor: all
+    run:
+      config: Debug
+      environmentVariables:
+        CHESSTUTOR_REMOTE_INVITES: cloudkit
+    test:
+      config: Debug
+      targets:
+        - ChessTutorTests
