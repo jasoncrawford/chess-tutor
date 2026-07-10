@@ -3,9 +3,12 @@ import SwiftUI
 struct RemotePlaySheetView: View {
     @Bindable var flow: RemotePlayFlow
     @Bindable var session: GameSession
+    @State private var copyFeedbackTask: Task<Void, Never>?
     let onLocalDisplayNameSaved: (String) -> Void
     let onInviteLinkCopied: (URL) -> Void
     let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
+    let onRemoteGameStarted: (RemoteGameStartAnnouncement) -> Void
+    let onRemoteInviteConfirmationNeeded: (RemoteInviteConfirmation) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -15,13 +18,17 @@ struct RemotePlaySheetView: View {
         session: GameSession,
         onLocalDisplayNameSaved: @escaping (String) -> Void = { _ in },
         onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
-        onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
+        onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
+        onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
+        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
         self.onLocalDisplayNameSaved = onLocalDisplayNameSaved
         self.onInviteLinkCopied = onInviteLinkCopied
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
+        self.onRemoteGameStarted = onRemoteGameStarted
+        self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
         #if DEBUG
         self.fakeRemoteLab = nil
         #endif
@@ -34,7 +41,9 @@ struct RemotePlaySheetView: View {
         fakeRemoteLab: FakeRemoteGameLab? = nil,
         onLocalDisplayNameSaved: @escaping (String) -> Void = { _ in },
         onInviteLinkCopied: @escaping (URL) -> Void = { _ in },
-        onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in }
+        onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
+        onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
+        onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation) -> Void = { _ in }
     ) {
         self.flow = flow
         self.session = session
@@ -42,6 +51,8 @@ struct RemotePlaySheetView: View {
         self.onLocalDisplayNameSaved = onLocalDisplayNameSaved
         self.onInviteLinkCopied = onInviteLinkCopied
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
+        self.onRemoteGameStarted = onRemoteGameStarted
+        self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
     }
     #endif
 
@@ -222,12 +233,11 @@ struct RemotePlaySheetView: View {
 
     private func joinWithCode() {
         #if DEBUG
-        guard flow.requestJoinCode() else {
+        guard let result = flow.requestJoinCode() else {
             return
         }
 
-        fakeRemoteLab?.start(session: session, localPlayerColor: .black)
-        onKnownPlayerAccepted(Self.fakeMayaPlayer)
+        handleJoinCodeResult(result)
         #endif
     }
 
@@ -318,9 +328,11 @@ struct RemotePlaySheetView: View {
         onLocalDisplayNameSaved(localDisplayName)
 
         #if DEBUG
-        if result == .joined {
-            fakeRemoteLab?.start(session: session, localPlayerColor: .black)
-            onKnownPlayerAccepted(Self.fakeMayaPlayer)
+        switch result {
+        case .needsConfirmation(let confirmation):
+            onRemoteInviteConfirmationNeeded(confirmation)
+        case .sentInvite, .saved:
+            break
         }
         #endif
     }
@@ -374,10 +386,16 @@ struct RemotePlaySheetView: View {
                     .font(AppTheme.aboutSectionTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
-                Button(presentation.copyLinkButtonTitle) {
-                    onInviteLinkCopied(presentation.inviteURL)
+                Button {
+                    copyInviteLink(presentation.inviteURL)
+                } label: {
+                    Text(presentation.copyLinkButtonTitle)
+                        .contentTransition(.opacity)
                 }
-                .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
+                .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: presentation.isCopyLinkButtonEnabled))
+                .disabled(!presentation.isCopyLinkButtonEnabled)
+                .animation(.easeInOut(duration: 0.18), value: presentation.copyLinkButtonTitle)
+                .animation(.easeInOut(duration: 0.18), value: presentation.isCopyLinkButtonEnabled)
 
                 Text(presentation.linkInstructions)
                     .font(.system(size: 14, weight: .medium, design: .rounded))
@@ -395,6 +413,23 @@ struct RemotePlaySheetView: View {
                 }
             }
             #endif
+        }
+    }
+
+    private func copyInviteLink(_ inviteURL: URL) {
+        onInviteLinkCopied(inviteURL)
+        flow.markInviteLinkCopied(inviteURL)
+
+        copyFeedbackTask?.cancel()
+        copyFeedbackTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            flow.clearCopiedInviteLink()
+            copyFeedbackTask = nil
         }
     }
 
@@ -422,15 +457,31 @@ struct RemotePlaySheetView: View {
     }
 
     #if DEBUG
+    private func handleJoinCodeResult(_ result: RemotePlayFlow.JoinCodeResult) {
+        switch result {
+        case .needsConfirmation(let confirmation):
+            onRemoteInviteConfirmationNeeded(confirmation)
+        }
+    }
+
     private func acceptPendingInvite(_ pendingInvite: RemotePlayFlow.PendingInvite) {
         let localPlayerColor = localPlayerColor(for: pendingInvite)
-        fakeRemoteLab?.start(session: session, localPlayerColor: localPlayerColor)
+        if let announcement = fakeRemoteLab?.start(session: session, localPlayerColor: localPlayerColor) {
+            onRemoteGameStarted(announcement)
+        }
         onKnownPlayerAccepted(Self.fakeMayaPlayer)
         flow.cancel()
     }
 
     private func localPlayerColor(for pendingInvite: RemotePlayFlow.PendingInvite) -> PieceColor {
-        pendingInvite.whiteChoice == .invitee ? .black : .white
+        switch pendingInvite.whiteChoice {
+        case .localPlayer:
+            return .white
+        case .invitee:
+            return .black
+        case .inviteeChooses:
+            return .white
+        }
     }
 
     private static var fakeMayaPlayer: KnownRemotePlayer {

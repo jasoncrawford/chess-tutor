@@ -15,6 +15,7 @@ final class FakeRemoteGameLab {
     private let gameID = RemoteGameID(rawValue: "fake-remote-game")
     private let localPlayerID = RemotePlayerID(rawValue: "local")
     private let remotePlayerID = RemotePlayerID(rawValue: "maya")
+    private let remotePlayerName = "Maya"
     private var transport = InMemoryRemoteGameTransport()
     private var coordinator: RemoteGameCoordinator?
     private var localPlayerColor: PieceColor = .white
@@ -30,7 +31,8 @@ final class FakeRemoteGameLab {
         return isActive && coordinator.projectedState.sideToMove != localPlayerColor
     }
 
-    func start(session: GameSession, localPlayerColor: PieceColor = .white) {
+    @discardableResult
+    func start(session: GameSession, localPlayerColor: PieceColor = .white) -> RemoteGameStartAnnouncement {
         session.newGame()
         transport = InMemoryRemoteGameTransport()
         self.localPlayerColor = localPlayerColor
@@ -50,6 +52,10 @@ final class FakeRemoteGameLab {
         isActive = true
         statusText = "Fake remote game"
         lastRemoteMove = nil
+        return RemoteGameStartAnnouncement(
+            opponentName: remotePlayerName,
+            localPlayerColor: localPlayerColor
+        )
     }
 
     func stop(session: GameSession) {
@@ -128,9 +134,9 @@ final class FakeRemoteGameLab {
         switch localPlayerColor {
         case .white:
             whitePlayer = RemotePlayerRef(id: localPlayerID, displayName: "You")
-            blackPlayer = RemotePlayerRef(id: remotePlayerID, displayName: "Maya")
+            blackPlayer = RemotePlayerRef(id: remotePlayerID, displayName: remotePlayerName)
         case .black:
-            whitePlayer = RemotePlayerRef(id: remotePlayerID, displayName: "Maya")
+            whitePlayer = RemotePlayerRef(id: remotePlayerID, displayName: remotePlayerName)
             blackPlayer = RemotePlayerRef(id: localPlayerID, displayName: "You")
         }
 

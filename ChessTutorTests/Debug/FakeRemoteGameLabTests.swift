@@ -8,24 +8,32 @@ final class FakeRemoteGameLabTests: XCTestCase {
         let session = GameSession()
         let lab = FakeRemoteGameLab()
 
-        lab.start(session: session)
+        let announcement = lab.start(session: session)
 
         XCTAssertTrue(lab.isActive)
         XCTAssertEqual(session.whitePlayer, .humanLocal)
         XCTAssertEqual(session.blackPlayer, .remote(playerID: "maya"))
         XCTAssertEqual(lab.statusText, "Fake remote game")
+        XCTAssertEqual(
+            announcement,
+            RemoteGameStartAnnouncement(opponentName: "Maya", localPlayerColor: .white)
+        )
     }
 
     func testStartCanMakeRemotePlayerWhite() {
         let session = GameSession()
         let lab = FakeRemoteGameLab()
 
-        lab.start(session: session, localPlayerColor: .black)
+        let announcement = lab.start(session: session, localPlayerColor: .black)
 
         XCTAssertTrue(lab.isActive)
         XCTAssertEqual(session.whitePlayer, .remote(playerID: "maya"))
         XCTAssertEqual(session.blackPlayer, .humanLocal)
         XCTAssertTrue(lab.canRemotePlay)
+        XCTAssertEqual(
+            announcement,
+            RemoteGameStartAnnouncement(opponentName: "Maya", localPlayerColor: .black)
+        )
     }
 
     func testRemotePlaysNextMoveAfterLocalCommit() async throws {

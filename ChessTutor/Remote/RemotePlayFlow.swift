@@ -27,8 +27,12 @@ final class RemotePlayFlow {
 
     enum LocalNameSaveResult: Equatable {
         case sentInvite(PendingInvite)
-        case joined
+        case needsConfirmation(RemoteInviteConfirmation)
         case saved
+    }
+
+    enum JoinCodeResult: Equatable {
+        case needsConfirmation(RemoteInviteConfirmation)
     }
 
     struct PendingInvite: Equatable, Hashable {
@@ -51,6 +55,7 @@ final class RemotePlayFlow {
         let codeInstructions: String
         let linkSectionTitle: String
         let copyLinkButtonTitle: String
+        let isCopyLinkButtonEnabled: Bool
         let inviteURL: URL
         let linkInstructions: String
     }
@@ -64,8 +69,11 @@ final class RemotePlayFlow {
     }
 
     private let nextInviteCode: String
+    private let nextJoinWhiteChoice: WhiteChoice
     private var pendingLocalNameInviteTarget: InviteTarget?
+    private var pendingLocalNameJoinWhiteChoice: WhiteChoice?
     private var localNameEditReturnStage: Stage?
+    private var inviteWhiteChoicesByCode: [String: WhiteChoice] = [:]
     private(set) var knownPlayers: [KnownRemotePlayer]
     private(set) var stage: Stage = .closed
     private(set) var localDisplayName: String?
@@ -73,6 +81,7 @@ final class RemotePlayFlow {
     var selectedWhiteChoice: WhiteChoice = .localPlayer
     private(set) var joinCode = ""
     private(set) var joinErrorMessage: String?
+    private var copiedInviteURL: URL?
 
     var canSubmitLocalName: Bool {
         Self.trimmedNonEmptyName(localNameDraft) != nil
@@ -100,13 +109,16 @@ final class RemotePlayFlow {
 
     func inviteSharePresentation(for pendingInvite: PendingInvite) -> InviteSharePresentation {
         let inviteeName = shareInviteeName(for: pendingInvite.target)
+        let inviteURL = Self.inviteURL(for: pendingInvite)
+        let isCopiedInviteURL = copiedInviteURL == inviteURL
         return InviteSharePresentation(
             codeSectionTitle: "Join code",
             code: pendingInvite.formattedCode,
             codeInstructions: "\(inviteeName) can join by tapping Play Remotely and entering this code.",
             linkSectionTitle: "Invite link",
-            copyLinkButtonTitle: "Copy link",
-            inviteURL: Self.inviteURL(for: pendingInvite.code),
+            copyLinkButtonTitle: isCopiedInviteURL ? "Copied!" : "Copy link",
+            isCopyLinkButtonEnabled: !isCopiedInviteURL,
+            inviteURL: inviteURL,
             linkInstructions: "You can send the link by Messages, Mail, or another app."
         )
     }
@@ -118,11 +130,13 @@ final class RemotePlayFlow {
     init(
         knownPlayers: [KnownRemotePlayer] = [],
         localDisplayName: String? = nil,
-        nextInviteCode: String = "428193"
+        nextInviteCode: String = "428193",
+        nextJoinWhiteChoice: WhiteChoice = .localPlayer
     ) {
         self.knownPlayers = knownPlayers
         self.localDisplayName = Self.trimmedNonEmptyName(localDisplayName ?? "")
         self.nextInviteCode = nextInviteCode
+        self.nextJoinWhiteChoice = nextJoinWhiteChoice
     }
 
     func canShowEntryPoint(for session: GameSession) -> Bool {
@@ -135,6 +149,7 @@ final class RemotePlayFlow {
     func open() {
         selectedWhiteChoice = .localPlayer
         pendingLocalNameInviteTarget = nil
+        pendingLocalNameJoinWhiteChoice = nil
         localNameEditReturnStage = nil
         joinErrorMessage = nil
         stage = .choosing
@@ -152,6 +167,14 @@ final class RemotePlayFlow {
 
     func chooseWhite(_ choice: WhiteChoice) {
         selectedWhiteChoice = choice
+    }
+
+    func markInviteLinkCopied(_ inviteURL: URL) {
+        copiedInviteURL = inviteURL
+    }
+
+    func clearCopiedInviteLink() {
+        copiedInviteURL = nil
     }
 
     func updateLocalDisplayName(_ displayName: String?) {
@@ -181,15 +204,16 @@ final class RemotePlayFlow {
     }
 
     @discardableResult
-    func requestJoinCode() -> Bool {
+    func requestJoinCode() -> JoinCodeResult? {
         guard localDisplayName != nil else {
             localNameDraft = ""
             pendingLocalNameInviteTarget = nil
+            pendingLocalNameJoinWhiteChoice = whiteChoiceForCurrentJoinCode()
             stage = .enteringLocalName(.joinWithCode)
-            return false
+            return nil
         }
 
-        return acceptJoinCode()
+        return acceptJoinCode(whiteChoice: whiteChoiceForCurrentJoinCode())
     }
 
     @discardableResult
@@ -209,7 +233,14 @@ final class RemotePlayFlow {
             return .sentInvite(pendingInvite)
         case .joinWithCode:
             stage = .choosing
-            return acceptJoinCode() ? .joined : nil
+            let whiteChoice = pendingLocalNameJoinWhiteChoice ?? nextJoinWhiteChoice
+            pendingLocalNameJoinWhiteChoice = nil
+            switch acceptJoinCode(whiteChoice: whiteChoice) {
+            case .needsConfirmation(let confirmation):
+                return .needsConfirmation(confirmation)
+            case nil:
+                return nil
+            }
         case .edit:
             stage = localNameEditReturnStage ?? .choosing
             localNameEditReturnStage = nil
@@ -232,41 +263,70 @@ final class RemotePlayFlow {
     }
 
     @discardableResult
-    func requestJoinInvite(from url: URL) -> Bool {
+    func requestJoinInvite(from url: URL) -> JoinCodeResult? {
         guard let code = Self.inviteCode(from: url) else {
             open()
             joinErrorMessage = "That link did not match an open invite."
-            return false
+            return nil
         }
 
         if stage == .closed {
             open()
         }
         updateJoinCode(code)
-        return requestJoinCode()
+
+        guard localDisplayName != nil else {
+            localNameDraft = ""
+            pendingLocalNameInviteTarget = nil
+            pendingLocalNameJoinWhiteChoice = whiteChoiceForCurrentJoinCode()
+            stage = .enteringLocalName(.joinWithCode)
+            return nil
+        }
+
+        return acceptJoinCode(whiteChoice: whiteChoiceForCurrentJoinCode())
     }
 
-    private func acceptJoinCode() -> Bool {
+    private func acceptJoinCode(whiteChoice: WhiteChoice) -> JoinCodeResult? {
         guard canSubmitJoinCode, joinCode == nextInviteCode else {
             joinErrorMessage = "That code did not match an open invite."
-            return false
+            return nil
         }
 
         joinCode = ""
         joinErrorMessage = nil
-        stage = .closed
-        return true
+
+        switch whiteChoice {
+        case .localPlayer:
+            stage = .closed
+            return .needsConfirmation(joinConfirmation(localPlayerColor: .black))
+        case .invitee:
+            stage = .closed
+            return .needsConfirmation(joinConfirmation(localPlayerColor: .white))
+        case .inviteeChooses:
+            stage = .closed
+            return .needsConfirmation(joinConfirmation(localPlayerColor: nil))
+        }
+    }
+
+    private func joinConfirmation(localPlayerColor: PieceColor?) -> RemoteInviteConfirmation {
+        RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: localPlayerColor)
+    }
+
+    private func whiteChoiceForCurrentJoinCode() -> WhiteChoice {
+        inviteWhiteChoicesByCode[joinCode] ?? nextJoinWhiteChoice
     }
 
     @discardableResult
     private func sendInvite(target explicitTarget: InviteTarget? = nil) -> PendingInvite {
         let target = explicitTarget ?? selectedInviteTarget()
+        copiedInviteURL = nil
 
         let pendingInvite = PendingInvite(
             target: target,
             whiteChoice: selectedWhiteChoice,
             code: nextInviteCode
         )
+        inviteWhiteChoicesByCode[pendingInvite.code] = pendingInvite.whiteChoice
         stage = .waitingForInvitee(pendingInvite)
         return pendingInvite
     }
@@ -297,12 +357,12 @@ final class RemotePlayFlow {
         }
     }
 
-    private static func inviteURL(for code: String) -> URL {
+    private static func inviteURL(for pendingInvite: PendingInvite) -> URL {
         var components = URLComponents()
         components.scheme = "chesstutor"
         components.host = "invite"
         components.queryItems = [
-            URLQueryItem(name: "code", value: code)
+            URLQueryItem(name: "code", value: pendingInvite.code)
         ]
         return components.url!
     }
@@ -316,13 +376,18 @@ final class RemotePlayFlow {
         }
 
         let code = String(rawCode.filter(\.isNumber).prefix(6))
-        return code.count == 6 ? code : nil
+        guard code.count == 6 else {
+            return nil
+        }
+
+        return code
     }
 
     func goBack() {
         switch stage {
         case .choosingWhite, .waitingForInvitee:
             selectedWhiteChoice = .localPlayer
+            copiedInviteURL = nil
             stage = .choosing
         case .closed, .choosing, .enteringLocalName:
             break
@@ -332,10 +397,12 @@ final class RemotePlayFlow {
     func cancel() {
         selectedWhiteChoice = .localPlayer
         pendingLocalNameInviteTarget = nil
+        pendingLocalNameJoinWhiteChoice = nil
         localNameEditReturnStage = nil
         localNameDraft = ""
         joinCode = ""
         joinErrorMessage = nil
+        copiedInviteURL = nil
         stage = .closed
     }
 

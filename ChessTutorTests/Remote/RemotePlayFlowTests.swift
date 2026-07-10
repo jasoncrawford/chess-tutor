@@ -104,20 +104,89 @@ final class RemotePlayFlowTests: XCTestCase {
 
         XCTAssertEqual(flow.joinCode, "123456")
         XCTAssertTrue(flow.canSubmitJoinCode)
-        XCTAssertFalse(flow.requestJoinCode())
+        XCTAssertNil(flow.requestJoinCode())
         XCTAssertEqual(flow.joinErrorMessage, "That code did not match an open invite.")
     }
 
-    func testAcceptJoinCodeClearsFlowForMatchingCode() {
+    func testAcceptJoinCodeShowsConfirmationWithJoinerBlackWhenInviterPlaysWhite() {
         let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
 
         flow.open()
         flow.updateJoinCode("428 193")
 
-        XCTAssertTrue(flow.requestJoinCode())
+        XCTAssertEqual(
+            flow.requestJoinCode(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .black))
+        )
         XCTAssertEqual(flow.stage, .closed)
         XCTAssertEqual(flow.joinCode, "")
         XCTAssertNil(flow.joinErrorMessage)
+    }
+
+    func testAcceptJoinCodeShowsConfirmationWithJoinerWhiteWhenInviteePlaysWhite() {
+        let flow = RemotePlayFlow(
+            localDisplayName: "Jason",
+            nextInviteCode: "428193",
+            nextJoinWhiteChoice: .invitee
+        )
+
+        flow.open()
+        flow.updateJoinCode("428 193")
+
+        XCTAssertEqual(
+            flow.requestJoinCode(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .white))
+        )
+        XCTAssertEqual(flow.stage, .closed)
+    }
+
+    func testAcceptJoinCodeShowsConfirmationRequiringColorChoiceWhenInviteeChooses() {
+        let flow = RemotePlayFlow(
+            localDisplayName: "Jason",
+            nextInviteCode: "428193",
+            nextJoinWhiteChoice: .inviteeChooses
+        )
+
+        flow.open()
+        flow.updateJoinCode("428 193")
+
+        XCTAssertEqual(
+            flow.requestJoinCode(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: nil))
+        )
+        XCTAssertEqual(flow.stage, .closed)
+        XCTAssertEqual(flow.joinCode, "")
+        XCTAssertNil(flow.joinErrorMessage)
+    }
+
+    func testJoinCodeUsesWhiteChoiceFromCreatedInviteRecord() throws {
+        let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
+
+        flow.open()
+        flow.inviteSomeoneNew()
+        flow.chooseWhite(.inviteeChooses)
+        _ = try XCTUnwrap(flow.requestSendInvite())
+        flow.updateJoinCode("428 193")
+
+        XCTAssertEqual(
+            flow.requestJoinCode(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: nil))
+        )
+    }
+
+    func testInviteLinkUsesWhiteChoiceFromCreatedInviteRecord() throws {
+        let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
+
+        flow.open()
+        flow.inviteSomeoneNew()
+        flow.chooseWhite(.invitee)
+        let pendingInvite = try XCTUnwrap(flow.requestSendInvite())
+        let inviteURL = flow.inviteSharePresentation(for: pendingInvite).inviteURL
+
+        XCTAssertEqual(
+            flow.requestJoinInvite(from: inviteURL),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .white))
+        )
     }
 
     func testJoinCodeRequiresLocalDisplayName() {
@@ -126,14 +195,38 @@ final class RemotePlayFlowTests: XCTestCase {
         flow.open()
         flow.updateJoinCode("428 193")
 
-        XCTAssertFalse(flow.requestJoinCode())
+        XCTAssertNil(flow.requestJoinCode())
         XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
 
         flow.updateLocalNameDraft("Jason")
 
-        XCTAssertEqual(flow.saveLocalNameAndContinue(), .joined)
+        XCTAssertEqual(
+            flow.saveLocalNameAndContinue(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .black))
+        )
         XCTAssertEqual(flow.stage, .closed)
         XCTAssertEqual(flow.localDisplayName, "Jason")
+    }
+
+    func testJoinCodeAfterLocalDisplayNameCanShowConfirmationRequiringColorChoice() {
+        let flow = RemotePlayFlow(
+            nextInviteCode: "428193",
+            nextJoinWhiteChoice: .inviteeChooses
+        )
+
+        flow.open()
+        flow.updateJoinCode("428 193")
+
+        XCTAssertNil(flow.requestJoinCode())
+        XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
+
+        flow.updateLocalNameDraft("Jason")
+
+        XCTAssertEqual(
+            flow.saveLocalNameAndContinue(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: nil))
+        )
+        XCTAssertEqual(flow.stage, .closed)
     }
 
     func testEditLocalDisplayNamePrefillsCurrentNameAndReturnsToChoosing() {
@@ -230,6 +323,7 @@ final class RemotePlayFlowTests: XCTestCase {
 
         flow.open()
         flow.invite(maya)
+        flow.chooseWhite(.inviteeChooses)
 
         let pendingInvite = try XCTUnwrap(flow.requestSendInvite())
         let presentation = flow.inviteSharePresentation(for: pendingInvite)
@@ -243,42 +337,127 @@ final class RemotePlayFlowTests: XCTestCase {
         )
         XCTAssertEqual(presentation.linkSectionTitle, "Invite link")
         XCTAssertEqual(presentation.copyLinkButtonTitle, "Copy link")
-        XCTAssertEqual(presentation.inviteURL.absoluteString, "chesstutor://invite?code=428193")
+        XCTAssertEqual(
+            presentation.inviteURL.absoluteString,
+            "chesstutor://invite?code=428193"
+        )
         XCTAssertEqual(
             presentation.linkInstructions,
             "You can send the link by Messages, Mail, or another app."
         )
     }
 
+    func testInviteSharePresentationShowsCopiedFeedbackForCopiedLink() throws {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let flow = RemotePlayFlow(
+            knownPlayers: [maya],
+            localDisplayName: "Jason",
+            nextInviteCode: "428193"
+        )
+
+        flow.open()
+        flow.invite(maya)
+
+        let pendingInvite = try XCTUnwrap(flow.requestSendInvite())
+        let presentation = flow.inviteSharePresentation(for: pendingInvite)
+
+        XCTAssertEqual(presentation.copyLinkButtonTitle, "Copy link")
+        XCTAssertTrue(presentation.isCopyLinkButtonEnabled)
+
+        flow.markInviteLinkCopied(presentation.inviteURL)
+
+        let copiedPresentation = flow.inviteSharePresentation(for: pendingInvite)
+        XCTAssertEqual(copiedPresentation.copyLinkButtonTitle, "Copied!")
+        XCTAssertFalse(copiedPresentation.isCopyLinkButtonEnabled)
+
+        flow.clearCopiedInviteLink()
+
+        let resetPresentation = flow.inviteSharePresentation(for: pendingInvite)
+        XCTAssertEqual(resetPresentation.copyLinkButtonTitle, "Copy link")
+        XCTAssertTrue(resetPresentation.isCopyLinkButtonEnabled)
+    }
+
     func testJoinInviteLinkUsesSameCodePath() {
         let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
 
-        XCTAssertTrue(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!))
+        XCTAssertEqual(
+            flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .black))
+        )
         XCTAssertEqual(flow.stage, .closed)
         XCTAssertEqual(flow.joinCode, "")
         XCTAssertNil(flow.joinErrorMessage)
     }
 
+    func testJoinInviteLinkUsesInviteRecordWhiteChoice() {
+        let flow = RemotePlayFlow(
+            localDisplayName: "Jason",
+            nextInviteCode: "428193",
+            nextJoinWhiteChoice: .invitee
+        )
+
+        XCTAssertEqual(
+            flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .white))
+        )
+        XCTAssertEqual(flow.stage, .closed)
+    }
+
+    func testJoinInviteLinkCanUseInviteRecordToRequireColorChoice() {
+        let flow = RemotePlayFlow(
+            localDisplayName: "Jason",
+            nextInviteCode: "428193",
+            nextJoinWhiteChoice: .inviteeChooses
+        )
+
+        XCTAssertEqual(
+            flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: nil))
+        )
+        XCTAssertEqual(flow.stage, .closed)
+    }
+
     func testJoinInviteLinkRequiresLocalDisplayName() {
         let flow = RemotePlayFlow(nextInviteCode: "428193")
 
-        XCTAssertFalse(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!))
+        XCTAssertNil(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!))
         XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
 
         flow.updateLocalNameDraft("Jason")
 
-        XCTAssertEqual(flow.saveLocalNameAndContinue(), .joined)
+        XCTAssertEqual(
+            flow.saveLocalNameAndContinue(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .black))
+        )
+        XCTAssertEqual(flow.stage, .closed)
+    }
+
+    func testJoinInviteLinkAfterLocalDisplayNameCanShowConfirmationRequiringColorChoice() {
+        let flow = RemotePlayFlow(
+            nextInviteCode: "428193",
+            nextJoinWhiteChoice: .inviteeChooses
+        )
+
+        XCTAssertNil(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=428193")!))
+        XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
+
+        flow.updateLocalNameDraft("Jason")
+
+        XCTAssertEqual(
+            flow.saveLocalNameAndContinue(),
+            .needsConfirmation(RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: nil))
+        )
         XCTAssertEqual(flow.stage, .closed)
     }
 
     func testRejectsInvalidInviteLink() {
         let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
 
-        XCTAssertFalse(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=111111")!))
+        XCTAssertNil(flow.requestJoinInvite(from: URL(string: "chesstutor://invite?code=111111")!))
         XCTAssertEqual(flow.stage, .choosing)
         XCTAssertEqual(flow.joinErrorMessage, "That code did not match an open invite.")
 
-        XCTAssertFalse(flow.requestJoinInvite(from: URL(string: "https://example.com/invite?code=428193")!))
+        XCTAssertNil(flow.requestJoinInvite(from: URL(string: "https://example.com/invite?code=428193")!))
         XCTAssertEqual(flow.stage, .choosing)
         XCTAssertEqual(flow.joinErrorMessage, "That link did not match an open invite.")
     }

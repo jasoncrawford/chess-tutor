@@ -6,6 +6,8 @@ struct ContentView: View {
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
     @State private var remotePlayFlow: RemotePlayFlow
+    @State private var pendingRemoteStartAnnouncement: RemoteGameStartAnnouncement?
+    @State private var pendingRemoteInviteConfirmation: RemoteInviteConfirmation?
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
@@ -42,7 +44,35 @@ struct ContentView: View {
                     .frame(width: layout.tabletopSize.width, height: layout.tabletopSize.height)
                     .rotationEffect(.degrees(tableRotationDegrees))
                     .frame(width: proxy.size.width, height: proxy.size.height)
+
+                if let pendingRemoteStartAnnouncement {
+                    Color.black.opacity(0.24)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+
+                    RemoteGameStartAnnouncementView(
+                        announcement: pendingRemoteStartAnnouncement,
+                        onStart: dismissRemoteStartAnnouncement
+                    )
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                }
+
+                if let pendingRemoteInviteConfirmation {
+                    Color.black.opacity(0.24)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+
+                    RemoteInviteConfirmationView(
+                        confirmation: pendingRemoteInviteConfirmation,
+                        onSelectColor: selectRemoteInviteColor,
+                        onStart: confirmRemoteInvite,
+                        onCancel: cancelRemoteInvite
+                    )
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                }
             }
+            .animation(.easeInOut(duration: 0.18), value: pendingRemoteStartAnnouncement)
+            .animation(.easeInOut(duration: 0.18), value: pendingRemoteInviteConfirmation)
         }
         .onAppear {
             syncToCurrentInterfaceOrientation(animated: false)
@@ -87,7 +117,9 @@ struct ContentView: View {
                 fakeRemoteLab: fakeRemoteLab,
                 onLocalDisplayNameSaved: saveLocalDisplayName,
                 onInviteLinkCopied: copyInviteLink,
-                onKnownPlayerAccepted: rememberKnownPlayer
+                onKnownPlayerAccepted: rememberKnownPlayer,
+                onRemoteGameStarted: showRemoteStartAnnouncement,
+                onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -97,7 +129,9 @@ struct ContentView: View {
                 session: session,
                 onLocalDisplayNameSaved: saveLocalDisplayName,
                 onInviteLinkCopied: copyInviteLink,
-                onKnownPlayerAccepted: rememberKnownPlayer
+                onKnownPlayerAccepted: rememberKnownPlayer,
+                onRemoteGameStarted: showRemoteStartAnnouncement,
+                onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -216,19 +250,53 @@ struct ContentView: View {
         UIPasteboard.general.string = inviteURL.absoluteString
     }
 
+    private func showRemoteStartAnnouncement(_ announcement: RemoteGameStartAnnouncement) {
+        pendingRemoteStartAnnouncement = announcement
+    }
+
+    private func showRemoteInviteConfirmation(_ confirmation: RemoteInviteConfirmation) {
+        pendingRemoteInviteConfirmation = confirmation
+    }
+
+    private func dismissRemoteStartAnnouncement() {
+        pendingRemoteStartAnnouncement = nil
+    }
+
+    private func selectRemoteInviteColor(_ color: PieceColor) {
+        pendingRemoteInviteConfirmation = pendingRemoteInviteConfirmation?.selectColor(color)
+    }
+
+    private func cancelRemoteInvite() {
+        pendingRemoteInviteConfirmation = nil
+    }
+
+    private func confirmRemoteInvite() {
+        guard let localPlayerColor = pendingRemoteInviteConfirmation?.localPlayerColor else {
+            return
+        }
+
+        pendingRemoteInviteConfirmation = nil
+        #if DEBUG
+        startFakeRemoteJoin(localPlayerColor: localPlayerColor)
+        #endif
+    }
+
     private func handleInviteURL(_ url: URL) {
-        guard remotePlayFlow.requestJoinInvite(from: url) else {
+        guard let result = remotePlayFlow.requestJoinInvite(from: url) else {
             return
         }
 
         #if DEBUG
-        startFakeRemoteJoin()
+        switch result {
+        case .needsConfirmation(let confirmation):
+            showRemoteInviteConfirmation(confirmation)
+        }
         #endif
     }
 
     #if DEBUG
-    private func startFakeRemoteJoin() {
-        fakeRemoteLab.start(session: session, localPlayerColor: .black)
+    private func startFakeRemoteJoin(localPlayerColor: PieceColor) {
+        fakeRemoteLab.start(session: session, localPlayerColor: localPlayerColor)
         rememberKnownPlayer(KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya"))
     }
     #endif
