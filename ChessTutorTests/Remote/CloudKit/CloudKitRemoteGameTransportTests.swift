@@ -123,6 +123,51 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         )
     }
 
+    func testUpdatePresenceSavesAndFetchesPresenceRecord() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        let transport = CloudKitRemoteGameTransport(database: database)
+        let presence = RemotePresenceUpdate(
+            gameID: Self.gameID,
+            playerID: Self.blackID,
+            state: .activeMoving,
+            updatedAt: Date(timeIntervalSince1970: 40),
+            expiresAt: Date(timeIntervalSince1970: 45)
+        )
+
+        try await transport.updatePresence(presence)
+
+        let fetchedPresence = try await transport.fetchPresence(gameID: Self.gameID, playerID: Self.blackID)
+        XCTAssertEqual(fetchedPresence, presence)
+        let savedRequest = await database.lastModifyRequest()
+        let lastRequest = try XCTUnwrap(savedRequest)
+        XCTAssertEqual(lastRequest.savedRecordIDs, [CKRecord.ID(recordName: "presence-game-1-black")])
+    }
+
+    func testOlderPresenceDoesNotOverwriteNewerPresenceRecord() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        let transport = CloudKitRemoteGameTransport(database: database)
+        let newerPresence = RemotePresenceUpdate(
+            gameID: Self.gameID,
+            playerID: Self.blackID,
+            state: .foregroundIdle,
+            updatedAt: Date(timeIntervalSince1970: 50),
+            expiresAt: Date(timeIntervalSince1970: 60)
+        )
+        let olderPresence = RemotePresenceUpdate(
+            gameID: Self.gameID,
+            playerID: Self.blackID,
+            state: .activeMoving,
+            updatedAt: Date(timeIntervalSince1970: 40),
+            expiresAt: Date(timeIntervalSince1970: 45)
+        )
+
+        try await transport.updatePresence(newerPresence)
+        try await transport.updatePresence(olderPresence)
+
+        let fetchedPresence = try await transport.fetchPresence(gameID: Self.gameID, playerID: Self.blackID)
+        XCTAssertEqual(fetchedPresence, newerPresence)
+    }
+
     private static let gameID = RemoteGameID(rawValue: "game-1")
     private static let whiteID = RemotePlayerID(rawValue: "white")
     private static let blackID = RemotePlayerID(rawValue: "black")

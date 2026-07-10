@@ -40,6 +40,52 @@ final class InMemoryRemoteGameTransportTests: XCTestCase {
         XCTAssertEqual(fetchedStatus, status)
     }
 
+    func testUpdatePresenceCanBeFetchedForCurrentPlayer() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        let presence = RemotePresenceUpdate(
+            gameID: RemoteGameID(rawValue: "game"),
+            playerID: RemotePlayerID(rawValue: "maya"),
+            state: .activeMoving,
+            updatedAt: Date(timeIntervalSince1970: 40),
+            expiresAt: Date(timeIntervalSince1970: 45)
+        )
+
+        try await transport.updatePresence(presence)
+
+        let fetchedPresence = try await transport.fetchPresence(
+            gameID: RemoteGameID(rawValue: "game"),
+            playerID: RemotePlayerID(rawValue: "maya")
+        )
+        XCTAssertEqual(fetchedPresence, presence)
+    }
+
+    func testOlderPresenceDoesNotOverwriteNewerPresence() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        let newerPresence = RemotePresenceUpdate(
+            gameID: RemoteGameID(rawValue: "game"),
+            playerID: RemotePlayerID(rawValue: "maya"),
+            state: .foregroundIdle,
+            updatedAt: Date(timeIntervalSince1970: 50),
+            expiresAt: Date(timeIntervalSince1970: 60)
+        )
+        let olderPresence = RemotePresenceUpdate(
+            gameID: RemoteGameID(rawValue: "game"),
+            playerID: RemotePlayerID(rawValue: "maya"),
+            state: .activeMoving,
+            updatedAt: Date(timeIntervalSince1970: 40),
+            expiresAt: Date(timeIntervalSince1970: 45)
+        )
+
+        try await transport.updatePresence(newerPresence)
+        try await transport.updatePresence(olderPresence)
+
+        let fetchedPresence = try await transport.fetchPresence(
+            gameID: RemoteGameID(rawValue: "game"),
+            playerID: RemotePlayerID(rawValue: "maya")
+        )
+        XCTAssertEqual(fetchedPresence, newerPresence)
+    }
+
     private func makeEvent(sequence: Int) -> RemoteMoveEvent {
         RemoteMoveEvent(
             id: RemoteMoveEventID(rawValue: "event-\(sequence)"),

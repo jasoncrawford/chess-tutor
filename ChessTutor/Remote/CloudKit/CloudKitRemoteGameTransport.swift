@@ -25,7 +25,8 @@ extension CKDatabase: CloudKitGameDatabase {}
 actor CloudKitRemoteGameTransport: RemoteGameTransport,
     RemoteGameMoveNotificationPreparing,
     RemoteGameLifecycleTransport,
-    RemoteGameLifecycleNotificationPreparing {
+    RemoteGameLifecycleNotificationPreparing,
+    RemotePresenceTransport {
     enum Error: Swift.Error, Equatable {
         case conflictingSequence(Int)
         case missingSavedRecord
@@ -119,6 +120,41 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         switch result {
         case .success(let record):
             return try CloudKitRemoteGameStatusRecordCodec.status(from: record)
+        case .failure(let error):
+            guard isMissingRecord(error) else {
+                throw Error.fetchFailed
+            }
+            return nil
+        }
+    }
+
+    func updatePresence(_ presence: RemotePresenceUpdate) async throws {
+        if let existingPresence = try await fetchPresence(gameID: presence.gameID, playerID: presence.playerID),
+           existingPresence.updatedAt > presence.updatedAt {
+            return
+        }
+
+        let record = CloudKitRemotePresenceRecordCodec.record(from: presence)
+        let result = try await database.modifyRecords(
+            saving: [record],
+            deleting: [],
+            savePolicy: .changedKeys,
+            atomically: true
+        )
+        guard savedRecord(record.recordID, in: result.saveResults) != nil else {
+            throw Error.missingSavedRecord
+        }
+    }
+
+    func fetchPresence(gameID: RemoteGameID, playerID: RemotePlayerID) async throws -> RemotePresenceUpdate? {
+        let recordID = CloudKitRemotePresenceRecordCodec.recordID(gameID: gameID, playerID: playerID)
+        let results = try await database.records(for: [recordID], desiredKeys: nil)
+        guard let result = results[recordID] else {
+            return nil
+        }
+        switch result {
+        case .success(let record):
+            return try CloudKitRemotePresenceRecordCodec.presence(from: record)
         case .failure(let error):
             guard isMissingRecord(error) else {
                 throw Error.fetchFailed

@@ -12,11 +12,16 @@ struct ContentView: View {
     @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
     @State private var activeRemoteGameController: RemoteGameSessionController?
     @State private var remoteMoveFetchTask: Task<Void, Never>?
+    @State private var remotePresenceHeartbeatTask: Task<Void, Never>?
+    @State private var remoteActiveMovingResetTask: Task<Void, Never>?
+    @State private var remoteOpponentPresence: RemotePresenceUpdate?
+    @State private var lastRemoteActivePresencePublishedAt: Date?
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
+    @Environment(\.scenePhase) private var scenePhase
     private let remoteIdentityStore: RemoteIdentityStore
     private let activeRemoteGameStore: ActiveRemoteGameStore
     private let remoteInviteTransport: any RemoteInviteTransport
@@ -109,6 +114,9 @@ struct ContentView: View {
                 syncToCurrentInterfaceOrientation(animated: false)
             }
             resumeRemoteSyncIfNeeded()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            handleScenePhaseChange(phase)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             let orientation = UIDevice.current.orientation
@@ -227,7 +235,8 @@ struct ContentView: View {
             onPromotionTestRequest: { square, color in
                 pendingPromotion = PendingPromotion(testingSquare: square, color: color)
             },
-            onMoveAttempt: handleMoveAttempt
+            onMoveAttempt: handleMoveAttempt,
+            onLocalBoardInteraction: reportLocalBoardInteraction
         )
         #else
         return ChessBoardView(
@@ -235,7 +244,8 @@ struct ContentView: View {
             captureNamespace: captureNamespace,
             viewingAngle: viewingAngle,
             readableRotationDegrees: readableRotationDegrees,
-            onMoveAttempt: handleMoveAttempt
+            onMoveAttempt: handleMoveAttempt,
+            onLocalBoardInteraction: reportLocalBoardInteraction
         )
         #endif
     }
@@ -257,6 +267,7 @@ struct ContentView: View {
             },
             onNewGame: startNewGame,
             remoteNewGameOpponentName: activeRemoteGameOpponent?.displayName,
+            remotePresence: remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
             onCommittedMove: handleCommittedMove,
             fakeRemoteLab: activeFakeRemoteLab
@@ -278,6 +289,7 @@ struct ContentView: View {
             },
             onNewGame: startNewGame,
             remoteNewGameOpponentName: activeRemoteGameOpponent?.displayName,
+            remotePresence: remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
             onCommittedMove: handleCommittedMove
         )
@@ -424,6 +436,7 @@ struct ContentView: View {
 
     private func dismissRemoteStartAnnouncement() {
         pendingRemoteStartAnnouncement = nil
+        syncRemotePresenceForCurrentTurn()
         startRemoteMoveFetchLoopIfNeeded()
     }
 
@@ -600,6 +613,9 @@ struct ContentView: View {
     }
 
     private func handleCommittedMove(_ move: Move) {
+        stopRemotePresenceHeartbeat()
+        remoteOpponentPresence = nil
+
         #if DEBUG
         if let fakeRemoteLab = activeFakeRemoteLab, fakeRemoteLab.isActive {
             Task { @MainActor in
@@ -619,6 +635,7 @@ struct ContentView: View {
                 persistActiveRemoteGame()
                 try await activeRemoteGameController.uploadPendingMoves()
                 persistActiveRemoteGame()
+                syncRemotePresenceForCurrentTurn()
                 startRemoteMoveFetchLoopIfNeeded()
             } catch {
                 persistActiveRemoteGame()
@@ -648,6 +665,7 @@ struct ContentView: View {
                 session.message = "Could not sync move. Check your connection."
             }
             await fetchRemoteGameStatusIfNeeded()
+            syncRemotePresenceForCurrentTurn()
             startRemoteMoveFetchLoopIfNeeded()
         }
     }
@@ -691,6 +709,7 @@ struct ContentView: View {
     private func startRemoteMoveFetchLoopIfNeeded() {
         guard activeRemoteGameController != nil,
               !session.localCanActForCurrentTurn else {
+            syncRemotePresenceForCurrentTurn()
             return
         }
         remoteMoveFetchTask?.cancel()
@@ -701,6 +720,7 @@ struct ContentView: View {
                     return
                 }
                 guard !session.localCanActForCurrentTurn else {
+                    syncRemotePresenceForCurrentTurn()
                     remoteMoveFetchTask = nil
                     return
                 }
@@ -711,10 +731,14 @@ struct ContentView: View {
                     return
                 }
 
+                await fetchRemotePresenceIfNeeded()
+
                 do {
                     let appliedMoves = try await activeRemoteGameController.fetchAndApplyRemoteMoves(to: session)
                     if !appliedMoves.isEmpty {
                         persistActiveRemoteGame()
+                        remoteOpponentPresence = nil
+                        syncRemotePresenceForCurrentTurn()
                         remoteMoveFetchTask = nil
                         return
                     }
@@ -773,6 +797,8 @@ struct ContentView: View {
         let opponentName = Self.opponentName(from: descriptor)
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
+        stopRemotePresenceHeartbeat()
+        remoteOpponentPresence = nil
         activeRemoteGameController = nil
         try? activeRemoteGameStore.clear()
         session.endRemoteGame(message: "\(opponentName) ended this game.")
@@ -788,10 +814,171 @@ struct ContentView: View {
     private func cancelRemoteGameSync(clearSavedGame: Bool) {
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
+        stopRemotePresenceHeartbeat()
+        remoteOpponentPresence = nil
         activeRemoteGameController = nil
         if clearSavedGame {
             try? activeRemoteGameStore.clear()
         }
+    }
+
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .active, .inactive:
+            syncRemotePresenceForCurrentTurn()
+        case .background:
+            publishLocalRemotePresence(.away, expiresAfter: RemotePresencePolicy.awayExpiresAfter)
+            stopRemotePresenceHeartbeat()
+        @unknown default:
+            break
+        }
+    }
+
+    private func reportLocalBoardInteraction() {
+        guard activeRemoteGameController != nil,
+              session.localCanActForCurrentTurn else {
+            return
+        }
+
+        let now = Date()
+        if RemotePresencePolicy.shouldPublishActiveMoving(
+            lastPublishedAt: lastRemoteActivePresencePublishedAt,
+            now: now
+        ) {
+            publishLocalRemotePresence(
+                .activeMoving,
+                updatedAt: now,
+                expiresAfter: RemotePresencePolicy.activeMovingExpiresAfter
+            )
+            lastRemoteActivePresencePublishedAt = now
+            remotePresenceHeartbeatTask?.cancel()
+            remotePresenceHeartbeatTask = nil
+        }
+
+        remoteActiveMovingResetTask?.cancel()
+        remoteActiveMovingResetTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(RemotePresencePolicy.activeMovingResetDelay * 1_000_000_000)
+            )
+            guard !Task.isCancelled else {
+                return
+            }
+            lastRemoteActivePresencePublishedAt = nil
+            publishLocalRemotePresence(
+                .foregroundIdle,
+                expiresAfter: RemotePresencePolicy.foregroundIdleExpiresAfter
+            )
+            startRemotePresenceHeartbeatIfNeeded()
+        }
+    }
+
+    private func syncRemotePresenceForCurrentTurn() {
+        guard activeRemoteGameController != nil else {
+            stopRemotePresenceHeartbeat()
+            return
+        }
+
+        if session.localCanActForCurrentTurn {
+            startRemotePresenceHeartbeatIfNeeded()
+        } else {
+            stopRemotePresenceHeartbeat()
+        }
+    }
+
+    private func startRemotePresenceHeartbeatIfNeeded() {
+        guard activeRemoteGameController != nil,
+              session.localCanActForCurrentTurn,
+              scenePhase != .background else {
+            stopRemotePresenceHeartbeat()
+            return
+        }
+
+        guard remotePresenceHeartbeatTask == nil else {
+            return
+        }
+
+        publishLocalRemotePresence(.foregroundIdle, expiresAfter: RemotePresencePolicy.foregroundIdleExpiresAfter)
+        remotePresenceHeartbeatTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(RemotePresencePolicy.foregroundIdleHeartbeatInterval * 1_000_000_000)
+                )
+                guard !Task.isCancelled,
+                      activeRemoteGameController != nil,
+                      session.localCanActForCurrentTurn,
+                      scenePhase != .background else {
+                    remotePresenceHeartbeatTask = nil
+                    return
+                }
+                publishLocalRemotePresence(
+                    .foregroundIdle,
+                    expiresAfter: RemotePresencePolicy.foregroundIdleExpiresAfter
+                )
+            }
+        }
+    }
+
+    private func stopRemotePresenceHeartbeat() {
+        remotePresenceHeartbeatTask?.cancel()
+        remotePresenceHeartbeatTask = nil
+        remoteActiveMovingResetTask?.cancel()
+        remoteActiveMovingResetTask = nil
+        lastRemoteActivePresencePublishedAt = nil
+    }
+
+    private func publishLocalRemotePresence(
+        _ state: RemotePresenceState,
+        updatedAt: Date = Date(),
+        expiresAfter timeInterval: TimeInterval
+    ) {
+        guard let descriptor = activeRemoteGameController?.snapshot.descriptor,
+              let presenceTransport = remoteGameTransport as? any RemotePresenceTransport else {
+            return
+        }
+
+        let presence = RemotePresenceUpdate(
+            gameID: descriptor.id,
+            playerID: descriptor.localPlayerID,
+            state: state,
+            updatedAt: updatedAt,
+            expiresAt: updatedAt.addingTimeInterval(timeInterval)
+        )
+
+        Task {
+            try? await presenceTransport.updatePresence(presence)
+        }
+    }
+
+    private func fetchRemotePresenceIfNeeded() async {
+        guard let descriptor = activeRemoteGameController?.snapshot.descriptor,
+              let remoteTurnPlayer = remoteTurnPlayer(from: descriptor),
+              let presenceTransport = remoteGameTransport as? any RemotePresenceTransport else {
+            remoteOpponentPresence = nil
+            return
+        }
+
+        do {
+            remoteOpponentPresence = try await presenceTransport.fetchPresence(
+                gameID: descriptor.id,
+                playerID: remoteTurnPlayer.id
+            )
+        } catch {
+            remoteOpponentPresence = nil
+        }
+    }
+
+    private func remoteTurnPlayer(from descriptor: RemoteGameDescriptor) -> RemotePlayerRef? {
+        let player: RemotePlayerRef
+        switch session.state.sideToMove {
+        case .white:
+            player = descriptor.whitePlayer
+        case .black:
+            player = descriptor.blackPlayer
+        }
+        guard player.id != descriptor.localPlayerID else {
+            return nil
+        }
+        return player
     }
 
     private static func applyRemoteSeats(from descriptor: RemoteGameDescriptor, to session: GameSession) {

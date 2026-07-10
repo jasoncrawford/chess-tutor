@@ -198,6 +198,7 @@ struct ChessBoardView: View {
     var onPromotionTestRequest: (Square, PieceColor) -> Void = { _, _ in }
     #endif
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
+    var onLocalBoardInteraction: () -> Void = {}
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
     @State private var settlingPieceID: UUID?
@@ -484,6 +485,7 @@ struct ChessBoardView: View {
                     $0.square == from && $0.piece == piece
                 }?.id
                 dragState = DragState(from: from, piece: piece, visualPieceID: visualPieceID, location: value.location)
+                reportLocalInteractionIfCurrentPiece(from)
             }
             .onEnded { value in
                 guard let dragState else {
@@ -516,6 +518,9 @@ struct ChessBoardView: View {
                 }
 
                 let result = session.moveSelectedPiece(to: destination)
+                if result.isLocalMovementInteraction {
+                    onLocalBoardInteraction()
+                }
                 onMoveAttempt(result)
                 switch result {
                 case .moved, .needsPromotion:
@@ -633,6 +638,7 @@ struct ChessBoardView: View {
 
         if session.selectedSquare == nil {
             session.select(square)
+            reportLocalInteractionIfCurrentPiece(square)
             return
         }
 
@@ -655,11 +661,15 @@ struct ChessBoardView: View {
         }
 
         session.select(square)
+        reportLocalInteractionIfCurrentPiece(square)
     }
 
     @discardableResult
     private func attemptMove(to square: Square) -> MoveAttemptResult {
         let result = session.moveSelectedPiece(to: square)
+        if result.isLocalMovementInteraction {
+            onLocalBoardInteraction()
+        }
         onMoveAttempt(result)
         return result
     }
@@ -674,6 +684,25 @@ struct ChessBoardView: View {
         }
 
         return tappedPiece.color != selectedPiece.color
+    }
+
+    private func reportLocalInteractionIfCurrentPiece(_ square: Square) {
+        guard session.localCanActForCurrentTurn,
+              session.state.board[square]?.color == session.state.sideToMove else {
+            return
+        }
+        onLocalBoardInteraction()
+    }
+}
+
+private extension MoveAttemptResult {
+    var isLocalMovementInteraction: Bool {
+        switch self {
+        case .moved, .needsPromotion:
+            return true
+        case .illegal:
+            return false
+        }
     }
 }
 

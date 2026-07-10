@@ -16,9 +16,15 @@ protocol RemoteGameLifecycleNotificationPreparing: Sendable {
     func prepareGameStatusNotification(gameID: RemoteGameID) async throws
 }
 
-actor InMemoryRemoteGameTransport: RemoteGameTransport, RemoteGameLifecycleTransport {
+protocol RemotePresenceTransport: Sendable {
+    func updatePresence(_ presence: RemotePresenceUpdate) async throws
+    func fetchPresence(gameID: RemoteGameID, playerID: RemotePlayerID) async throws -> RemotePresenceUpdate?
+}
+
+actor InMemoryRemoteGameTransport: RemoteGameTransport, RemoteGameLifecycleTransport, RemotePresenceTransport {
     private var eventsByGame: [RemoteGameID: [RemoteMoveEvent]] = [:]
     private var statusByGame: [RemoteGameID: RemoteGameStatusUpdate] = [:]
+    private var presenceByPlayer: [PresenceKey: RemotePresenceUpdate] = [:]
 
     func sendMove(_ event: RemoteMoveEvent) async throws -> RemoteMoveAck {
         var events = eventsByGame[event.gameID, default: []]
@@ -53,6 +59,19 @@ actor InMemoryRemoteGameTransport: RemoteGameTransport, RemoteGameLifecycleTrans
         statusByGame[gameID]
     }
 
+    func updatePresence(_ presence: RemotePresenceUpdate) async throws {
+        let key = PresenceKey(gameID: presence.gameID, playerID: presence.playerID)
+        if let existing = presenceByPlayer[key],
+           existing.updatedAt > presence.updatedAt {
+            return
+        }
+        presenceByPlayer[key] = presence
+    }
+
+    func fetchPresence(gameID: RemoteGameID, playerID: RemotePlayerID) async throws -> RemotePresenceUpdate? {
+        presenceByPlayer[PresenceKey(gameID: gameID, playerID: playerID)]
+    }
+
     #if DEBUG
     func storeForTesting(_ event: RemoteMoveEvent) {
         var events = eventsByGame[event.gameID, default: []]
@@ -66,4 +85,9 @@ actor InMemoryRemoteGameTransport: RemoteGameTransport, RemoteGameLifecycleTrans
 
 enum InMemoryRemoteGameTransportError: Swift.Error, Equatable {
     case conflictingSequence(Int)
+}
+
+private struct PresenceKey: Hashable {
+    let gameID: RemoteGameID
+    let playerID: RemotePlayerID
 }

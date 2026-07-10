@@ -146,3 +146,17 @@ struct RemoteGameStatusUpdate: Codable, Equatable, Sendable {
     let updatedByPlayerID: RemotePlayerID
     let updatedAt: Date
 }
+
+enum RemotePresenceState: String, Codable, Equatable, Sendable {
+    case activeMoving
+    case foregroundIdle
+    case away
+}
+
+struct RemotePresenceUpdate: Codable, Equatable, Sendable {
+    let gameID: RemoteGameID
+    let playerID: RemotePlayerID
+    let state: RemotePresenceState
+    let updatedAt: Date
+    let expiresAt: Date
+}
