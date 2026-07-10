@@ -221,6 +221,8 @@ Invite records are not the durable game. They are only rendezvous records. Once 
 
 Use `CKShare` for accepted game records in V1.
 
+Implementation note for the first two-device test slice: the current production code uses app-managed CloudKit records behind the `RemoteGameTransport` boundary rather than the CKShare-backed accepted game store described here. Pending invites still use six-digit public rendezvous records, but accepted game move logs use the invite's random link token as the logical game ID so move record names are not derived from the short code. CKShare remains the preferred privacy direction if the app-managed CloudKit record approach proves insufficient after device testing.
+
 CloudKit storage split:
 
 ```text

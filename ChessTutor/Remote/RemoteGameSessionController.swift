@@ -4,6 +4,7 @@ import Foundation
 final class RemoteGameSessionController {
     enum Error: Swift.Error, Equatable {
         case remoteMoveRejected
+        case invalidSnapshot
     }
 
     private var coordinator: RemoteGameCoordinator
@@ -11,6 +12,10 @@ final class RemoteGameSessionController {
 
     var syncStatus: RemoteGameCoordinator.SyncStatus {
         coordinator.syncStatus
+    }
+
+    var snapshot: ActiveRemoteGameSnapshot {
+        coordinator.snapshot
     }
 
     init(
@@ -23,6 +28,22 @@ final class RemoteGameSessionController {
             descriptor: descriptor,
             transport: transport,
             initialState: initialState
+        )
+    }
+
+    init(
+        snapshot: ActiveRemoteGameSnapshot,
+        transport: any RemoteGameTransport
+    ) throws {
+        let projectedState = try Self.projectedState(from: snapshot)
+        self.gameID = snapshot.descriptor.id
+        self.coordinator = RemoteGameCoordinator(
+            descriptor: snapshot.descriptor,
+            transport: transport,
+            initialState: projectedState,
+            acceptedEvents: snapshot.acceptedEvents,
+            outbox: snapshot.outbox,
+            lastAppliedSequence: snapshot.lastAppliedSequence
         )
     }
 
@@ -66,5 +87,20 @@ final class RemoteGameSessionController {
 
         coordinator = nextCoordinator
         return appliedMoves
+    }
+
+    static func projectedState(from snapshot: ActiveRemoteGameSnapshot) throws -> GameState {
+        let result = try RemoteMoveLog.apply(
+            events: snapshot.acceptedEvents,
+            to: .startingPosition(),
+            gameID: snapshot.descriptor.id,
+            protocolVersion: snapshot.descriptor.protocolVersion,
+            whitePlayerID: snapshot.descriptor.whitePlayer.id,
+            blackPlayerID: snapshot.descriptor.blackPlayer.id
+        )
+        guard result.lastAppliedSequence == snapshot.lastAppliedSequence else {
+            throw Error.invalidSnapshot
+        }
+        return result.state
     }
 }

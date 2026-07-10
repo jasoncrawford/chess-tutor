@@ -59,6 +59,40 @@ final class RemoteGameSessionControllerTests: XCTestCase {
         XCTAssertEqual(controller.syncStatus, .failed(.transportFailed))
     }
 
+    func testRestoreFromSnapshotContinuesFetchingAfterLastAppliedSequence() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        var coordinator = RemoteGameCoordinator(
+            descriptor: descriptor(localPlayerID: whiteID),
+            transport: transport,
+            initialState: .startingPosition()
+        )
+        let whiteMove = Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4))
+        let firstEvent = try coordinator.recordLocalMove(whiteMove, createdAt: Date(timeIntervalSince1970: 1))
+        let blackMove = Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5))
+        let secondEvent = makeRemoteMoveEvent(
+            sequence: 2,
+            actor: blackID,
+            move: blackMove,
+            startingFrom: coordinator.projectedState
+        )
+        await transport.storeForTesting(secondEvent)
+        var restoredSessionState = GameState.startingPosition()
+        restoredSessionState.apply(whiteMove)
+        let restoredSession = GameSession(state: restoredSessionState)
+        restoredSession.whitePlayer = .humanLocal
+        restoredSession.blackPlayer = .remote(playerID: blackID.rawValue)
+        let restoredController = try RemoteGameSessionController(
+            snapshot: coordinator.snapshot,
+            transport: transport
+        )
+
+        let appliedMoves = try await restoredController.fetchAndApplyRemoteMoves(to: restoredSession)
+
+        XCTAssertEqual(firstEvent.sequenceNumber, 1)
+        XCTAssertEqual(appliedMoves, [blackMove])
+        XCTAssertEqual(restoredController.snapshot.lastAppliedSequence, 2)
+    }
+
     private let gameID = RemoteGameID(rawValue: "game-1")
     private let whiteID = RemotePlayerID(rawValue: "white")
     private let blackID = RemotePlayerID(rawValue: "black")
@@ -71,6 +105,28 @@ final class RemoteGameSessionControllerTests: XCTestCase {
             whitePlayer: RemotePlayerRef(id: whiteID, displayName: "Jason"),
             blackPlayer: RemotePlayerRef(id: blackID, displayName: "Maya"),
             localPlayerID: localPlayerID
+        )
+    }
+
+    private func makeRemoteMoveEvent(
+        sequence: Int,
+        actor: RemotePlayerID,
+        move: Move,
+        startingFrom state: GameState
+    ) -> RemoteMoveEvent {
+        var resultingState = state
+        resultingState.apply(move)
+        return RemoteMoveEvent(
+            id: RemoteMoveEventID(rawValue: "\(gameID.rawValue)-\(sequence)-\(actor.rawValue)"),
+            gameID: gameID,
+            sequenceNumber: sequence,
+            actorPlayerID: actor,
+            move: RemoteMoveCodec.encode(move),
+            createdAt: Date(timeIntervalSince1970: TimeInterval(sequence)),
+            protocolVersion: 1,
+            previousPositionFingerprint: PositionFingerprinting.fingerprint(for: state),
+            resultingPositionFingerprint: PositionFingerprinting.fingerprint(for: resultingState),
+            notificationSummary: "Move"
         )
     }
 }

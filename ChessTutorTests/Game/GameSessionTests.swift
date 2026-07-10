@@ -232,6 +232,23 @@ final class GameSessionTests: XCTestCase {
         XCTAssertTrue(session.capturedPieces.isEmpty)
     }
 
+    func testReplayingCommittedMovesRestoresCapturedPieces() {
+        let session = GameSession(
+            replayingCommittedMoves: [
+                Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+                Move(from: Square(file: .d, rank: 7), to: Square(file: .d, rank: 5)),
+                Move(from: Square(file: .e, rank: 4), to: Square(file: .d, rank: 5)),
+            ]
+        )
+
+        XCTAssertEqual(session.state.board[Square(file: .d, rank: 5)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+        XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.capturedAt), [Square(file: .d, rank: 5)])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.committed])
+    }
+
     #if DEBUG
     func testCaptureForTestingRemovesPieceFromBoardAndAddsCommittedCapture() {
         let session = GameSession()

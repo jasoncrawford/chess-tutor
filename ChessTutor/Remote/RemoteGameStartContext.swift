@@ -40,7 +40,7 @@ struct RemoteGameStartContext: Equatable {
 
         return RemoteGameStartContext(
             descriptor: RemoteGameDescriptor(
-                id: RemoteGameID(rawValue: acceptedInvite.invite.id.rawValue),
+                id: RemoteGameID(rawValue: acceptedInvite.invite.token.rawValue),
                 protocolVersion: acceptedInvite.invite.protocolVersion,
                 status: .active,
                 whitePlayer: whitePlayer,

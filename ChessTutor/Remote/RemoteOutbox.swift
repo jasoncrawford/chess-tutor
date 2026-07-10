@@ -1,4 +1,4 @@
-struct RemoteOutboxItem: Equatable, Sendable {
+struct RemoteOutboxItem: Codable, Equatable, Sendable {
     enum State: String, Codable, Equatable, Sendable {
         case pendingUpload
         case uploading
@@ -11,7 +11,7 @@ struct RemoteOutboxItem: Equatable, Sendable {
     var state: State
 }
 
-struct RemoteOutbox: Equatable, Sendable {
+struct RemoteOutbox: Codable, Equatable, Sendable {
     enum Error: Swift.Error, Equatable {
         case missingEvent(RemoteMoveEventID)
         case mismatchedAck

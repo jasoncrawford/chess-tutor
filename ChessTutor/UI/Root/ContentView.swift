@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
     private let remoteIdentityStore: RemoteIdentityStore
+    private let activeRemoteGameStore: ActiveRemoteGameStore
     private let remoteInviteTransport: any RemoteInviteTransport
     private let remoteGameTransport: any RemoteGameTransport
     private let remotePlayRuntimeMode: RemotePlayRuntimeMode
@@ -30,6 +31,8 @@ struct ContentView: View {
     init() {
         let remoteIdentityStore = RemoteIdentityStore()
         self.remoteIdentityStore = remoteIdentityStore
+        let activeRemoteGameStore = ActiveRemoteGameStore()
+        self.activeRemoteGameStore = activeRemoteGameStore
         let runtimeMode = RemotePlayRuntimeMode.resolve()
         self.remotePlayRuntimeMode = runtimeMode
         self.remoteInviteTransport = Self.remoteInviteTransport(for: runtimeMode)
@@ -45,6 +48,19 @@ struct ContentView: View {
         let initialViewingAngle = Self.currentViewingAngle()
         _viewingAngle = State(initialValue: initialViewingAngle)
         _tableRotationDegrees = State(initialValue: initialViewingAngle.tableRotationDegrees)
+
+        if let snapshot = try? activeRemoteGameStore.load(),
+           let restoredSession = try? Self.restoredSession(from: snapshot),
+           let restoredController = try? RemoteGameSessionController(
+                snapshot: snapshot,
+                transport: self.remoteGameTransport
+           ) {
+            Self.applyRemoteSeats(from: snapshot.descriptor, to: restoredSession)
+            _session = State(initialValue: restoredSession)
+            _activeRemoteGameController = State(initialValue: restoredController)
+        } else if (try? activeRemoteGameStore.load()) != nil {
+            try? activeRemoteGameStore.clear()
+        }
     }
 
     var body: some View {
@@ -92,6 +108,7 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 syncToCurrentInterfaceOrientation(animated: false)
             }
+            resumeRemoteSyncIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             let orientation = UIDevice.current.orientation
@@ -259,7 +276,7 @@ struct ContentView: View {
     }
 
     private func startNewGame() {
-        cancelRemoteGameSync()
+        cancelRemoteGameSync(clearSavedGame: true)
         #if DEBUG
         GameLifecycle.startNewGame(
             session: session,
@@ -532,21 +549,15 @@ struct ContentView: View {
     }
 
     private func startRemoteGame(context: RemoteGameStartContext) -> RemoteGameStartAnnouncement {
-        cancelRemoteGameSync()
+        cancelRemoteGameSync(clearSavedGame: false)
         session.newGame()
-        switch context.localPlayerColor {
-        case .white:
-            session.whitePlayer = .humanLocal
-            session.blackPlayer = .remote(playerID: context.opponent.id.rawValue)
-        case .black:
-            session.whitePlayer = .remote(playerID: context.opponent.id.rawValue)
-            session.blackPlayer = .humanLocal
-        }
+        Self.applyRemoteSeats(from: context.descriptor, to: session)
         activeRemoteGameController = RemoteGameSessionController(
             descriptor: context.descriptor,
             transport: remoteGameTransport,
             initialState: .startingPosition()
         )
+        persistActiveRemoteGame()
         prepareRemoteMoveNotification(for: context.descriptor)
         remotePlayFlow.cancel()
         return RemoteGameStartAnnouncement(
@@ -572,11 +583,37 @@ struct ContentView: View {
         Task { @MainActor in
             do {
                 try activeRemoteGameController.recordCommittedLocalMove(move)
+                persistActiveRemoteGame()
                 try await activeRemoteGameController.uploadPendingMoves()
+                persistActiveRemoteGame()
                 startRemoteMoveFetchLoopIfNeeded()
             } catch {
+                persistActiveRemoteGame()
                 session.message = "Could not sync move. Check your connection."
             }
+        }
+    }
+
+    private func resumeRemoteSyncIfNeeded() {
+        guard activeRemoteGameController != nil else {
+            return
+        }
+        if let descriptor = activeRemoteGameController?.snapshot.descriptor {
+            prepareRemoteMoveNotification(for: descriptor)
+        }
+
+        Task { @MainActor in
+            guard let activeRemoteGameController else {
+                return
+            }
+            do {
+                try await activeRemoteGameController.uploadPendingMoves()
+                persistActiveRemoteGame()
+            } catch {
+                persistActiveRemoteGame()
+                session.message = "Could not sync move. Check your connection."
+            }
+            startRemoteMoveFetchLoopIfNeeded()
         }
     }
 
@@ -617,6 +654,7 @@ struct ContentView: View {
                 do {
                     let appliedMoves = try await activeRemoteGameController.fetchAndApplyRemoteMoves(to: session)
                     if !appliedMoves.isEmpty {
+                        persistActiveRemoteGame()
                         remoteMoveFetchTask = nil
                         return
                     }
@@ -631,10 +669,42 @@ struct ContentView: View {
         }
     }
 
-    private func cancelRemoteGameSync() {
+    private func persistActiveRemoteGame() {
+        guard let activeRemoteGameController else {
+            return
+        }
+        try? activeRemoteGameStore.save(activeRemoteGameController.snapshot)
+    }
+
+    private func cancelRemoteGameSync(clearSavedGame: Bool) {
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
         activeRemoteGameController = nil
+        if clearSavedGame {
+            try? activeRemoteGameStore.clear()
+        }
+    }
+
+    private static func applyRemoteSeats(from descriptor: RemoteGameDescriptor, to session: GameSession) {
+        if descriptor.localPlayerID == descriptor.whitePlayer.id {
+            session.whitePlayer = .humanLocal
+            session.blackPlayer = .remote(playerID: descriptor.blackPlayer.id.rawValue)
+        } else {
+            session.whitePlayer = .remote(playerID: descriptor.whitePlayer.id.rawValue)
+            session.blackPlayer = .humanLocal
+        }
+    }
+
+    private static func restoredSession(from snapshot: ActiveRemoteGameSnapshot) throws -> GameSession {
+        let projectedState = try RemoteGameSessionController.projectedState(from: snapshot)
+        let moves = try snapshot.acceptedEvents
+            .sorted { $0.sequenceNumber < $1.sequenceNumber }
+            .map { try RemoteMoveCodec.decode($0.move) }
+        let session = GameSession(replayingCommittedMoves: moves)
+        guard session.state == projectedState else {
+            throw RemoteGameSessionController.Error.invalidSnapshot
+        }
+        return session
     }
 
     private static func remoteInviteTransport(for mode: RemotePlayRuntimeMode) -> any RemoteInviteTransport {

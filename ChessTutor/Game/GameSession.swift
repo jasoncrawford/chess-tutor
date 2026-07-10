@@ -137,6 +137,13 @@ final class GameSession {
         self.committedState = state
     }
 
+    convenience init(replayingCommittedMoves moves: [Move]) {
+        self.init()
+        for move in moves {
+            commitRestoredMove(move)
+        }
+    }
+
     func select(_ square: Square) {
         guard committedState.result == .ongoing else {
             selectedSquare = nil
@@ -286,6 +293,24 @@ final class GameSession {
         selectedSquare = nil
         legalMovesForSelection = []
         message = nil
+    }
+
+    private func commitRestoredMove(_ move: Move) {
+        if let capturedPiece = capturedPiece(for: move, in: committedState) {
+            committedCapturedPieces.append(
+                CapturedPiece(
+                    id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
+                    piece: capturedPiece.piece,
+                    capturedAt: capturedPiece.square,
+                    state: .committed
+                )
+            )
+        }
+        committedState.apply(move)
+        tentativeMove = nil
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = committedState.result == .ongoing ? nil : statusText
     }
 
     #if DEBUG

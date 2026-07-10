@@ -22,6 +22,15 @@ struct RemoteGameCoordinator {
     private(set) var lastAppliedSequence: Int
     private(set) var syncStatus: SyncStatus
 
+    var snapshot: ActiveRemoteGameSnapshot {
+        ActiveRemoteGameSnapshot(
+            descriptor: descriptor,
+            acceptedEvents: acceptedEvents,
+            outbox: outbox,
+            lastAppliedSequence: lastAppliedSequence
+        )
+    }
+
     init(
         descriptor: RemoteGameDescriptor,
         transport: any RemoteGameTransport,

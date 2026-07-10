@@ -132,3 +132,10 @@ struct RemoteAcceptedInvite: Equatable, Sendable {
     let joiner: RemotePlayerRef
     let joinerColor: PieceColor
 }
+
+struct ActiveRemoteGameSnapshot: Codable, Equatable, Sendable {
+    let descriptor: RemoteGameDescriptor
+    let acceptedEvents: [RemoteMoveEvent]
+    let outbox: RemoteOutbox
+    let lastAppliedSequence: Int
+}

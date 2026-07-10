@@ -9,7 +9,8 @@ final class RemoteGameStartContextTests: XCTestCase {
 
         XCTAssertEqual(context.opponent, inviter)
         XCTAssertEqual(context.localPlayerColor, .black)
-        XCTAssertEqual(context.descriptor.id, RemoteGameID(rawValue: inviteID.rawValue))
+        XCTAssertEqual(context.descriptor.id, RemoteGameID(rawValue: inviteToken.rawValue))
+        XCTAssertNotEqual(context.descriptor.id.rawValue, inviteID.rawValue)
         XCTAssertEqual(context.descriptor.whitePlayer, inviter)
         XCTAssertEqual(context.descriptor.blackPlayer, joiner)
         XCTAssertEqual(context.descriptor.localPlayerID, joiner.id)
@@ -22,13 +23,15 @@ final class RemoteGameStartContextTests: XCTestCase {
 
         XCTAssertEqual(context.opponent, joiner)
         XCTAssertEqual(context.localPlayerColor, .black)
-        XCTAssertEqual(context.descriptor.id, RemoteGameID(rawValue: inviteID.rawValue))
+        XCTAssertEqual(context.descriptor.id, RemoteGameID(rawValue: inviteToken.rawValue))
+        XCTAssertNotEqual(context.descriptor.id.rawValue, inviteID.rawValue)
         XCTAssertEqual(context.descriptor.whitePlayer, joiner)
         XCTAssertEqual(context.descriptor.blackPlayer, inviter)
         XCTAssertEqual(context.descriptor.localPlayerID, inviter.id)
     }
 
     private let inviteID = RemoteInviteID(rawValue: "123456")
+    private let inviteToken = RemoteInviteToken(rawValue: "private-game-token")
     private let inviter = RemotePlayerRef(id: RemotePlayerID(rawValue: "inviter"), displayName: "Jason")
     private let joiner = RemotePlayerRef(id: RemotePlayerID(rawValue: "joiner"), displayName: "Maya")
 
@@ -37,7 +40,7 @@ final class RemoteGameStartContextTests: XCTestCase {
             invite: RemotePendingInvite(
                 id: inviteID,
                 code: InviteCode(rawValue: inviteID.rawValue),
-                token: RemoteInviteToken(rawValue: "token"),
+                token: inviteToken,
                 inviter: inviter,
                 inviteeDisplayName: joiner.displayName,
                 whiteAssignment: .inviteeChooses,
