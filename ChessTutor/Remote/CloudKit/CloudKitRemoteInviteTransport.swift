@@ -60,13 +60,21 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             savePolicy: .ifServerRecordUnchanged,
             atomically: true
         )
-        guard case .success = result.saveResults[record.recordID] else {
+        guard savedRecord(record.recordID, in: result.saveResults) != nil else {
             throw RemoteInviteTransportError.codeCollision
         }
         return invite
     }
 
     func fetchInvite(code: InviteCode, token: RemoteInviteToken?, now: Date) async throws -> RemotePendingInvite {
+        try await fetchPendingInviteRecord(code: code, token: token, now: now).invite
+    }
+
+    private func fetchPendingInviteRecord(
+        code: InviteCode,
+        token: RemoteInviteToken?,
+        now: Date
+    ) async throws -> (invite: RemotePendingInvite, record: CKRecord) {
         let recordID = CKRecord.ID(recordName: code.rawValue)
         let results = try await database.records(for: [recordID], desiredKeys: nil)
         guard case .success(let record) = results[recordID] else {
@@ -82,11 +90,12 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         guard invite.expiresAt > now else {
             throw RemoteInviteTransportError.expired
         }
-        return invite
+        return (invite, record)
     }
 
     func acceptInvite(_ request: JoinRemoteInviteRequest, chosenColor: PieceColor?) async throws -> RemoteAcceptedInvite {
-        let invite = try await fetchInvite(code: request.code, token: request.token, now: request.now)
+        let fetched = try await fetchPendingInviteRecord(code: request.code, token: request.token, now: request.now)
+        let invite = fetched.invite
         let joinerColor: PieceColor
         if let fixedColor = invite.whiteAssignment.localPlayerColorForJoiner {
             guard chosenColor == nil || chosenColor == fixedColor else {
@@ -112,23 +121,49 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             expiresAt: invite.expiresAt,
             protocolVersion: invite.protocolVersion
         )
-        let record = CloudKitPendingInviteRecordCodec.record(from: accepted)
-        _ = try await database.modifyRecords(
-            saving: [record],
+        CloudKitPendingInviteRecordCodec.apply(accepted, to: fetched.record)
+        let result = try await database.modifyRecords(
+            saving: [fetched.record],
             deleting: [],
-            savePolicy: .changedKeys,
+            savePolicy: .ifServerRecordUnchanged,
             atomically: true
         )
+        guard savedRecord(fetched.record.recordID, in: result.saveResults) != nil else {
+            throw RemoteInviteTransportError.notPending
+        }
         return RemoteAcceptedInvite(invite: accepted, joiner: request.joiner, joinerColor: joinerColor)
     }
 
     func cancelInvite(id: RemoteInviteID) async throws {
         let recordID = CKRecord.ID(recordName: id.rawValue)
-        _ = try await database.modifyRecords(
+        let result = try await database.modifyRecords(
             saving: [],
             deleting: [recordID],
             savePolicy: .changedKeys,
             atomically: true
         )
+        guard deletedRecord(recordID, in: result.deleteResults) else {
+            throw RemoteInviteTransportError.notFound
+        }
+    }
+
+    private func savedRecord(
+        _ recordID: CKRecord.ID,
+        in results: [CKRecord.ID: Result<CKRecord, any Error>]
+    ) -> CKRecord? {
+        guard case .success(let record) = results[recordID] else {
+            return nil
+        }
+        return record
+    }
+
+    private func deletedRecord(
+        _ recordID: CKRecord.ID,
+        in results: [CKRecord.ID: Result<Void, any Error>]
+    ) -> Bool {
+        guard case .success = results[recordID] else {
+            return false
+        }
+        return true
     }
 }
