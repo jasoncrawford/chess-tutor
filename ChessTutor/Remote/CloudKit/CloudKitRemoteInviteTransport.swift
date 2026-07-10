@@ -2,6 +2,8 @@ import CloudKit
 import Foundation
 
 protocol CloudKitInviteDatabase: Sendable {
+    func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription
+
     func records(
         for ids: [CKRecord.ID],
         desiredKeys: [CKRecord.FieldKey]?
@@ -18,7 +20,11 @@ protocol CloudKitInviteDatabase: Sendable {
     )
 }
 
-extension CKDatabase: CloudKitInviteDatabase {}
+extension CKDatabase: CloudKitInviteDatabase {
+    func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
+        try await save(subscription)
+    }
+}
 
 actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
     private let database: any CloudKitInviteDatabase
@@ -155,6 +161,19 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         return try CloudKitPendingInviteRecordCodec.acceptedInvite(from: record)
     }
 
+    func prepareAcceptanceNotification(for invite: RemotePendingInvite) async throws {
+        let subscription = CKQuerySubscription(
+            recordType: CloudKitPendingInviteRecordCodec.recordType,
+            predicate: NSPredicate(format: "%K == %@", "inviteCode", invite.code.rawValue),
+            subscriptionID: acceptanceSubscriptionID(for: invite.id),
+            options: [.firesOnRecordUpdate]
+        )
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+        _ = try await database.saveSubscription(subscription)
+    }
+
     func cancelInvite(id: RemoteInviteID) async throws {
         let recordID = CKRecord.ID(recordName: id.rawValue)
         let result = try await database.modifyRecords(
@@ -186,5 +205,9 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             return false
         }
         return true
+    }
+
+    private func acceptanceSubscriptionID(for id: RemoteInviteID) -> String {
+        "pending-invite-accepted-\(id.rawValue)"
     }
 }

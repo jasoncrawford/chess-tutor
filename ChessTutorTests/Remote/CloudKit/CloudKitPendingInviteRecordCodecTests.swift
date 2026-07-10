@@ -10,6 +10,7 @@ final class CloudKitPendingInviteRecordCodecTests: XCTestCase {
         let decoded = try CloudKitPendingInviteRecordCodec.invite(from: record)
 
         XCTAssertEqual(record.recordID.recordName, "428193")
+        XCTAssertEqual(record["inviteCode"] as? String, "428193")
         XCTAssertEqual(decoded, invite)
     }
 

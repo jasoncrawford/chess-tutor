@@ -97,6 +97,12 @@ struct ContentView: View {
             let nextAngle = BoardViewingAngle(deviceOrientation: orientation, baseline: baselineOrientation.deviceOrientation)
             applyViewingAngle(nextAngle, animated: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .remoteInviteAcceptanceMayHaveChanged)) { notification in
+            guard let rawInviteID = notification.userInfo?[RemoteInviteAcceptancePushUserInfoKey.inviteID] as? String else {
+                return
+            }
+            fetchAcceptedInviteAfterPush(id: RemoteInviteID(rawValue: rawInviteID))
+        }
         .sheet(item: $pendingPromotion) { promotion in
             PromotionPickerView(color: promotion.color) { kind in
                 #if DEBUG
@@ -273,7 +279,7 @@ struct ContentView: View {
         }
 
         let now = Date()
-        return try await remoteInviteTransport.createInvite(
+        let invite = try await remoteInviteTransport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: RemotePlayerRef(id: profile.id, displayName: displayName),
                 inviteeDisplayName: remoteInviteeDisplayName(for: target),
@@ -282,6 +288,8 @@ struct ContentView: View {
                 expiresAt: now.addingTimeInterval(10 * 60)
             )
         )
+        try? await remoteInviteTransport.prepareAcceptanceNotification(for: invite)
+        return invite
     }
 
     private func fetchRemoteInvite(
@@ -293,6 +301,27 @@ struct ContentView: View {
 
     private func fetchAcceptedRemoteInvite(id: RemoteInviteID) async throws -> RemoteAcceptedInvite? {
         try await remoteInviteTransport.acceptedInvite(id: id, now: Date())
+    }
+
+    private func fetchAcceptedInviteAfterPush(id: RemoteInviteID) {
+        guard case .waitingForInvitee(let pendingInvite) = remotePlayFlow.stage,
+              pendingInvite.remoteInviteID == id else {
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                guard case .waitingForInvitee(let currentInvite) = remotePlayFlow.stage,
+                      currentInvite.remoteInviteID == id,
+                      let acceptedInvite = try await fetchAcceptedRemoteInvite(id: id) else {
+                    return
+                }
+                remotePlayFlow.cancel()
+                startInviterRemoteGame(acceptedInvite)
+            } catch {
+                return
+            }
+        }
     }
 
     private func remoteInviteeDisplayName(for target: RemotePlayFlow.InviteTarget) -> String? {

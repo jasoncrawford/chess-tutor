@@ -136,6 +136,21 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(fetchedAcceptance, accepted)
     }
 
+    func testPreparingAcceptanceNotificationSavesQuerySubscriptionForInviteCode() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .invitee)
+
+        try await transport.prepareAcceptanceNotification(for: invite)
+
+        let storedSubscription = await database.subscription(withID: "pending-invite-accepted-428193")
+        let subscription = try XCTUnwrap(storedSubscription)
+        XCTAssertEqual(subscription.subscriptionID, "pending-invite-accepted-428193")
+        let querySubscription = try XCTUnwrap(subscription as? CKQuerySubscription)
+        XCTAssertEqual(querySubscription.recordType, CloudKitPendingInviteRecordCodec.recordType)
+        XCTAssertEqual(querySubscription.notificationInfo?.shouldSendContentAvailable, true)
+    }
+
     func testAcceptInviteRecordLevelSaveFailureMapsToNotPending() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
@@ -232,12 +247,17 @@ private struct ModifyRecordsRequest: Equatable {
 
 private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
     private var records: [CKRecord.ID: CKRecord] = [:]
+    private var subscriptions: [String: CKSubscription] = [:]
     private var failingSaveIDs: Set<CKRecord.ID> = []
     private var failingDeleteIDs: Set<CKRecord.ID> = []
     private var requests: [ModifyRecordsRequest] = []
 
     func record(withID id: CKRecord.ID) -> CKRecord? {
         records[id]
+    }
+
+    func subscription(withID id: String) -> CKSubscription? {
+        subscriptions[id]
     }
 
     func store(_ invite: RemotePendingInvite) {
@@ -255,6 +275,11 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
 
     func lastModifyRequest() -> ModifyRecordsRequest? {
         requests.last
+    }
+
+    func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
+        subscriptions[subscription.subscriptionID] = subscription
+        return subscription
     }
 
     func records(

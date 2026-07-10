@@ -67,6 +67,7 @@
 		C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */; };
 		C28AABFA7D36AEEE1DDB975D /* FakeRemoteGameLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */; };
 		C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */; };
+		C60F9265F58DFD62EDF20670 /* CloudKitRemoteInvitePushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98449A339F0BA3C0E75B64ED /* CloudKitRemoteInvitePushNotifications.swift */; };
 		C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */; };
 		C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */; };
 		CA0390518BB87B51C26996ED /* Piece.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D93E7407EE5AA7D111C6A2 /* Piece.swift */; };
@@ -138,6 +139,7 @@
 		90EAA3445235303F429994C6 /* RemoteGameStartAnnouncementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartAnnouncementView.swift; sourceTree = "<group>"; };
 		945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutboxTests.swift; sourceTree = "<group>"; };
 		96CA7788DB059F937C045AD4 /* RemoteMoveCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteMoveCodec.swift; sourceTree = "<group>"; };
+		98449A339F0BA3C0E75B64ED /* CloudKitRemoteInvitePushNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteInvitePushNotifications.swift; sourceTree = "<group>"; };
 		9D517824035C75485AD4D712 /* GameSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSession.swift; sourceTree = "<group>"; };
 		9DF66E252A80BDA67538D11C /* GameSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSessionTests.swift; sourceTree = "<group>"; };
 		A1D00A39AD12F2E4C69496C2 /* PlayerSeat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerSeat.swift; sourceTree = "<group>"; };
@@ -473,6 +475,7 @@
 			isa = PBXGroup;
 			children = (
 				1F8CD72E41E6DCBD71ED6064 /* CloudKitPendingInviteRecordCodec.swift */,
+				98449A339F0BA3C0E75B64ED /* CloudKitRemoteInvitePushNotifications.swift */,
 				1603F5651C9AF18C92BFFC5D /* CloudKitRemoteInviteTransport.swift */,
 			);
 			path = CloudKit;
@@ -525,6 +528,12 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					6A716FFF3AA67ABE8A7992B0 = {
+						DevelopmentTeam = T2YLUCCPQ3;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = D5AAB133253D85981CF0C8E9 /* Build configuration list for PBXProject "ChessTutor" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -571,6 +580,7 @@
 				791A0AB929E424A85CE1F615 /* ChessBoardView.swift in Sources */,
 				C17ABB1547BF16B5FCBDE3AF /* ChessTutorApp.swift in Sources */,
 				4FB08192A95AFF20E0058020 /* CloudKitPendingInviteRecordCodec.swift in Sources */,
+				C60F9265F58DFD62EDF20670 /* CloudKitRemoteInvitePushNotifications.swift in Sources */,
 				4055B6D26D46FF40D5AC5B39 /* CloudKitRemoteInviteTransport.swift in Sources */,
 				D067C5720A19D345CD3388A8 /* Color.swift in Sources */,
 				1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */,
@@ -682,6 +692,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ChessTutor/ChessTutor.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = T2YLUCCPQ3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChessTutor/Info.plist;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -841,6 +853,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ChessTutor/ChessTutor.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = T2YLUCCPQ3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChessTutor/Info.plist;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

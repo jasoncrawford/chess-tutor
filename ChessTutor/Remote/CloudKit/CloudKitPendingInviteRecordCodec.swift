@@ -12,6 +12,7 @@ enum CloudKitPendingInviteRecordCodec {
     static let recordType = "PendingInvite"
 
     private enum Field {
+        static let inviteCode = "inviteCode"
         static let token = "token"
         static let inviterPlayerID = "inviterPlayerID"
         static let inviterDisplayName = "inviterDisplayName"
@@ -34,6 +35,7 @@ enum CloudKitPendingInviteRecordCodec {
     }
 
     static func apply(_ invite: RemotePendingInvite, to record: CKRecord) {
+        record[Field.inviteCode] = invite.code.rawValue as CKRecordValue
         record[Field.token] = invite.token.rawValue as CKRecordValue
         record[Field.inviterPlayerID] = invite.inviter.id.rawValue as CKRecordValue
         record[Field.inviterDisplayName] = invite.inviter.displayName as CKRecordValue
