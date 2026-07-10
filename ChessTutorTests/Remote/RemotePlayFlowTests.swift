@@ -479,6 +479,50 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.stage, .closed)
     }
 
+    func testInviteLinkLookupRequiresLocalDisplayNameBeforeFetching() {
+        let flow = RemotePlayFlow()
+        let lookup = RemotePlayFlow.InviteLookup(
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1")
+        )
+
+        XCTAssertNil(flow.requestJoinInviteLookup(lookup))
+
+        XCTAssertEqual(flow.stage, .enteringLocalName(.joinWithCode))
+        XCTAssertEqual(flow.joinCode, "428193")
+        XCTAssertNil(flow.joinErrorMessage)
+    }
+
+    func testSavingLocalNameForPendingInviteLinkPreservesLookupToken() {
+        let flow = RemotePlayFlow()
+        let lookup = RemotePlayFlow.InviteLookup(
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1")
+        )
+
+        XCTAssertNil(flow.requestJoinInviteLookup(lookup))
+        flow.updateLocalNameDraft("  Jason  ")
+
+        XCTAssertEqual(flow.saveLocalNameForPendingJoin(), lookup)
+        XCTAssertEqual(flow.localDisplayName, "Jason")
+        XCTAssertEqual(flow.stage, .choosing)
+        XCTAssertEqual(flow.joinCode, "428193")
+    }
+
+    func testManualJoinAfterLocalNameUsesCodeLookupWithoutToken() {
+        let flow = RemotePlayFlow()
+
+        flow.open()
+        flow.updateJoinCode("428 193")
+        XCTAssertNil(flow.requestJoinCode())
+        flow.updateLocalNameDraft("Jason")
+
+        XCTAssertEqual(
+            flow.saveLocalNameForPendingJoin(),
+            RemotePlayFlow.InviteLookup(code: InviteCode(rawValue: "428193"), token: nil)
+        )
+    }
+
     func testJoinInviteLinkAfterLocalDisplayNameCanShowConfirmationRequiringColorChoice() {
         let flow = RemotePlayFlow(
             nextInviteCode: "428193",
@@ -497,6 +541,19 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.stage, .closed)
     }
 
+    func testInviteLinkLookupWithLocalDisplayNameReturnsLookupForFetch() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+        let lookup = RemotePlayFlow.InviteLookup(
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1")
+        )
+
+        XCTAssertEqual(flow.requestJoinInviteLookup(lookup), lookup)
+        XCTAssertEqual(flow.joinCode, "428193")
+        XCTAssertEqual(flow.stage, .closed)
+        XCTAssertNil(flow.joinErrorMessage)
+    }
+
     func testRejectsInvalidInviteLink() {
         let flow = RemotePlayFlow(localDisplayName: "Jason", nextInviteCode: "428193")
 
@@ -506,6 +563,20 @@ final class RemotePlayFlowTests: XCTestCase {
 
         XCTAssertNil(flow.requestJoinInvite(from: URL(string: "https://example.com/invite?code=428193")!))
         XCTAssertEqual(flow.stage, .choosing)
+        XCTAssertEqual(flow.joinErrorMessage, "That link did not match an open invite.")
+    }
+
+    func testFailedInviteLinkLookupShowsCodeAndError() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+        let lookup = RemotePlayFlow.InviteLookup(
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1")
+        )
+
+        flow.showJoinInviteLookupError(lookup, message: "That link did not match an open invite.")
+
+        XCTAssertEqual(flow.stage, .choosing)
+        XCTAssertEqual(flow.joinCode, "428193")
         XCTAssertEqual(flow.joinErrorMessage, "That link did not match an open invite.")
     }
 

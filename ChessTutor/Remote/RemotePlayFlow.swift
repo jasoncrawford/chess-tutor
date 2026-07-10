@@ -89,6 +89,7 @@ final class RemotePlayFlow {
     private let nextJoinWhiteChoice: WhiteChoice
     private var pendingLocalNameInviteTarget: InviteTarget?
     private var pendingLocalNameJoinWhiteChoice: WhiteChoice?
+    private var pendingLocalNameJoinLookup: InviteLookup?
     private var localNameEditReturnStage: Stage?
     private var inviteWhiteChoicesByCode: [String: WhiteChoice] = [:]
     private(set) var knownPlayers: [KnownRemotePlayer]
@@ -167,6 +168,7 @@ final class RemotePlayFlow {
         selectedWhiteChoice = .localPlayer
         pendingLocalNameInviteTarget = nil
         pendingLocalNameJoinWhiteChoice = nil
+        pendingLocalNameJoinLookup = nil
         localNameEditReturnStage = nil
         joinErrorMessage = nil
         stage = .choosing
@@ -238,6 +240,7 @@ final class RemotePlayFlow {
             localNameDraft = ""
             pendingLocalNameInviteTarget = nil
             pendingLocalNameJoinWhiteChoice = whiteChoiceForCurrentJoinCode()
+            pendingLocalNameJoinLookup = InviteLookup(code: InviteCode(rawValue: joinCode), token: nil)
             stage = .enteringLocalName(.joinWithCode)
             return nil
         }
@@ -264,6 +267,7 @@ final class RemotePlayFlow {
             stage = .choosing
             let whiteChoice = pendingLocalNameJoinWhiteChoice ?? nextJoinWhiteChoice
             pendingLocalNameJoinWhiteChoice = nil
+            pendingLocalNameJoinLookup = nil
             switch acceptJoinCode(whiteChoice: whiteChoice) {
             case .needsConfirmation(let confirmation):
                 return .needsConfirmation(confirmation)
@@ -278,17 +282,19 @@ final class RemotePlayFlow {
     }
 
     @discardableResult
-    func saveLocalNameForPendingJoin() -> Bool {
+    func saveLocalNameForPendingJoin() -> InviteLookup? {
         guard case .enteringLocalName(.joinWithCode) = stage,
               let displayName = Self.trimmedNonEmptyName(localNameDraft) else {
-            return false
+            return nil
         }
 
+        let lookup = pendingLocalNameJoinLookup ?? InviteLookup(code: InviteCode(rawValue: joinCode), token: nil)
         localDisplayName = displayName
         localNameDraft = ""
         pendingLocalNameJoinWhiteChoice = nil
+        pendingLocalNameJoinLookup = nil
         stage = .choosing
-        return true
+        return lookup
     }
 
     func rememberKnownPlayer(_ player: KnownRemotePlayer) {
@@ -322,11 +328,39 @@ final class RemotePlayFlow {
             localNameDraft = ""
             pendingLocalNameInviteTarget = nil
             pendingLocalNameJoinWhiteChoice = whiteChoiceForCurrentJoinCode()
+            pendingLocalNameJoinLookup = lookup
             stage = .enteringLocalName(.joinWithCode)
             return nil
         }
 
         return acceptJoinCode(whiteChoice: whiteChoiceForCurrentJoinCode())
+    }
+
+    @discardableResult
+    func requestJoinInviteLookup(_ lookup: InviteLookup) -> InviteLookup? {
+        updateJoinCode(lookup.code.rawValue)
+
+        guard localDisplayName != nil else {
+            if stage == .closed {
+                open()
+            }
+            localNameDraft = ""
+            pendingLocalNameInviteTarget = nil
+            pendingLocalNameJoinWhiteChoice = whiteChoiceForCurrentJoinCode()
+            pendingLocalNameJoinLookup = lookup
+            stage = .enteringLocalName(.joinWithCode)
+            return nil
+        }
+
+        return lookup
+    }
+
+    func showJoinInviteLookupError(_ lookup: InviteLookup, message: String) {
+        if stage == .closed {
+            open()
+        }
+        updateJoinCode(lookup.code.rawValue)
+        joinErrorMessage = message
     }
 
     private func acceptJoinCode(whiteChoice: WhiteChoice) -> JoinCodeResult? {
@@ -457,6 +491,7 @@ final class RemotePlayFlow {
         selectedWhiteChoice = .localPlayer
         pendingLocalNameInviteTarget = nil
         pendingLocalNameJoinWhiteChoice = nil
+        pendingLocalNameJoinLookup = nil
         localNameEditReturnStage = nil
         localNameDraft = ""
         joinCode = ""

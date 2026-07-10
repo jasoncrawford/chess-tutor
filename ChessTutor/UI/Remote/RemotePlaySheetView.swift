@@ -262,13 +262,18 @@ struct RemotePlaySheetView: View {
     }
 
     private func joinWithCode() {
+        joinWithCode(using: nil)
+    }
+
+    private func joinWithCode(using pendingLookup: RemotePlayFlow.InviteLookup?) {
         guard flow.localDisplayName != nil else {
             _ = flow.requestJoinCode()
             return
         }
 
-        let code = InviteCode(rawValue: flow.joinCode)
-        let request = RemoteInviteRequest(kind: .fetch(code: code, token: nil))
+        let code = pendingLookup?.code ?? InviteCode(rawValue: flow.joinCode)
+        let token = pendingLookup?.token
+        let request = RemoteInviteRequest(kind: .fetch(code: code, token: token))
         isWorkingWithRemoteInvite = true
         activeRemoteInviteRequest = request
         remoteInviteErrorMessage = nil
@@ -283,22 +288,24 @@ struct RemotePlaySheetView: View {
             }
 
             do {
-                let invite = try await onFetchRemoteInvite(code, nil)
+                let invite = try await onFetchRemoteInvite(code, token)
                 guard isCurrentRemoteInviteRequest(request) else {
                     return
                 }
+                flow.cancel()
                 onRemoteInviteConfirmationNeeded(
                     RemoteInviteConfirmation(
                         opponentName: invite.inviter.displayName,
                         localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner
                     )
                 )
-                flow.cancel()
             } catch {
                 guard isCurrentRemoteInviteRequest(request) else {
                     return
                 }
-                remoteInviteErrorMessage = "That code did not match an open invite."
+                remoteInviteErrorMessage = token == nil
+                    ? "That code did not match an open invite."
+                    : "That link did not match an open invite."
             }
         }
     }
@@ -391,13 +398,13 @@ struct RemotePlaySheetView: View {
 
     private func saveLocalNameAndContinue() {
         if case .enteringLocalName(.joinWithCode) = flow.stage {
-            guard flow.saveLocalNameForPendingJoin(),
+            guard let lookup = flow.saveLocalNameForPendingJoin(),
                   let localDisplayName = flow.localDisplayName else {
                 return
             }
 
             onLocalDisplayNameSaved(localDisplayName)
-            joinWithCode()
+            joinWithCode(using: lookup)
             return
         }
 

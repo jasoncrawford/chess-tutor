@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var remotePlayFlow: RemotePlayFlow
     @State private var pendingRemoteStartAnnouncement: RemoteGameStartAnnouncement?
     @State private var pendingRemoteInviteConfirmation: RemoteInviteConfirmation?
+    @State private var activeInviteLinkRequest: InviteLinkRequest?
+    @State private var inviteLinkFetchTask: Task<Void, Never>?
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
@@ -345,13 +347,31 @@ struct ContentView: View {
             return
         }
 
-        Task { @MainActor in
+        guard let lookupToFetch = remotePlayFlow.requestJoinInviteLookup(lookup) else {
+            return
+        }
+
+        let request = InviteLinkRequest(lookup: lookupToFetch)
+        activeInviteLinkRequest = request
+        inviteLinkFetchTask?.cancel()
+        inviteLinkFetchTask = Task { @MainActor in
+            defer {
+                if activeInviteLinkRequest == request {
+                    activeInviteLinkRequest = nil
+                    inviteLinkFetchTask = nil
+                }
+            }
+
             do {
                 let invite = try await remoteInviteTransport.fetchInvite(
-                    code: lookup.code,
-                    token: lookup.token,
+                    code: lookupToFetch.code,
+                    token: lookupToFetch.token,
                     now: Date()
                 )
+                guard isCurrentInviteLinkRequest(request) else {
+                    return
+                }
+                remotePlayFlow.cancel()
                 showRemoteInviteConfirmation(
                     RemoteInviteConfirmation(
                         opponentName: invite.inviter.displayName,
@@ -359,9 +379,19 @@ struct ContentView: View {
                     )
                 )
             } catch {
-                remotePlayFlow.open()
+                guard isCurrentInviteLinkRequest(request) else {
+                    return
+                }
+                remotePlayFlow.showJoinInviteLookupError(
+                    lookupToFetch,
+                    message: "That link did not match an open invite."
+                )
             }
         }
+    }
+
+    private func isCurrentInviteLinkRequest(_ request: InviteLinkRequest) -> Bool {
+        activeInviteLinkRequest == request && !Task.isCancelled
     }
 
     #if DEBUG
@@ -523,6 +553,11 @@ private struct PendingPromotion: Identifiable {
         self.testingSquare = testingSquare
     }
     #endif
+}
+
+private struct InviteLinkRequest: Equatable {
+    let id = UUID()
+    let lookup: RemotePlayFlow.InviteLookup
 }
 
 private struct PromotionPickerView: View {
