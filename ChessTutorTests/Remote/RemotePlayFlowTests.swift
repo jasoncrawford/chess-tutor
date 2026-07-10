@@ -189,6 +189,33 @@ final class RemotePlayFlowTests: XCTestCase {
         )
     }
 
+    func testCreatedRemoteInvitePresentationUsesTransportInviteCodeAndLinkToken() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+        let invite = RemotePendingInvite(
+            id: RemoteInviteID(rawValue: "428193"),
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1"),
+            inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason"),
+            inviteeDisplayName: "Maya",
+            whiteAssignment: .inviteeChooses,
+            status: .pending,
+            createdAt: Date(timeIntervalSince1970: 10),
+            expiresAt: Date(timeIntervalSince1970: 70),
+            protocolVersion: 1
+        )
+
+        flow.open()
+        flow.inviteSomeoneNew()
+        flow.showCreatedRemoteInvite(invite, target: .newPlayer)
+
+        guard case .waitingForInvitee(let pendingInvite) = flow.stage else {
+            return XCTFail("Expected waiting state")
+        }
+        let presentation = flow.inviteSharePresentation(for: pendingInvite)
+        XCTAssertEqual(presentation.code, "428 193")
+        XCTAssertEqual(presentation.inviteURL.absoluteString, "chesstutor://invite?code=428193&token=token-1")
+    }
+
     func testJoinCodeRequiresLocalDisplayName() {
         let flow = RemotePlayFlow(nextInviteCode: "428193")
 

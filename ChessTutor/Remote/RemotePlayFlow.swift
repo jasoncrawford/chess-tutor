@@ -39,13 +39,25 @@ final class RemotePlayFlow {
         let target: InviteTarget
         let whiteChoice: WhiteChoice
         let code: String
+        let token: String?
+        let remoteInviteID: RemoteInviteID?
+
+        init(
+            target: InviteTarget,
+            whiteChoice: WhiteChoice,
+            code: String,
+            token: String? = nil,
+            remoteInviteID: RemoteInviteID? = nil
+        ) {
+            self.target = target
+            self.whiteChoice = whiteChoice
+            self.code = code
+            self.token = token
+            self.remoteInviteID = remoteInviteID
+        }
 
         var formattedCode: String {
-            guard code.count == 6 else {
-                return code
-            }
-            let splitIndex = code.index(code.startIndex, offsetBy: 3)
-            return "\(code[..<splitIndex]) \(code[splitIndex...])"
+            InviteCode(rawValue: code).formatted
         }
     }
 
@@ -171,6 +183,18 @@ final class RemotePlayFlow {
 
     func markInviteLinkCopied(_ inviteURL: URL) {
         copiedInviteURL = inviteURL
+    }
+
+    func showCreatedRemoteInvite(_ invite: RemotePendingInvite, target: InviteTarget) {
+        let pendingInvite = PendingInvite(
+            target: target,
+            whiteChoice: Self.whiteChoice(from: invite.whiteAssignment),
+            code: invite.code.rawValue,
+            token: invite.token.rawValue,
+            remoteInviteID: invite.id
+        )
+        inviteWhiteChoicesByCode[pendingInvite.code] = pendingInvite.whiteChoice
+        stage = .waitingForInvitee(pendingInvite)
     }
 
     func clearCopiedInviteLink() {
@@ -358,13 +382,27 @@ final class RemotePlayFlow {
     }
 
     private static func inviteURL(for pendingInvite: PendingInvite) -> URL {
+        var queryItems = [URLQueryItem(name: "code", value: pendingInvite.code)]
+        if let token = pendingInvite.token {
+            queryItems.append(URLQueryItem(name: "token", value: token))
+        }
+
         var components = URLComponents()
         components.scheme = "chesstutor"
         components.host = "invite"
-        components.queryItems = [
-            URLQueryItem(name: "code", value: pendingInvite.code)
-        ]
+        components.queryItems = queryItems
         return components.url!
+    }
+
+    private static func whiteChoice(from assignment: RemoteInviteWhiteAssignment) -> WhiteChoice {
+        switch assignment {
+        case .inviter:
+            return .localPlayer
+        case .invitee:
+            return .invitee
+        case .inviteeChooses:
+            return .inviteeChooses
+        }
     }
 
     private static func inviteCode(from url: URL) -> String? {
