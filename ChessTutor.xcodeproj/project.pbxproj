@@ -102,6 +102,7 @@
 		3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryRemoteGameTransportTests.swift; sourceTree = "<group>"; };
 		3ED78066AE168AF6D4963A85 /* RemoteInviteConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteConfirmationView.swift; sourceTree = "<group>"; };
 		42A350660E86E3A3B590AD2C /* FakeRemoteGameLabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeRemoteGameLabTests.swift; sourceTree = "<group>"; };
+		471DD2B1085A1111D4C3723A /* ChessTutor.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ChessTutor.entitlements; sourceTree = "<group>"; };
 		534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameTransport.swift; sourceTree = "<group>"; };
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
@@ -336,6 +337,7 @@
 		9480EA40179DF223C311D73B /* ChessTutor */ = {
 			isa = PBXGroup;
 			children = (
+				471DD2B1085A1111D4C3723A /* ChessTutor.entitlements */,
 				743E2F9D0A9B836A2641FB93 /* Info.plist */,
 				59D4B980F3B4D416419B2779 /* App */,
 				640B8EB034B7847829CB32EA /* Core */,
@@ -626,6 +628,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ChessTutor/ChessTutor.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChessTutor/Info.plist;
@@ -784,6 +787,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ChessTutor/ChessTutor.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChessTutor/Info.plist;
