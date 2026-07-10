@@ -10,6 +10,8 @@ struct SidePanelView: View {
     let onAbout: () -> Void
     let onPlayRemotely: () -> Void
     let onNewGame: () -> Void
+    let remoteNewGameOpponentName: String?
+    let onInviteRemoteNewGame: () -> Void
     let onCommittedMove: (Move) -> Void
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
@@ -40,14 +42,26 @@ struct SidePanelView: View {
         }
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: layout.columnHeight, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewingAngle.sidebarSegmentsInTabletopOrder)
-        .alert("Start a new game?", isPresented: $isConfirmingNewGame) {
+        .alert(newGameConfirmationPresentation.title, isPresented: $isConfirmingNewGame) {
             Button("Keep Playing", role: .cancel) {}
-            Button("New Game", role: .destructive) {
+            if let remoteInviteActionTitle = newGameConfirmationPresentation.remoteInviteActionTitle {
+                Button(remoteInviteActionTitle) {
+                    onInviteRemoteNewGame()
+                }
+            }
+            Button(newGameConfirmationPresentation.localResetActionTitle, role: .destructive) {
                 onNewGame()
             }
         } message: {
-            Text("This will abandon the current game.")
+            Text(newGameConfirmationPresentation.message)
         }
+    }
+
+    private var newGameConfirmationPresentation: NewGameConfirmationPresentation {
+        if let remoteNewGameOpponentName {
+            return .remoteGame(opponentName: remoteNewGameOpponentName)
+        }
+        return .localGame
     }
 
     private func segmentStack(

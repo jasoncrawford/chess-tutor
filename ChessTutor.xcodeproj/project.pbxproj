@@ -62,6 +62,7 @@
 		9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */; };
 		9CDAE04C985BAF4F88CC8854 /* CloudKitRemoteGameTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEF32A5B744746870FF30D8 /* CloudKitRemoteGameTransport.swift */; };
 		A67A38AF28CF06AB1C84FF4E /* RemoteIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35043CEFFECDB685BCD9254A /* RemoteIdentityStore.swift */; };
+		A7A3EA405FA03BF2EB8862CE /* NewGameConfirmationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9308E7E1B991F5BB293B8F6 /* NewGameConfirmationPresentationTests.swift */; };
 		AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B85D2EDEE013CB4A449A83A9 /* PositionFingerprintingTests.swift */; };
 		AB97CF19E16DEA81097C05D1 /* RemoteInviteTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB65C5819A7B114A81E68439 /* RemoteInviteTransport.swift */; };
 		ABE2F418D252E8DFDEE1A9F1 /* RemotePlayRuntimeModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53EBAF4FE1AC9E15E1C68FFE /* RemotePlayRuntimeModeTests.swift */; };
@@ -78,6 +79,7 @@
 		C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */; };
 		CA0390518BB87B51C26996ED /* Piece.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D93E7407EE5AA7D111C6A2 /* Piece.swift */; };
 		D067C5720A19D345CD3388A8 /* Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6AB24F0D97ACE07C1C5E67E /* Color.swift */; };
+		D1870CDF282D6282923381C8 /* NewGameConfirmationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F476FE327EB86F6C3714E880 /* NewGameConfirmationPresentation.swift */; };
 		D51D270D200E6B4000607861 /* ActiveRemoteGameStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA781720EFDD244F60F25289 /* ActiveRemoteGameStore.swift */; };
 		D6CA2A6A0357C3C74D5EF1EF /* CloudKitRemoteMoveRecordCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E2DD0ECCAF48965544FE44 /* CloudKitRemoteMoveRecordCodec.swift */; };
 		D6D68BC917FAB7DF523A348F /* GameSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF66E252A80BDA67538D11C /* GameSessionTests.swift */; };
@@ -172,6 +174,7 @@
 		C3C9B30C3E0E430A338D94D6 /* GameResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameResult.swift; sourceTree = "<group>"; };
 		C65312F4367726826F552878 /* MoveHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryView.swift; sourceTree = "<group>"; };
 		C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAssetTests.swift; sourceTree = "<group>"; };
+		C9308E7E1B991F5BB293B8F6 /* NewGameConfirmationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewGameConfirmationPresentationTests.swift; sourceTree = "<group>"; };
 		C96F83E9475941E6AA79A599 /* Board.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Board.swift; sourceTree = "<group>"; };
 		CA781720EFDD244F60F25289 /* ActiveRemoteGameStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveRemoteGameStore.swift; sourceTree = "<group>"; };
 		CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveAttemptResult.swift; sourceTree = "<group>"; };
@@ -199,6 +202,7 @@
 		F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatter.swift; sourceTree = "<group>"; };
 		F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialMoveTests.swift; sourceTree = "<group>"; };
 		F4471B31F5756F99709339DF /* MoveHistoryFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatterTests.swift; sourceTree = "<group>"; };
+		F476FE327EB86F6C3714E880 /* NewGameConfirmationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewGameConfirmationPresentation.swift; sourceTree = "<group>"; };
 		F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameModels.swift; sourceTree = "<group>"; };
 		FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ChessTutorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -270,6 +274,7 @@
 			children = (
 				E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */,
 				A74C6E2BAF6CCA621D32B749 /* GameControlsPresentationTests.swift */,
+				C9308E7E1B991F5BB293B8F6 /* NewGameConfirmationPresentationTests.swift */,
 				C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */,
 			);
 			path = UI;
@@ -471,6 +476,7 @@
 			isa = PBXGroup;
 			children = (
 				7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */,
+				F476FE327EB86F6C3714E880 /* NewGameConfirmationPresentation.swift */,
 				245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */,
 				747E6891942AFE9A8B73651F /* SidebarPanelView.swift */,
 				E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */,
@@ -630,6 +636,7 @@
 				9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */,
 				C94A497FD7F6447396355952 /* MoveHistoryFormatter.swift in Sources */,
 				64C6845F93B878E7F3820D1C /* MoveHistoryView.swift in Sources */,
+				D1870CDF282D6282923381C8 /* NewGameConfirmationPresentation.swift in Sources */,
 				CA0390518BB87B51C26996ED /* Piece.swift in Sources */,
 				ECD7007B94C5DF6E15FF1FAB /* PieceAsset.swift in Sources */,
 				39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */,
@@ -679,6 +686,7 @@
 				C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */,
 				7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */,
 				D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */,
+				A7A3EA405FA03BF2EB8862CE /* NewGameConfirmationPresentationTests.swift in Sources */,
 				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
 				AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */,
 				C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */,

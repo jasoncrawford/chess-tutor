@@ -256,6 +256,8 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
+            remoteNewGameOpponentName: activeRemoteGameOpponent?.displayName,
+            onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
             onCommittedMove: handleCommittedMove,
             fakeRemoteLab: activeFakeRemoteLab
         )
@@ -275,6 +277,8 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
+            remoteNewGameOpponentName: activeRemoteGameOpponent?.displayName,
+            onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
             onCommittedMove: handleCommittedMove
         )
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: sideLength, alignment: .top)
@@ -293,6 +297,27 @@ struct ContentView: View {
         #else
         GameLifecycle.startNewGame(session: session, remotePlayFlow: remotePlayFlow)
         #endif
+    }
+
+    private var activeRemoteGameOpponent: KnownRemotePlayer? {
+        guard let descriptor = activeRemoteGameController?.snapshot.descriptor else {
+            return nil
+        }
+        let opponent: RemotePlayerRef
+        if descriptor.localPlayerID == descriptor.whitePlayer.id {
+            opponent = descriptor.blackPlayer
+        } else {
+            opponent = descriptor.whitePlayer
+        }
+        return KnownRemotePlayer(id: opponent.id, displayName: opponent.displayName)
+    }
+
+    private func inviteActiveRemoteOpponentAgain() {
+        guard let opponent = activeRemoteGameOpponent else {
+            return
+        }
+        remotePlayFlow.open()
+        remotePlayFlow.invite(opponent)
     }
 
     private func rememberKnownPlayer(_ player: KnownRemotePlayer) {
