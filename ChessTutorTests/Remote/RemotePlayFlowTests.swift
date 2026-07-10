@@ -191,18 +191,7 @@ final class RemotePlayFlowTests: XCTestCase {
 
     func testCreatedRemoteInvitePresentationUsesTransportInviteCodeAndLinkToken() {
         let flow = RemotePlayFlow(localDisplayName: "Jason")
-        let invite = RemotePendingInvite(
-            id: RemoteInviteID(rawValue: "428193"),
-            code: InviteCode(rawValue: "428193"),
-            token: RemoteInviteToken(rawValue: "token-1"),
-            inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason"),
-            inviteeDisplayName: "Maya",
-            whiteAssignment: .inviteeChooses,
-            status: .pending,
-            createdAt: Date(timeIntervalSince1970: 10),
-            expiresAt: Date(timeIntervalSince1970: 70),
-            protocolVersion: 1
-        )
+        let invite = makeRemotePendingInvite(whiteAssignment: .inviteeChooses)
 
         flow.open()
         flow.inviteSomeoneNew()
@@ -211,9 +200,33 @@ final class RemotePlayFlowTests: XCTestCase {
         guard case .waitingForInvitee(let pendingInvite) = flow.stage else {
             return XCTFail("Expected waiting state")
         }
+        XCTAssertEqual(pendingInvite.remoteInviteID, invite.id)
+        XCTAssertEqual(pendingInvite.token, invite.token.rawValue)
+        XCTAssertEqual(pendingInvite.whiteChoice, .inviteeChooses)
+
         let presentation = flow.inviteSharePresentation(for: pendingInvite)
         XCTAssertEqual(presentation.code, "428 193")
         XCTAssertEqual(presentation.inviteURL.absoluteString, "chesstutor://invite?code=428193&token=token-1")
+    }
+
+    func testCreatedRemoteInviteMapsTransportWhiteAssignments() {
+        let cases: [(RemoteInviteWhiteAssignment, RemotePlayFlow.WhiteChoice)] = [
+            (.inviter, .localPlayer),
+            (.invitee, .invitee)
+        ]
+
+        for (assignment, expectedWhiteChoice) in cases {
+            let flow = RemotePlayFlow(localDisplayName: "Jason")
+            let invite = makeRemotePendingInvite(whiteAssignment: assignment)
+
+            flow.open()
+            flow.showCreatedRemoteInvite(invite, target: .newPlayer)
+
+            guard case .waitingForInvitee(let pendingInvite) = flow.stage else {
+                return XCTFail("Expected waiting state for \(assignment)")
+            }
+            XCTAssertEqual(pendingInvite.whiteChoice, expectedWhiteChoice)
+        }
     }
 
     func testJoinCodeRequiresLocalDisplayName() {
@@ -499,5 +512,22 @@ final class RemotePlayFlowTests: XCTestCase {
         _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
 
         XCTAssertFalse(flow.canShowEntryPoint(for: session))
+    }
+
+    private func makeRemotePendingInvite(
+        whiteAssignment: RemoteInviteWhiteAssignment
+    ) -> RemotePendingInvite {
+        RemotePendingInvite(
+            id: RemoteInviteID(rawValue: "428193"),
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1"),
+            inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason"),
+            inviteeDisplayName: "Maya",
+            whiteAssignment: whiteAssignment,
+            status: .pending,
+            createdAt: Date(timeIntervalSince1970: 10),
+            expiresAt: Date(timeIntervalSince1970: 70),
+            protocolVersion: 1
+        )
     }
 }
