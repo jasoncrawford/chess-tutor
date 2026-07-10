@@ -209,6 +209,13 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(presentation.inviteURL.absoluteString, "chesstutor://invite?code=428193&token=token-1")
     }
 
+    func testInviteLinkParsesCodeAndTokenWithoutPolicy() {
+        let parsed = RemotePlayFlow.inviteLookup(from: URL(string: "chesstutor://invite?code=428193&token=token-1")!)
+
+        XCTAssertEqual(parsed?.code, InviteCode(rawValue: "428193"))
+        XCTAssertEqual(parsed?.token, RemoteInviteToken(rawValue: "token-1"))
+    }
+
     func testCreatedRemoteInviteMapsTransportWhiteAssignments() {
         let cases: [(RemoteInviteWhiteAssignment, RemotePlayFlow.WhiteChoice)] = [
             (.inviter, .localPlayer),

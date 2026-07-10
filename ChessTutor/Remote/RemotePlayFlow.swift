@@ -72,6 +72,11 @@ final class RemotePlayFlow {
         let linkInstructions: String
     }
 
+    struct InviteLookup: Equatable {
+        let code: InviteCode
+        let token: RemoteInviteToken?
+    }
+
     enum Stage: Equatable, Hashable {
         case closed
         case choosing
@@ -272,6 +277,20 @@ final class RemotePlayFlow {
         }
     }
 
+    @discardableResult
+    func saveLocalNameForPendingJoin() -> Bool {
+        guard case .enteringLocalName(.joinWithCode) = stage,
+              let displayName = Self.trimmedNonEmptyName(localNameDraft) else {
+            return false
+        }
+
+        localDisplayName = displayName
+        localNameDraft = ""
+        pendingLocalNameJoinWhiteChoice = nil
+        stage = .choosing
+        return true
+    }
+
     func rememberKnownPlayer(_ player: KnownRemotePlayer) {
         if let existingIndex = knownPlayers.firstIndex(where: { $0.id == player.id }) {
             knownPlayers[existingIndex] = player
@@ -288,7 +307,7 @@ final class RemotePlayFlow {
 
     @discardableResult
     func requestJoinInvite(from url: URL) -> JoinCodeResult? {
-        guard let code = Self.inviteCode(from: url) else {
+        guard let lookup = Self.inviteLookup(from: url) else {
             open()
             joinErrorMessage = "That link did not match an open invite."
             return nil
@@ -297,7 +316,7 @@ final class RemotePlayFlow {
         if stage == .closed {
             open()
         }
-        updateJoinCode(code)
+        updateJoinCode(lookup.code.rawValue)
 
         guard localDisplayName != nil else {
             localNameDraft = ""
@@ -405,7 +424,7 @@ final class RemotePlayFlow {
         }
     }
 
-    private static func inviteCode(from url: URL) -> String? {
+    static func inviteLookup(from url: URL) -> InviteLookup? {
         guard url.scheme == "chesstutor",
               url.host == "invite",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -418,7 +437,9 @@ final class RemotePlayFlow {
             return nil
         }
 
-        return code
+        let token = components.queryItems?.first(where: { $0.name == "token" })?.value
+            .map(RemoteInviteToken.init(rawValue:))
+        return InviteLookup(code: InviteCode(rawValue: code), token: token)
     }
 
     func goBack() {

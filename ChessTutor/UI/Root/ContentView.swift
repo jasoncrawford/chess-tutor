@@ -340,16 +340,28 @@ struct ContentView: View {
     }
 
     private func handleInviteURL(_ url: URL) {
-        guard let result = remotePlayFlow.requestJoinInvite(from: url) else {
+        guard let lookup = RemotePlayFlow.inviteLookup(from: url) else {
+            _ = remotePlayFlow.requestJoinInvite(from: url)
             return
         }
 
-        #if DEBUG
-        switch result {
-        case .needsConfirmation(let confirmation):
-            showRemoteInviteConfirmation(confirmation)
+        Task { @MainActor in
+            do {
+                let invite = try await remoteInviteTransport.fetchInvite(
+                    code: lookup.code,
+                    token: lookup.token,
+                    now: Date()
+                )
+                showRemoteInviteConfirmation(
+                    RemoteInviteConfirmation(
+                        opponentName: invite.inviter.displayName,
+                        localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner
+                    )
+                )
+            } catch {
+                remotePlayFlow.open()
+            }
         }
-        #endif
     }
 
     #if DEBUG

@@ -240,7 +240,7 @@ struct RemotePlaySheetView: View {
                     .disabled(!canJoinWithCode)
                 }
 
-                if let joinErrorMessage = flow.joinErrorMessage {
+                if let joinErrorMessage = flow.joinErrorMessage ?? remoteInviteErrorMessage {
                     Text(joinErrorMessage)
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(AppTheme.ink.opacity(0.68))
@@ -258,21 +258,49 @@ struct RemotePlaySheetView: View {
     }
 
     private var canJoinWithCode: Bool {
-        #if DEBUG
         flow.canSubmitJoinCode && !isWorkingWithRemoteInvite
-        #else
-        false
-        #endif
     }
 
     private func joinWithCode() {
-        #if DEBUG
-        guard let result = flow.requestJoinCode() else {
+        guard flow.localDisplayName != nil else {
+            _ = flow.requestJoinCode()
             return
         }
 
-        handleJoinCodeResult(result)
-        #endif
+        let code = InviteCode(rawValue: flow.joinCode)
+        let request = RemoteInviteRequest(kind: .fetch(code: code, token: nil))
+        isWorkingWithRemoteInvite = true
+        activeRemoteInviteRequest = request
+        remoteInviteErrorMessage = nil
+        remoteInviteTask?.cancel()
+        remoteInviteTask = Task { @MainActor in
+            defer {
+                if activeRemoteInviteRequest == request {
+                    isWorkingWithRemoteInvite = false
+                    activeRemoteInviteRequest = nil
+                    remoteInviteTask = nil
+                }
+            }
+
+            do {
+                let invite = try await onFetchRemoteInvite(code, nil)
+                guard isCurrentRemoteInviteRequest(request) else {
+                    return
+                }
+                onRemoteInviteConfirmationNeeded(
+                    RemoteInviteConfirmation(
+                        opponentName: invite.inviter.displayName,
+                        localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner
+                    )
+                )
+                flow.cancel()
+            } catch {
+                guard isCurrentRemoteInviteRequest(request) else {
+                    return
+                }
+                remoteInviteErrorMessage = "That code did not match an open invite."
+            }
+        }
     }
 
     private func choosingWhiteView(for target: RemotePlayFlow.InviteTarget) -> some View {
@@ -362,6 +390,17 @@ struct RemotePlaySheetView: View {
     }
 
     private func saveLocalNameAndContinue() {
+        if case .enteringLocalName(.joinWithCode) = flow.stage {
+            guard flow.saveLocalNameForPendingJoin(),
+                  let localDisplayName = flow.localDisplayName else {
+                return
+            }
+
+            onLocalDisplayNameSaved(localDisplayName)
+            joinWithCode()
+            return
+        }
+
         guard let result = flow.saveLocalNameAndContinue(),
               let localDisplayName = flow.localDisplayName else {
             return
@@ -401,7 +440,7 @@ struct RemotePlaySheetView: View {
         target: RemotePlayFlow.InviteTarget,
         whiteChoice: RemotePlayFlow.WhiteChoice
     ) {
-        let request = RemoteInviteRequest(target: target, whiteChoice: whiteChoice)
+        let request = RemoteInviteRequest(kind: .create(target: target, whiteChoice: whiteChoice))
         showInviteChoice(target: target, whiteChoice: whiteChoice)
         isWorkingWithRemoteInvite = true
         activeRemoteInviteRequest = request
@@ -433,10 +472,18 @@ struct RemotePlaySheetView: View {
     }
 
     private func isCurrentRemoteInviteRequest(_ request: RemoteInviteRequest) -> Bool {
-        activeRemoteInviteRequest == request
-            && !Task.isCancelled
-            && flow.stage == .choosingWhite(request.target)
-            && flow.selectedWhiteChoice == request.whiteChoice
+        guard activeRemoteInviteRequest == request,
+              !Task.isCancelled else {
+            return false
+        }
+
+        switch request.kind {
+        case .create(let target, let whiteChoice):
+            return flow.stage == .choosingWhite(target)
+                && flow.selectedWhiteChoice == whiteChoice
+        case .fetch(let code, _):
+            return flow.joinCode == code.rawValue
+        }
     }
 
     private func showInviteChoice(
@@ -574,13 +621,6 @@ struct RemotePlaySheetView: View {
     }
 
     #if DEBUG
-    private func handleJoinCodeResult(_ result: RemotePlayFlow.JoinCodeResult) {
-        switch result {
-        case .needsConfirmation(let confirmation):
-            onRemoteInviteConfirmationNeeded(confirmation)
-        }
-    }
-
     private func acceptPendingInvite(_ pendingInvite: RemotePlayFlow.PendingInvite) {
         let localPlayerColor = localPlayerColor(for: pendingInvite)
         if let announcement = fakeRemoteLab?.start(session: session, localPlayerColor: localPlayerColor) {
@@ -609,8 +649,12 @@ struct RemotePlaySheetView: View {
 
 private struct RemoteInviteRequest: Equatable {
     let id = UUID()
-    let target: RemotePlayFlow.InviteTarget
-    let whiteChoice: RemotePlayFlow.WhiteChoice
+    let kind: Kind
+
+    enum Kind: Equatable {
+        case create(target: RemotePlayFlow.InviteTarget, whiteChoice: RemotePlayFlow.WhiteChoice)
+        case fetch(code: InviteCode, token: RemoteInviteToken?)
+    }
 }
 
 private struct RemotePlaySheetButtonStyle: ButtonStyle {
