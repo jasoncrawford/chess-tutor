@@ -608,6 +608,7 @@ struct RemotePlaySheetView: View {
 }
 
 private struct RemoteInviteRequest: Equatable {
+    let id = UUID()
     let target: RemotePlayFlow.InviteTarget
     let whiteChoice: RemotePlayFlow.WhiteChoice
 }
