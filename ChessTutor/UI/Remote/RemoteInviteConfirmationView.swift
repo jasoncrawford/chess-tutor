@@ -55,7 +55,7 @@ struct RemoteInviteConfirmationView: View {
 
     @ViewBuilder
     private func colorSeat(_ seat: RemoteGameSeat) -> some View {
-        if confirmation.requiresColorChoice {
+        if confirmation.allowsColorChoice {
             Button {
                 onSelectColor(seat.color)
             } label: {

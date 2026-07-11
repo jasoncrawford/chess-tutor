@@ -581,7 +581,7 @@ struct ContentView: View {
                 displayName: acceptedInvite.invite.inviter.displayName
             )
         )
-        showRemoteStartAnnouncement(startRemoteGame(context: .joiner(from: acceptedInvite)))
+        startRemoteGame(context: .joiner(from: acceptedInvite), role: .joiner)
     }
 
     private func startInviterRemoteGame(_ acceptedInvite: RemoteAcceptedInvite) {
@@ -591,10 +591,10 @@ struct ContentView: View {
                 displayName: acceptedInvite.joiner.displayName
             )
         )
-        showRemoteStartAnnouncement(startRemoteGame(context: .inviter(from: acceptedInvite)))
+        startRemoteGame(context: .inviter(from: acceptedInvite), role: .inviter)
     }
 
-    private func startRemoteGame(context: RemoteGameStartContext) -> RemoteGameStartAnnouncement {
+    private func startRemoteGame(context: RemoteGameStartContext, role: RemoteGameStartRole) {
         cancelRemoteGameSync(clearSavedGame: false)
         session.newGame()
         Self.applyRemoteSeats(from: context.descriptor, to: session)
@@ -608,10 +608,17 @@ struct ContentView: View {
         prepareRemoteGameStatusNotification(for: context.descriptor.id)
         requestRemoteNotificationAuthorizationIfNeeded()
         remotePlayFlow.cancel()
-        return RemoteGameStartAnnouncement(
+        let announcement = RemoteGameStartAnnouncement(
             opponentName: context.opponent.displayName,
             localPlayerColor: context.localPlayerColor
         )
+
+        if RemoteGameStartPresentationPolicy.shouldShowAnnouncement(for: role) {
+            showRemoteStartAnnouncement(announcement)
+        } else {
+            syncRemotePresenceForCurrentTurn()
+            startRemoteMoveFetchLoopIfNeeded()
+        }
     }
 
     private func handleCommittedMove(_ move: Move) {

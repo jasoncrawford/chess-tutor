@@ -3,6 +3,17 @@ import Foundation
 struct RemoteInviteConfirmation: Equatable {
     let opponentName: String
     let localPlayerColor: PieceColor?
+    let allowsColorChoice: Bool
+
+    init(
+        opponentName: String,
+        localPlayerColor: PieceColor?,
+        allowsColorChoice: Bool? = nil
+    ) {
+        self.opponentName = opponentName
+        self.localPlayerColor = localPlayerColor
+        self.allowsColorChoice = allowsColorChoice ?? (localPlayerColor == nil)
+    }
 
     var title: String {
         "\(opponentName) wants to play"
@@ -17,7 +28,7 @@ struct RemoteInviteConfirmation: Equatable {
     }
 
     var requiresColorChoice: Bool {
-        localPlayerColor == nil
+        allowsColorChoice && localPlayerColor == nil
     }
 
     var canStart: Bool {
@@ -47,6 +58,13 @@ struct RemoteInviteConfirmation: Equatable {
     }
 
     func selectColor(_ color: PieceColor) -> RemoteInviteConfirmation {
-        RemoteInviteConfirmation(opponentName: opponentName, localPlayerColor: color)
+        guard allowsColorChoice else {
+            return self
+        }
+        return RemoteInviteConfirmation(
+            opponentName: opponentName,
+            localPlayerColor: color,
+            allowsColorChoice: true
+        )
     }
 }

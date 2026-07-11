@@ -42,4 +42,29 @@ final class RemoteInviteConfirmationTests: XCTestCase {
         XCTAssertEqual(confirmation.whiteSeat.playerName, "You")
         XCTAssertEqual(confirmation.blackSeat.playerName, "Maya")
     }
+
+    func testChoosingColorKeepsColorChoiceAvailableUntilStart() {
+        let confirmation = RemoteInviteConfirmation(
+            opponentName: "Maya",
+            localPlayerColor: nil
+        )
+        let choseWhite = confirmation.selectColor(.white)
+        let changedToBlack = choseWhite.selectColor(.black)
+
+        XCTAssertTrue(choseWhite.allowsColorChoice)
+        XCTAssertTrue(changedToBlack.allowsColorChoice)
+        XCTAssertEqual(changedToBlack.localPlayerColor, .black)
+        XCTAssertEqual(changedToBlack.whiteSeat.playerName, "Maya")
+        XCTAssertEqual(changedToBlack.blackSeat.playerName, "You")
+    }
+
+    func testFixedColorDoesNotAllowChangingColor() {
+        let confirmation = RemoteInviteConfirmation(
+            opponentName: "Maya",
+            localPlayerColor: .black
+        )
+
+        XCTAssertFalse(confirmation.allowsColorChoice)
+        XCTAssertEqual(confirmation.selectColor(.white), confirmation)
+    }
 }

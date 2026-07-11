@@ -63,6 +63,7 @@
 		8F63639BDB9700501409AC9C /* BoardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB156EDC259546DEF345170 /* BoardTests.swift */; };
 		95900C448E1F1D0D3F027C21 /* RemoteInviteTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A18F57D50181F0900479AA /* RemoteInviteTransportTests.swift */; };
 		9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */; };
+		9B75141A2F1B5E68F3DCE46B /* RemoteGameStartPresentationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2AF7050703D5DCF0641C734 /* RemoteGameStartPresentationPolicyTests.swift */; };
 		9CDAE04C985BAF4F88CC8854 /* CloudKitRemoteGameTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEF32A5B744746870FF30D8 /* CloudKitRemoteGameTransport.swift */; };
 		A67A38AF28CF06AB1C84FF4E /* RemoteIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35043CEFFECDB685BCD9254A /* RemoteIdentityStore.swift */; };
 		A7A3EA405FA03BF2EB8862CE /* NewGameConfirmationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9308E7E1B991F5BB293B8F6 /* NewGameConfirmationPresentationTests.swift */; };
@@ -79,6 +80,7 @@
 		C28AABFA7D36AEEE1DDB975D /* FakeRemoteGameLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */; };
 		C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178298638E67D9B729679076 /* RemoteGameCoordinatorTests.swift */; };
 		C551286CA206D2F6A8E84A67 /* CloudKitRemotePresenceRecordCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC7D3479CCE8B1B4D60BAF3B /* CloudKitRemotePresenceRecordCodec.swift */; };
+		C5CEFF3C3AD7FFF08BAAAEBB /* RemoteGameStartPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */; };
 		C60F9265F58DFD62EDF20670 /* CloudKitRemoteInvitePushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98449A339F0BA3C0E75B64ED /* CloudKitRemoteInvitePushNotifications.swift */; };
 		C74B7CEDFEA8023099061838 /* RemoteGameSessionControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C34DD0B8F34D966E92E299 /* RemoteGameSessionControllerTests.swift */; };
 		C91307CE1E57D1286CDECDDD /* InMemoryRemoteGameTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3730AAF9D62B4D1553AAE420 /* InMemoryRemoteGameTransportTests.swift */; };
@@ -159,6 +161,7 @@
 		7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPiecesPanelView.swift; sourceTree = "<group>"; };
 		7C023C83EDC2217984A48D59 /* PieceAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAsset.swift; sourceTree = "<group>"; };
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
+		80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicy.swift; sourceTree = "<group>"; };
 		843DA88957074E118D9B5F6C /* RemoteInviteConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteConfirmationTests.swift; sourceTree = "<group>"; };
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		892B39ACE33796097240A052 /* ChessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessBoardView.swift; sourceTree = "<group>"; };
@@ -208,6 +211,7 @@
 		E09AF46101F78AFD88CA0FF1 /* RemotePlaySheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlaySheetView.swift; sourceTree = "<group>"; };
 		E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGeneratorTests.swift; sourceTree = "<group>"; };
 		E134EABED5BC244A5466A161 /* RemoteGameCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameCoordinator.swift; sourceTree = "<group>"; };
+		E2AF7050703D5DCF0641C734 /* RemoteGameStartPresentationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicyTests.swift; sourceTree = "<group>"; };
 		E6D98017AFFA0B1E2F1C695A /* RemoteInviteTransportModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteTransportModelTests.swift; sourceTree = "<group>"; };
 		E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTrayLayoutTests.swift; sourceTree = "<group>"; };
 		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
@@ -355,6 +359,7 @@
 				F0C34DD0B8F34D966E92E299 /* RemoteGameSessionControllerTests.swift */,
 				D6272F403D8734ADC645DF74 /* RemoteGameStartAnnouncementTests.swift */,
 				3D9E331547FCF0428F764142 /* RemoteGameStartContextTests.swift */,
+				E2AF7050703D5DCF0641C734 /* RemoteGameStartPresentationPolicyTests.swift */,
 				7A0F3FDB75BB35C0F746BB2C /* RemoteIdentityStoreTests.swift */,
 				843DA88957074E118D9B5F6C /* RemoteInviteConfirmationTests.swift */,
 				E6D98017AFFA0B1E2F1C695A /* RemoteInviteTransportModelTests.swift */,
@@ -381,6 +386,7 @@
 				CE7CC99F1AFBDFF2319176EF /* RemoteGameSessionController.swift */,
 				AC9B8D8BA56FC7EB2E867D6F /* RemoteGameStartAnnouncement.swift */,
 				C3A7CE08EAD1288C79425A43 /* RemoteGameStartContext.swift */,
+				80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */,
 				534DEA430C1B0399A42FA9DD /* RemoteGameTransport.swift */,
 				35043CEFFECDB685BCD9254A /* RemoteIdentityStore.swift */,
 				09C2424C22CF6B5348610FF9 /* RemoteInviteConfirmation.swift */,
@@ -675,6 +681,7 @@
 				B1D8CEA60129F7D6D7E2E590 /* RemoteGameStartAnnouncement.swift in Sources */,
 				FCFA0B46EB4FD66EF135D6D0 /* RemoteGameStartAnnouncementView.swift in Sources */,
 				E10CEE4760AE101FB71BDE6B /* RemoteGameStartContext.swift in Sources */,
+				C5CEFF3C3AD7FFF08BAAAEBB /* RemoteGameStartPresentationPolicy.swift in Sources */,
 				1E1B30E41EA62A9E99F15934 /* RemoteGameTransport.swift in Sources */,
 				A67A38AF28CF06AB1C84FF4E /* RemoteIdentityStore.swift in Sources */,
 				0BBAC9DA3293C60DB15BE7BE /* RemoteInviteConfirmation.swift in Sources */,
@@ -722,6 +729,7 @@
 				C74B7CEDFEA8023099061838 /* RemoteGameSessionControllerTests.swift in Sources */,
 				F15211BBA75E01951F06F80E /* RemoteGameStartAnnouncementTests.swift in Sources */,
 				5C586124F0D2D76C66E86B75 /* RemoteGameStartContextTests.swift in Sources */,
+				9B75141A2F1B5E68F3DCE46B /* RemoteGameStartPresentationPolicyTests.swift in Sources */,
 				E43EF5E0A861F2A5910D5117 /* RemoteIdentityStoreTests.swift in Sources */,
 				DD1893F0C382EF660BB7F5B6 /* RemoteInviteConfirmationTests.swift in Sources */,
 				3194365AAE619FDD740212E8 /* RemoteInviteTransportModelTests.swift in Sources */,
