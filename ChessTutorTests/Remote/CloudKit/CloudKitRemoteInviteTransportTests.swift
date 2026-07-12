@@ -91,7 +91,7 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
-    func testAcceptInviteeChoosesChosenWhiteSavesAcceptedStatusAndUsesConditionalPolicy() async throws {
+    func testAcceptInviteeChoosesChosenWhiteSavesSeparateAcceptanceRecordAndUsesConditionalPolicy() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
         let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
@@ -109,10 +109,12 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         let storedRecord = await database.record(withID: Self.recordID)
         let savedRecord = try XCTUnwrap(storedRecord)
         let savedInvite = try CloudKitPendingInviteRecordCodec.invite(from: savedRecord)
-        XCTAssertEqual(savedInvite.status, .accepted)
+        XCTAssertEqual(savedInvite.status, .pending)
+        let acceptanceRecord = await database.record(withID: Self.acceptanceRecordID)
+        XCTAssertNotNil(acceptanceRecord)
         let lastRequest = await database.lastModifyRequest()
         let requestMetadata = try XCTUnwrap(lastRequest)
-        XCTAssertEqual(requestMetadata.savedRecordIDs, [Self.recordID])
+        XCTAssertEqual(requestMetadata.savedRecordIDs, [Self.acceptanceRecordID])
         XCTAssertEqual(requestMetadata.savePolicy, .ifServerRecordUnchanged)
         XCTAssertTrue(requestMetadata.atomically)
     }
@@ -136,6 +138,55 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(fetchedAcceptance, accepted)
     }
 
+    func testFetchInviteAfterSeparateAcceptanceMapsToNotPending() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+
+        _ = try await transport.acceptInvite(
+            JoinRemoteInviteRequest(
+                code: invite.code,
+                token: invite.token,
+                joiner: Self.joiner,
+                now: Self.joinedAt
+            ),
+            chosenColor: .black
+        )
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
+            try await transport.fetchInvite(code: invite.code, token: invite.token, now: Self.joinedAt)
+        )
+    }
+
+    func testSecondAcceptanceMapsToNotPendingWithoutOverwritingFirstAcceptance() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        let firstAccepted = try await transport.acceptInvite(
+            JoinRemoteInviteRequest(
+                code: invite.code,
+                token: invite.token,
+                joiner: Self.joiner,
+                now: Self.joinedAt
+            ),
+            chosenColor: .black
+        )
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
+            try await transport.acceptInvite(
+                JoinRemoteInviteRequest(
+                    code: invite.code,
+                    token: invite.token,
+                    joiner: RemotePlayerRef(id: RemotePlayerID(rawValue: "other"), displayName: "Other"),
+                    now: Self.joinedAt.addingTimeInterval(1)
+                ),
+                chosenColor: .white
+            )
+        )
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertEqual(fetchedAcceptance, firstAccepted)
+    }
+
     func testPreparingAcceptanceNotificationSavesQuerySubscriptionForInviteCode() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
@@ -147,15 +198,27 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         let subscription = try XCTUnwrap(storedSubscription)
         XCTAssertEqual(subscription.subscriptionID, "pending-invite-accepted-428193")
         let querySubscription = try XCTUnwrap(subscription as? CKQuerySubscription)
-        XCTAssertEqual(querySubscription.recordType, CloudKitPendingInviteRecordCodec.recordType)
+        XCTAssertEqual(querySubscription.recordType, CloudKitInviteAcceptanceRecordCodec.recordType)
         XCTAssertEqual(querySubscription.notificationInfo?.shouldSendContentAvailable, true)
+    }
+
+    func testAcceptanceSubscriptionIDParsesInviteIDForPushNotificationRouting() {
+        XCTAssertEqual(
+            CloudKitRemoteInviteTransport.inviteID(
+                fromAcceptanceSubscriptionID: "pending-invite-accepted-428193"
+            ),
+            RemoteInviteID(rawValue: "428193")
+        )
+        XCTAssertNil(
+            CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: "remote-game-moves-game-1")
+        )
     }
 
     func testAcceptInviteRecordLevelSaveFailureMapsToNotPending() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
         let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
-        await database.failSaves(for: [Self.recordID])
+        await database.failSaves(for: [Self.acceptanceRecordID])
 
         await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
             try await transport.acceptInvite(
@@ -189,6 +252,9 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
 
     private static let code = InviteCode(rawValue: "428193")
     private static let recordID = CKRecord.ID(recordName: code.rawValue)
+    private static let acceptanceRecordID = CloudKitInviteAcceptanceRecordCodec.recordID(
+        for: RemoteInviteID(rawValue: code.rawValue)
+    )
     private static let token = RemoteInviteToken(rawValue: "token-1")
     private static let inviter = RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason")
     private static let joiner = RemotePlayerRef(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
@@ -318,6 +384,8 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
         var saveResults: [CKRecord.ID: Result<CKRecord, any Error>] = [:]
         for record in recordsToSave {
             if failingSaveIDs.contains(record.recordID) {
+                saveResults[record.recordID] = .failure(CKError(.serverRecordChanged))
+            } else if savePolicy == .ifServerRecordUnchanged, records[record.recordID] != nil {
                 saveResults[record.recordID] = .failure(CKError(.serverRecordChanged))
             } else {
                 records[record.recordID] = record

@@ -47,6 +47,40 @@ final class CloudKitPendingInviteRecordCodecTests: XCTestCase {
         XCTAssertNil(decoded.inviteeDisplayName)
     }
 
+    func testAcceptanceRecordFieldsRoundTripWithPendingInvite() throws {
+        let invite = makeInvite()
+        let acceptedInvite = RemoteAcceptedInvite(
+            invite: RemotePendingInvite(
+                id: invite.id,
+                code: invite.code,
+                token: invite.token,
+                inviter: invite.inviter,
+                inviteeDisplayName: invite.inviteeDisplayName,
+                whiteAssignment: invite.whiteAssignment,
+                status: .accepted,
+                createdAt: invite.createdAt,
+                expiresAt: invite.expiresAt,
+                protocolVersion: invite.protocolVersion
+            ),
+            joiner: RemotePlayerRef(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya"),
+            joinerColor: .black
+        )
+
+        let record = CloudKitInviteAcceptanceRecordCodec.record(
+            from: acceptedInvite,
+            acceptedAt: Date(timeIntervalSince1970: 20)
+        )
+        let decoded = try CloudKitInviteAcceptanceRecordCodec.acceptedInvite(
+            from: record,
+            pendingInvite: invite
+        )
+
+        XCTAssertEqual(record.recordType, CloudKitInviteAcceptanceRecordCodec.recordType)
+        XCTAssertEqual(record.recordID.recordName, "invite-acceptance-428193")
+        XCTAssertEqual(record["inviteCode"] as? String, "428193")
+        XCTAssertEqual(decoded, acceptedInvite)
+    }
+
     private func makeInvite(inviteeDisplayName: String? = nil) -> RemotePendingInvite {
         RemotePendingInvite(
             id: RemoteInviteID(rawValue: "428193"),

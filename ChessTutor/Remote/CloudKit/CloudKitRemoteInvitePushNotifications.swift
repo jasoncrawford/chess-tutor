@@ -60,16 +60,16 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
             return
         }
 
-        guard let recordID = queryNotification.recordID else {
-            completionHandler(.noData)
+        if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: subscriptionID) {
+            NotificationCenter.default.post(
+                name: .remoteInviteAcceptanceMayHaveChanged,
+                object: nil,
+                userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: inviteID.rawValue]
+            )
+            completionHandler(.newData)
             return
         }
 
-        NotificationCenter.default.post(
-            name: .remoteInviteAcceptanceMayHaveChanged,
-            object: nil,
-            userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: recordID.recordName]
-        )
-        completionHandler(.newData)
+        completionHandler(.noData)
     }
 }
