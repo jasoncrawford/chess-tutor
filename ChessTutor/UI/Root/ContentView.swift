@@ -7,15 +7,11 @@ struct ContentView: View {
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
     @State private var remotePlayFlow: RemotePlayFlow
-    @State private var pendingRemoteStartAnnouncement: RemoteGameStartAnnouncement?
-    @State private var pendingRemoteInviteConfirmation: RemoteInviteConfirmation?
-    @State private var pendingRemoteInviteAcceptance: PendingRemoteInviteAcceptance?
+    @State private var remoteLifecycle: RemoteGameLifecycleController
     @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
-    @State private var activeRemoteGameController: RemoteGameSessionController?
     @State private var remoteMoveFetchTask: Task<Void, Never>?
     @State private var remotePresenceHeartbeatTask: Task<Void, Never>?
     @State private var remoteActiveMovingResetTask: Task<Void, Never>?
-    @State private var remoteOpponentPresence: RemotePresenceUpdate?
     @State private var lastRemoteActivePresencePublishedAt: Date?
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
@@ -47,29 +43,43 @@ struct ContentView: View {
         self.remoteInviteTransport = Self.remoteInviteTransport(for: runtimeMode, diagnosticsLog: diagnosticsLog)
         self.remoteGameTransport = Self.remoteGameTransport(for: runtimeMode, diagnosticsLog: diagnosticsLog)
         let localProfile = try? remoteIdentityStore.loadLocalProfile()
-        _remotePlayFlow = State(
-            initialValue: RemotePlayFlow(
-                knownPlayers: (try? remoteIdentityStore.loadKnownPlayers()) ?? [],
-                localDisplayName: localProfile?.displayName
-            )
+        let remotePlayFlow = RemotePlayFlow(
+            knownPlayers: (try? remoteIdentityStore.loadKnownPlayers()) ?? [],
+            localDisplayName: localProfile?.displayName
         )
+        _remotePlayFlow = State(initialValue: remotePlayFlow)
 
         let initialViewingAngle = Self.currentViewingAngle()
         _viewingAngle = State(initialValue: initialViewingAngle)
         _tableRotationDegrees = State(initialValue: initialViewingAngle.tableRotationDegrees)
 
+        let initialSession: GameSession
+        let initialActiveRemoteGameController: RemoteGameSessionController?
         if let snapshot = try? activeRemoteGameStore.load(),
            let restoredSession = try? Self.restoredSession(from: snapshot),
            let restoredController = try? RemoteGameSessionController(
                 snapshot: snapshot,
                 transport: self.remoteGameTransport
            ) {
-            Self.applyRemoteSeats(from: snapshot.descriptor, to: restoredSession)
-            _session = State(initialValue: restoredSession)
-            _activeRemoteGameController = State(initialValue: restoredController)
-        } else if (try? activeRemoteGameStore.load()) != nil {
-            try? activeRemoteGameStore.clear()
+            RemoteGameLifecycleController.applyRemoteSeats(from: snapshot.descriptor, to: restoredSession)
+            initialSession = restoredSession
+            initialActiveRemoteGameController = restoredController
+        } else {
+            if (try? activeRemoteGameStore.load()) != nil {
+                try? activeRemoteGameStore.clear()
+            }
+            initialSession = GameSession()
+            initialActiveRemoteGameController = nil
         }
+        _session = State(initialValue: initialSession)
+        _remoteLifecycle = State(
+            initialValue: RemoteGameLifecycleController(
+                session: initialSession,
+                remotePlayFlow: remotePlayFlow,
+                remoteGameTransport: self.remoteGameTransport,
+                activeRemoteGameController: initialActiveRemoteGameController
+            )
+        )
     }
 
     var body: some View {
@@ -83,7 +93,7 @@ struct ContentView: View {
                     .rotationEffect(.degrees(tableRotationDegrees))
                     .frame(width: proxy.size.width, height: proxy.size.height)
 
-                if let pendingRemoteStartAnnouncement {
+                if let pendingRemoteStartAnnouncement = remoteLifecycle.pendingRemoteStartAnnouncement {
                     Color.black.opacity(0.24)
                         .ignoresSafeArea()
                         .transition(.opacity)
@@ -95,7 +105,7 @@ struct ContentView: View {
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
 
-                if let pendingRemoteInviteConfirmation {
+                if let pendingRemoteInviteConfirmation = remoteLifecycle.pendingRemoteInviteConfirmation {
                     Color.black.opacity(0.24)
                         .ignoresSafeArea()
                         .transition(.opacity)
@@ -109,8 +119,8 @@ struct ContentView: View {
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: pendingRemoteStartAnnouncement)
-            .animation(.easeInOut(duration: 0.18), value: pendingRemoteInviteConfirmation)
+            .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteStartAnnouncement)
+            .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteInviteConfirmation)
         }
         .onAppear {
             syncToCurrentInterfaceOrientation(animated: false)
@@ -271,8 +281,8 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
-            remoteNewGameOpponentName: activeRemoteGameOpponent?.displayName,
-            remotePresence: remoteOpponentPresence,
+            remoteNewGameOpponentName: remoteLifecycle.activeRemoteGameOpponent?.displayName,
+            remotePresence: remoteLifecycle.remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
             onCommittedMove: handleCommittedMove,
             fakeRemoteLab: activeFakeRemoteLab
@@ -293,8 +303,8 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
-            remoteNewGameOpponentName: activeRemoteGameOpponent?.displayName,
-            remotePresence: remoteOpponentPresence,
+            remoteNewGameOpponentName: remoteLifecycle.activeRemoteGameOpponent?.displayName,
+            remotePresence: remoteLifecycle.remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
             onCommittedMove: handleCommittedMove
         )
@@ -316,25 +326,8 @@ struct ContentView: View {
         #endif
     }
 
-    private var activeRemoteGameOpponent: KnownRemotePlayer? {
-        guard let descriptor = activeRemoteGameController?.snapshot.descriptor else {
-            return nil
-        }
-        let opponent: RemotePlayerRef
-        if descriptor.localPlayerID == descriptor.whitePlayer.id {
-            opponent = descriptor.blackPlayer
-        } else {
-            opponent = descriptor.whitePlayer
-        }
-        return KnownRemotePlayer(id: opponent.id, displayName: opponent.displayName)
-    }
-
     private func inviteActiveRemoteOpponentAgain() {
-        guard let opponent = activeRemoteGameOpponent else {
-            return
-        }
-        remotePlayFlow.open()
-        remotePlayFlow.invite(opponent)
+        remoteLifecycle.inviteActiveRemoteOpponentAgain()
     }
 
     private func rememberKnownPlayer(_ player: KnownRemotePlayer) {
@@ -557,7 +550,7 @@ struct ContentView: View {
     }
 
     private func showRemoteStartAnnouncement(_ announcement: RemoteGameStartAnnouncement) {
-        pendingRemoteStartAnnouncement = announcement
+        remoteLifecycle.pendingRemoteStartAnnouncement = announcement
     }
 
     private func showRemoteInviteConfirmation(
@@ -573,38 +566,36 @@ struct ContentView: View {
                 "localPlayerColor": confirmation.localPlayerColor?.rawValue ?? "choiceRequired"
             ]
         )
-        pendingRemoteInviteConfirmation = confirmation
-        pendingRemoteInviteAcceptance = invite.map(PendingRemoteInviteAcceptance.init(invite:))
+        remoteLifecycle.showRemoteInviteConfirmation(confirmation, invite: invite)
     }
 
     private func dismissRemoteStartAnnouncement() {
-        pendingRemoteStartAnnouncement = nil
+        remoteLifecycle.dismissRemoteStartAnnouncement()
         syncRemotePresenceForCurrentTurn()
         startRemoteMoveFetchLoopIfNeeded()
     }
 
     private func selectRemoteInviteColor(_ color: PieceColor) {
-        pendingRemoteInviteConfirmation = pendingRemoteInviteConfirmation?.selectColor(color)
+        remoteLifecycle.selectRemoteInviteColor(color)
     }
 
     private func cancelRemoteInvite() {
-        pendingRemoteInviteConfirmation = nil
-        pendingRemoteInviteAcceptance = nil
+        remoteLifecycle.cancelRemoteInviteConfirmation()
         remoteInviteAcceptanceTask?.cancel()
         remoteInviteAcceptanceTask = nil
     }
 
     private func confirmRemoteInvite() {
-        guard let localPlayerColor = pendingRemoteInviteConfirmation?.localPlayerColor else {
+        guard let localPlayerColor = remoteLifecycle.pendingRemoteInviteConfirmation?.localPlayerColor else {
             return
         }
 
-        if let pendingRemoteInviteAcceptance {
-            acceptRemoteInvite(pendingRemoteInviteAcceptance.invite, localPlayerColor: localPlayerColor)
+        if let pendingRemoteInviteAcceptance = remoteLifecycle.pendingRemoteInviteAcceptance {
+            acceptRemoteInvite(pendingRemoteInviteAcceptance, localPlayerColor: localPlayerColor)
             return
         }
 
-        pendingRemoteInviteConfirmation = nil
+        remoteLifecycle.cancelRemoteInviteConfirmation()
         #if DEBUG
         if remotePlayRuntimeMode == .fakeLocal {
             startFakeRemoteJoin(localPlayerColor: localPlayerColor)
@@ -726,8 +717,7 @@ struct ContentView: View {
                     ),
                     chosenColor: localPlayerColor
                 )
-                pendingRemoteInviteConfirmation = nil
-                pendingRemoteInviteAcceptance = nil
+                remoteLifecycle.cancelRemoteInviteConfirmation()
                 logDiagnostics(
                     category: "remoteInvite",
                     "acceptSucceeded",
@@ -793,27 +783,13 @@ struct ContentView: View {
                 "blackPlayerID": context.descriptor.blackPlayer.id.rawValue
             ]
         )
-        cancelRemoteGameSync(clearSavedGame: false)
-        session.newGame()
-        Self.applyRemoteSeats(from: context.descriptor, to: session)
-        activeRemoteGameController = RemoteGameSessionController(
-            descriptor: context.descriptor,
-            transport: remoteGameTransport,
-            initialState: .startingPosition()
-        )
+        let result = remoteLifecycle.startRemoteGame(context: context, role: role)
         persistActiveRemoteGame()
-        prepareRemoteMoveNotification(for: context.descriptor)
-        prepareRemoteGameStatusNotification(for: context.descriptor.id)
+        prepareRemoteMoveNotification(for: result.descriptor)
+        prepareRemoteGameStatusNotification(for: result.descriptor.id)
         requestRemoteNotificationAuthorizationIfNeeded()
-        remotePlayFlow.cancel()
-        let announcement = RemoteGameStartAnnouncement(
-            opponentName: context.opponent.displayName,
-            localPlayerColor: context.localPlayerColor
-        )
 
-        if RemoteGameStartPresentationPolicy.shouldShowAnnouncement(for: role) {
-            showRemoteStartAnnouncement(announcement)
-        } else {
+        if result.shouldStartSyncImmediately {
             syncRemotePresenceForCurrentTurn()
             startRemoteMoveFetchLoopIfNeeded()
         }
@@ -821,7 +797,7 @@ struct ContentView: View {
 
     private func handleCommittedMove(_ move: Move) {
         stopRemotePresenceHeartbeat()
-        remoteOpponentPresence = nil
+        remoteLifecycle.remoteOpponentPresence = nil
 
         #if DEBUG
         if let fakeRemoteLab = activeFakeRemoteLab, fakeRemoteLab.isActive {
@@ -832,7 +808,7 @@ struct ContentView: View {
         }
         #endif
 
-        guard let activeRemoteGameController else {
+        guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController else {
             return
         }
 
@@ -869,16 +845,16 @@ struct ContentView: View {
     }
 
     private func resumeRemoteSyncIfNeeded() {
-        guard activeRemoteGameController != nil else {
+        guard remoteLifecycle.activeRemoteGameController != nil else {
             return
         }
-        if let descriptor = activeRemoteGameController?.snapshot.descriptor {
+        if let descriptor = remoteLifecycle.activeRemoteGameController?.snapshot.descriptor {
             prepareRemoteMoveNotification(for: descriptor)
             prepareRemoteGameStatusNotification(for: descriptor.id)
         }
 
         Task { @MainActor in
-            guard let activeRemoteGameController else {
+            guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController else {
                 return
             }
             do {
@@ -928,14 +904,14 @@ struct ContentView: View {
     }
 
     private func fetchRemoteMovesAfterPush(gameID: RemoteGameID) {
-        guard activeRemoteGameController?.gameID == gameID else {
+        guard remoteLifecycle.activeRemoteGameController?.gameID == gameID else {
             return
         }
         startRemoteMoveFetchLoopIfNeeded()
     }
 
     private func fetchRemoteGameStatusAfterPush(gameID: RemoteGameID) {
-        guard activeRemoteGameController?.gameID == gameID else {
+        guard remoteLifecycle.activeRemoteGameController?.gameID == gameID else {
             return
         }
         Task { @MainActor in
@@ -944,7 +920,7 @@ struct ContentView: View {
     }
 
     private func startRemoteMoveFetchLoopIfNeeded() {
-        guard activeRemoteGameController != nil,
+        guard remoteLifecycle.activeRemoteGameController != nil,
               !session.localCanActForCurrentTurn else {
             syncRemotePresenceForCurrentTurn()
             return
@@ -952,7 +928,7 @@ struct ContentView: View {
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = Task { @MainActor in
             while !Task.isCancelled {
-                guard let activeRemoteGameController else {
+                guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController else {
                     remoteMoveFetchTask = nil
                     return
                 }
@@ -974,7 +950,7 @@ struct ContentView: View {
                     let appliedMoves = try await activeRemoteGameController.fetchAndApplyRemoteMoves(to: session)
                     if !appliedMoves.isEmpty {
                         persistActiveRemoteGame()
-                        remoteOpponentPresence = nil
+                        remoteLifecycle.remoteOpponentPresence = nil
                         logDiagnostics(
                             category: "remoteMove",
                             "fetchApplied",
@@ -1005,7 +981,7 @@ struct ContentView: View {
 
     @discardableResult
     private func fetchRemoteGameStatusIfNeeded() async -> Bool {
-        guard let activeRemoteGameController,
+        guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController,
               let lifecycleTransport = remoteGameTransport as? any RemoteGameLifecycleTransport else {
             return false
         }
@@ -1025,7 +1001,7 @@ struct ContentView: View {
     }
 
     private func publishRemoteGameEndedIfNeeded() {
-        guard let activeRemoteGameController,
+        guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController,
               let lifecycleTransport = remoteGameTransport as? any RemoteGameLifecycleTransport else {
             return
         }
@@ -1044,18 +1020,15 @@ struct ContentView: View {
     }
 
     private func endRemoteGameAfterOpponentEnded(descriptor: RemoteGameDescriptor) {
-        let opponentName = Self.opponentName(from: descriptor)
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
         stopRemotePresenceHeartbeat()
-        remoteOpponentPresence = nil
-        activeRemoteGameController = nil
+        remoteLifecycle.endRemoteGameAfterOpponentEnded(descriptor: descriptor)
         try? activeRemoteGameStore.clear()
-        session.endRemoteGame(message: "\(opponentName) ended this game.")
     }
 
     private func persistActiveRemoteGame() {
-        guard let activeRemoteGameController else {
+        guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController else {
             return
         }
         try? activeRemoteGameStore.save(activeRemoteGameController.snapshot)
@@ -1065,8 +1038,7 @@ struct ContentView: View {
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
         stopRemotePresenceHeartbeat()
-        remoteOpponentPresence = nil
-        activeRemoteGameController = nil
+        remoteLifecycle.clearRemoteGameState()
         if clearSavedGame {
             try? activeRemoteGameStore.clear()
         }
@@ -1085,7 +1057,7 @@ struct ContentView: View {
     }
 
     private func reportLocalBoardInteraction() {
-        guard activeRemoteGameController != nil,
+        guard remoteLifecycle.activeRemoteGameController != nil,
               session.localCanActForCurrentTurn else {
             return
         }
@@ -1123,7 +1095,7 @@ struct ContentView: View {
     }
 
     private func syncRemotePresenceForCurrentTurn() {
-        guard activeRemoteGameController != nil else {
+        guard remoteLifecycle.activeRemoteGameController != nil else {
             stopRemotePresenceHeartbeat()
             return
         }
@@ -1136,7 +1108,7 @@ struct ContentView: View {
     }
 
     private func startRemotePresenceHeartbeatIfNeeded() {
-        guard activeRemoteGameController != nil,
+        guard remoteLifecycle.activeRemoteGameController != nil,
               session.localCanActForCurrentTurn,
               scenePhase != .background else {
             stopRemotePresenceHeartbeat()
@@ -1154,7 +1126,7 @@ struct ContentView: View {
                     nanoseconds: UInt64(RemotePresencePolicy.foregroundIdleHeartbeatInterval * 1_000_000_000)
                 )
                 guard !Task.isCancelled,
-                      activeRemoteGameController != nil,
+                      remoteLifecycle.activeRemoteGameController != nil,
                       session.localCanActForCurrentTurn,
                       scenePhase != .background else {
                     remotePresenceHeartbeatTask = nil
@@ -1181,7 +1153,7 @@ struct ContentView: View {
         updatedAt: Date = Date(),
         expiresAfter timeInterval: TimeInterval
     ) {
-        guard let descriptor = activeRemoteGameController?.snapshot.descriptor,
+        guard let descriptor = remoteLifecycle.activeRemoteGameController?.snapshot.descriptor,
               let presenceTransport = remoteGameTransport as? any RemotePresenceTransport else {
             return
         }
@@ -1200,20 +1172,20 @@ struct ContentView: View {
     }
 
     private func fetchRemotePresenceIfNeeded() async {
-        guard let descriptor = activeRemoteGameController?.snapshot.descriptor,
+        guard let descriptor = remoteLifecycle.activeRemoteGameController?.snapshot.descriptor,
               let remoteTurnPlayer = remoteTurnPlayer(from: descriptor),
               let presenceTransport = remoteGameTransport as? any RemotePresenceTransport else {
-            remoteOpponentPresence = nil
+            remoteLifecycle.remoteOpponentPresence = nil
             return
         }
 
         do {
-            remoteOpponentPresence = try await presenceTransport.fetchPresence(
+            remoteLifecycle.remoteOpponentPresence = try await presenceTransport.fetchPresence(
                 gameID: descriptor.id,
                 playerID: remoteTurnPlayer.id
             )
         } catch {
-            remoteOpponentPresence = nil
+            remoteLifecycle.remoteOpponentPresence = nil
         }
     }
 
@@ -1231,16 +1203,6 @@ struct ContentView: View {
         return player
     }
 
-    private static func applyRemoteSeats(from descriptor: RemoteGameDescriptor, to session: GameSession) {
-        if descriptor.localPlayerID == descriptor.whitePlayer.id {
-            session.whitePlayer = .humanLocal
-            session.blackPlayer = .remote(playerID: descriptor.blackPlayer.id.rawValue)
-        } else {
-            session.whitePlayer = .remote(playerID: descriptor.whitePlayer.id.rawValue)
-            session.blackPlayer = .humanLocal
-        }
-    }
-
     private static func restoredSession(from snapshot: ActiveRemoteGameSnapshot) throws -> GameSession {
         let projectedState = try RemoteGameSessionController.projectedState(from: snapshot)
         let moves = try snapshot.acceptedEvents
@@ -1251,13 +1213,6 @@ struct ContentView: View {
             throw RemoteGameSessionController.Error.invalidSnapshot
         }
         return session
-    }
-
-    private static func opponentName(from descriptor: RemoteGameDescriptor) -> String {
-        if descriptor.localPlayerID == descriptor.whitePlayer.id {
-            return descriptor.blackPlayer.displayName
-        }
-        return descriptor.whitePlayer.displayName
     }
 
     private static func remoteInviteTransport(
@@ -1450,10 +1405,6 @@ private struct InviteLinkRequest: Equatable {
     let lookup: RemotePlayFlow.InviteLookup
     let expectedStage: RemotePlayFlow.Stage
     let expectedJoinCode: String
-}
-
-private struct PendingRemoteInviteAcceptance: Equatable {
-    let invite: RemotePendingInvite
 }
 
 private struct PromotionPickerView: View {
