@@ -29,6 +29,24 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         )
     }
 
+    func testNewGameRequestConfirmsForLocalGameInProgress() {
+        XCTAssertTrue(
+            NewGameRequestPolicy.shouldConfirm(
+                hasGameInProgress: true,
+                isRemoteGameActive: false
+            )
+        )
+    }
+
+    func testNewGameRequestConfirmsForRemoteGameBeforeFirstMove() {
+        XCTAssertTrue(
+            NewGameRequestPolicy.shouldConfirm(
+                hasGameInProgress: false,
+                isRemoteGameActive: true
+            )
+        )
+    }
+
     func testNewGameRequestDoesNotConfirmForFinishedLocalGame() {
         XCTAssertFalse(
             NewGameRequestPolicy.shouldConfirm(

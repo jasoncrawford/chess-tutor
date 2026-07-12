@@ -96,6 +96,37 @@ final class RemoteInviteTransportTests: XCTestCase {
         )
     }
 
+    func testFixedWhiteAssignmentAllowsOmittedOrMatchingChosenColor() async throws {
+        let noChoiceTransport = makeTransport()
+        let noChoiceInvite = try await createInvite(on: noChoiceTransport, whiteAssignment: .inviter)
+        let noChoiceRequest = JoinRemoteInviteRequest(
+            code: noChoiceInvite.code,
+            token: noChoiceInvite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let acceptedWithoutChoice = try await noChoiceTransport.acceptInvite(noChoiceRequest, chosenColor: nil)
+
+        XCTAssertEqual(acceptedWithoutChoice.joinerColor, .black)
+
+        let matchingChoiceTransport = makeTransport()
+        let matchingChoiceInvite = try await createInvite(on: matchingChoiceTransport, whiteAssignment: .invitee)
+        let matchingChoiceRequest = JoinRemoteInviteRequest(
+            code: matchingChoiceInvite.code,
+            token: matchingChoiceInvite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let acceptedWithMatchingChoice = try await matchingChoiceTransport.acceptInvite(
+            matchingChoiceRequest,
+            chosenColor: .white
+        )
+
+        XCTAssertEqual(acceptedWithMatchingChoice.joinerColor, .white)
+    }
+
     func testInviteeChoosesRequiresChosenColor() async throws {
         let transport = makeTransport()
         let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)

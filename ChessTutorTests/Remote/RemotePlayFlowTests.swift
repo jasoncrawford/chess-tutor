@@ -22,6 +22,42 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(pendingInvite.formattedCode, "428 193")
     }
 
+    func testInviteTargetsAndWhiteChoicesCreateExpectedPendingInvites() throws {
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let cases: [(RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice)] = [
+            (.known(maya), .localPlayer),
+            (.known(maya), .invitee),
+            (.known(maya), .inviteeChooses),
+            (.newPlayer, .localPlayer),
+            (.newPlayer, .invitee),
+            (.newPlayer, .inviteeChooses)
+        ]
+
+        for (target, whiteChoice) in cases {
+            let flow = RemotePlayFlow(
+                knownPlayers: [maya],
+                localDisplayName: "Jason",
+                nextInviteCode: "428193"
+            )
+
+            flow.open()
+            switch target {
+            case .known(let player):
+                flow.invite(player)
+            case .newPlayer:
+                flow.inviteSomeoneNew()
+            }
+            flow.chooseWhite(whiteChoice)
+
+            let pendingInvite = try XCTUnwrap(flow.requestSendInvite())
+
+            XCTAssertEqual(pendingInvite.target, target)
+            XCTAssertEqual(pendingInvite.whiteChoice, whiteChoice)
+            XCTAssertEqual(pendingInvite.code, "428193")
+            XCTAssertEqual(flow.stage, .waitingForInvitee(pendingInvite))
+        }
+    }
+
     func testSendInviteRequiresLocalDisplayName() {
         let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
         let flow = RemotePlayFlow(knownPlayers: [maya], nextInviteCode: "428193")

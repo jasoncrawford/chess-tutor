@@ -119,6 +119,39 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertTrue(requestMetadata.atomically)
     }
 
+    func testAcceptFixedWhiteAssignmentAllowsOmittedOrMatchingChosenColor() async throws {
+        let noChoiceDatabase = InMemoryCloudKitInviteDatabase()
+        let noChoiceTransport = makeTransport(database: noChoiceDatabase)
+        let noChoiceInvite = try await createInvite(on: noChoiceTransport, whiteAssignment: .inviter)
+        let noChoiceRequest = JoinRemoteInviteRequest(
+            code: noChoiceInvite.code,
+            token: noChoiceInvite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let acceptedWithoutChoice = try await noChoiceTransport.acceptInvite(noChoiceRequest, chosenColor: nil)
+
+        XCTAssertEqual(acceptedWithoutChoice.joinerColor, .black)
+
+        let matchingChoiceDatabase = InMemoryCloudKitInviteDatabase()
+        let matchingChoiceTransport = makeTransport(database: matchingChoiceDatabase)
+        let matchingChoiceInvite = try await createInvite(on: matchingChoiceTransport, whiteAssignment: .invitee)
+        let matchingChoiceRequest = JoinRemoteInviteRequest(
+            code: matchingChoiceInvite.code,
+            token: matchingChoiceInvite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let acceptedWithMatchingChoice = try await matchingChoiceTransport.acceptInvite(
+            matchingChoiceRequest,
+            chosenColor: .white
+        )
+
+        XCTAssertEqual(acceptedWithMatchingChoice.joinerColor, .white)
+    }
+
     func testAcceptedInviteCanBeFetchedAfterJoinerAccepts() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
