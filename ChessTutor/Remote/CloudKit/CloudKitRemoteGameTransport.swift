@@ -35,19 +35,32 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
 
     private let database: any CloudKitGameDatabase
     private let fetchBatchSize: Int
+    private let diagnosticsLog: DiagnosticsLog
     static let moveSubscriptionIDPrefix = "remote-game-moves-"
     static let statusSubscriptionIDPrefix = "remote-game-status-"
 
     init(
         database: any CloudKitGameDatabase = CKContainer(identifier: "iCloud.org.jasoncrawford.chesstutor").publicCloudDatabase,
-        fetchBatchSize: Int = 20
+        fetchBatchSize: Int = 20,
+        diagnosticsLog: DiagnosticsLog = .shared
     ) {
         self.database = database
         self.fetchBatchSize = fetchBatchSize
+        self.diagnosticsLog = diagnosticsLog
     }
 
     func sendMove(_ event: RemoteMoveEvent) async throws -> RemoteMoveAck {
         let record = CloudKitRemoteMoveRecordCodec.record(from: event)
+        await diagnosticsLog.append(
+            category: "cloudKitGame",
+            "sendMoveSaving",
+            fields: [
+                "gameID": event.gameID.rawValue,
+                "sequence": "\(event.sequenceNumber)",
+                "eventID": event.id.rawValue,
+                "actorPlayerID": event.actorPlayerID.rawValue
+            ]
+        )
         let result = try await database.modifyRecords(
             saving: [record],
             deleting: [],
@@ -56,13 +69,32 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         )
 
         if savedRecord(record.recordID, in: result.saveResults) != nil {
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "sendMoveSaved",
+                fields: [
+                    "gameID": event.gameID.rawValue,
+                    "sequence": "\(event.sequenceNumber)",
+                    "recordID": record.recordID.recordName
+                ]
+            )
             return RemoteMoveAck(eventID: event.id, gameID: event.gameID, sequenceNumber: event.sequenceNumber)
         }
 
         let existingEvent = try await existingEvent(for: record.recordID)
         guard existingEvent == event else {
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "sendMoveConflict",
+                fields: ["gameID": event.gameID.rawValue, "sequence": "\(event.sequenceNumber)"]
+            )
             throw Error.conflictingSequence(event.sequenceNumber)
         }
+        await diagnosticsLog.append(
+            category: "cloudKitGame",
+            "sendMoveIdempotent",
+            fields: ["gameID": event.gameID.rawValue, "sequence": "\(event.sequenceNumber)"]
+        )
         return RemoteMoveAck(
             eventID: existingEvent.id,
             gameID: existingEvent.gameID,
@@ -73,6 +105,11 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
     func fetchMoves(gameID: RemoteGameID, after sequenceNumber: Int) async throws -> [RemoteMoveEvent] {
         var events: [RemoteMoveEvent] = []
         var nextSequence = sequenceNumber + 1
+        await diagnosticsLog.append(
+            category: "cloudKitGame",
+            "fetchMovesStarted",
+            fields: ["gameID": gameID.rawValue, "afterSequence": "\(sequenceNumber)"]
+        )
 
         while true {
             let ids = (nextSequence..<(nextSequence + fetchBatchSize)).map {
@@ -90,8 +127,26 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
                     nextSequence += 1
                 case .failure(let error):
                     guard isMissingRecord(error) else {
+                        await diagnosticsLog.append(
+                            category: "cloudKitGame",
+                            "fetchMovesFailed",
+                            fields: [
+                                "gameID": gameID.rawValue,
+                                "afterSequence": "\(sequenceNumber)",
+                                "error": String(describing: error)
+                            ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                        )
                         throw Error.fetchFailed
                     }
+                    await diagnosticsLog.append(
+                        category: "cloudKitGame",
+                        "fetchMovesReturned",
+                        fields: [
+                            "gameID": gameID.rawValue,
+                            "afterSequence": "\(sequenceNumber)",
+                            "count": "\(events.count)"
+                        ]
+                    )
                     return events
                 }
             }
@@ -100,6 +155,15 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
 
     func updateGameStatus(_ status: RemoteGameStatusUpdate) async throws {
         let record = CloudKitRemoteGameStatusRecordCodec.record(from: status)
+        await diagnosticsLog.append(
+            category: "cloudKitGame",
+            "statusSaving",
+            fields: [
+                "gameID": status.gameID.rawValue,
+                "status": status.status.rawValue,
+                "updatedByPlayerID": status.updatedByPlayerID.rawValue
+            ]
+        )
         let result = try await database.modifyRecords(
             saving: [record],
             deleting: [],
@@ -107,6 +171,11 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             atomically: true
         )
         guard savedRecord(record.recordID, in: result.saveResults) != nil else {
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "statusSaveRejected",
+                fields: ["gameID": status.gameID.rawValue]
+            )
             throw Error.missingSavedRecord
         }
     }
@@ -122,6 +191,14 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             return try CloudKitRemoteGameStatusRecordCodec.status(from: record)
         case .failure(let error):
             guard isMissingRecord(error) else {
+                await diagnosticsLog.append(
+                    category: "cloudKitGame",
+                    "statusFetchFailed",
+                    fields: [
+                        "gameID": gameID.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
                 throw Error.fetchFailed
             }
             return nil
@@ -131,6 +208,11 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
     func updatePresence(_ presence: RemotePresenceUpdate) async throws {
         if let existingPresence = try await fetchPresence(gameID: presence.gameID, playerID: presence.playerID),
            existingPresence.updatedAt > presence.updatedAt {
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "presenceSkippedOlderUpdate",
+                fields: ["gameID": presence.gameID.rawValue, "playerID": presence.playerID.rawValue]
+            )
             return
         }
 
@@ -142,6 +224,11 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             atomically: true
         )
         guard savedRecord(record.recordID, in: result.saveResults) != nil else {
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "presenceSaveRejected",
+                fields: ["gameID": presence.gameID.rawValue, "playerID": presence.playerID.rawValue]
+            )
             throw Error.missingSavedRecord
         }
     }
@@ -157,6 +244,15 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             return try CloudKitRemotePresenceRecordCodec.presence(from: record)
         case .failure(let error):
             guard isMissingRecord(error) else {
+                await diagnosticsLog.append(
+                    category: "cloudKitGame",
+                    "presenceFetchFailed",
+                    fields: [
+                        "gameID": gameID.rawValue,
+                        "playerID": playerID.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
                 throw Error.fetchFailed
             }
             return nil
@@ -182,6 +278,11 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         notificationInfo.alertLocalizationArgs = [CloudKitRemoteMoveRecordCodec.Field.notificationSummary]
         subscription.notificationInfo = notificationInfo
         _ = try await database.saveSubscription(subscription)
+        await diagnosticsLog.append(
+            category: "cloudKitGame",
+            "moveSubscriptionSaved",
+            fields: ["gameID": descriptor.id.rawValue, "subscriptionID": subscription.subscriptionID]
+        )
     }
 
     func prepareGameStatusNotification(gameID: RemoteGameID) async throws {
@@ -199,6 +300,11 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         notificationInfo.shouldSendContentAvailable = true
         subscription.notificationInfo = notificationInfo
         _ = try await database.saveSubscription(subscription)
+        await diagnosticsLog.append(
+            category: "cloudKitGame",
+            "statusSubscriptionSaved",
+            fields: ["gameID": gameID.rawValue, "subscriptionID": subscription.subscriptionID]
+        )
     }
 
     static func moveSubscriptionID(for gameID: RemoteGameID) -> String {

@@ -1,6 +1,6 @@
 import Foundation
 
-enum RemotePlayRuntimeMode: Equatable {
+enum RemotePlayRuntimeMode: Equatable, Sendable {
     case fakeLocal
     case cloudKit
 

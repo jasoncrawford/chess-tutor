@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var lastRemoteActivePresencePublishedAt: Date?
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
+    @State private var didLogAppLaunch = false
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
     @State private var tableRotationDegrees: Double
@@ -28,6 +29,7 @@ struct ContentView: View {
     private let remoteInviteTransport: any RemoteInviteTransport
     private let remoteGameTransport: any RemoteGameTransport
     private let remotePlayRuntimeMode: RemotePlayRuntimeMode
+    private let diagnosticsLog: DiagnosticsLog
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
     @State private var fakeRemoteLab = FakeRemoteGameLab()
@@ -41,8 +43,9 @@ struct ContentView: View {
         self.activeRemoteGameStore = activeRemoteGameStore
         let runtimeMode = RemotePlayRuntimeMode.resolve()
         self.remotePlayRuntimeMode = runtimeMode
-        self.remoteInviteTransport = Self.remoteInviteTransport(for: runtimeMode)
-        self.remoteGameTransport = Self.remoteGameTransport(for: runtimeMode)
+        self.diagnosticsLog = .shared
+        self.remoteInviteTransport = Self.remoteInviteTransport(for: runtimeMode, diagnosticsLog: diagnosticsLog)
+        self.remoteGameTransport = Self.remoteGameTransport(for: runtimeMode, diagnosticsLog: diagnosticsLog)
         let localProfile = try? remoteIdentityStore.loadLocalProfile()
         _remotePlayFlow = State(
             initialValue: RemotePlayFlow(
@@ -114,6 +117,7 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 syncToCurrentInterfaceOrientation(animated: false)
             }
+            logAppLaunchIfNeeded()
             resumeRemoteSyncIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -162,8 +166,8 @@ struct ContentView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingAbout) {
-            AboutSheetView()
-                .presentationDetents([.height(320)])
+            AboutSheetView(diagnosticsLog: diagnosticsLog)
+                .presentationDetents([.height(380)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: remotePlaySheetBinding) {
@@ -344,6 +348,61 @@ struct ContentView: View {
         }
     }
 
+    private func logAppLaunchIfNeeded() {
+        guard !didLogAppLaunch else {
+            return
+        }
+        didLogAppLaunch = true
+        Task { @MainActor in
+            let installationID = await diagnosticsLog.installationID()
+            let device = DiagnosticsDeviceSnapshot.current(installationID: installationID)
+            let localProfile = try? remoteIdentityStore.loadLocalProfile()
+            await diagnosticsLog.logAppLaunch(
+                runtimeMode: remotePlayRuntimeMode,
+                device: device,
+                localPlayerID: localProfile?.id
+            )
+        }
+    }
+
+    private func logDiagnostics(
+        category: String,
+        _ name: String,
+        fields: [String: String] = [:]
+    ) {
+        Task {
+            await diagnosticsLog.append(category: category, name, fields: fields)
+        }
+    }
+
+    private func diagnosticsTargetName(_ target: RemotePlayFlow.InviteTarget) -> String {
+        switch target {
+        case .known(let player):
+            return "known:\(player.id.rawValue)"
+        case .newPlayer:
+            return "newPlayer"
+        }
+    }
+
+    private func diagnosticsMoveFields(_ move: Move) -> [String: String] {
+        [
+            "from": diagnosticsSquareName(move.from),
+            "to": diagnosticsSquareName(move.to),
+            "special": diagnosticsSpecialName(move.special)
+        ]
+    }
+
+    private func diagnosticsSquareName(_ square: Square) -> String {
+        "\(square.file)\(square.rank)"
+    }
+
+    private func diagnosticsSpecialName(_ special: Move.Special?) -> String {
+        guard let special else {
+            return "none"
+        }
+        return "\(special)"
+    }
+
     private func createRemoteInvite(
         target: RemotePlayFlow.InviteTarget,
         whiteChoice: RemotePlayFlow.WhiteChoice
@@ -354,6 +413,15 @@ struct ContentView: View {
         }
 
         let now = Date()
+        logDiagnostics(
+            category: "remoteInvite",
+            "createStarted",
+            fields: [
+                "target": diagnosticsTargetName(target),
+                "whiteChoice": "\(whiteChoice)",
+                "localPlayerID": profile.id.rawValue
+            ]
+        )
         let invite = try await remoteInviteTransport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: RemotePlayerRef(id: profile.id, displayName: displayName),
@@ -364,6 +432,16 @@ struct ContentView: View {
             )
         )
         try? await remoteInviteTransport.prepareAcceptanceNotification(for: invite)
+        logDiagnostics(
+            category: "remoteInvite",
+            "createReadyToShare",
+            fields: [
+                "inviteID": invite.id.rawValue,
+                "code": invite.code.rawValue,
+                "tokenSuffix": DiagnosticsLog.tokenSuffix(invite.token),
+                "whiteAssignment": invite.whiteAssignment.rawValue
+            ]
+        )
         return invite
     }
 
@@ -371,16 +449,71 @@ struct ContentView: View {
         code: InviteCode,
         token: RemoteInviteToken?
     ) async throws -> RemotePendingInvite {
-        try await remoteInviteTransport.fetchInvite(code: code, token: token, now: Date())
+        logDiagnostics(
+            category: "remoteInvite",
+            "fetchStarted",
+            fields: [
+                "code": code.rawValue,
+                "tokenSuffix": DiagnosticsLog.tokenSuffix(token),
+                "source": token == nil ? "code" : "link"
+            ]
+        )
+        do {
+            let invite = try await remoteInviteTransport.fetchInvite(code: code, token: token, now: Date())
+            logDiagnostics(
+                category: "remoteInvite",
+                "fetchSucceeded",
+                fields: [
+                    "inviteID": invite.id.rawValue,
+                    "code": invite.code.rawValue,
+                    "status": invite.status.rawValue,
+                    "whiteAssignment": invite.whiteAssignment.rawValue,
+                    "inviterID": invite.inviter.id.rawValue
+                ]
+            )
+            return invite
+        } catch {
+            logDiagnostics(
+                category: "remoteInvite",
+                "fetchFailed",
+                fields: [
+                    "code": code.rawValue,
+                    "tokenSuffix": DiagnosticsLog.tokenSuffix(token),
+                    "source": token == nil ? "code" : "link",
+                    "error": String(describing: error)
+                ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+            )
+            throw error
+        }
     }
 
     private func fetchAcceptedRemoteInvite(id: RemoteInviteID) async throws -> RemoteAcceptedInvite? {
-        try await remoteInviteTransport.acceptedInvite(id: id, now: Date())
+        do {
+            let acceptedInvite = try await remoteInviteTransport.acceptedInvite(id: id, now: Date())
+            logDiagnostics(
+                category: "remoteInvite",
+                acceptedInvite == nil ? "acceptancePollNoChange" : "acceptancePollSucceeded",
+                fields: ["inviteID": id.rawValue]
+            )
+            return acceptedInvite
+        } catch {
+            logDiagnostics(
+                category: "remoteInvite",
+                "acceptancePollFailed",
+                fields: [
+                    "inviteID": id.rawValue,
+                    "error": String(describing: error)
+                ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+            )
+            throw error
+        }
     }
 
     private func fetchAcceptedInviteAfterPush(id: RemoteInviteID) {
+        logDiagnostics(category: "remoteInvite", "acceptancePushReceived", fields: ["inviteID": id.rawValue])
         guard case .waitingForInvitee(let pendingInvite) = remotePlayFlow.stage,
               pendingInvite.remoteInviteID == id else {
+            logDiagnostics(category: "remoteInvite", "acceptancePushIgnored", fields: ["inviteID": id.rawValue])
             return
         }
 
@@ -431,6 +564,15 @@ struct ContentView: View {
         _ confirmation: RemoteInviteConfirmation,
         invite: RemotePendingInvite? = nil
     ) {
+        logDiagnostics(
+            category: "remoteInvite",
+            "confirmationShown",
+            fields: [
+                "opponentName": confirmation.opponentName,
+                "inviteID": invite?.id.rawValue ?? "none",
+                "localPlayerColor": confirmation.localPlayerColor?.rawValue ?? "choiceRequired"
+            ]
+        )
         pendingRemoteInviteConfirmation = confirmation
         pendingRemoteInviteAcceptance = invite.map(PendingRemoteInviteAcceptance.init(invite:))
     }
@@ -472,9 +614,18 @@ struct ContentView: View {
 
     private func handleInviteURL(_ url: URL) {
         guard let lookup = RemotePlayFlow.inviteLookup(from: url) else {
+            logDiagnostics(category: "remoteInvite", "linkRejected", fields: ["urlHost": url.host ?? "none"])
             _ = remotePlayFlow.requestJoinInvite(from: url)
             return
         }
+        logDiagnostics(
+            category: "remoteInvite",
+            "linkOpened",
+            fields: [
+                "code": lookup.code.rawValue,
+                "tokenSuffix": DiagnosticsLog.tokenSuffix(lookup.token)
+            ]
+        )
 
         guard let lookupToFetch = remotePlayFlow.requestJoinInviteLookup(lookup) else {
             return
@@ -516,6 +667,15 @@ struct ContentView: View {
                 guard isCurrentInviteLinkRequest(request) else {
                     return
                 }
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "linkFetchFailed",
+                    fields: [
+                        "code": lookupToFetch.code.rawValue,
+                        "tokenSuffix": DiagnosticsLog.tokenSuffix(lookupToFetch.token),
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
                 remotePlayFlow.showJoinInviteLookupError(
                     lookupToFetch,
                     message: "That link did not match an open invite."
@@ -543,6 +703,16 @@ struct ContentView: View {
     #endif
 
     private func acceptRemoteInvite(_ invite: RemotePendingInvite, localPlayerColor: PieceColor) {
+        logDiagnostics(
+            category: "remoteInvite",
+            "acceptStarted",
+            fields: [
+                "inviteID": invite.id.rawValue,
+                "code": invite.code.rawValue,
+                "tokenSuffix": DiagnosticsLog.tokenSuffix(invite.token),
+                "localPlayerColor": localPlayerColor.rawValue
+            ]
+        )
         remoteInviteAcceptanceTask?.cancel()
         remoteInviteAcceptanceTask = Task { @MainActor in
             do {
@@ -558,8 +728,25 @@ struct ContentView: View {
                 )
                 pendingRemoteInviteConfirmation = nil
                 pendingRemoteInviteAcceptance = nil
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "acceptSucceeded",
+                    fields: [
+                        "inviteID": acceptedInvite.invite.id.rawValue,
+                        "joinerID": acceptedInvite.joiner.id.rawValue,
+                        "joinerColor": acceptedInvite.joinerColor.rawValue
+                    ]
+                )
                 startJoinerRemoteGame(acceptedInvite)
             } catch {
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "acceptFailed",
+                    fields: [
+                        "inviteID": invite.id.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
                 session.message = "Could not start remote game. Check your connection and try again."
             }
             remoteInviteAcceptanceTask = nil
@@ -595,6 +782,17 @@ struct ContentView: View {
     }
 
     private func startRemoteGame(context: RemoteGameStartContext, role: RemoteGameStartRole) {
+        logDiagnostics(
+            category: "remoteGame",
+            "start",
+            fields: [
+                "gameID": context.descriptor.id.rawValue,
+                "role": "\(role)",
+                "localPlayerID": context.descriptor.localPlayerID.rawValue,
+                "whitePlayerID": context.descriptor.whitePlayer.id.rawValue,
+                "blackPlayerID": context.descriptor.blackPlayer.id.rawValue
+            ]
+        )
         cancelRemoteGameSync(clearSavedGame: false)
         session.newGame()
         Self.applyRemoteSeats(from: context.descriptor, to: session)
@@ -641,13 +839,30 @@ struct ContentView: View {
         Task { @MainActor in
             do {
                 try activeRemoteGameController.recordCommittedLocalMove(move)
+                logDiagnostics(
+                    category: "remoteMove",
+                    "localMoveQueued",
+                    fields: diagnosticsMoveFields(move)
+                )
                 persistActiveRemoteGame()
                 try await activeRemoteGameController.uploadPendingMoves()
                 persistActiveRemoteGame()
+                logDiagnostics(
+                    category: "remoteMove",
+                    "uploadSucceeded",
+                    fields: diagnosticsMoveFields(move)
+                )
                 syncRemotePresenceForCurrentTurn()
                 startRemoteMoveFetchLoopIfNeeded()
             } catch {
                 persistActiveRemoteGame()
+                logDiagnostics(
+                    category: "remoteMove",
+                    "uploadFailed",
+                    fields: diagnosticsMoveFields(move).merging([
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }) { current, _ in current }
+                )
                 session.message = "Could not sync move. Check your connection."
             }
         }
@@ -760,12 +975,25 @@ struct ContentView: View {
                     if !appliedMoves.isEmpty {
                         persistActiveRemoteGame()
                         remoteOpponentPresence = nil
+                        logDiagnostics(
+                            category: "remoteMove",
+                            "fetchApplied",
+                            fields: ["count": "\(appliedMoves.count)"]
+                        )
                         syncRemotePresenceForCurrentTurn()
                         remoteMoveFetchTask = nil
                         return
                     }
                 } catch {
                     if !Task.isCancelled {
+                        logDiagnostics(
+                            category: "remoteMove",
+                            "fetchFailed",
+                            fields: [
+                                "gameID": activeRemoteGameController.gameID.rawValue,
+                                "error": String(describing: error)
+                            ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                        )
                         session.message = "Could not sync remote move. Check your connection."
                     }
                 }
@@ -1032,21 +1260,27 @@ struct ContentView: View {
         return descriptor.whitePlayer.displayName
     }
 
-    private static func remoteInviteTransport(for mode: RemotePlayRuntimeMode) -> any RemoteInviteTransport {
+    private static func remoteInviteTransport(
+        for mode: RemotePlayRuntimeMode,
+        diagnosticsLog: DiagnosticsLog
+    ) -> any RemoteInviteTransport {
         switch mode {
         case .fakeLocal:
             return InMemoryRemoteInviteTransport()
         case .cloudKit:
-            return CloudKitRemoteInviteTransport()
+            return CloudKitRemoteInviteTransport(diagnosticsLog: diagnosticsLog)
         }
     }
 
-    private static func remoteGameTransport(for mode: RemotePlayRuntimeMode) -> any RemoteGameTransport {
+    private static func remoteGameTransport(
+        for mode: RemotePlayRuntimeMode,
+        diagnosticsLog: DiagnosticsLog
+    ) -> any RemoteGameTransport {
         switch mode {
         case .fakeLocal:
             return InMemoryRemoteGameTransport()
         case .cloudKit:
-            return CloudKitRemoteGameTransport()
+            return CloudKitRemoteGameTransport(diagnosticsLog: diagnosticsLog)
         }
     }
 

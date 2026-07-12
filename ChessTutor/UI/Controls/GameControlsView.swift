@@ -148,6 +148,14 @@ private struct PrimaryGameButtonStyle: ButtonStyle {
 
 struct AboutSheetView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var diagnosticsShareItem: DiagnosticsShareItem?
+    @State private var diagnosticsErrorMessage: String?
+    @State private var isPreparingDiagnostics = false
+    let diagnosticsLog: DiagnosticsLog
+
+    init(diagnosticsLog: DiagnosticsLog = .shared) {
+        self.diagnosticsLog = diagnosticsLog
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -179,6 +187,27 @@ struct AboutSheetView: View {
 
             Spacer(minLength: 0)
 
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    shareDiagnostics()
+                } label: {
+                    Label(
+                        isPreparingDiagnostics ? "Preparing Diagnostics..." : "Share Diagnostics",
+                        systemImage: "square.and.arrow.up"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isPreparingDiagnostics)
+                .foregroundStyle(AppTheme.boardFrame)
+
+                if let diagnosticsErrorMessage {
+                    Text(diagnosticsErrorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(Color(red: 0.72, green: 0.23, blue: 0.17))
+                }
+            }
+
             Button {
                 dismiss()
             } label: {
@@ -191,5 +220,22 @@ struct AboutSheetView: View {
         .padding(26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppTheme.panel)
+        .sheet(item: $diagnosticsShareItem) { item in
+            DiagnosticsShareSheet(url: item.url)
+        }
+    }
+
+    private func shareDiagnostics() {
+        isPreparingDiagnostics = true
+        diagnosticsErrorMessage = nil
+        Task { @MainActor in
+            do {
+                let exportURL = try await diagnosticsLog.exportFile()
+                diagnosticsShareItem = DiagnosticsShareItem(url: exportURL)
+            } catch {
+                diagnosticsErrorMessage = "Could not prepare diagnostics."
+            }
+            isPreparingDiagnostics = false
+        }
     }
 }

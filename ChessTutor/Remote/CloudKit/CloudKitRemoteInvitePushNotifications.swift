@@ -36,11 +36,25 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
     ) {
         guard let queryNotification = CKNotification(fromRemoteNotificationDictionary: userInfo) as? CKQueryNotification,
               let subscriptionID = queryNotification.subscriptionID else {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "ignored",
+                    fields: ["reason": "notQueryNotification"]
+                )
+            }
             completionHandler(.noData)
             return
         }
 
         if let gameID = CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscriptionID) {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "remoteGameStatus",
+                    fields: ["gameID": gameID.rawValue, "subscriptionID": subscriptionID]
+                )
+            }
             NotificationCenter.default.post(
                 name: .remoteGameStatusMayHaveChanged,
                 object: nil,
@@ -51,6 +65,13 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let gameID = CloudKitRemoteGameTransport.gameID(fromMoveSubscriptionID: subscriptionID) {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "remoteGameMove",
+                    fields: ["gameID": gameID.rawValue, "subscriptionID": subscriptionID]
+                )
+            }
             NotificationCenter.default.post(
                 name: .remoteGameMovesMayHaveChanged,
                 object: nil,
@@ -61,6 +82,13 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: subscriptionID) {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "remoteInviteAcceptance",
+                    fields: ["inviteID": inviteID.rawValue, "subscriptionID": subscriptionID]
+                )
+            }
             NotificationCenter.default.post(
                 name: .remoteInviteAcceptanceMayHaveChanged,
                 object: nil,
@@ -70,6 +98,13 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
             return
         }
 
+        Task {
+            await DiagnosticsLog.shared.append(
+                category: "push",
+                "ignored",
+                fields: ["reason": "unknownSubscription", "subscriptionID": subscriptionID]
+            )
+        }
         completionHandler(.noData)
     }
 }
