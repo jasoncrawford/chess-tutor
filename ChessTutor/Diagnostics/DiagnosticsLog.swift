@@ -356,6 +356,16 @@ extension DiagnosticsLog {
             return "assetFileModified"
         case .incompatibleVersion:
             return "incompatibleVersion"
+        case .missingEntitlement:
+            return "missingEntitlement"
+        case .limitExceeded:
+            return "limitExceeded"
+        case .assetNotAvailable:
+            return "assetNotAvailable"
+        case .accountTemporarilyUnavailable:
+            return "accountTemporarilyUnavailable"
+        case .participantAlreadyInvited:
+            return "participantAlreadyInvited"
         @unknown default:
             return "unknown-\(code.rawValue)"
         }

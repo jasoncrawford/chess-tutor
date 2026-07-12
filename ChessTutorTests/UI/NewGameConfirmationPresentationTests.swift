@@ -19,4 +19,22 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.remoteInviteActionTitle, "Invite Maya Again")
         XCTAssertEqual(presentation.localResetActionTitle, "New Game Here")
     }
+
+    func testNewGameRequestConfirmsWhenRemoteGameIsActiveAfterGameEnds() {
+        XCTAssertTrue(
+            NewGameRequestPolicy.shouldConfirm(
+                hasGameInProgress: false,
+                isRemoteGameActive: true
+            )
+        )
+    }
+
+    func testNewGameRequestDoesNotConfirmForFinishedLocalGame() {
+        XCTAssertFalse(
+            NewGameRequestPolicy.shouldConfirm(
+                hasGameInProgress: false,
+                isRemoteGameActive: false
+            )
+        )
+    }
 }
