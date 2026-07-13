@@ -245,6 +245,32 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(presentation.inviteURL.absoluteString, "chesstutor://invite?code=428193&token=token-1")
     }
 
+    func testAddressedKnownPlayerInviteStartsOnDirectWaitingPresentation() throws {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let invite = makeRemotePendingInvite(inviteePlayerID: maya.id, whiteAssignment: .invitee)
+
+        flow.showCreatedRemoteInvite(invite, target: .known(maya))
+        let pendingInvite = try currentPendingInvite(in: flow)
+        let presentation = flow.inviteWaitingPresentation(for: pendingInvite)
+
+        XCTAssertFalse(flow.shouldShowInviteShareFallback(for: pendingInvite))
+        XCTAssertEqual(presentation.title, "Waiting for Maya to accept...")
+        XCTAssertEqual(presentation.fallbackButtonTitle, "Show code and link")
+    }
+
+    func testAddressedKnownPlayerInviteCanRevealCodeAndLinkFallback() throws {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+        let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+        let invite = makeRemotePendingInvite(inviteePlayerID: maya.id, whiteAssignment: .invitee)
+
+        flow.showCreatedRemoteInvite(invite, target: .known(maya))
+        let pendingInvite = try currentPendingInvite(in: flow)
+        flow.showInviteShareFallback(for: pendingInvite)
+
+        XCTAssertTrue(flow.shouldShowInviteShareFallback(for: pendingInvite))
+    }
+
     func testInviteLinkParsesCodeAndTokenWithoutPolicy() {
         let parsed = RemotePlayFlow.inviteLookup(from: URL(string: "chesstutor://invite?code=428193&token=token-1")!)
 
@@ -420,6 +446,7 @@ final class RemotePlayFlowTests: XCTestCase {
         )
         XCTAssertEqual(presentation.linkSectionTitle, "Invite link")
         XCTAssertEqual(presentation.copyLinkButtonTitle, "Copy link")
+        XCTAssertEqual(presentation.shareLinkButtonTitle, "Share link")
         XCTAssertEqual(
             presentation.inviteURL.absoluteString,
             "chesstutor://invite?code=428193"
@@ -654,6 +681,7 @@ final class RemotePlayFlowTests: XCTestCase {
     }
 
     private func makeRemotePendingInvite(
+        inviteePlayerID: RemotePlayerID? = nil,
         whiteAssignment: RemoteInviteWhiteAssignment
     ) -> RemotePendingInvite {
         RemotePendingInvite(
@@ -661,6 +689,7 @@ final class RemotePlayFlowTests: XCTestCase {
             code: InviteCode(rawValue: "428193"),
             token: RemoteInviteToken(rawValue: "token-1"),
             inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason"),
+            inviteePlayerID: inviteePlayerID,
             inviteeDisplayName: "Maya",
             whiteAssignment: whiteAssignment,
             status: .pending,
@@ -668,5 +697,13 @@ final class RemotePlayFlowTests: XCTestCase {
             expiresAt: Date(timeIntervalSince1970: 70),
             protocolVersion: 1
         )
+    }
+
+    private func currentPendingInvite(in flow: RemotePlayFlow) throws -> RemotePlayFlow.PendingInvite {
+        guard case .waitingForInvitee(let pendingInvite) = flow.stage else {
+            XCTFail("Expected waiting state")
+            throw XCTSkip("No pending invite")
+        }
+        return pendingInvite
     }
 }

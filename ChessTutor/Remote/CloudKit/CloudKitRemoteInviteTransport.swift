@@ -9,6 +9,12 @@ protocol CloudKitInviteDatabase: Sendable {
         desiredKeys: [CKRecord.FieldKey]?
     ) async throws -> [CKRecord.ID: Result<CKRecord, any Error>]
 
+    func records(
+        matching query: CKQuery,
+        desiredKeys: [CKRecord.FieldKey]?,
+        resultsLimit: Int
+    ) async throws -> [CKRecord]
+
     func modifyRecords(
         saving recordsToSave: [CKRecord],
         deleting recordIDsToDelete: [CKRecord.ID],
@@ -23,6 +29,22 @@ protocol CloudKitInviteDatabase: Sendable {
 extension CKDatabase: CloudKitInviteDatabase {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
         try await save(subscription)
+    }
+
+    func records(
+        matching query: CKQuery,
+        desiredKeys: [CKRecord.FieldKey]?,
+        resultsLimit: Int
+    ) async throws -> [CKRecord] {
+        let results = try await records(
+            matching: query,
+            inZoneWith: nil,
+            desiredKeys: desiredKeys,
+            resultsLimit: resultsLimit
+        )
+        return try results.matchResults.compactMap { _, result in
+            try result.get()
+        }
     }
 }
 
@@ -55,6 +77,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             code: code,
             token: tokenGenerator(),
             inviter: request.inviter,
+            inviteePlayerID: request.inviteePlayerID,
             inviteeDisplayName: request.inviteeDisplayName,
             whiteAssignment: request.whiteAssignment,
             status: .pending,
@@ -207,6 +230,33 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         return (invite, record)
     }
 
+    func fetchPendingInvite(for inviteePlayerID: RemotePlayerID, now: Date) async throws -> RemotePendingInvite? {
+        let query = CKQuery(
+            recordType: CloudKitPendingInviteRecordCodec.recordType,
+            predicate: NSPredicate(
+                format: "%K == %@ AND %K == %@",
+                "inviteePlayerID",
+                inviteePlayerID.rawValue,
+                "status",
+                RemoteInviteStatus.pending.rawValue
+            )
+        )
+        query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        let records = try await database.records(matching: query, desiredKeys: nil, resultsLimit: 20)
+        for record in records {
+            let invite = try CloudKitPendingInviteRecordCodec.invite(from: record)
+            let alreadyAccepted = try await acceptanceRecordExists(for: invite.id)
+            guard invite.inviteePlayerID == inviteePlayerID,
+                  invite.status == .pending,
+                  invite.expiresAt > now,
+                  !alreadyAccepted else {
+                continue
+            }
+            return invite
+        }
+        return nil
+    }
+
     func acceptInvite(_ request: JoinRemoteInviteRequest, chosenColor: PieceColor?) async throws -> RemoteAcceptedInvite {
         let fetched = try await fetchPendingInviteRecord(code: request.code, token: request.token, now: request.now)
         let invite = fetched.invite
@@ -251,6 +301,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             code: invite.code,
             token: invite.token,
             inviter: invite.inviter,
+            inviteePlayerID: invite.inviteePlayerID,
             inviteeDisplayName: invite.inviteeDisplayName,
             whiteAssignment: invite.whiteAssignment,
             status: .accepted,
@@ -457,6 +508,7 @@ enum CloudKitInviteAcceptanceRecordCodec {
             code: pendingInvite.code,
             token: pendingInvite.token,
             inviter: pendingInvite.inviter,
+            inviteePlayerID: pendingInvite.inviteePlayerID,
             inviteeDisplayName: pendingInvite.inviteeDisplayName,
             whiteAssignment: pendingInvite.whiteAssignment,
             status: .accepted,

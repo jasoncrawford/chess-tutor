@@ -59,6 +59,10 @@ final class GameSession {
         return playerSeat(for: committedState.sideToMove).isLocal
     }
 
+    var isRemoteGameEnded: Bool {
+        boardLockMessage != nil
+    }
+
     var hasGameInProgress: Bool {
         tentativeMove != nil || !committedState.moveHistory.isEmpty
     }
@@ -111,6 +115,10 @@ final class GameSession {
     }
 
     var statusText: String {
+        if boardLockMessage != nil {
+            return "Game forfeit."
+        }
+
         switch committedState.result {
         case .ongoing:
             return "\(committedState.sideToMove.rawValue.capitalized)'s turn"

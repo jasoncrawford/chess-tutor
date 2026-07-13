@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var remotePlayFlow: RemotePlayFlow
     @State private var remoteLifecycle: RemoteGameLifecycleController
     @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
+    @State private var incomingRemoteInvitePollTask: Task<Void, Never>?
     @State private var remoteMoveFetchTask: Task<Void, Never>?
     @State private var remotePresenceHeartbeatTask: Task<Void, Never>?
     @State private var remoteActiveMovingResetTask: Task<Void, Never>?
@@ -129,6 +130,7 @@ struct ContentView: View {
             }
             logAppLaunchIfNeeded()
             resumeRemoteSyncIfNeeded()
+            startIncomingRemoteInvitePollLoopIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
@@ -418,6 +420,7 @@ struct ContentView: View {
         let invite = try await remoteInviteTransport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: RemotePlayerRef(id: profile.id, displayName: displayName),
+                inviteePlayerID: remoteInviteePlayerID(for: target),
                 inviteeDisplayName: remoteInviteeDisplayName(for: target),
                 whiteAssignment: remoteWhiteAssignment(from: whiteChoice),
                 now: now,
@@ -534,6 +537,15 @@ struct ContentView: View {
         }
     }
 
+    private func remoteInviteePlayerID(for target: RemotePlayFlow.InviteTarget) -> RemotePlayerID? {
+        switch target {
+        case .known(let player):
+            return player.id
+        case .newPlayer:
+            return nil
+        }
+    }
+
     private func remoteWhiteAssignment(from choice: RemotePlayFlow.WhiteChoice) -> RemoteInviteWhiteAssignment {
         switch choice {
         case .localPlayer:
@@ -563,7 +575,8 @@ struct ContentView: View {
             fields: [
                 "opponentName": confirmation.opponentName,
                 "inviteID": invite?.id.rawValue ?? "none",
-                "localPlayerColor": confirmation.localPlayerColor?.rawValue ?? "choiceRequired"
+                "localPlayerColor": confirmation.localPlayerColor?.rawValue ?? "choiceRequired",
+                "purpose": confirmation.purpose.rawValue
             ]
         )
         remoteLifecycle.showRemoteInviteConfirmation(confirmation, invite: invite)
@@ -583,6 +596,7 @@ struct ContentView: View {
         remoteLifecycle.cancelRemoteInviteConfirmation()
         remoteInviteAcceptanceTask?.cancel()
         remoteInviteAcceptanceTask = nil
+        startIncomingRemoteInvitePollLoopIfNeeded()
     }
 
     private func confirmRemoteInvite() {
@@ -718,6 +732,7 @@ struct ContentView: View {
                     chosenColor: localPlayerColor
                 )
                 remoteLifecycle.cancelRemoteInviteConfirmation()
+                startIncomingRemoteInvitePollLoopIfNeeded()
                 logDiagnostics(
                     category: "remoteInvite",
                     "acceptSucceeded",
@@ -738,6 +753,7 @@ struct ContentView: View {
                     ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
                 )
                 session.message = "Could not start remote game. Check your connection and try again."
+                startIncomingRemoteInvitePollLoopIfNeeded()
             }
             remoteInviteAcceptanceTask = nil
         }
@@ -1048,12 +1064,91 @@ struct ContentView: View {
         switch phase {
         case .active, .inactive:
             syncRemotePresenceForCurrentTurn()
+            startIncomingRemoteInvitePollLoopIfNeeded()
         case .background:
             publishLocalRemotePresence(.away, expiresAfter: RemotePresencePolicy.awayExpiresAfter)
             stopRemotePresenceHeartbeat()
+            stopIncomingRemoteInvitePollLoop()
         @unknown default:
             break
         }
+    }
+
+    private func startIncomingRemoteInvitePollLoopIfNeeded() {
+        guard scenePhase != .background,
+              incomingRemoteInvitePollTask == nil else {
+            return
+        }
+
+        incomingRemoteInvitePollTask = Task { @MainActor in
+            while !Task.isCancelled {
+                if remoteLifecycle.pendingRemoteInviteConfirmation == nil {
+                    await fetchIncomingRemoteInviteIfNeeded()
+                }
+
+                do {
+                    try await Task.sleep(for: .seconds(3))
+                } catch {
+                    incomingRemoteInvitePollTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopIncomingRemoteInvitePollLoop() {
+        incomingRemoteInvitePollTask?.cancel()
+        incomingRemoteInvitePollTask = nil
+    }
+
+    private func fetchIncomingRemoteInviteIfNeeded() async {
+        guard let profile = try? remoteIdentityStore.loadLocalProfile(),
+              profile.displayName != nil else {
+            return
+        }
+
+        do {
+            guard let invite = try await remoteInviteTransport.fetchPendingInvite(for: profile.id, now: Date()) else {
+                return
+            }
+            guard remoteLifecycle.pendingRemoteInviteAcceptance?.id != invite.id,
+                  remoteLifecycle.pendingRemoteInviteConfirmation == nil else {
+                return
+            }
+            logDiagnostics(
+                category: "remoteInvite",
+                "incomingAddressedInviteFound",
+                fields: [
+                    "inviteID": invite.id.rawValue,
+                    "code": invite.code.rawValue,
+                    "inviterID": invite.inviter.id.rawValue,
+                    "whiteAssignment": invite.whiteAssignment.rawValue
+                ]
+            )
+            showRemoteInviteConfirmation(
+                RemoteInviteConfirmation(
+                    opponentName: invite.inviter.displayName,
+                    localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner,
+                    purpose: remoteInviteConfirmationPurpose(for: invite)
+                ),
+                invite: invite
+            )
+        } catch {
+            logDiagnostics(
+                category: "remoteInvite",
+                "incomingAddressedInviteFetchFailed",
+                fields: [
+                    "error": String(describing: error)
+                ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+            )
+        }
+    }
+
+    private func remoteInviteConfirmationPurpose(for invite: RemotePendingInvite) -> RemoteInviteConfirmationPurpose {
+        if remoteLifecycle.activeRemoteGameOpponent?.id == invite.inviter.id {
+            return .newGame
+        }
+        return .play
     }
 
     private func reportLocalBoardInteraction() {

@@ -15,12 +15,15 @@ struct GameControlsPresentation: Equatable {
     let primaryAction: PrimaryAction
     let secondaryActions: [SecondaryAction]
 
-    init(result: GameResult, isRemotePlayAvailable: Bool = false) {
-        switch result {
-        case .ongoing:
+    init(result: GameResult, isRemoteGameEnded: Bool = false, isRemotePlayAvailable: Bool = false) {
+        switch (isRemoteGameEnded, result) {
+        case (true, _):
+            primaryAction = .newGame
+            secondaryActions = [.about]
+        case (false, .ongoing):
             primaryAction = isRemotePlayAvailable ? .playRemotely : .done
             secondaryActions = [.newGame, .about]
-        case .checkmate, .stalemate:
+        case (false, .checkmate), (false, .stalemate):
             primaryAction = .newGame
             secondaryActions = [.about]
         }
@@ -51,6 +54,7 @@ struct GameControlsView: View {
     var body: some View {
         let presentation = GameControlsPresentation(
             result: session.state.result,
+            isRemoteGameEnded: session.isRemoteGameEnded,
             isRemotePlayAvailable: isRemotePlayAvailable
         )
 

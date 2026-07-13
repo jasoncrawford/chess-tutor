@@ -8,6 +8,7 @@ final class RemoteInviteTransportTests: XCTestCase {
         let invite = try await transport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
                 inviteeDisplayName: "Maya",
                 whiteAssignment: .inviteeChooses,
                 now: Self.createdAt,
@@ -17,7 +18,35 @@ final class RemoteInviteTransportTests: XCTestCase {
         let fetched = try await transport.fetchInvite(code: Self.code, token: nil, now: Self.joinedAt)
 
         XCTAssertEqual(fetched, invite)
+        XCTAssertEqual(fetched.inviteePlayerID, Self.joiner.id)
         XCTAssertEqual(fetched.whiteAssignment, .inviteeChooses)
+    }
+
+    func testAddressedInviteCanBeFetchedByInviteePlayerID() async throws {
+        let transport = makeTransport()
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+
+        XCTAssertEqual(fetched, invite)
+    }
+
+    func testUnaddressedInviteIsNotFetchedByInviteePlayerID() async throws {
+        let transport = makeTransport()
+        _ = try await createInvite(on: transport, whiteAssignment: .invitee)
+
+        let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+
+        XCTAssertNil(fetched)
     }
 
     func testLinkTokenMustMatchWhenPresent() async throws {
@@ -25,6 +54,7 @@ final class RemoteInviteTransportTests: XCTestCase {
         _ = try await transport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: Self.inviter,
+                inviteePlayerID: nil,
                 inviteeDisplayName: nil,
                 whiteAssignment: .inviter,
                 now: Self.createdAt,
@@ -175,6 +205,7 @@ final class RemoteInviteTransportTests: XCTestCase {
         try await transport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: Self.inviter,
+                inviteePlayerID: nil,
                 inviteeDisplayName: nil,
                 whiteAssignment: whiteAssignment,
                 now: Self.createdAt,

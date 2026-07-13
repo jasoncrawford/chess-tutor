@@ -31,4 +31,15 @@ final class GameControlsPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.primaryAction, .newGame)
         XCTAssertEqual(presentation.secondaryActions, [.about])
     }
+
+    func testPresentationPromotesNewGameAfterOpponentEndsRemoteGame() {
+        let presentation = GameControlsPresentation(
+            result: .ongoing,
+            isRemoteGameEnded: true,
+            isRemotePlayAvailable: false
+        )
+
+        XCTAssertEqual(presentation.primaryAction, .newGame)
+        XCTAssertEqual(presentation.secondaryActions, [.about])
+    }
 }

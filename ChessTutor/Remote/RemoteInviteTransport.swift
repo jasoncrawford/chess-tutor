@@ -3,6 +3,7 @@ import Foundation
 protocol RemoteInviteTransport: Sendable {
     func createInvite(_ request: CreateRemoteInviteRequest) async throws -> RemotePendingInvite
     func fetchInvite(code: InviteCode, token: RemoteInviteToken?, now: Date) async throws -> RemotePendingInvite
+    func fetchPendingInvite(for inviteePlayerID: RemotePlayerID, now: Date) async throws -> RemotePendingInvite?
     func acceptInvite(_ request: JoinRemoteInviteRequest, chosenColor: PieceColor?) async throws -> RemoteAcceptedInvite
     func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite?
     func prepareAcceptanceNotification(for invite: RemotePendingInvite) async throws
@@ -47,6 +48,7 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
             code: code,
             token: tokenGenerator(),
             inviter: request.inviter,
+            inviteePlayerID: request.inviteePlayerID,
             inviteeDisplayName: request.inviteeDisplayName,
             whiteAssignment: request.whiteAssignment,
             status: .pending,
@@ -56,6 +58,17 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
         )
         invitesByCode[code] = invite
         return invite
+    }
+
+    func fetchPendingInvite(for inviteePlayerID: RemotePlayerID, now: Date) async throws -> RemotePendingInvite? {
+        invitesByCode.values
+            .filter { invite in
+                invite.inviteePlayerID == inviteePlayerID
+                    && invite.status == .pending
+                    && invite.expiresAt > now
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+            .first
     }
 
     func fetchInvite(code: InviteCode, token: RemoteInviteToken?, now: Date) async throws -> RemotePendingInvite {
@@ -94,6 +107,7 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
             code: invite.code,
             token: invite.token,
             inviter: invite.inviter,
+            inviteePlayerID: invite.inviteePlayerID,
             inviteeDisplayName: invite.inviteeDisplayName,
             whiteAssignment: invite.whiteAssignment,
             status: .accepted,
@@ -129,6 +143,7 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
             code: invite.code,
             token: invite.token,
             inviter: invite.inviter,
+            inviteePlayerID: invite.inviteePlayerID,
             inviteeDisplayName: invite.inviteeDisplayName,
             whiteAssignment: invite.whiteAssignment,
             status: .cancelled,

@@ -41,19 +41,22 @@ final class RemotePlayFlow {
         let code: String
         let token: String?
         let remoteInviteID: RemoteInviteID?
+        let isAddressed: Bool
 
         init(
             target: InviteTarget,
             whiteChoice: WhiteChoice,
             code: String,
             token: String? = nil,
-            remoteInviteID: RemoteInviteID? = nil
+            remoteInviteID: RemoteInviteID? = nil,
+            isAddressed: Bool = false
         ) {
             self.target = target
             self.whiteChoice = whiteChoice
             self.code = code
             self.token = token
             self.remoteInviteID = remoteInviteID
+            self.isAddressed = isAddressed
         }
 
         var formattedCode: String {
@@ -67,9 +70,15 @@ final class RemotePlayFlow {
         let codeInstructions: String
         let linkSectionTitle: String
         let copyLinkButtonTitle: String
+        let shareLinkButtonTitle: String
         let isCopyLinkButtonEnabled: Bool
         let inviteURL: URL
         let linkInstructions: String
+    }
+
+    struct InviteWaitingPresentation: Equatable {
+        let title: String
+        let fallbackButtonTitle: String
     }
 
     struct InviteLookup: Equatable {
@@ -100,6 +109,7 @@ final class RemotePlayFlow {
     private(set) var joinCode = ""
     private(set) var joinErrorMessage: String?
     private var copiedInviteURL: URL?
+    private var fallbackInviteID: RemoteInviteID?
 
     var canSubmitLocalName: Bool {
         Self.trimmedNonEmptyName(localNameDraft) != nil
@@ -135,10 +145,22 @@ final class RemotePlayFlow {
             codeInstructions: "\(inviteeName) can join by tapping Play Remotely and entering this code.",
             linkSectionTitle: "Invite link",
             copyLinkButtonTitle: isCopiedInviteURL ? "Copied!" : "Copy link",
+            shareLinkButtonTitle: "Share link",
             isCopyLinkButtonEnabled: !isCopiedInviteURL,
             inviteURL: inviteURL,
             linkInstructions: "You can send the link by Messages, Mail, or another app."
         )
+    }
+
+    func inviteWaitingPresentation(for pendingInvite: PendingInvite) -> InviteWaitingPresentation {
+        InviteWaitingPresentation(
+            title: "Waiting for \(shareInviteeName(for: pendingInvite.target)) to accept...",
+            fallbackButtonTitle: "Show code and link"
+        )
+    }
+
+    func shouldShowInviteShareFallback(for pendingInvite: PendingInvite) -> Bool {
+        !pendingInvite.isAddressed || fallbackInviteID == pendingInvite.remoteInviteID
     }
 
     var canSubmitJoinCode: Bool {
@@ -192,13 +214,18 @@ final class RemotePlayFlow {
         copiedInviteURL = inviteURL
     }
 
+    func showInviteShareFallback(for pendingInvite: PendingInvite) {
+        fallbackInviteID = pendingInvite.remoteInviteID
+    }
+
     func showCreatedRemoteInvite(_ invite: RemotePendingInvite, target: InviteTarget) {
         let pendingInvite = PendingInvite(
             target: target,
             whiteChoice: Self.whiteChoice(from: invite.whiteAssignment),
             code: invite.code.rawValue,
             token: invite.token.rawValue,
-            remoteInviteID: invite.id
+            remoteInviteID: invite.id,
+            isAddressed: invite.inviteePlayerID != nil
         )
         inviteWhiteChoicesByCode[pendingInvite.code] = pendingInvite.whiteChoice
         stage = .waitingForInvitee(pendingInvite)
@@ -479,6 +506,7 @@ final class RemotePlayFlow {
         case .choosingWhite, .waitingForInvitee:
             selectedWhiteChoice = .localPlayer
             copiedInviteURL = nil
+            fallbackInviteID = nil
             stage = .choosing
         case .closed, .choosing, .enteringLocalName:
             break
@@ -495,6 +523,7 @@ final class RemotePlayFlow {
         joinCode = ""
         joinErrorMessage = nil
         copiedInviteURL = nil
+        fallbackInviteID = nil
         stage = .closed
     }
 

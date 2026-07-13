@@ -4,13 +4,14 @@ import XCTest
 
 final class CloudKitPendingInviteRecordCodecTests: XCTestCase {
     func testRecordNameIsInviteCodeAndFieldsRoundTrip() throws {
-        let invite = makeInvite(inviteeDisplayName: "Maya")
+        let invite = makeInvite(inviteePlayerID: RemotePlayerID(rawValue: "maya"), inviteeDisplayName: "Maya")
 
         let record = CloudKitPendingInviteRecordCodec.record(from: invite)
         let decoded = try CloudKitPendingInviteRecordCodec.invite(from: record)
 
         XCTAssertEqual(record.recordID.recordName, "428193")
         XCTAssertEqual(record["inviteCode"] as? String, "428193")
+        XCTAssertEqual(record["inviteePlayerID"] as? String, "maya")
         XCTAssertEqual(decoded, invite)
     }
 
@@ -81,12 +82,16 @@ final class CloudKitPendingInviteRecordCodecTests: XCTestCase {
         XCTAssertEqual(decoded, acceptedInvite)
     }
 
-    private func makeInvite(inviteeDisplayName: String? = nil) -> RemotePendingInvite {
+    private func makeInvite(
+        inviteePlayerID: RemotePlayerID? = nil,
+        inviteeDisplayName: String? = nil
+    ) -> RemotePendingInvite {
         RemotePendingInvite(
             id: RemoteInviteID(rawValue: "428193"),
             code: InviteCode(rawValue: "428193"),
             token: RemoteInviteToken(rawValue: "token-1"),
             inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason"),
+            inviteePlayerID: inviteePlayerID,
             inviteeDisplayName: inviteeDisplayName,
             whiteAssignment: .inviteeChooses,
             status: .pending,

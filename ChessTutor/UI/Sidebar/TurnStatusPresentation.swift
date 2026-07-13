@@ -14,6 +14,8 @@ struct TurnStatusPresentation: Equatable {
 
         if let guidanceText = session.guidanceText {
             self.detail = guidanceText
+        } else if session.state.result != .ongoing {
+            self.detail = nil
         } else if let remoteOpponentName {
             self.detail = Self.remoteDetail(
                 opponentName: remoteOpponentName,

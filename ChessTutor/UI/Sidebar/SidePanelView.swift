@@ -24,7 +24,10 @@ struct SidePanelView: View {
             for: sideLength,
             presentation: viewingAngle.presentsSidebarSegmentsHorizontally ? .horizontalSegments : .verticalColumn
         )
-        let secondaryActions = GameControlsPresentation(result: session.state.result).secondaryActions
+        let secondaryActions = GameControlsPresentation(
+            result: session.state.result,
+            isRemoteGameEnded: session.isRemoteGameEnded
+        ).secondaryActions
 
         VStack(spacing: 0) {
             if layout.showsColumnUtilityStrip,

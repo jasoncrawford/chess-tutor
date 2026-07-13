@@ -16,6 +16,7 @@ enum CloudKitPendingInviteRecordCodec {
         static let token = "token"
         static let inviterPlayerID = "inviterPlayerID"
         static let inviterDisplayName = "inviterDisplayName"
+        static let inviteePlayerID = "inviteePlayerID"
         static let inviteeDisplayName = "inviteeDisplayName"
         static let whiteAssignment = "whiteAssignment"
         static let status = "status"
@@ -39,6 +40,7 @@ enum CloudKitPendingInviteRecordCodec {
         record[Field.token] = invite.token.rawValue as CKRecordValue
         record[Field.inviterPlayerID] = invite.inviter.id.rawValue as CKRecordValue
         record[Field.inviterDisplayName] = invite.inviter.displayName as CKRecordValue
+        record[Field.inviteePlayerID] = invite.inviteePlayerID?.rawValue as CKRecordValue?
         record[Field.inviteeDisplayName] = invite.inviteeDisplayName as CKRecordValue?
         record[Field.whiteAssignment] = invite.whiteAssignment.rawValue as CKRecordValue
         record[Field.status] = invite.status.rawValue as CKRecordValue
@@ -73,6 +75,7 @@ enum CloudKitPendingInviteRecordCodec {
                 id: RemotePlayerID(rawValue: try string(Field.inviterPlayerID, from: record)),
                 displayName: try string(Field.inviterDisplayName, from: record)
             ),
+            inviteePlayerID: (record[Field.inviteePlayerID] as? String).map(RemotePlayerID.init(rawValue:)),
             inviteeDisplayName: record[Field.inviteeDisplayName] as? String,
             whiteAssignment: whiteAssignment,
             status: status,

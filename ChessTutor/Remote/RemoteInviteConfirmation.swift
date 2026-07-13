@@ -1,22 +1,35 @@
 import Foundation
 
+enum RemoteInviteConfirmationPurpose: String, Equatable {
+    case play
+    case newGame
+}
+
 struct RemoteInviteConfirmation: Equatable {
     let opponentName: String
     let localPlayerColor: PieceColor?
     let allowsColorChoice: Bool
+    let purpose: RemoteInviteConfirmationPurpose
 
     init(
         opponentName: String,
         localPlayerColor: PieceColor?,
-        allowsColorChoice: Bool? = nil
+        allowsColorChoice: Bool? = nil,
+        purpose: RemoteInviteConfirmationPurpose = .play
     ) {
         self.opponentName = opponentName
         self.localPlayerColor = localPlayerColor
         self.allowsColorChoice = allowsColorChoice ?? (localPlayerColor == nil)
+        self.purpose = purpose
     }
 
     var title: String {
-        "\(opponentName) wants to play"
+        switch purpose {
+        case .play:
+            "\(opponentName) wants to play"
+        case .newGame:
+            "\(opponentName) wants to start a new game"
+        }
     }
 
     var startButtonTitle: String {
@@ -64,7 +77,8 @@ struct RemoteInviteConfirmation: Equatable {
         return RemoteInviteConfirmation(
             opponentName: opponentName,
             localPlayerColor: color,
-            allowsColorChoice: true
+            allowsColorChoice: true,
+            purpose: purpose
         )
     }
 }

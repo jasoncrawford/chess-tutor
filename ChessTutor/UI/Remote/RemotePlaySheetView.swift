@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct RemotePlaySheetView: View {
     @Bindable var flow: RemotePlayFlow
     @Bindable var session: GameSession
     @State private var copyFeedbackTask: Task<Void, Never>?
+    @State private var inviteLinkShareItem: InviteLinkShareItem?
     @State private var remoteInviteTask: Task<Void, Never>?
     @State private var remoteInviteErrorMessage: String?
     @State private var isWorkingWithRemoteInvite = false
@@ -117,6 +119,9 @@ struct RemotePlaySheetView: View {
             remoteInviteTask = nil
             isWorkingWithRemoteInvite = false
             activeRemoteInviteRequest = nil
+        }
+        .sheet(item: $inviteLinkShareItem) { item in
+            InviteLinkShareSheet(url: item.url)
         }
     }
 
@@ -545,9 +550,54 @@ struct RemotePlaySheetView: View {
     }
 
     private func waitingView(for pendingInvite: RemotePlayFlow.PendingInvite) -> some View {
+        let waitingPresentation = flow.inviteWaitingPresentation(for: pendingInvite)
+        let shouldShowFallback = flow.shouldShowInviteShareFallback(for: pendingInvite)
         let presentation = flow.inviteSharePresentation(for: pendingInvite)
 
         return VStack(alignment: .leading, spacing: 18) {
+            if pendingInvite.isAddressed {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(waitingPresentation.title)
+                        .font(AppTheme.panelBodyFont)
+                        .foregroundStyle(AppTheme.ink.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !shouldShowFallback {
+                        Button(waitingPresentation.fallbackButtonTitle) {
+                            flow.showInviteShareFallback(for: pendingInvite)
+                        }
+                        .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
+                    }
+                }
+            }
+
+            if shouldShowFallback {
+                inviteShareFallbackView(presentation)
+            }
+
+            #if DEBUG
+            HStack(spacing: 10) {
+                if fakeRemoteLab != nil {
+                    Button("Maya Accepts") {
+                        acceptPendingInvite(pendingInvite)
+                    }
+                    .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
+                }
+            }
+            #endif
+        }
+        .task(id: pendingInvite.remoteInviteID) {
+            #if DEBUG
+            guard fakeRemoteLab == nil else {
+                return
+            }
+            #endif
+            await pollForAcceptedInvite(pendingInvite)
+        }
+    }
+
+    private func inviteShareFallbackView(_ presentation: RemotePlayFlow.InviteSharePresentation) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(presentation.codeSectionTitle)
                     .font(AppTheme.aboutSectionTitleFont)
@@ -569,41 +619,29 @@ struct RemotePlaySheetView: View {
                     .font(AppTheme.aboutSectionTitleFont)
                     .foregroundStyle(AppTheme.ink)
 
-                Button {
-                    copyInviteLink(presentation.inviteURL)
-                } label: {
-                    Text(presentation.copyLinkButtonTitle)
-                        .contentTransition(.opacity)
+                HStack(spacing: 10) {
+                    Button {
+                        copyInviteLink(presentation.inviteURL)
+                    } label: {
+                        Text(presentation.copyLinkButtonTitle)
+                            .contentTransition(.opacity)
+                    }
+                    .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: presentation.isCopyLinkButtonEnabled))
+                    .disabled(!presentation.isCopyLinkButtonEnabled)
+                    .animation(.easeInOut(duration: 0.18), value: presentation.copyLinkButtonTitle)
+                    .animation(.easeInOut(duration: 0.18), value: presentation.isCopyLinkButtonEnabled)
+
+                    Button(presentation.shareLinkButtonTitle) {
+                        inviteLinkShareItem = InviteLinkShareItem(url: presentation.inviteURL)
+                    }
+                    .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
                 }
-                .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: presentation.isCopyLinkButtonEnabled))
-                .disabled(!presentation.isCopyLinkButtonEnabled)
-                .animation(.easeInOut(duration: 0.18), value: presentation.copyLinkButtonTitle)
-                .animation(.easeInOut(duration: 0.18), value: presentation.isCopyLinkButtonEnabled)
 
                 Text(presentation.linkInstructions)
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(AppTheme.ink.opacity(0.62))
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            #if DEBUG
-            HStack(spacing: 10) {
-                if fakeRemoteLab != nil {
-                    Button("Maya Accepts") {
-                        acceptPendingInvite(pendingInvite)
-                    }
-                    .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
-                }
-            }
-            #endif
-        }
-        .task(id: pendingInvite.remoteInviteID) {
-            #if DEBUG
-            guard fakeRemoteLab == nil else {
-                return
-            }
-            #endif
-            await pollForAcceptedInvite(pendingInvite)
         }
     }
 
@@ -779,4 +817,19 @@ private struct RemotePlaySheetCompactButtonStyle: ButtonStyle {
                     .stroke(AppTheme.panelStroke, lineWidth: 1)
             }
     }
+}
+
+private struct InviteLinkShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct InviteLinkShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -58,6 +58,20 @@ final class RemoteInviteConfirmationTests: XCTestCase {
         XCTAssertEqual(changedToBlack.blackSeat.playerName, "You")
     }
 
+    func testNewGameConfirmationUsesRestartTitleAndPreservesPurposeWhenChoosingColor() {
+        let confirmation = RemoteInviteConfirmation(
+            opponentName: "Maya",
+            localPlayerColor: nil,
+            purpose: .newGame
+        )
+
+        let choseWhite = confirmation.selectColor(.white)
+
+        XCTAssertEqual(confirmation.title, "Maya wants to start a new game")
+        XCTAssertEqual(choseWhite.title, "Maya wants to start a new game")
+        XCTAssertEqual(choseWhite.purpose, .newGame)
+    }
+
     func testFixedColorDoesNotAllowChangingColor() {
         let confirmation = RemoteInviteConfirmation(
             opponentName: "Maya",

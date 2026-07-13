@@ -104,20 +104,64 @@ struct RemotePendingInvite: Codable, Equatable, Sendable {
     let code: InviteCode
     let token: RemoteInviteToken
     let inviter: RemotePlayerRef
+    let inviteePlayerID: RemotePlayerID?
     let inviteeDisplayName: String?
     let whiteAssignment: RemoteInviteWhiteAssignment
     let status: RemoteInviteStatus
     let createdAt: Date
     let expiresAt: Date
     let protocolVersion: Int
+
+    init(
+        id: RemoteInviteID,
+        code: InviteCode,
+        token: RemoteInviteToken,
+        inviter: RemotePlayerRef,
+        inviteePlayerID: RemotePlayerID? = nil,
+        inviteeDisplayName: String?,
+        whiteAssignment: RemoteInviteWhiteAssignment,
+        status: RemoteInviteStatus,
+        createdAt: Date,
+        expiresAt: Date,
+        protocolVersion: Int
+    ) {
+        self.id = id
+        self.code = code
+        self.token = token
+        self.inviter = inviter
+        self.inviteePlayerID = inviteePlayerID
+        self.inviteeDisplayName = inviteeDisplayName
+        self.whiteAssignment = whiteAssignment
+        self.status = status
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+        self.protocolVersion = protocolVersion
+    }
 }
 
 struct CreateRemoteInviteRequest: Equatable, Sendable {
     let inviter: RemotePlayerRef
+    let inviteePlayerID: RemotePlayerID?
     let inviteeDisplayName: String?
     let whiteAssignment: RemoteInviteWhiteAssignment
     let now: Date
     let expiresAt: Date
+
+    init(
+        inviter: RemotePlayerRef,
+        inviteePlayerID: RemotePlayerID? = nil,
+        inviteeDisplayName: String?,
+        whiteAssignment: RemoteInviteWhiteAssignment,
+        now: Date,
+        expiresAt: Date
+    ) {
+        self.inviter = inviter
+        self.inviteePlayerID = inviteePlayerID
+        self.inviteeDisplayName = inviteeDisplayName
+        self.whiteAssignment = whiteAssignment
+        self.now = now
+        self.expiresAt = expiresAt
+    }
 }
 
 struct JoinRemoteInviteRequest: Equatable, Sendable {

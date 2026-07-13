@@ -89,7 +89,24 @@ final class TurnStatusPresentationTests: XCTestCase {
 
         let presentation = TurnStatusPresentation(session: session, remoteOpponentName: "Maya")
 
+        XCTAssertEqual(presentation.headline, "Game forfeit.")
         XCTAssertEqual(presentation.detail, "Maya ended this game.")
+    }
+
+    func testRemoteDetailIsSuppressedAfterCheckmate() {
+        let session = GameSession(
+            state: GameState(
+                board: Board(),
+                sideToMove: .white,
+                result: .checkmate(winner: .black)
+            )
+        )
+        session.whitePlayer = .remote(playerID: "maya")
+
+        let presentation = TurnStatusPresentation(session: session, remoteOpponentName: "Maya")
+
+        XCTAssertEqual(presentation.headline, "Checkmate. Black wins.")
+        XCTAssertNil(presentation.detail)
     }
 
     func testLocalGameHasNoDefaultDetail() {

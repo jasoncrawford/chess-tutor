@@ -10,6 +10,7 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         let invite = try await transport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
                 inviteeDisplayName: "Maya",
                 whiteAssignment: .invitee,
                 now: Self.createdAt,
@@ -23,12 +24,42 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
 
         XCTAssertEqual(invite, fetched)
+        XCTAssertEqual(fetched.inviteePlayerID, Self.joiner.id)
         let savedRecord = await database.record(withID: Self.recordID)
         XCTAssertNotNil(savedRecord)
         let lastRequest = await database.lastModifyRequest()
         let request = try XCTUnwrap(lastRequest)
         XCTAssertEqual(request.savePolicy, .ifServerRecordUnchanged)
         XCTAssertTrue(request.atomically)
+    }
+
+    func testAddressedInviteCanBeFetchedByInviteePlayerID() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+
+        XCTAssertEqual(fetched, invite)
+    }
+
+    func testUnaddressedInviteIsNotFetchedByInviteePlayerID() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        _ = try await createInvite(on: transport, whiteAssignment: .invitee)
+
+        let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+
+        XCTAssertNil(fetched)
     }
 
     func testCreateInviteRecordLevelSaveFailureMapsToCodeCollision() async {
@@ -310,6 +341,7 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         try await transport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: Self.inviter,
+                inviteePlayerID: nil,
                 inviteeDisplayName: nil,
                 whiteAssignment: whiteAssignment,
                 now: Self.createdAt,
@@ -394,6 +426,24 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
             }
         }
         return results
+    }
+
+    func records(
+        matching query: CKQuery,
+        desiredKeys: [CKRecord.FieldKey]?,
+        resultsLimit: Int
+    ) async throws -> [CKRecord] {
+        Array(records.values)
+            .filter { record in
+                record.recordType == query.recordType
+            }
+            .sorted {
+                let lhs = ($0["createdAt"] as? Date) ?? .distantPast
+                let rhs = ($1["createdAt"] as? Date) ?? .distantPast
+                return lhs > rhs
+            }
+            .prefix(resultsLimit)
+            .map { $0 }
     }
 
     func modifyRecords(
