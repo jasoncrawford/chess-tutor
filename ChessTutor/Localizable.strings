@@ -1,1 +1,2 @@
 "REMOTE_MOVE_NOTIFICATION_BODY" = "%@. Your turn.";
+"REMOTE_INVITE_NOTIFICATION_BODY" = "%@ wants to play.";

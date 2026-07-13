@@ -266,6 +266,22 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(querySubscription.notificationInfo?.shouldSendContentAvailable, true)
     }
 
+    func testPreparingIncomingInviteNotificationSavesAddressedInviteSubscription() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+
+        try await transport.prepareIncomingInviteNotification(for: Self.joiner.id)
+
+        let storedSubscription = await database.subscription(withID: "pending-invite-for-maya")
+        let subscription = try XCTUnwrap(storedSubscription)
+        XCTAssertEqual(subscription.subscriptionID, "pending-invite-for-maya")
+        let querySubscription = try XCTUnwrap(subscription as? CKQuerySubscription)
+        XCTAssertEqual(querySubscription.recordType, CloudKitPendingInviteRecordCodec.recordType)
+        XCTAssertEqual(querySubscription.notificationInfo?.shouldSendContentAvailable, true)
+        XCTAssertEqual(querySubscription.notificationInfo?.alertLocalizationKey, "REMOTE_INVITE_NOTIFICATION_BODY")
+        XCTAssertEqual(querySubscription.notificationInfo?.alertLocalizationArgs, ["inviterDisplayName"])
+    }
+
     func testAcceptanceSubscriptionIDParsesInviteIDForPushNotificationRouting() {
         XCTAssertEqual(
             CloudKitRemoteInviteTransport.inviteID(
@@ -275,6 +291,18 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
         XCTAssertNil(
             CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: "remote-game-moves-game-1")
+        )
+    }
+
+    func testIncomingInviteSubscriptionIDParsesPlayerIDForPushNotificationRouting() {
+        XCTAssertEqual(
+            CloudKitRemoteInviteTransport.playerID(
+                fromIncomingInviteSubscriptionID: "pending-invite-for-maya"
+            ),
+            RemotePlayerID(rawValue: "maya")
+        )
+        XCTAssertNil(
+            CloudKitRemoteInviteTransport.playerID(fromIncomingInviteSubscriptionID: "pending-invite-accepted-428193")
         )
     }
 

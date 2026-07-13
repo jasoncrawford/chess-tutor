@@ -7,6 +7,7 @@ protocol RemoteInviteTransport: Sendable {
     func acceptInvite(_ request: JoinRemoteInviteRequest, chosenColor: PieceColor?) async throws -> RemoteAcceptedInvite
     func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite?
     func prepareAcceptanceNotification(for invite: RemotePendingInvite) async throws
+    func prepareIncomingInviteNotification(for inviteePlayerID: RemotePlayerID) async throws
     func cancelInvite(id: RemoteInviteID) async throws
 }
 
@@ -132,6 +133,8 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
     }
 
     func prepareAcceptanceNotification(for invite: RemotePendingInvite) async throws {}
+
+    func prepareIncomingInviteNotification(for inviteePlayerID: RemotePlayerID) async throws {}
 
     func cancelInvite(id: RemoteInviteID) async throws {
         guard let code = invitesByCode.first(where: { $0.value.id == id })?.key,

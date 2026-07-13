@@ -130,6 +130,7 @@ struct ContentView: View {
             }
             logAppLaunchIfNeeded()
             resumeRemoteSyncIfNeeded()
+            prepareIncomingRemoteInviteNotificationIfPossible()
             startIncomingRemoteInvitePollLoopIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -148,6 +149,15 @@ struct ContentView: View {
                 return
             }
             fetchAcceptedInviteAfterPush(id: RemoteInviteID(rawValue: rawInviteID))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .remotePendingInvitesMayHaveChanged)) { notification in
+            guard let rawPlayerID = notification.userInfo?[RemotePendingInvitePushUserInfoKey.playerID] as? String,
+                  (try? remoteIdentityStore.loadLocalProfile().id.rawValue) == rawPlayerID else {
+                return
+            }
+            Task { @MainActor in
+                await fetchIncomingRemoteInviteIfNeeded()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .remoteGameMovesMayHaveChanged)) { notification in
             guard let rawGameID = notification.userInfo?[RemoteGameMovePushUserInfoKey.gameID] as? String else {
@@ -340,6 +350,8 @@ struct ContentView: View {
     private func saveLocalDisplayName(_ displayName: String) {
         if let profile = try? remoteIdentityStore.saveLocalDisplayName(displayName) {
             remotePlayFlow.updateLocalDisplayName(profile.displayName)
+            prepareIncomingRemoteInviteNotification(for: profile.id)
+            requestRemoteNotificationAuthorizationIfNeeded()
         }
     }
 
@@ -916,6 +928,31 @@ struct ContentView: View {
                 return
             }
             _ = try? await center.requestAuthorization(options: [.alert])
+        }
+    }
+
+    private func prepareIncomingRemoteInviteNotificationIfPossible() {
+        guard let profile = try? remoteIdentityStore.loadLocalProfile(),
+              profile.displayName != nil else {
+            return
+        }
+        prepareIncomingRemoteInviteNotification(for: profile.id)
+    }
+
+    private func prepareIncomingRemoteInviteNotification(for playerID: RemotePlayerID) {
+        Task {
+            do {
+                try await remoteInviteTransport.prepareIncomingInviteNotification(for: playerID)
+            } catch {
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "incomingInviteSubscriptionFailed",
+                    fields: [
+                        "playerID": playerID.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
+            }
         }
     }
 

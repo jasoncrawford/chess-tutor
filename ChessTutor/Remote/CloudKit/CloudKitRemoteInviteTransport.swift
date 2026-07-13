@@ -405,6 +405,35 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         )
     }
 
+    func prepareIncomingInviteNotification(for inviteePlayerID: RemotePlayerID) async throws {
+        let subscription = CKQuerySubscription(
+            recordType: CloudKitPendingInviteRecordCodec.recordType,
+            predicate: NSPredicate(
+                format: "%K == %@ AND %K == %@",
+                "inviteePlayerID",
+                inviteePlayerID.rawValue,
+                "status",
+                RemoteInviteStatus.pending.rawValue
+            ),
+            subscriptionID: Self.incomingInviteSubscriptionID(for: inviteePlayerID),
+            options: [.firesOnRecordCreation]
+        )
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        notificationInfo.alertLocalizationKey = "REMOTE_INVITE_NOTIFICATION_BODY"
+        notificationInfo.alertLocalizationArgs = ["inviterDisplayName"]
+        subscription.notificationInfo = notificationInfo
+        _ = try await database.saveSubscription(subscription)
+        await diagnosticsLog.append(
+            category: "cloudKitInvite",
+            "incomingInviteSubscriptionSaved",
+            fields: [
+                "inviteePlayerID": inviteePlayerID.rawValue,
+                "subscriptionID": subscription.subscriptionID
+            ]
+        )
+    }
+
     func cancelInvite(id: RemoteInviteID) async throws {
         let recordID = CKRecord.ID(recordName: id.rawValue)
         let result = try await database.modifyRecords(
@@ -455,11 +484,24 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         return RemoteInviteID(rawValue: rawValue)
     }
 
+    static func playerID(fromIncomingInviteSubscriptionID subscriptionID: String) -> RemotePlayerID? {
+        guard subscriptionID.hasPrefix(incomingInviteSubscriptionIDPrefix) else {
+            return nil
+        }
+        let rawValue = String(subscriptionID.dropFirst(incomingInviteSubscriptionIDPrefix.count))
+        return RemotePlayerID(rawValue: rawValue)
+    }
+
     private func acceptanceSubscriptionID(for id: RemoteInviteID) -> String {
         Self.acceptanceSubscriptionIDPrefix + id.rawValue
     }
 
+    private static func incomingInviteSubscriptionID(for playerID: RemotePlayerID) -> String {
+        incomingInviteSubscriptionIDPrefix + playerID.rawValue
+    }
+
     private static let acceptanceSubscriptionIDPrefix = "pending-invite-accepted-"
+    private static let incomingInviteSubscriptionIDPrefix = "pending-invite-for-"
 }
 
 enum CloudKitInviteAcceptanceRecordCodec {
