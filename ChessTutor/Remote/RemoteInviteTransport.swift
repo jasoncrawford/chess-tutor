@@ -16,9 +16,46 @@ enum RemoteInviteTransportError: Error, Equatable {
     case tokenMismatch
     case expired
     case notPending
+    case cancelled(inviterDisplayName: String)
     case colorChoiceRequired
     case colorChoiceNotAllowed
     case codeCollision
+}
+
+enum RemoteInviteJoinFailureKind {
+    case code
+    case link
+}
+
+extension Error {
+    func remoteInviteJoinFailureMessage(fallbackKind: RemoteInviteJoinFailureKind) -> String {
+        if let remoteInviteError = self as? RemoteInviteTransportError {
+            return remoteInviteError.joinFailureMessage(fallbackKind: fallbackKind)
+        }
+
+        switch fallbackKind {
+        case .code:
+            return "That code did not match an open invite."
+        case .link:
+            return "That link did not match an open invite."
+        }
+    }
+}
+
+extension RemoteInviteTransportError {
+    func joinFailureMessage(fallbackKind: RemoteInviteJoinFailureKind) -> String {
+        switch self {
+        case .cancelled(let inviterDisplayName):
+            return "Sorry, \(inviterDisplayName) left this game."
+        case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
+            switch fallbackKind {
+            case .code:
+                return "That code did not match an open invite."
+            case .link:
+                return "That link did not match an open invite."
+            }
+        }
+    }
 }
 
 actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
@@ -78,6 +115,9 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
         }
         if let token, token != invite.token {
             throw RemoteInviteTransportError.tokenMismatch
+        }
+        if invite.status == .cancelled {
+            throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
         }
         guard invite.status == .pending else {
             throw RemoteInviteTransportError.notPending

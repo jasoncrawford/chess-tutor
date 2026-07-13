@@ -172,13 +172,13 @@ final class RemoteInviteTransportTests: XCTestCase {
         )
     }
 
-    func testCancelPreventsSubsequentFetch() async throws {
+    func testCancelReportsInviterLeftOnSubsequentFetch() async throws {
         let transport = makeTransport()
         let invite = try await createInvite(on: transport, whiteAssignment: .inviter)
 
         try await transport.cancelInvite(id: invite.id)
 
-        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.cancelled(inviterDisplayName: Self.inviter.displayName),
             try await transport.fetchInvite(code: invite.code, token: invite.token, now: Self.joinedAt)
         )
     }

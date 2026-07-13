@@ -320,9 +320,9 @@ struct RemotePlaySheetView: View {
                 guard isCurrentRemoteInviteRequest(request) else {
                     return
                 }
-                remoteInviteErrorMessage = token == nil
-                    ? "That code did not match an open invite."
-                    : "That link did not match an open invite."
+                remoteInviteErrorMessage = error.remoteInviteJoinFailureMessage(
+                    fallbackKind: token == nil ? .code : .link
+                )
             }
         }
     }

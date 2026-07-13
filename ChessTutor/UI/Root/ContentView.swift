@@ -695,7 +695,7 @@ struct ContentView: View {
                 )
                 remotePlayFlow.showJoinInviteLookupError(
                     lookupToFetch,
-                    message: "That link did not match an open invite."
+                    message: error.remoteInviteJoinFailureMessage(fallbackKind: .link)
                 )
             }
         }

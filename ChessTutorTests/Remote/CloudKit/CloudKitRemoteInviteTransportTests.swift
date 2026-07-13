@@ -222,6 +222,18 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
+    func testCancelReportsInviterLeftOnSubsequentFetch() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviter)
+
+        try await transport.cancelInvite(id: invite.id)
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.cancelled(inviterDisplayName: Self.inviter.displayName),
+            try await transport.fetchInvite(code: invite.code, token: invite.token, now: Self.joinedAt)
+        )
+    }
+
     func testSecondAcceptanceMapsToNotPendingWithoutOverwritingFirstAcceptance() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
@@ -325,20 +337,20 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
-    func testCancelInviteDeleteFailureOrMissingIDMapsToNotFound() async throws {
-        let failingDeleteDatabase = InMemoryCloudKitInviteDatabase()
-        let failingDeleteTransport = makeTransport(database: failingDeleteDatabase)
-        let invite = try await createInvite(on: failingDeleteTransport, whiteAssignment: .inviter)
-        await failingDeleteDatabase.failDeletes(for: [Self.recordID])
+    func testCancelInviteSaveFailureOrMissingIDMapsToNotFound() async throws {
+        let failingSaveDatabase = InMemoryCloudKitInviteDatabase()
+        let failingSaveTransport = makeTransport(database: failingSaveDatabase)
+        let invite = try await createInvite(on: failingSaveTransport, whiteAssignment: .inviter)
+        await failingSaveDatabase.failSaves(for: [Self.recordID])
 
         await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notFound,
-            try await failingDeleteTransport.cancelInvite(id: invite.id)
+            try await failingSaveTransport.cancelInvite(id: invite.id)
         )
 
-        let missingDeleteDatabase = InMemoryCloudKitInviteDatabase()
-        let missingDeleteTransport = makeTransport(database: missingDeleteDatabase)
+        let missingSaveDatabase = InMemoryCloudKitInviteDatabase()
+        let missingSaveTransport = makeTransport(database: missingSaveDatabase)
         await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notFound,
-            try await missingDeleteTransport.cancelInvite(id: RemoteInviteID(rawValue: "missing"))
+            try await missingSaveTransport.cancelInvite(id: RemoteInviteID(rawValue: "missing"))
         )
     }
 

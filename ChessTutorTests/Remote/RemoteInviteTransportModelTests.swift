@@ -12,4 +12,22 @@ final class RemoteInviteTransportModelTests: XCTestCase {
         XCTAssertEqual(InviteCode(rawValue: "428193").formatted, "428 193")
         XCTAssertEqual(InviteCode(rawValue: "12345").formatted, "12345")
     }
+
+    func testCancelledInviteErrorExplainsInviterLeft() {
+        XCTAssertEqual(
+            RemoteInviteTransportError.cancelled(inviterDisplayName: "Maya").joinFailureMessage(fallbackKind: .code),
+            "Sorry, Maya left this game."
+        )
+    }
+
+    func testMissingInviteErrorKeepsCodeAndLinkSpecificMessages() {
+        XCTAssertEqual(
+            RemoteInviteTransportError.notFound.joinFailureMessage(fallbackKind: .code),
+            "That code did not match an open invite."
+        )
+        XCTAssertEqual(
+            RemoteInviteTransportError.notFound.joinFailureMessage(fallbackKind: .link),
+            "That link did not match an open invite."
+        )
+    }
 }

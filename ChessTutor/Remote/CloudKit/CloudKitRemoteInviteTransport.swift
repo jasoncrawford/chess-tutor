@@ -203,6 +203,14 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             )
             throw RemoteInviteTransportError.tokenMismatch
         }
+        if invite.status == .cancelled {
+            await diagnosticsLog.append(
+                category: "cloudKitInvite",
+                "fetchCancelled",
+                fields: ["code": code.rawValue, "inviterID": invite.inviter.id.rawValue]
+            )
+            throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
+        }
         guard invite.status == .pending else {
             await diagnosticsLog.append(
                 category: "cloudKitInvite",
@@ -436,13 +444,32 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
 
     func cancelInvite(id: RemoteInviteID) async throws {
         let recordID = CKRecord.ID(recordName: id.rawValue)
+        let records = try await database.records(for: [recordID], desiredKeys: nil)
+        guard case .success(let record) = records[recordID] else {
+            throw RemoteInviteTransportError.notFound
+        }
+        let invite = try CloudKitPendingInviteRecordCodec.invite(from: record)
+        let cancelledInvite = RemotePendingInvite(
+            id: invite.id,
+            code: invite.code,
+            token: invite.token,
+            inviter: invite.inviter,
+            inviteePlayerID: invite.inviteePlayerID,
+            inviteeDisplayName: invite.inviteeDisplayName,
+            whiteAssignment: invite.whiteAssignment,
+            status: .cancelled,
+            createdAt: invite.createdAt,
+            expiresAt: invite.expiresAt,
+            protocolVersion: invite.protocolVersion
+        )
+        CloudKitPendingInviteRecordCodec.apply(cancelledInvite, to: record)
         let result = try await database.modifyRecords(
-            saving: [],
-            deleting: [recordID],
+            saving: [record],
+            deleting: [],
             savePolicy: .changedKeys,
             atomically: true
         )
-        guard deletedRecord(recordID, in: result.deleteResults) else {
+        guard savedRecord(recordID, in: result.saveResults) != nil else {
             throw RemoteInviteTransportError.notFound
         }
     }
@@ -455,16 +482,6 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             return nil
         }
         return record
-    }
-
-    private func deletedRecord(
-        _ recordID: CKRecord.ID,
-        in results: [CKRecord.ID: Result<Void, any Error>]
-    ) -> Bool {
-        guard case .success = results[recordID] else {
-            return false
-        }
-        return true
     }
 
     private func acceptanceRecordExists(for id: RemoteInviteID) async throws -> Bool {
