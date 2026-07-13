@@ -7,6 +7,8 @@ enum GameLifecycle {
         remotePlayFlow: RemotePlayFlow
     ) {
         remotePlayFlow.cancel()
+        session.whitePlayer = .humanLocal
+        session.blackPlayer = .humanLocal
         session.newGame()
     }
 
