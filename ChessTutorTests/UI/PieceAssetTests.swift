@@ -49,6 +49,24 @@ final class PieceAssetTests: XCTestCase {
         XCTAssertTrue(aboutText.contains("MIT License"))
     }
 
+    func testAppBuildInfoFormatsVersionBuildAndRevision() {
+        let buildInfo = AppBuildInfo(
+            version: "1.2",
+            build: "45",
+            revision: "5d254f957834"
+        )
+
+        XCTAssertEqual(buildInfo.versionDisplayText, "Version 1.2 (Build 45)")
+        XCTAssertEqual(buildInfo.revisionDisplayText, "Revision 5d254f957834")
+    }
+
+    func testAppBuildInfoFallsBackWhenRevisionIsMissing() {
+        let buildInfo = AppBuildInfo(version: "1.2", build: "45", revision: nil)
+
+        XCTAssertEqual(buildInfo.versionDisplayText, "Version 1.2 (Build 45)")
+        XCTAssertEqual(buildInfo.revisionDisplayText, "Revision Unknown")
+    }
+
     func testGameControlsPresentationKeepsRareActionsVisibleButSecondaryDuringPlay() {
         let presentation = GameControlsPresentation(result: .ongoing)
 

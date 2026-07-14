@@ -156,14 +156,16 @@ struct AboutSheetView: View {
     @State private var diagnosticsErrorMessage: String?
     @State private var isPreparingDiagnostics = false
     let diagnosticsLog: DiagnosticsLog
+    let buildInfo: AppBuildInfo
 
-    init(diagnosticsLog: DiagnosticsLog = .shared) {
+    init(diagnosticsLog: DiagnosticsLog = .shared, buildInfo: AppBuildInfo = .current()) {
         self.diagnosticsLog = diagnosticsLog
+        self.buildInfo = buildInfo
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text(AboutAttribution.appName)
                     .font(AppTheme.aboutTitleFont)
                     .foregroundStyle(AppTheme.ink)
@@ -171,6 +173,13 @@ struct AboutSheetView: View {
                 Text(AboutAttribution.appSummary)
                     .font(AppTheme.panelBodyFont)
                     .foregroundStyle(AppTheme.ink.opacity(0.72))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(buildInfo.versionDisplayText)
+                    Text(buildInfo.revisionDisplayText)
+                }
+                .font(.footnote)
+                .foregroundStyle(AppTheme.ink.opacity(0.58))
             }
 
             Divider()
