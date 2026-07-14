@@ -234,6 +234,29 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
+    func testDeclinePreventsInviteePromptAndReportsDeclineToInviter() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        try await transport.declineInvite(id: invite.id)
+
+        let pendingInvite = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+        XCTAssertNil(pendingInvite)
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.declined(inviteeDisplayName: Self.joiner.displayName),
+            try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        )
+    }
+
     func testSecondAcceptanceMapsToNotPendingWithoutOverwritingFirstAcceptance() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)

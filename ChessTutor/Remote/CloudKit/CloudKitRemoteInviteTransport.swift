@@ -211,6 +211,14 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             )
             throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
         }
+        if invite.status == .declined {
+            await diagnosticsLog.append(
+                category: "cloudKitInvite",
+                "fetchDeclined",
+                fields: ["code": code.rawValue, "inviteeDisplayName": invite.inviteeDisplayName ?? "none"]
+            )
+            throw RemoteInviteTransportError.declined(inviteeDisplayName: invite.inviteeDisplayName)
+        }
         guard invite.status == .pending else {
             await diagnosticsLog.append(
                 category: "cloudKitInvite",
@@ -372,6 +380,12 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         guard invite.expiresAt > now else {
             throw RemoteInviteTransportError.expired
         }
+        if invite.status == .cancelled {
+            throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
+        }
+        if invite.status == .declined {
+            throw RemoteInviteTransportError.declined(inviteeDisplayName: invite.inviteeDisplayName)
+        }
         if invite.status == .accepted {
             return try CloudKitPendingInviteRecordCodec.acceptedInvite(from: record)
         }
@@ -443,13 +457,21 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
     }
 
     func cancelInvite(id: RemoteInviteID) async throws {
+        try await updateInviteStatus(id: id, status: .cancelled)
+    }
+
+    func declineInvite(id: RemoteInviteID) async throws {
+        try await updateInviteStatus(id: id, status: .declined)
+    }
+
+    private func updateInviteStatus(id: RemoteInviteID, status: RemoteInviteStatus) async throws {
         let recordID = CKRecord.ID(recordName: id.rawValue)
         let records = try await database.records(for: [recordID], desiredKeys: nil)
         guard case .success(let record) = records[recordID] else {
             throw RemoteInviteTransportError.notFound
         }
         let invite = try CloudKitPendingInviteRecordCodec.invite(from: record)
-        let cancelledInvite = RemotePendingInvite(
+        let updatedInvite = RemotePendingInvite(
             id: invite.id,
             code: invite.code,
             token: invite.token,
@@ -457,12 +479,12 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             inviteePlayerID: invite.inviteePlayerID,
             inviteeDisplayName: invite.inviteeDisplayName,
             whiteAssignment: invite.whiteAssignment,
-            status: .cancelled,
+            status: status,
             createdAt: invite.createdAt,
             expiresAt: invite.expiresAt,
             protocolVersion: invite.protocolVersion
         )
-        CloudKitPendingInviteRecordCodec.apply(cancelledInvite, to: record)
+        CloudKitPendingInviteRecordCodec.apply(updatedInvite, to: record)
         let result = try await database.modifyRecords(
             saving: [record],
             deleting: [],

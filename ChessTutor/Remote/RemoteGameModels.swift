@@ -96,6 +96,7 @@ enum RemoteInviteStatus: String, Codable, Equatable, Sendable {
     case pending
     case accepted
     case cancelled
+    case declined
     case expired
 }
 

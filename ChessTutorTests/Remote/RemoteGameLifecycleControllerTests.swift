@@ -87,6 +87,26 @@ final class RemoteGameLifecycleControllerTests: XCTestCase {
         XCTAssertNil(controller.pendingRemoteInviteAcceptance)
     }
 
+    func testCancelRemoteInviteConfirmationCanExplainTerminalInviteState() {
+        let session = GameSession()
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+        let controller = RemoteGameLifecycleController(
+            session: session,
+            remotePlayFlow: flow,
+            remoteGameTransport: InMemoryRemoteGameTransport()
+        )
+        controller.showRemoteInviteConfirmation(
+            RemoteInviteConfirmation(opponentName: "Maya", localPlayerColor: .white),
+            invite: Self.pendingInvite()
+        )
+
+        controller.cancelRemoteInviteConfirmation(message: "Sorry, Maya left this game.")
+
+        XCTAssertNil(controller.pendingRemoteInviteConfirmation)
+        XCTAssertNil(controller.pendingRemoteInviteAcceptance)
+        XCTAssertEqual(session.message, "Sorry, Maya left this game.")
+    }
+
     func testEndingAfterOpponentEndedClearsActiveGameAndLocksBoardWithMessage() {
         let session = GameSession()
         let flow = RemotePlayFlow(localDisplayName: "Jason")

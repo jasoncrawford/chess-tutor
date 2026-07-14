@@ -183,6 +183,28 @@ final class RemoteInviteTransportTests: XCTestCase {
         )
     }
 
+    func testDeclinePreventsInviteePromptAndReportsDeclineToInviter() async throws {
+        let transport = makeTransport()
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        try await transport.declineInvite(id: invite.id)
+
+        let pendingInvite = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+        XCTAssertNil(pendingInvite)
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.declined(inviteeDisplayName: Self.joiner.displayName),
+            try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        )
+    }
+
     private static let code = InviteCode(rawValue: "428193")
     private static let token = RemoteInviteToken(rawValue: "token-1")
     private static let inviter = RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason")

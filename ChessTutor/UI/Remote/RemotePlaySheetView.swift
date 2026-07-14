@@ -15,6 +15,8 @@ struct RemotePlaySheetView: View {
     let onKnownPlayerAccepted: (KnownRemotePlayer) -> Void
     let onRemoteGameStarted: (RemoteGameStartAnnouncement) -> Void
     let onRemoteInviteConfirmationNeeded: (RemoteInviteConfirmation, RemotePendingInvite?) -> Void
+    let onPendingRemoteInviteCancelled: (RemotePlayFlow.PendingInvite) -> Void
+    let onCreatedRemoteInviteAbandoned: (RemotePendingInvite) -> Void
     let onCreateRemoteInvite: @Sendable (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite
     let onFetchRemoteInvite: @Sendable (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite
     let onFetchAcceptedRemoteInvite: @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite?
@@ -31,6 +33,8 @@ struct RemotePlaySheetView: View {
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
         onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
         onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation, RemotePendingInvite?) -> Void = { _, _ in },
+        onPendingRemoteInviteCancelled: @escaping (RemotePlayFlow.PendingInvite) -> Void = { _ in },
+        onCreatedRemoteInviteAbandoned: @escaping (RemotePendingInvite) -> Void = { _ in },
         onCreateRemoteInvite: @escaping @Sendable (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite = { _, _ in
             throw RemoteInviteTransportError.notFound
         },
@@ -47,6 +51,8 @@ struct RemotePlaySheetView: View {
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
         self.onRemoteGameStarted = onRemoteGameStarted
         self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
+        self.onPendingRemoteInviteCancelled = onPendingRemoteInviteCancelled
+        self.onCreatedRemoteInviteAbandoned = onCreatedRemoteInviteAbandoned
         self.onCreateRemoteInvite = onCreateRemoteInvite
         self.onFetchRemoteInvite = onFetchRemoteInvite
         self.onFetchAcceptedRemoteInvite = onFetchAcceptedRemoteInvite
@@ -66,6 +72,8 @@ struct RemotePlaySheetView: View {
         onKnownPlayerAccepted: @escaping (KnownRemotePlayer) -> Void = { _ in },
         onRemoteGameStarted: @escaping (RemoteGameStartAnnouncement) -> Void = { _ in },
         onRemoteInviteConfirmationNeeded: @escaping (RemoteInviteConfirmation, RemotePendingInvite?) -> Void = { _, _ in },
+        onPendingRemoteInviteCancelled: @escaping (RemotePlayFlow.PendingInvite) -> Void = { _ in },
+        onCreatedRemoteInviteAbandoned: @escaping (RemotePendingInvite) -> Void = { _ in },
         onCreateRemoteInvite: @escaping @Sendable (RemotePlayFlow.InviteTarget, RemotePlayFlow.WhiteChoice) async throws -> RemotePendingInvite = { _, _ in
             throw RemoteInviteTransportError.notFound
         },
@@ -83,6 +91,8 @@ struct RemotePlaySheetView: View {
         self.onKnownPlayerAccepted = onKnownPlayerAccepted
         self.onRemoteGameStarted = onRemoteGameStarted
         self.onRemoteInviteConfirmationNeeded = onRemoteInviteConfirmationNeeded
+        self.onPendingRemoteInviteCancelled = onPendingRemoteInviteCancelled
+        self.onCreatedRemoteInviteAbandoned = onCreatedRemoteInviteAbandoned
         self.onCreateRemoteInvite = onCreateRemoteInvite
         self.onFetchRemoteInvite = onFetchRemoteInvite
         self.onFetchAcceptedRemoteInvite = onFetchAcceptedRemoteInvite
@@ -148,7 +158,7 @@ struct RemotePlaySheetView: View {
                 Spacer()
 
                 Button("Cancel") {
-                    flow.cancel()
+                    cancelRemotePlaySheet()
                 }
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(AppTheme.mutedInk)
@@ -203,6 +213,12 @@ struct RemotePlaySheetView: View {
 
     private var choosingView: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if let remoteInviteErrorMessage {
+                Text(remoteInviteErrorMessage)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.72, green: 0.23, blue: 0.17))
+            }
+
             if !flow.knownPlayers.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Invite")
@@ -281,6 +297,13 @@ struct RemotePlaySheetView: View {
         joinWithCode(using: nil)
     }
 
+    private func cancelRemotePlaySheet() {
+        if case .waitingForInvitee(let pendingInvite) = flow.stage {
+            onPendingRemoteInviteCancelled(pendingInvite)
+        }
+        flow.cancel()
+    }
+
     private func joinWithCode(using pendingLookup: RemotePlayFlow.InviteLookup?) {
         guard flow.localDisplayName != nil else {
             _ = flow.requestJoinCode()
@@ -318,6 +341,11 @@ struct RemotePlaySheetView: View {
                 )
             } catch {
                 guard isCurrentRemoteInviteRequest(request) else {
+                    return
+                }
+                if let terminalMessage = Self.terminalInviteMessage(from: error) {
+                    flow.goBack()
+                    remoteInviteErrorMessage = terminalMessage
                     return
                 }
                 remoteInviteErrorMessage = error.remoteInviteJoinFailureMessage(
@@ -482,6 +510,7 @@ struct RemotePlaySheetView: View {
             do {
                 let invite = try await onCreateRemoteInvite(target, whiteChoice)
                 guard isCurrentRemoteInviteRequest(request) else {
+                    onCreatedRemoteInviteAbandoned(invite)
                     return
                 }
                 flow.showCreatedRemoteInvite(invite, target: target)
@@ -732,8 +761,28 @@ struct RemotePlaySheetView: View {
             } catch is CancellationError {
                 return
             } catch {
+                if let terminalMessage = Self.terminalInviteMessage(from: error) {
+                    flow.goBack()
+                    remoteInviteErrorMessage = terminalMessage
+                    return
+                }
                 continue
             }
+        }
+    }
+
+    private static func terminalInviteMessage(from error: Error) -> String? {
+        guard let remoteInviteError = error as? RemoteInviteTransportError else {
+            return nil
+        }
+
+        switch remoteInviteError {
+        case .cancelled(let inviterDisplayName):
+            return "Sorry, \(inviterDisplayName) left this game."
+        case .declined(let inviteeDisplayName):
+            return "\(inviteeDisplayName ?? "The other player") declined the invite."
+        case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
+            return nil
         }
     }
 }

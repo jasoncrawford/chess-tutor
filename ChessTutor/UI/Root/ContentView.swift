@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var lastRemoteActivePresencePublishedAt: Date?
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
+    @State private var dismissedIncomingRemoteInviteIDs: Set<RemoteInviteID> = []
     @State private var didLogAppLaunch = false
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
@@ -203,6 +204,8 @@ struct ContentView: View {
                 onKnownPlayerAccepted: rememberKnownPlayer,
                 onRemoteGameStarted: showRemoteStartAnnouncement,
                 onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation,
+                onPendingRemoteInviteCancelled: cancelPendingOutboundInvite,
+                onCreatedRemoteInviteAbandoned: cancelCreatedRemoteInvite,
                 onCreateRemoteInvite: createRemoteInvite,
                 onFetchRemoteInvite: fetchRemoteInvite,
                 onFetchAcceptedRemoteInvite: fetchAcceptedRemoteInvite,
@@ -219,6 +222,8 @@ struct ContentView: View {
                 onKnownPlayerAccepted: rememberKnownPlayer,
                 onRemoteGameStarted: showRemoteStartAnnouncement,
                 onRemoteInviteConfirmationNeeded: showRemoteInviteConfirmation,
+                onPendingRemoteInviteCancelled: cancelPendingOutboundInvite,
+                onCreatedRemoteInviteAbandoned: cancelCreatedRemoteInvite,
                 onCreateRemoteInvite: createRemoteInvite,
                 onFetchRemoteInvite: fetchRemoteInvite,
                 onFetchAcceptedRemoteInvite: fetchAcceptedRemoteInvite,
@@ -605,10 +610,38 @@ struct ContentView: View {
     }
 
     private func cancelRemoteInvite() {
+        let inviteToDecline = remoteLifecycle.pendingRemoteInviteAcceptance
+        if let inviteToDecline {
+            dismissedIncomingRemoteInviteIDs.insert(inviteToDecline.id)
+        }
         remoteLifecycle.cancelRemoteInviteConfirmation()
         remoteInviteAcceptanceTask?.cancel()
         remoteInviteAcceptanceTask = nil
-        startIncomingRemoteInvitePollLoopIfNeeded()
+        guard let inviteToDecline else {
+            startIncomingRemoteInvitePollLoopIfNeeded()
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                try await remoteInviteTransport.declineInvite(id: inviteToDecline.id)
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "declineSucceeded",
+                    fields: ["inviteID": inviteToDecline.id.rawValue]
+                )
+            } catch {
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "declineFailed",
+                    fields: [
+                        "inviteID": inviteToDecline.id.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
+            }
+            startIncomingRemoteInvitePollLoopIfNeeded()
+        }
     }
 
     private func confirmRemoteInvite() {
@@ -764,10 +797,49 @@ struct ContentView: View {
                         "error": String(describing: error)
                     ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
                 )
-                session.message = "Could not start remote game. Check your connection and try again."
+                if let terminalMessage = terminalInviteMessage(from: error) {
+                    dismissedIncomingRemoteInviteIDs.insert(invite.id)
+                    remoteLifecycle.cancelRemoteInviteConfirmation(message: terminalMessage)
+                } else {
+                    session.message = "Could not start remote game. Check your connection and try again."
+                }
                 startIncomingRemoteInvitePollLoopIfNeeded()
             }
             remoteInviteAcceptanceTask = nil
+        }
+    }
+
+    private func cancelPendingOutboundInvite(_ pendingInvite: RemotePlayFlow.PendingInvite) {
+        guard let inviteID = pendingInvite.remoteInviteID else {
+            return
+        }
+
+        cancelRemoteInviteRecord(id: inviteID)
+    }
+
+    private func cancelCreatedRemoteInvite(_ invite: RemotePendingInvite) {
+        cancelRemoteInviteRecord(id: invite.id)
+    }
+
+    private func cancelRemoteInviteRecord(id inviteID: RemoteInviteID) {
+        Task { @MainActor in
+            do {
+                try await remoteInviteTransport.cancelInvite(id: inviteID)
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "cancelInviteSucceeded",
+                    fields: ["inviteID": inviteID.rawValue]
+                )
+            } catch {
+                logDiagnostics(
+                    category: "remoteInvite",
+                    "cancelInviteFailed",
+                    fields: [
+                        "inviteID": inviteID.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
+            }
         }
     }
 
@@ -1121,6 +1193,8 @@ struct ContentView: View {
             while !Task.isCancelled {
                 if remoteLifecycle.pendingRemoteInviteConfirmation == nil {
                     await fetchIncomingRemoteInviteIfNeeded()
+                } else {
+                    await validatePendingRemoteInviteConfirmationIfNeeded()
                 }
 
                 do {
@@ -1149,7 +1223,8 @@ struct ContentView: View {
                 return
             }
             guard remoteLifecycle.pendingRemoteInviteAcceptance?.id != invite.id,
-                  remoteLifecycle.pendingRemoteInviteConfirmation == nil else {
+                  remoteLifecycle.pendingRemoteInviteConfirmation == nil,
+                  !dismissedIncomingRemoteInviteIDs.contains(invite.id) else {
                 return
             }
             logDiagnostics(
@@ -1186,6 +1261,45 @@ struct ContentView: View {
             return .newGame
         }
         return .play
+    }
+
+    private func validatePendingRemoteInviteConfirmationIfNeeded() async {
+        guard let invite = remoteLifecycle.pendingRemoteInviteAcceptance else {
+            return
+        }
+
+        do {
+            _ = try await remoteInviteTransport.fetchInvite(code: invite.code, token: invite.token, now: Date())
+        } catch {
+            guard let terminalMessage = terminalInviteMessage(from: error) else {
+                return
+            }
+            dismissedIncomingRemoteInviteIDs.insert(invite.id)
+            remoteLifecycle.cancelRemoteInviteConfirmation(message: terminalMessage)
+            logDiagnostics(
+                category: "remoteInvite",
+                "pendingConfirmationInvalidated",
+                fields: [
+                    "inviteID": invite.id.rawValue,
+                    "error": String(describing: error)
+                ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+            )
+        }
+    }
+
+    private func terminalInviteMessage(from error: Error) -> String? {
+        guard let remoteInviteError = error as? RemoteInviteTransportError else {
+            return nil
+        }
+
+        switch remoteInviteError {
+        case .cancelled(let inviterDisplayName):
+            return "Sorry, \(inviterDisplayName) left this game."
+        case .declined(let inviteeDisplayName):
+            return "\(inviteeDisplayName ?? "The other player") declined the invite."
+        case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
+            return nil
+        }
     }
 
     private func reportLocalBoardInteraction() {
@@ -1427,6 +1541,9 @@ struct ContentView: View {
         } set: { isPresented in
             if !isPresented {
                 cancelInviteLinkFetch()
+                if case .waitingForInvitee(let pendingInvite) = remotePlayFlow.stage {
+                    cancelPendingOutboundInvite(pendingInvite)
+                }
                 remotePlayFlow.cancel()
             }
         }

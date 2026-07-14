@@ -61,9 +61,12 @@ final class RemoteGameLifecycleController {
         pendingRemoteInviteConfirmation = pendingRemoteInviteConfirmation?.selectColor(color)
     }
 
-    func cancelRemoteInviteConfirmation() {
+    func cancelRemoteInviteConfirmation(message: String? = nil) {
         pendingRemoteInviteConfirmation = nil
         pendingRemoteInviteAcceptance = nil
+        if let message {
+            session.message = message
+        }
     }
 
     func dismissRemoteStartAnnouncement() {

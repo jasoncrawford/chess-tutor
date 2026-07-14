@@ -9,6 +9,7 @@ protocol RemoteInviteTransport: Sendable {
     func prepareAcceptanceNotification(for invite: RemotePendingInvite) async throws
     func prepareIncomingInviteNotification(for inviteePlayerID: RemotePlayerID) async throws
     func cancelInvite(id: RemoteInviteID) async throws
+    func declineInvite(id: RemoteInviteID) async throws
 }
 
 enum RemoteInviteTransportError: Error, Equatable {
@@ -17,6 +18,7 @@ enum RemoteInviteTransportError: Error, Equatable {
     case expired
     case notPending
     case cancelled(inviterDisplayName: String)
+    case declined(inviteeDisplayName: String?)
     case colorChoiceRequired
     case colorChoiceNotAllowed
     case codeCollision
@@ -47,7 +49,7 @@ extension RemoteInviteTransportError {
         switch self {
         case .cancelled(let inviterDisplayName):
             return "Sorry, \(inviterDisplayName) left this game."
-        case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
+        case .declined, .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
             switch fallbackKind {
             case .code:
                 return "That code did not match an open invite."
@@ -119,6 +121,9 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
         if invite.status == .cancelled {
             throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
         }
+        if invite.status == .declined {
+            throw RemoteInviteTransportError.declined(inviteeDisplayName: invite.inviteeDisplayName)
+        }
         guard invite.status == .pending else {
             throw RemoteInviteTransportError.notPending
         }
@@ -163,6 +168,15 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
     }
 
     func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite? {
+        guard let invite = invitesByCode.values.first(where: { $0.id == id }) else {
+            throw RemoteInviteTransportError.notFound
+        }
+        if invite.status == .cancelled {
+            throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
+        }
+        if invite.status == .declined {
+            throw RemoteInviteTransportError.declined(inviteeDisplayName: invite.inviteeDisplayName)
+        }
         guard let acceptedInvite = acceptedInvitesByID[id] else {
             return nil
         }
@@ -177,6 +191,14 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
     func prepareIncomingInviteNotification(for inviteePlayerID: RemotePlayerID) async throws {}
 
     func cancelInvite(id: RemoteInviteID) async throws {
+        try updateInviteStatus(id: id, status: .cancelled)
+    }
+
+    func declineInvite(id: RemoteInviteID) async throws {
+        try updateInviteStatus(id: id, status: .declined)
+    }
+
+    private func updateInviteStatus(id: RemoteInviteID, status: RemoteInviteStatus) throws {
         guard let code = invitesByCode.first(where: { $0.value.id == id })?.key,
               let invite = invitesByCode[code] else {
             throw RemoteInviteTransportError.notFound
@@ -189,7 +211,7 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
             inviteePlayerID: invite.inviteePlayerID,
             inviteeDisplayName: invite.inviteeDisplayName,
             whiteAssignment: invite.whiteAssignment,
-            status: .cancelled,
+            status: status,
             createdAt: invite.createdAt,
             expiresAt: invite.expiresAt,
             protocolVersion: invite.protocolVersion
