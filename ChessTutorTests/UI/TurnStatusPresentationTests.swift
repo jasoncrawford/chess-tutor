@@ -42,7 +42,7 @@ final class TurnStatusPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.detail, "Maya is moving...")
     }
 
-    func testRemoteWaitingTurnShowsOpponentAwayWhenPresenceExpired() {
+    func testRemoteWaitingTurnDoesNotClaimOpponentAwayWhenPresenceExpired() {
         let session = GameSession()
         session.whitePlayer = .remote(playerID: "maya")
 
@@ -55,6 +55,26 @@ final class TurnStatusPresentationTests: XCTestCase {
                 state: .foregroundIdle,
                 updatedAt: Date(timeIntervalSince1970: 10),
                 expiresAt: Date(timeIntervalSince1970: 20)
+            ),
+            now: Date(timeIntervalSince1970: 25)
+        )
+
+        XCTAssertEqual(presentation.detail, "Waiting for Maya to move.")
+    }
+
+    func testRemoteWaitingTurnShowsOpponentAwayForFreshAwayPresence() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+
+        let presentation = TurnStatusPresentation(
+            session: session,
+            remoteOpponentName: "Maya",
+            remotePresence: RemotePresenceUpdate(
+                gameID: RemoteGameID(rawValue: "game"),
+                playerID: RemotePlayerID(rawValue: "maya"),
+                state: .away,
+                updatedAt: Date(timeIntervalSince1970: 10),
+                expiresAt: Date(timeIntervalSince1970: 40)
             ),
             now: Date(timeIntervalSince1970: 25)
         )

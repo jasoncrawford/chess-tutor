@@ -43,7 +43,7 @@ struct TurnStatusPresentation: Equatable {
         }
 
         if remotePresence.expiresAt <= now {
-            return "\(opponentName) is away from the board."
+            return "Waiting for \(opponentName) to move."
         }
 
         switch remotePresence.state {

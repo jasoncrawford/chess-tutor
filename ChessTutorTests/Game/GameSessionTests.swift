@@ -666,6 +666,24 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.message)
     }
 
+    func testClearMessageMatchingClearsOnlyExpectedMessage() {
+        let session = GameSession()
+        session.message = "Could not sync remote move. Check your connection."
+
+        session.clearMessage(matching: "Could not sync remote move. Check your connection.")
+
+        XCTAssertNil(session.message)
+    }
+
+    func testClearMessageMatchingKeepsDifferentMessage() {
+        let session = GameSession()
+        session.message = "It's not your turn."
+
+        session.clearMessage(matching: "Could not sync remote move. Check your connection.")
+
+        XCTAssertEqual(session.message, "It's not your turn.")
+    }
+
     func testCheckmateMoveShowsGameOverMessageAndBlocksFurtherSelection() {
         var board = Board()
         board[Square(file: .h, rank: 1)] = Piece(kind: .king, color: .white)

@@ -2,6 +2,11 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
+private enum RemoteSyncMessage {
+    static let uploadFailed = "Could not sync move. Check your connection."
+    static let fetchFailed = "Could not sync remote move. Check your connection."
+}
+
 struct ContentView: View {
     @State private var session = GameSession()
     @State private var pendingPromotion: PendingPromotion?
@@ -923,6 +928,7 @@ struct ContentView: View {
                 persistActiveRemoteGame()
                 try await activeRemoteGameController.uploadPendingMoves()
                 persistActiveRemoteGame()
+                session.clearMessage(matching: RemoteSyncMessage.uploadFailed)
                 logDiagnostics(
                     category: "remoteMove",
                     "uploadSucceeded",
@@ -939,7 +945,7 @@ struct ContentView: View {
                         "error": String(describing: error)
                     ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }) { current, _ in current }
                 )
-                session.message = "Could not sync move. Check your connection."
+                session.message = RemoteSyncMessage.uploadFailed
             }
         }
     }
@@ -960,9 +966,10 @@ struct ContentView: View {
             do {
                 try await activeRemoteGameController.uploadPendingMoves()
                 persistActiveRemoteGame()
+                session.clearMessage(matching: RemoteSyncMessage.uploadFailed)
             } catch {
                 persistActiveRemoteGame()
-                session.message = "Could not sync move. Check your connection."
+                session.message = RemoteSyncMessage.uploadFailed
             }
             await fetchRemoteGameStatusIfNeeded()
             syncRemotePresenceForCurrentTurn()
@@ -1073,6 +1080,7 @@ struct ContentView: View {
 
                 do {
                     let appliedMoves = try await activeRemoteGameController.fetchAndApplyRemoteMoves(to: session)
+                    session.clearMessage(matching: RemoteSyncMessage.fetchFailed)
                     if !appliedMoves.isEmpty {
                         persistActiveRemoteGame()
                         remoteLifecycle.remoteOpponentPresence = nil
@@ -1095,7 +1103,7 @@ struct ContentView: View {
                                 "error": String(describing: error)
                             ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
                         )
-                        session.message = "Could not sync remote move. Check your connection."
+                        session.message = RemoteSyncMessage.fetchFailed
                     }
                 }
 

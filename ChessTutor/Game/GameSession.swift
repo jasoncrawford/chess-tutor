@@ -323,6 +323,13 @@ final class GameSession {
         self.message = message
     }
 
+    func clearMessage(matching expectedMessage: String) {
+        guard message == expectedMessage else {
+            return
+        }
+        message = nil
+    }
+
     private func commitRestoredMove(_ move: Move) {
         if let capturedPiece = capturedPiece(for: move, in: committedState) {
             committedCapturedPieces.append(
