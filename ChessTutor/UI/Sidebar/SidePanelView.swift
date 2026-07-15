@@ -62,13 +62,11 @@ struct SidePanelView: View {
     }
 
     private var newGameConfirmationPresentation: NewGameConfirmationPresentation {
-        guard session.state.result == .ongoing, !session.isRemoteGameEnded else {
-            return .completedGame
-        }
-        if let remoteNewGameOpponentName {
-            return .remoteGame(opponentName: remoteNewGameOpponentName)
-        }
-        return .localGame
+        NewGameConfirmationPresentation.presentation(
+            result: session.state.result,
+            isRemoteGameEnded: session.isRemoteGameEnded,
+            remoteOpponentName: remoteNewGameOpponentName
+        )
     }
 
     private func segmentStack(

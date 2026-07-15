@@ -22,18 +22,49 @@ struct NewGameConfirmationPresentation: Equatable {
     )
 
     static func remoteGame(opponentName: String) -> NewGameConfirmationPresentation {
+        remoteGame(opponentName: opponentName, cancelActionTitle: "Keep Playing")
+    }
+
+    private static func remoteGame(
+        opponentName: String,
+        cancelActionTitle: String
+    ) -> NewGameConfirmationPresentation {
         NewGameConfirmationPresentation(
             title: "Start a new game?",
             message: "You can invite \(opponentName) again or start a new game here.",
-            cancelActionTitle: "Keep Playing",
+            cancelActionTitle: cancelActionTitle,
             remoteInviteActionTitle: "Invite \(opponentName) Again",
             localResetActionTitle: "New Game Here"
         )
+    }
+
+    static func presentation(
+        result: GameResult,
+        isRemoteGameEnded: Bool,
+        remoteOpponentName: String?
+    ) -> NewGameConfirmationPresentation {
+        if let remoteOpponentName, !isRemoteGameEnded {
+            return remoteGame(
+                opponentName: remoteOpponentName,
+                cancelActionTitle: result == .ongoing ? "Keep Playing" : "Keep Board"
+            )
+        }
+
+        guard result == .ongoing, !isRemoteGameEnded else {
+            return .completedGame
+        }
+        return .localGame
     }
 }
 
 enum NewGameRequestPolicy {
     static func shouldConfirm(hasGameInProgress: Bool, isRemoteGameActive: Bool) -> Bool {
         hasGameInProgress || isRemoteGameActive
+    }
+}
+
+enum RemoteGameEndPublishingPolicy {
+    static func shouldPublishOnLocalReset(result: GameResult) -> Bool {
+        result == .ongoing
     }
 }

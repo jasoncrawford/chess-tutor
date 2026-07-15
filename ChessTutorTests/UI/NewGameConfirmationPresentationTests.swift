@@ -22,6 +22,20 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.localResetActionTitle, "New Game Here")
     }
 
+    func testCompletedRemoteGameStillOffersSamePlayerInviteAndLocalReset() {
+        let presentation = NewGameConfirmationPresentation.presentation(
+            result: .checkmate(winner: .white),
+            isRemoteGameEnded: false,
+            remoteOpponentName: "Maya"
+        )
+
+        XCTAssertEqual(presentation.title, "Start a new game?")
+        XCTAssertEqual(presentation.message, "You can invite Maya again or start a new game here.")
+        XCTAssertEqual(presentation.cancelActionTitle, "Keep Board")
+        XCTAssertEqual(presentation.remoteInviteActionTitle, "Invite Maya Again")
+        XCTAssertEqual(presentation.localResetActionTitle, "New Game Here")
+    }
+
     func testCompletedGameConfirmationUsesBoardResetCopy() {
         let presentation = NewGameConfirmationPresentation.completedGame
 
@@ -66,5 +80,13 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
                 isRemoteGameActive: false
             )
         )
+    }
+
+    func testPublishesRemoteEndOnlyWhenOngoingRemoteGameIsResetLocally() {
+        XCTAssertTrue(RemoteGameEndPublishingPolicy.shouldPublishOnLocalReset(result: .ongoing))
+        XCTAssertFalse(
+            RemoteGameEndPublishingPolicy.shouldPublishOnLocalReset(result: .checkmate(winner: .white))
+        )
+        XCTAssertFalse(RemoteGameEndPublishingPolicy.shouldPublishOnLocalReset(result: .stalemate))
     }
 }

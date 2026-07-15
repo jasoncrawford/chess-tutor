@@ -1229,7 +1229,8 @@ struct ContentView: View {
     }
 
     private func publishRemoteGameEndedIfNeeded() {
-        guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController,
+        guard RemoteGameEndPublishingPolicy.shouldPublishOnLocalReset(result: session.state.result),
+              let activeRemoteGameController = remoteLifecycle.activeRemoteGameController,
               let lifecycleTransport = remoteGameTransport as? any RemoteGameLifecycleTransport else {
             return
         }
