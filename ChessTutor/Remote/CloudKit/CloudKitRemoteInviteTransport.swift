@@ -419,6 +419,12 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             )
             return nil
         }
+        if try CloudKitInviteAcceptanceRecordCodec.responseStatus(from: acceptanceRecord) == .declined {
+            throw RemoteInviteTransportError.declined(
+                inviteeDisplayName: CloudKitInviteAcceptanceRecordCodec.declinedInviteeDisplayName(from: acceptanceRecord)
+                    ?? invite.inviteeDisplayName
+            )
+        }
         guard invite.status == .pending else {
             return nil
         }
@@ -520,7 +526,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
     }
 
     func declineInvite(id: RemoteInviteID) async throws {
-        try await updateInviteStatus(id: id, status: .declined)
+        try await declineInviteStatus(id: id)
     }
 
     private func updateInviteStatus(id: RemoteInviteID, status: RemoteInviteStatus) async throws {
@@ -564,6 +570,84 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             throw await inviteTransitionErrorAfterRejectedSave(
                 id: id,
                 fallback: .notFound
+            )
+        }
+    }
+
+    private func declineInviteStatus(id: RemoteInviteID) async throws {
+        let recordID = CKRecord.ID(recordName: id.rawValue)
+        let (invite, record) = try await currentInviteRecord(id: id)
+        if let terminalError = terminalTransitionError(for: invite) {
+            throw terminalError
+        }
+        if let responseError = try await terminalInviteResponseError(for: invite) {
+            throw responseError
+        }
+
+        let updatedInvite = RemotePendingInvite(
+            id: invite.id,
+            code: invite.code,
+            token: invite.token,
+            inviter: invite.inviter,
+            inviteePlayerID: invite.inviteePlayerID,
+            inviteeDisplayName: invite.inviteeDisplayName,
+            whiteAssignment: invite.whiteAssignment,
+            status: .declined,
+            createdAt: invite.createdAt,
+            expiresAt: invite.expiresAt,
+            protocolVersion: invite.protocolVersion
+        )
+        CloudKitPendingInviteRecordCodec.apply(updatedInvite, to: record)
+        let result: (
+            saveResults: [CKRecord.ID: Result<CKRecord, any Error>],
+            deleteResults: [CKRecord.ID: Result<Void, any Error>]
+        )
+        do {
+            result = try await database.modifyRecords(
+                saving: [record],
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+        } catch {
+            try await saveDeclinedInviteResponse(from: invite)
+            return
+        }
+        guard savedRecord(recordID, in: result.saveResults) != nil else {
+            try await saveDeclinedInviteResponse(from: invite)
+            return
+        }
+    }
+
+    private func saveDeclinedInviteResponse(from invite: RemotePendingInvite) async throws {
+        let declineRecord = CloudKitInviteAcceptanceRecordCodec.declinedRecord(from: invite, declinedAt: Date())
+        let result = try await database.modifyRecords(
+            saving: [declineRecord],
+            deleting: [],
+            savePolicy: .ifServerRecordUnchanged,
+            atomically: true
+        )
+        guard savedRecord(declineRecord.recordID, in: result.saveResults) != nil else {
+            if let responseError = try await terminalInviteResponseError(for: invite) {
+                throw responseError
+            }
+            throw RemoteInviteTransportError.notPending
+        }
+    }
+
+    private func terminalInviteResponseError(for invite: RemotePendingInvite) async throws -> RemoteInviteTransportError? {
+        let responseRecordID = CloudKitInviteAcceptanceRecordCodec.recordID(for: invite.id)
+        let results = try await database.records(for: [responseRecordID], desiredKeys: nil)
+        guard case .success(let responseRecord) = results[responseRecordID] else {
+            return nil
+        }
+        switch try CloudKitInviteAcceptanceRecordCodec.responseStatus(from: responseRecord) {
+        case .accepted:
+            return .notPending
+        case .declined:
+            return .declined(
+                inviteeDisplayName: CloudKitInviteAcceptanceRecordCodec.declinedInviteeDisplayName(from: responseRecord)
+                    ?? invite.inviteeDisplayName
             )
         }
     }
@@ -669,17 +753,26 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
 enum CloudKitInviteAcceptanceRecordCodec {
     enum Error: Swift.Error, Equatable {
         case missingField(String)
+        case invalidResponseStatus(String)
         case invalidJoinerColor(String)
     }
 
     static let recordType = "InviteAcceptance"
 
+    enum ResponseStatus: String {
+        case accepted
+        case declined
+    }
+
     private enum Field {
         static let inviteCode = "inviteCode"
+        static let responseStatus = "responseStatus"
         static let acceptedJoinerPlayerID = "acceptedJoinerPlayerID"
         static let acceptedJoinerDisplayName = "acceptedJoinerDisplayName"
         static let acceptedJoinerColor = "acceptedJoinerColor"
         static let acceptedAt = "acceptedAt"
+        static let declinedInviteeDisplayName = "declinedInviteeDisplayName"
+        static let declinedAt = "declinedAt"
     }
 
     static func recordID(for inviteID: RemoteInviteID) -> CKRecord.ID {
@@ -692,6 +785,7 @@ enum CloudKitInviteAcceptanceRecordCodec {
             recordID: recordID(for: acceptedInvite.invite.id)
         )
         record[Field.inviteCode] = acceptedInvite.invite.code.rawValue as CKRecordValue
+        record[Field.responseStatus] = ResponseStatus.accepted.rawValue as CKRecordValue
         record[Field.acceptedJoinerPlayerID] = acceptedInvite.joiner.id.rawValue as CKRecordValue
         record[Field.acceptedJoinerDisplayName] = acceptedInvite.joiner.displayName as CKRecordValue
         record[Field.acceptedJoinerColor] = acceptedInvite.joinerColor.rawValue as CKRecordValue
@@ -699,10 +793,39 @@ enum CloudKitInviteAcceptanceRecordCodec {
         return record
     }
 
+    static func declinedRecord(from invite: RemotePendingInvite, declinedAt: Date) -> CKRecord {
+        let record = CKRecord(
+            recordType: recordType,
+            recordID: recordID(for: invite.id)
+        )
+        record[Field.inviteCode] = invite.code.rawValue as CKRecordValue
+        record[Field.responseStatus] = ResponseStatus.declined.rawValue as CKRecordValue
+        record[Field.declinedInviteeDisplayName] = invite.inviteeDisplayName as CKRecordValue?
+        record[Field.declinedAt] = declinedAt as CKRecordValue
+        return record
+    }
+
+    static func responseStatus(from record: CKRecord) throws -> ResponseStatus {
+        guard let rawStatus = record[Field.responseStatus] as? String else {
+            return .accepted
+        }
+        guard let status = ResponseStatus(rawValue: rawStatus) else {
+            throw Error.invalidResponseStatus(rawStatus)
+        }
+        return status
+    }
+
+    static func declinedInviteeDisplayName(from record: CKRecord) -> String? {
+        record[Field.declinedInviteeDisplayName] as? String
+    }
+
     static func acceptedInvite(
         from record: CKRecord,
         pendingInvite: RemotePendingInvite
     ) throws -> RemoteAcceptedInvite {
+        guard try responseStatus(from: record) == .accepted else {
+            throw Error.missingField(Field.acceptedJoinerColor)
+        }
         let joinerColorRaw = try string(Field.acceptedJoinerColor, from: record)
         guard let joinerColor = PieceColor(rawValue: joinerColorRaw) else {
             throw Error.invalidJoinerColor(joinerColorRaw)

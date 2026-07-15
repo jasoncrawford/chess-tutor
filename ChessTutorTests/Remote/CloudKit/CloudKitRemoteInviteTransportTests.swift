@@ -287,6 +287,41 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
+    func testDeclineFallsBackToResponseRecordWhenPendingInviteCannotBeUpdated() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+        await database.failSaves(for: [Self.recordID])
+
+        try await transport.declineInvite(id: invite.id)
+
+        let storedPendingRecord = await database.record(withID: Self.recordID)
+        let pendingRecord = try XCTUnwrap(storedPendingRecord)
+        let pendingInvite = try CloudKitPendingInviteRecordCodec.invite(from: pendingRecord)
+        XCTAssertEqual(pendingInvite.status, .pending)
+        let storedResponseRecord = await database.record(withID: Self.acceptanceRecordID)
+        let responseRecord = try XCTUnwrap(storedResponseRecord)
+        XCTAssertEqual(try CloudKitInviteAcceptanceRecordCodec.responseStatus(from: responseRecord), .declined)
+        XCTAssertEqual(
+            CloudKitInviteAcceptanceRecordCodec.declinedInviteeDisplayName(from: responseRecord),
+            Self.joiner.displayName
+        )
+        let pendingInviteForJoiner = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+        XCTAssertNil(pendingInviteForJoiner)
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.declined(inviteeDisplayName: Self.joiner.displayName),
+            try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        )
+    }
+
     func testAcceptAfterInviteWasCancelledDuringRaceReportsCancellation() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
