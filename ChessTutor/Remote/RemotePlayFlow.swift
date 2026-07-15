@@ -81,6 +81,16 @@ final class RemotePlayFlow {
         let fallbackButtonTitle: String
     }
 
+    struct TerminalInvitePresentation: Equatable, Hashable {
+        let message: String
+        let buttonTitle: String
+
+        init(message: String, buttonTitle: String = "OK") {
+            self.message = message
+            self.buttonTitle = buttonTitle
+        }
+    }
+
     struct InviteLookup: Equatable {
         let code: InviteCode
         let token: RemoteInviteToken?
@@ -91,6 +101,7 @@ final class RemotePlayFlow {
         case choosing
         case choosingWhite(InviteTarget)
         case waitingForInvitee(PendingInvite)
+        case terminalInvite(TerminalInvitePresentation)
         case enteringLocalName(LocalNameAction)
     }
 
@@ -508,9 +519,23 @@ final class RemotePlayFlow {
             copiedInviteURL = nil
             fallbackInviteID = nil
             stage = .choosing
-        case .closed, .choosing, .enteringLocalName:
+        case .closed, .choosing, .terminalInvite, .enteringLocalName:
             break
         }
+    }
+
+    func showTerminalInviteMessage(_ message: String) {
+        selectedWhiteChoice = .localPlayer
+        pendingLocalNameInviteTarget = nil
+        pendingLocalNameJoinWhiteChoice = nil
+        pendingLocalNameJoinLookup = nil
+        localNameEditReturnStage = nil
+        localNameDraft = ""
+        joinCode = ""
+        joinErrorMessage = nil
+        copiedInviteURL = nil
+        fallbackInviteID = nil
+        stage = .terminalInvite(TerminalInvitePresentation(message: message))
     }
 
     func cancel() {

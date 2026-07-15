@@ -14,6 +14,10 @@ final class RemoteGameSessionController {
         coordinator.syncStatus
     }
 
+    var hasPendingUploads: Bool {
+        coordinator.hasPendingUploads
+    }
+
     var snapshot: ActiveRemoteGameSnapshot {
         coordinator.snapshot
     }

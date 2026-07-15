@@ -117,6 +117,8 @@ struct RemotePlaySheetView: View {
                 choosingWhiteView(for: target)
             case .waitingForInvitee(let pendingInvite):
                 waitingView(for: pendingInvite)
+            case .terminalInvite(let presentation):
+                terminalInviteView(presentation)
             case .enteringLocalName:
                 localNameView
             }
@@ -206,7 +208,7 @@ struct RemotePlaySheetView: View {
         switch flow.stage {
         case .choosingWhite:
             return true
-        case .closed, .choosing, .waitingForInvitee, .enteringLocalName:
+        case .closed, .choosing, .waitingForInvitee, .terminalInvite, .enteringLocalName:
             return false
         }
     }
@@ -344,8 +346,7 @@ struct RemotePlaySheetView: View {
                     return
                 }
                 if let terminalMessage = Self.terminalInviteMessage(from: error) {
-                    flow.goBack()
-                    remoteInviteErrorMessage = terminalMessage
+                    flow.showTerminalInviteMessage(terminalMessage)
                     return
                 }
                 remoteInviteErrorMessage = error.remoteInviteJoinFailureMessage(
@@ -625,6 +626,20 @@ struct RemotePlaySheetView: View {
         }
     }
 
+    private func terminalInviteView(_ presentation: RemotePlayFlow.TerminalInvitePresentation) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(presentation.message)
+                .font(AppTheme.panelBodyFont)
+                .foregroundStyle(AppTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(presentation.buttonTitle) {
+                flow.cancel()
+            }
+            .buttonStyle(RemotePlaySheetCompactButtonStyle(isEnabled: true))
+        }
+    }
+
     private func inviteShareFallbackView(_ presentation: RemotePlayFlow.InviteSharePresentation) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
@@ -762,8 +777,7 @@ struct RemotePlaySheetView: View {
                 return
             } catch {
                 if let terminalMessage = Self.terminalInviteMessage(from: error) {
-                    flow.goBack()
-                    remoteInviteErrorMessage = terminalMessage
+                    flow.showTerminalInviteMessage(terminalMessage)
                     return
                 }
                 continue
@@ -778,9 +792,9 @@ struct RemotePlaySheetView: View {
 
         switch remoteInviteError {
         case .cancelled(let inviterDisplayName):
-            return "Sorry, \(inviterDisplayName) left this game."
+            return "Sorry, \(inviterDisplayName) canceled this game."
         case .declined(let inviteeDisplayName):
-            return "\(inviteeDisplayName ?? "The other player") declined the invite."
+            return "Sorry, \(inviteeDisplayName ?? "the other player") declined this game."
         case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
             return nil
         }

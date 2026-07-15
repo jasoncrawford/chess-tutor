@@ -96,6 +96,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             ]
         )
         let record = CloudKitPendingInviteRecordCodec.record(from: invite)
+        CloudKitPendingInviteRecordCodec.applyNotificationBody(request.notificationBody, to: record)
         let result: (
             saveResults: [CKRecord.ID: Result<CKRecord, any Error>],
             deleteResults: [CKRecord.ID: Result<Void, any Error>]
@@ -443,7 +444,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
         let notificationInfo = CKSubscription.NotificationInfo()
         notificationInfo.shouldSendContentAvailable = true
         notificationInfo.alertLocalizationKey = "REMOTE_INVITE_NOTIFICATION_BODY"
-        notificationInfo.alertLocalizationArgs = ["inviterDisplayName"]
+        notificationInfo.alertLocalizationArgs = [CloudKitPendingInviteRecordCodec.notificationBodyFieldName]
         subscription.notificationInfo = notificationInfo
         _ = try await database.saveSubscription(subscription)
         await diagnosticsLog.append(

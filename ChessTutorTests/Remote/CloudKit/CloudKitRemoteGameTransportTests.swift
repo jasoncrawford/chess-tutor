@@ -117,6 +117,8 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         XCTAssertEqual(subscription.subscriptionID, "remote-game-status-game-1")
         XCTAssertEqual(subscription.recordType, CloudKitRemoteGameStatusRecordCodec.recordType)
         XCTAssertEqual(subscription.notificationInfo?.shouldSendContentAvailable, true)
+        XCTAssertEqual(subscription.notificationInfo?.alertLocalizationKey, "REMOTE_GAME_ENDED_NOTIFICATION_BODY")
+        XCTAssertEqual(subscription.notificationInfo?.alertLocalizationArgs, ["updatedByDisplayName"])
         XCTAssertEqual(
             CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscription.subscriptionID),
             Self.gameID

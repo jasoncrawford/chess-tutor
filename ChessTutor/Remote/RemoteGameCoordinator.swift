@@ -31,6 +31,10 @@ struct RemoteGameCoordinator {
         )
     }
 
+    var hasPendingUploads: Bool {
+        outbox.hasPendingEvents
+    }
+
     init(
         descriptor: RemoteGameDescriptor,
         transport: any RemoteGameTransport,

@@ -298,6 +298,8 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         )
         let notificationInfo = CKSubscription.NotificationInfo()
         notificationInfo.shouldSendContentAvailable = true
+        notificationInfo.alertLocalizationKey = "REMOTE_GAME_ENDED_NOTIFICATION_BODY"
+        notificationInfo.alertLocalizationArgs = [CloudKitRemoteGameStatusRecordCodec.Field.updatedByDisplayName]
         subscription.notificationInfo = notificationInfo
         _ = try await database.saveSubscription(subscription)
         await diagnosticsLog.append(

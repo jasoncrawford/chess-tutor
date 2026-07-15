@@ -10,25 +10,41 @@ struct RemoteInviteConfirmation: Equatable {
     let localPlayerColor: PieceColor?
     let allowsColorChoice: Bool
     let purpose: RemoteInviteConfirmationPurpose
+    private let terminalTitle: String?
 
     init(
         opponentName: String,
         localPlayerColor: PieceColor?,
         allowsColorChoice: Bool? = nil,
-        purpose: RemoteInviteConfirmationPurpose = .play
+        purpose: RemoteInviteConfirmationPurpose = .play,
+        terminalTitle: String? = nil
     ) {
         self.opponentName = opponentName
         self.localPlayerColor = localPlayerColor
         self.allowsColorChoice = allowsColorChoice ?? (localPlayerColor == nil)
         self.purpose = purpose
+        self.terminalTitle = terminalTitle
+    }
+
+    static func terminal(title: String) -> RemoteInviteConfirmation {
+        RemoteInviteConfirmation(
+            opponentName: "",
+            localPlayerColor: nil,
+            allowsColorChoice: false,
+            terminalTitle: title
+        )
     }
 
     var title: String {
+        if let terminalTitle {
+            return terminalTitle
+        }
+
         switch purpose {
         case .play:
-            "\(opponentName) wants to play"
+            return "\(opponentName) wants to play"
         case .newGame:
-            "\(opponentName) wants to start a new game"
+            return "\(opponentName) wants to start a new game"
         }
     }
 
@@ -40,12 +56,24 @@ struct RemoteInviteConfirmation: Equatable {
         "Cancel"
     }
 
+    var acknowledgementButtonTitle: String {
+        "OK"
+    }
+
+    var isTerminal: Bool {
+        terminalTitle != nil
+    }
+
+    var showsColorSeats: Bool {
+        !isTerminal
+    }
+
     var requiresColorChoice: Bool {
-        allowsColorChoice && localPlayerColor == nil
+        !isTerminal && allowsColorChoice && localPlayerColor == nil
     }
 
     var canStart: Bool {
-        localPlayerColor != nil
+        !isTerminal && localPlayerColor != nil
     }
 
     var whitePlayerName: String {
@@ -71,7 +99,7 @@ struct RemoteInviteConfirmation: Equatable {
     }
 
     func selectColor(_ color: PieceColor) -> RemoteInviteConfirmation {
-        guard allowsColorChoice else {
+        guard !isTerminal, allowsColorChoice else {
             return self
         }
         return RemoteInviteConfirmation(

@@ -47,7 +47,7 @@ struct SidePanelView: View {
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: layout.columnHeight, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewingAngle.sidebarSegmentsInTabletopOrder)
         .alert(newGameConfirmationPresentation.title, isPresented: $isConfirmingNewGame) {
-            Button("Keep Playing", role: .cancel) {}
+            Button(newGameConfirmationPresentation.cancelActionTitle, role: .cancel) {}
             if let remoteInviteActionTitle = newGameConfirmationPresentation.remoteInviteActionTitle {
                 Button(remoteInviteActionTitle) {
                     onInviteRemoteNewGame()
@@ -62,6 +62,9 @@ struct SidePanelView: View {
     }
 
     private var newGameConfirmationPresentation: NewGameConfirmationPresentation {
+        guard session.state.result == .ongoing, !session.isRemoteGameEnded else {
+            return .completedGame
+        }
         if let remoteNewGameOpponentName {
             return .remoteGame(opponentName: remoteNewGameOpponentName)
         }

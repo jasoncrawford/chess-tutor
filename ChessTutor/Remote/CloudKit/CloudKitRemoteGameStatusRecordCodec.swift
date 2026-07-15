@@ -13,6 +13,7 @@ enum CloudKitRemoteGameStatusRecordCodec {
         static let gameID = "gameID"
         static let status = "status"
         static let updatedByPlayerID = "updatedByPlayerID"
+        static let updatedByDisplayName = "updatedByDisplayName"
         static let updatedAt = "updatedAt"
     }
 
@@ -30,6 +31,7 @@ enum CloudKitRemoteGameStatusRecordCodec {
         record[Field.gameID] = status.gameID.rawValue as CKRecordValue
         record[Field.status] = status.status.rawValue as CKRecordValue
         record[Field.updatedByPlayerID] = status.updatedByPlayerID.rawValue as CKRecordValue
+        record[Field.updatedByDisplayName] = status.updatedByDisplayName as CKRecordValue?
         record[Field.updatedAt] = status.updatedAt as CKRecordValue
     }
 
@@ -43,6 +45,7 @@ enum CloudKitRemoteGameStatusRecordCodec {
             gameID: RemoteGameID(rawValue: try string(Field.gameID, from: record)),
             status: status,
             updatedByPlayerID: RemotePlayerID(rawValue: try string(Field.updatedByPlayerID, from: record)),
+            updatedByDisplayName: record[Field.updatedByDisplayName] as? String,
             updatedAt: try date(Field.updatedAt, from: record)
         )
     }

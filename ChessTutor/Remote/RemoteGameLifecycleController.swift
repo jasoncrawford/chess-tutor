@@ -57,6 +57,11 @@ final class RemoteGameLifecycleController {
         pendingRemoteInviteAcceptance = invite
     }
 
+    func showTerminalRemoteInviteConfirmation(title: String) {
+        pendingRemoteInviteConfirmation = .terminal(title: title)
+        pendingRemoteInviteAcceptance = nil
+    }
+
     func selectRemoteInviteColor(_ color: PieceColor) {
         pendingRemoteInviteConfirmation = pendingRemoteInviteConfirmation?.selectColor(color)
     }

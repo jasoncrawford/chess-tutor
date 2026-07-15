@@ -57,6 +57,9 @@ final class RemoteGameSessionControllerTests: XCTestCase {
         }
 
         XCTAssertEqual(controller.syncStatus, .failed(.transportFailed))
+        XCTAssertTrue(controller.hasPendingUploads)
+        try await controller.uploadPendingMoves()
+        XCTAssertFalse(controller.hasPendingUploads)
     }
 
     func testRestoreFromSnapshotContinuesFetchingAfterLastAppliedSequence() async throws {

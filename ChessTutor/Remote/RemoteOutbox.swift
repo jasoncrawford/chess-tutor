@@ -60,6 +60,10 @@ struct RemoteOutbox: Codable, Equatable, Sendable {
         }
     }
 
+    var hasPendingEvents: Bool {
+        !pendingEvents.isEmpty
+    }
+
     private mutating func update(
         _ eventID: RemoteMoveEventID,
         mutate: (inout RemoteOutboxItem) throws -> Void

@@ -145,6 +145,7 @@ struct CreateRemoteInviteRequest: Equatable, Sendable {
     let inviteePlayerID: RemotePlayerID?
     let inviteeDisplayName: String?
     let whiteAssignment: RemoteInviteWhiteAssignment
+    let notificationBody: String
     let now: Date
     let expiresAt: Date
 
@@ -153,6 +154,7 @@ struct CreateRemoteInviteRequest: Equatable, Sendable {
         inviteePlayerID: RemotePlayerID? = nil,
         inviteeDisplayName: String?,
         whiteAssignment: RemoteInviteWhiteAssignment,
+        notificationBody: String? = nil,
         now: Date,
         expiresAt: Date
     ) {
@@ -160,6 +162,7 @@ struct CreateRemoteInviteRequest: Equatable, Sendable {
         self.inviteePlayerID = inviteePlayerID
         self.inviteeDisplayName = inviteeDisplayName
         self.whiteAssignment = whiteAssignment
+        self.notificationBody = notificationBody ?? "\(inviter.displayName) wants to play."
         self.now = now
         self.expiresAt = expiresAt
     }
@@ -189,7 +192,22 @@ struct RemoteGameStatusUpdate: Codable, Equatable, Sendable {
     let gameID: RemoteGameID
     let status: RemoteGameStatus
     let updatedByPlayerID: RemotePlayerID
+    let updatedByDisplayName: String?
     let updatedAt: Date
+
+    init(
+        gameID: RemoteGameID,
+        status: RemoteGameStatus,
+        updatedByPlayerID: RemotePlayerID,
+        updatedByDisplayName: String? = nil,
+        updatedAt: Date
+    ) {
+        self.gameID = gameID
+        self.status = status
+        self.updatedByPlayerID = updatedByPlayerID
+        self.updatedByDisplayName = updatedByDisplayName
+        self.updatedAt = updatedAt
+    }
 }
 
 enum RemotePresenceState: String, Codable, Equatable, Sendable {

@@ -81,4 +81,15 @@ final class RemoteInviteConfirmationTests: XCTestCase {
         XCTAssertFalse(confirmation.allowsColorChoice)
         XCTAssertEqual(confirmation.selectColor(.white), confirmation)
     }
+
+    func testTerminalConfirmationShowsSingleAcknowledgementAction() {
+        let confirmation = RemoteInviteConfirmation.terminal(
+            title: "Sorry, Maya canceled this game."
+        )
+
+        XCTAssertEqual(confirmation.title, "Sorry, Maya canceled this game.")
+        XCTAssertTrue(confirmation.isTerminal)
+        XCTAssertFalse(confirmation.showsColorSeats)
+        XCTAssertEqual(confirmation.acknowledgementButtonTitle, "OK")
+    }
 }

@@ -48,7 +48,7 @@ extension RemoteInviteTransportError {
     func joinFailureMessage(fallbackKind: RemoteInviteJoinFailureKind) -> String {
         switch self {
         case .cancelled(let inviterDisplayName):
-            return "Sorry, \(inviterDisplayName) left this game."
+            return "Sorry, \(inviterDisplayName) canceled this game."
         case .declined, .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
             switch fallbackKind {
             case .code:

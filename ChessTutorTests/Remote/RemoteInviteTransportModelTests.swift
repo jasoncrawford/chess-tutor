@@ -13,10 +13,10 @@ final class RemoteInviteTransportModelTests: XCTestCase {
         XCTAssertEqual(InviteCode(rawValue: "12345").formatted, "12345")
     }
 
-    func testCancelledInviteErrorExplainsInviterLeft() {
+    func testCancelledInviteErrorExplainsInviterCanceled() {
         XCTAssertEqual(
             RemoteInviteTransportError.cancelled(inviterDisplayName: "Maya").joinFailureMessage(fallbackKind: .code),
-            "Sorry, Maya left this game."
+            "Sorry, Maya canceled this game."
         )
     }
 

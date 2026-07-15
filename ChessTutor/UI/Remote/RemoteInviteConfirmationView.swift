@@ -21,24 +21,33 @@ struct RemoteInviteConfirmationView: View {
                     .foregroundStyle(AppTheme.mutedInk)
             }
 
-            HStack(spacing: 14) {
-                colorSeat(confirmation.whiteSeat)
-                colorSeat(confirmation.blackSeat)
+            if confirmation.showsColorSeats {
+                HStack(spacing: 14) {
+                    colorSeat(confirmation.whiteSeat)
+                    colorSeat(confirmation.blackSeat)
+                }
             }
 
-            HStack(spacing: 12) {
-                Button(confirmation.cancelButtonTitle) {
+            if confirmation.isTerminal {
+                Button(confirmation.acknowledgementButtonTitle) {
                     onCancel()
                 }
                 .buttonStyle(RemoteInviteCancelButtonStyle())
+            } else {
+                HStack(spacing: 12) {
+                    Button(confirmation.cancelButtonTitle) {
+                        onCancel()
+                    }
+                    .buttonStyle(RemoteInviteCancelButtonStyle())
 
-                Button(confirmation.startButtonTitle) {
-                    onStart()
+                    Button(confirmation.startButtonTitle) {
+                        onStart()
+                    }
+                    .buttonStyle(RemoteGameStartButtonStyle())
+                    .disabled(!confirmation.canStart)
+                    .opacity(confirmation.canStart ? 1 : 0.45)
+                    .accessibilityIdentifier("remote-invite-start-button")
                 }
-                .buttonStyle(RemoteGameStartButtonStyle())
-                .disabled(!confirmation.canStart)
-                .opacity(confirmation.canStart ? 1 : 0.45)
-                .accessibilityIdentifier("remote-invite-start-button")
             }
         }
         .padding(26)

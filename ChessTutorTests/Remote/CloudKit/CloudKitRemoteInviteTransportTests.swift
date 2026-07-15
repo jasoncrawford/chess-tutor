@@ -26,7 +26,11 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(invite, fetched)
         XCTAssertEqual(fetched.inviteePlayerID, Self.joiner.id)
         let savedRecord = await database.record(withID: Self.recordID)
-        XCTAssertNotNil(savedRecord)
+        let record = try XCTUnwrap(savedRecord)
+        XCTAssertEqual(
+            record[CloudKitPendingInviteRecordCodec.notificationBodyFieldName] as? String,
+            "Jason wants to play."
+        )
         let lastRequest = await database.lastModifyRequest()
         let request = try XCTUnwrap(lastRequest)
         XCTAssertEqual(request.savePolicy, .ifServerRecordUnchanged)
@@ -50,6 +54,30 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
 
         XCTAssertEqual(fetched, invite)
+    }
+
+    func testCreateInviteCanStoreCustomNotificationBody() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+
+        _ = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                notificationBody: "Jason wants to start a new game.",
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        let savedRecord = await database.record(withID: Self.recordID)
+        let record = try XCTUnwrap(savedRecord)
+        XCTAssertEqual(
+            record[CloudKitPendingInviteRecordCodec.notificationBodyFieldName] as? String,
+            "Jason wants to start a new game."
+        )
     }
 
     func testUnaddressedInviteIsNotFetchedByInviteePlayerID() async throws {
@@ -314,7 +342,7 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(querySubscription.recordType, CloudKitPendingInviteRecordCodec.recordType)
         XCTAssertEqual(querySubscription.notificationInfo?.shouldSendContentAvailable, true)
         XCTAssertEqual(querySubscription.notificationInfo?.alertLocalizationKey, "REMOTE_INVITE_NOTIFICATION_BODY")
-        XCTAssertEqual(querySubscription.notificationInfo?.alertLocalizationArgs, ["inviterDisplayName"])
+        XCTAssertEqual(querySubscription.notificationInfo?.alertLocalizationArgs, ["notificationBody"])
     }
 
     func testAcceptanceSubscriptionIDParsesInviteIDForPushNotificationRouting() {

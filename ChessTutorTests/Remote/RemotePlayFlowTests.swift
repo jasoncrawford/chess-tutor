@@ -113,6 +113,19 @@ final class RemotePlayFlowTests: XCTestCase {
         XCTAssertEqual(flow.stage, .closed)
     }
 
+    func testTerminalInviteMessageShowsAcknowledgementStage() {
+        let flow = RemotePlayFlow(localDisplayName: "Jason")
+
+        flow.open()
+        flow.showTerminalInviteMessage("Sorry, Maya declined this game.")
+
+        XCTAssertEqual(
+            flow.stage,
+            .terminalInvite(RemotePlayFlow.TerminalInvitePresentation(message: "Sorry, Maya declined this game."))
+        )
+        XCTAssertEqual(flow.sheetTitle, "Play Remotely")
+    }
+
     func testBackFromWhiteChoiceReturnsToInviteeSelection() {
         let maya = KnownRemotePlayer(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
         let flow = RemotePlayFlow(knownPlayers: [maya], nextInviteCode: "428193")

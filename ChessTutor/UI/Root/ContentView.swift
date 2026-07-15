@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
     @State private var incomingRemoteInvitePollTask: Task<Void, Never>?
     @State private var remoteMoveFetchTask: Task<Void, Never>?
+    @State private var remoteMoveUploadRetryTask: Task<Void, Never>?
     @State private var remotePresenceHeartbeatTask: Task<Void, Never>?
     @State private var remoteActiveMovingResetTask: Task<Void, Never>?
     @State private var lastRemoteActivePresencePublishedAt: Date?
@@ -445,6 +446,7 @@ struct ContentView: View {
                 inviteePlayerID: remoteInviteePlayerID(for: target),
                 inviteeDisplayName: remoteInviteeDisplayName(for: target),
                 whiteAssignment: remoteWhiteAssignment(from: whiteChoice),
+                notificationBody: remoteInviteNotificationBody(inviterDisplayName: displayName, target: target),
                 now: now,
                 expiresAt: now.addingTimeInterval(10 * 60)
             )
@@ -545,6 +547,9 @@ struct ContentView: View {
                 remotePlayFlow.cancel()
                 startInviterRemoteGame(acceptedInvite)
             } catch {
+                if let terminalMessage = outboundTerminalInviteMessage(from: error) {
+                    remotePlayFlow.showTerminalInviteMessage(terminalMessage)
+                }
                 return
             }
         }
@@ -566,6 +571,17 @@ struct ContentView: View {
         case .newPlayer:
             return nil
         }
+    }
+
+    private func remoteInviteNotificationBody(
+        inviterDisplayName: String,
+        target: RemotePlayFlow.InviteTarget
+    ) -> String {
+        if case .known(let player) = target,
+           remoteLifecycle.activeRemoteGameOpponent?.id == player.id {
+            return "\(inviterDisplayName) wants to start a new game."
+        }
+        return "\(inviterDisplayName) wants to play."
     }
 
     private func remoteWhiteAssignment(from choice: RemotePlayFlow.WhiteChoice) -> RemoteInviteWhiteAssignment {
@@ -802,9 +818,9 @@ struct ContentView: View {
                         "error": String(describing: error)
                     ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
                 )
-                if let terminalMessage = terminalInviteMessage(from: error) {
+                if let terminalMessage = incomingTerminalInviteTitle(from: error) {
                     dismissedIncomingRemoteInviteIDs.insert(invite.id)
-                    remoteLifecycle.cancelRemoteInviteConfirmation(message: terminalMessage)
+                    remoteLifecycle.showTerminalRemoteInviteConfirmation(title: terminalMessage)
                 } else {
                     session.message = "Could not start remote game. Check your connection and try again."
                 }
@@ -946,6 +962,7 @@ struct ContentView: View {
                     ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }) { current, _ in current }
                 )
                 session.message = RemoteSyncMessage.uploadFailed
+                startRemoteMoveUploadRetryLoopIfNeeded()
             }
         }
     }
@@ -969,7 +986,7 @@ struct ContentView: View {
                 session.clearMessage(matching: RemoteSyncMessage.uploadFailed)
             } catch {
                 persistActiveRemoteGame()
-                session.message = RemoteSyncMessage.uploadFailed
+                startRemoteMoveUploadRetryLoopIfNeeded()
             }
             await fetchRemoteGameStatusIfNeeded()
             syncRemotePresenceForCurrentTurn()
@@ -1112,6 +1129,57 @@ struct ContentView: View {
         }
     }
 
+    private func startRemoteMoveUploadRetryLoopIfNeeded() {
+        guard remoteMoveUploadRetryTask == nil,
+              remoteLifecycle.activeRemoteGameController?.hasPendingUploads == true else {
+            return
+        }
+
+        remoteMoveUploadRetryTask = Task { @MainActor in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(2))
+                } catch {
+                    remoteMoveUploadRetryTask = nil
+                    return
+                }
+
+                guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController else {
+                    remoteMoveUploadRetryTask = nil
+                    return
+                }
+
+                guard activeRemoteGameController.hasPendingUploads else {
+                    remoteMoveUploadRetryTask = nil
+                    return
+                }
+
+                do {
+                    try await activeRemoteGameController.uploadPendingMoves()
+                    persistActiveRemoteGame()
+                    session.clearMessage(matching: RemoteSyncMessage.uploadFailed)
+                    syncRemotePresenceForCurrentTurn()
+                    startRemoteMoveFetchLoopIfNeeded()
+
+                    guard activeRemoteGameController.hasPendingUploads else {
+                        remoteMoveUploadRetryTask = nil
+                        return
+                    }
+                } catch {
+                    persistActiveRemoteGame()
+                    logDiagnostics(
+                        category: "remoteMove",
+                        "uploadRetryFailed",
+                        fields: [
+                            "gameID": activeRemoteGameController.gameID.rawValue,
+                            "error": String(describing: error)
+                        ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                    )
+                }
+            }
+        }
+    }
+
     @discardableResult
     private func fetchRemoteGameStatusIfNeeded() async -> Bool {
         guard let activeRemoteGameController = remoteLifecycle.activeRemoteGameController,
@@ -1146,6 +1214,7 @@ struct ContentView: View {
                     gameID: descriptor.id,
                     status: .ended,
                     updatedByPlayerID: descriptor.localPlayerID,
+                    updatedByDisplayName: localRemotePlayer(from: descriptor).displayName,
                     updatedAt: Date()
                 )
             )
@@ -1170,6 +1239,8 @@ struct ContentView: View {
     private func cancelRemoteGameSync(clearSavedGame: Bool) {
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
+        remoteMoveUploadRetryTask?.cancel()
+        remoteMoveUploadRetryTask = nil
         stopRemotePresenceHeartbeat()
         remoteLifecycle.clearRemoteGameState()
         if clearSavedGame {
@@ -1279,11 +1350,11 @@ struct ContentView: View {
         do {
             _ = try await remoteInviteTransport.fetchInvite(code: invite.code, token: invite.token, now: Date())
         } catch {
-            guard let terminalMessage = terminalInviteMessage(from: error) else {
+            guard let terminalMessage = incomingTerminalInviteTitle(from: error) else {
                 return
             }
             dismissedIncomingRemoteInviteIDs.insert(invite.id)
-            remoteLifecycle.cancelRemoteInviteConfirmation(message: terminalMessage)
+            remoteLifecycle.showTerminalRemoteInviteConfirmation(title: terminalMessage)
             logDiagnostics(
                 category: "remoteInvite",
                 "pendingConfirmationInvalidated",
@@ -1295,16 +1366,31 @@ struct ContentView: View {
         }
     }
 
-    private func terminalInviteMessage(from error: Error) -> String? {
+    private func incomingTerminalInviteTitle(from error: Error) -> String? {
         guard let remoteInviteError = error as? RemoteInviteTransportError else {
             return nil
         }
 
         switch remoteInviteError {
         case .cancelled(let inviterDisplayName):
-            return "Sorry, \(inviterDisplayName) left this game."
+            return "Sorry, \(inviterDisplayName) canceled this game."
         case .declined(let inviteeDisplayName):
-            return "\(inviteeDisplayName ?? "The other player") declined the invite."
+            return "Sorry, \(inviteeDisplayName ?? "the other player") declined this game."
+        case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
+            return nil
+        }
+    }
+
+    private func outboundTerminalInviteMessage(from error: Error) -> String? {
+        guard let remoteInviteError = error as? RemoteInviteTransportError else {
+            return nil
+        }
+
+        switch remoteInviteError {
+        case .declined(let inviteeDisplayName):
+            return "Sorry, \(inviteeDisplayName ?? "the other player") declined this game."
+        case .cancelled(let inviterDisplayName):
+            return "Sorry, \(inviterDisplayName) canceled this game."
         case .notFound, .tokenMismatch, .expired, .notPending, .colorChoiceRequired, .colorChoiceNotAllowed, .codeCollision:
             return nil
         }
@@ -1455,6 +1541,13 @@ struct ContentView: View {
             return nil
         }
         return player
+    }
+
+    private func localRemotePlayer(from descriptor: RemoteGameDescriptor) -> RemotePlayerRef {
+        if descriptor.localPlayerID == descriptor.whitePlayer.id {
+            return descriptor.whitePlayer
+        }
+        return descriptor.blackPlayer
     }
 
     private static func restoredSession(from snapshot: ActiveRemoteGameSnapshot) throws -> GameSession {

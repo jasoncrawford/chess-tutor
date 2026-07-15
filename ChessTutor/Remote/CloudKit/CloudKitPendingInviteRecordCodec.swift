@@ -18,6 +18,7 @@ enum CloudKitPendingInviteRecordCodec {
         static let inviterDisplayName = "inviterDisplayName"
         static let inviteePlayerID = "inviteePlayerID"
         static let inviteeDisplayName = "inviteeDisplayName"
+        static let notificationBody = "notificationBody"
         static let whiteAssignment = "whiteAssignment"
         static let status = "status"
         static let acceptedJoinerPlayerID = "acceptedJoinerPlayerID"
@@ -47,6 +48,14 @@ enum CloudKitPendingInviteRecordCodec {
         record[Field.createdAt] = invite.createdAt as CKRecordValue
         record[Field.expiresAt] = invite.expiresAt as CKRecordValue
         record[Field.protocolVersion] = invite.protocolVersion as CKRecordValue
+    }
+
+    static func applyNotificationBody(_ notificationBody: String, to record: CKRecord) {
+        record[Field.notificationBody] = notificationBody as CKRecordValue
+    }
+
+    static var notificationBodyFieldName: String {
+        Field.notificationBody
     }
 
     static func apply(_ acceptedInvite: RemoteAcceptedInvite, to record: CKRecord) {
