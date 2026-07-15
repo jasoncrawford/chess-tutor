@@ -203,6 +203,18 @@ actor InMemoryRemoteInviteTransport: RemoteInviteTransport {
               let invite = invitesByCode[code] else {
             throw RemoteInviteTransportError.notFound
         }
+        switch invite.status {
+        case .pending:
+            break
+        case .accepted:
+            throw RemoteInviteTransportError.notPending
+        case .cancelled:
+            throw RemoteInviteTransportError.cancelled(inviterDisplayName: invite.inviter.displayName)
+        case .declined:
+            throw RemoteInviteTransportError.declined(inviteeDisplayName: invite.inviteeDisplayName)
+        case .expired:
+            throw RemoteInviteTransportError.expired
+        }
         invitesByCode[code] = RemotePendingInvite(
             id: invite.id,
             code: invite.code,

@@ -762,12 +762,12 @@ struct RemotePlaySheetView: View {
 
         while !Task.isCancelled {
             do {
-                try await Task.sleep(for: .seconds(2))
                 guard case .waitingForInvitee(let currentInvite) = flow.stage,
                       currentInvite.remoteInviteID == inviteID else {
                     return
                 }
                 guard let acceptedInvite = try await onFetchAcceptedRemoteInvite(inviteID) else {
+                    try await Task.sleep(for: .seconds(2))
                     continue
                 }
                 flow.cancel()

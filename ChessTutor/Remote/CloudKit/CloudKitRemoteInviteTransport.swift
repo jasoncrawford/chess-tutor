@@ -340,13 +340,26 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             from: acceptedInvite,
             acceptedAt: request.now
         )
-        let result = try await database.modifyRecords(
-            saving: [acceptanceRecord],
-            deleting: [],
-            savePolicy: .ifServerRecordUnchanged,
-            atomically: true
+        CloudKitPendingInviteRecordCodec.apply(acceptedInvite, to: fetched.record)
+        let result: (
+            saveResults: [CKRecord.ID: Result<CKRecord, any Error>],
+            deleteResults: [CKRecord.ID: Result<Void, any Error>]
         )
-        guard savedRecord(acceptanceRecord.recordID, in: result.saveResults) != nil else {
+        do {
+            result = try await database.modifyRecords(
+                saving: [fetched.record, acceptanceRecord],
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+        } catch {
+            throw await inviteTransitionErrorAfterRejectedSave(
+                id: invite.id,
+                fallback: .notPending
+            )
+        }
+        guard savedRecord(fetched.record.recordID, in: result.saveResults) != nil,
+              savedRecord(acceptanceRecord.recordID, in: result.saveResults) != nil else {
             await diagnosticsLog.append(
                 category: "cloudKitInvite",
                 "acceptSaveRejected",
@@ -355,7 +368,10 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
                     "acceptanceRecordID": acceptanceRecord.recordID.recordName
                 ]
             )
-            throw RemoteInviteTransportError.notPending
+            throw await inviteTransitionErrorAfterRejectedSave(
+                id: invite.id,
+                fallback: .notPending
+            )
         }
         await diagnosticsLog.append(
             category: "cloudKitInvite",
@@ -509,11 +525,10 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
 
     private func updateInviteStatus(id: RemoteInviteID, status: RemoteInviteStatus) async throws {
         let recordID = CKRecord.ID(recordName: id.rawValue)
-        let records = try await database.records(for: [recordID], desiredKeys: nil)
-        guard case .success(let record) = records[recordID] else {
-            throw RemoteInviteTransportError.notFound
+        let (invite, record) = try await currentInviteRecord(id: id)
+        if let terminalError = terminalTransitionError(for: invite) {
+            throw terminalError
         }
-        let invite = try CloudKitPendingInviteRecordCodec.invite(from: record)
         let updatedInvite = RemotePendingInvite(
             id: invite.id,
             code: invite.code,
@@ -528,14 +543,66 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             protocolVersion: invite.protocolVersion
         )
         CloudKitPendingInviteRecordCodec.apply(updatedInvite, to: record)
-        let result = try await database.modifyRecords(
-            saving: [record],
-            deleting: [],
-            savePolicy: .changedKeys,
-            atomically: true
+        let result: (
+            saveResults: [CKRecord.ID: Result<CKRecord, any Error>],
+            deleteResults: [CKRecord.ID: Result<Void, any Error>]
         )
+        do {
+            result = try await database.modifyRecords(
+                saving: [record],
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+        } catch {
+            throw await inviteTransitionErrorAfterRejectedSave(
+                id: id,
+                fallback: .notFound
+            )
+        }
         guard savedRecord(recordID, in: result.saveResults) != nil else {
+            throw await inviteTransitionErrorAfterRejectedSave(
+                id: id,
+                fallback: .notFound
+            )
+        }
+    }
+
+    private func currentInviteRecord(id: RemoteInviteID) async throws -> (RemotePendingInvite, CKRecord) {
+        let recordID = CKRecord.ID(recordName: id.rawValue)
+        let records = try await database.records(for: [recordID], desiredKeys: nil)
+        guard case .success(let record) = records[recordID] else {
             throw RemoteInviteTransportError.notFound
+        }
+        return (try CloudKitPendingInviteRecordCodec.invite(from: record), record)
+    }
+
+    private func inviteTransitionErrorAfterRejectedSave(
+        id: RemoteInviteID,
+        fallback: RemoteInviteTransportError
+    ) async -> RemoteInviteTransportError {
+        do {
+            let (invite, _) = try await currentInviteRecord(id: id)
+            return terminalTransitionError(for: invite) ?? fallback
+        } catch let error as RemoteInviteTransportError {
+            return error
+        } catch {
+            return fallback
+        }
+    }
+
+    private func terminalTransitionError(for invite: RemotePendingInvite) -> RemoteInviteTransportError? {
+        switch invite.status {
+        case .pending:
+            return nil
+        case .accepted:
+            return .notPending
+        case .cancelled:
+            return .cancelled(inviterDisplayName: invite.inviter.displayName)
+        case .declined:
+            return .declined(inviteeDisplayName: invite.inviteeDisplayName)
+        case .expired:
+            return .expired
         }
     }
 

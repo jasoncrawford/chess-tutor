@@ -150,7 +150,7 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
-    func testAcceptInviteeChoosesChosenWhiteSavesSeparateAcceptanceRecordAndUsesConditionalPolicy() async throws {
+    func testAcceptInviteeChoosesChosenWhiteMarksInviteAcceptedAndUsesConditionalPolicy() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
         let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
@@ -168,12 +168,14 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         let storedRecord = await database.record(withID: Self.recordID)
         let savedRecord = try XCTUnwrap(storedRecord)
         let savedInvite = try CloudKitPendingInviteRecordCodec.invite(from: savedRecord)
-        XCTAssertEqual(savedInvite.status, .pending)
+        XCTAssertEqual(savedInvite.status, .accepted)
+        let acceptedFromPendingRecord = try CloudKitPendingInviteRecordCodec.acceptedInvite(from: savedRecord)
+        XCTAssertEqual(acceptedFromPendingRecord, accepted)
         let acceptanceRecord = await database.record(withID: Self.acceptanceRecordID)
         XCTAssertNotNil(acceptanceRecord)
         let lastRequest = await database.lastModifyRequest()
         let requestMetadata = try XCTUnwrap(lastRequest)
-        XCTAssertEqual(requestMetadata.savedRecordIDs, [Self.acceptanceRecordID])
+        XCTAssertEqual(requestMetadata.savedRecordIDs, [Self.recordID, Self.acceptanceRecordID])
         XCTAssertEqual(requestMetadata.savePolicy, .ifServerRecordUnchanged)
         XCTAssertTrue(requestMetadata.atomically)
     }
@@ -283,6 +285,57 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         await XCTAssertThrowsRemoteInviteTransportErrorAsync(.declined(inviteeDisplayName: Self.joiner.displayName),
             try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
         )
+    }
+
+    func testAcceptAfterInviteWasCancelledDuringRaceReportsCancellation() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .invitee)
+        await database.applyServerInviteStatusBeforeNextSave(id: invite.id, status: .cancelled)
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.cancelled(inviterDisplayName: Self.inviter.displayName),
+            try await transport.acceptInvite(
+                JoinRemoteInviteRequest(
+                    code: invite.code,
+                    token: invite.token,
+                    joiner: Self.joiner,
+                    now: Self.joinedAt
+                ),
+                chosenColor: .white
+            )
+        )
+        let acceptanceRecord = await database.record(withID: Self.acceptanceRecordID)
+        XCTAssertNil(acceptanceRecord)
+    }
+
+    func testCancelAfterInviteWasAcceptedDuringRaceDoesNotOverwriteAcceptance() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .invitee)
+        let acceptedInvite = RemoteAcceptedInvite(
+            invite: RemotePendingInvite(
+                id: invite.id,
+                code: invite.code,
+                token: invite.token,
+                inviter: invite.inviter,
+                inviteePlayerID: invite.inviteePlayerID,
+                inviteeDisplayName: invite.inviteeDisplayName,
+                whiteAssignment: invite.whiteAssignment,
+                status: .accepted,
+                createdAt: invite.createdAt,
+                expiresAt: invite.expiresAt,
+                protocolVersion: invite.protocolVersion
+            ),
+            joiner: Self.joiner,
+            joinerColor: .white
+        )
+        await database.applyServerAcceptedInviteBeforeNextSave(acceptedInvite)
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
+            try await transport.cancelInvite(id: invite.id)
+        )
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertEqual(fetchedAcceptance, acceptedInvite)
     }
 
     func testSecondAcceptanceMapsToNotPendingWithoutOverwritingFirstAcceptance() async throws {
@@ -486,10 +539,12 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
     private var subscriptions: [String: CKSubscription] = [:]
     private var failingSaveIDs: Set<CKRecord.ID> = []
     private var failingDeleteIDs: Set<CKRecord.ID> = []
+    private var fetchedRecordIDs: Set<CKRecord.ID> = []
+    private var recordsToApplyBeforeNextSave: [CKRecord.ID: CKRecord] = [:]
     private var requests: [ModifyRecordsRequest] = []
 
     func record(withID id: CKRecord.ID) -> CKRecord? {
-        records[id]
+        records[id].map(clone)
     }
 
     func subscription(withID id: String) -> CKSubscription? {
@@ -499,6 +554,27 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
     func store(_ invite: RemotePendingInvite) {
         let record = CloudKitPendingInviteRecordCodec.record(from: invite)
         records[record.recordID] = record
+    }
+
+    func applyServerInviteStatusBeforeNextSave(id: RemoteInviteID, status: RemoteInviteStatus) {
+        let recordID = CKRecord.ID(recordName: id.rawValue)
+        guard let record = records[recordID] else {
+            return
+        }
+        let updatedRecord = clone(record)
+        updatedRecord["status"] = status.rawValue as CKRecordValue
+        recordsToApplyBeforeNextSave[recordID] = updatedRecord
+    }
+
+    func applyServerAcceptedInviteBeforeNextSave(_ acceptedInvite: RemoteAcceptedInvite) {
+        let pendingRecord = CloudKitPendingInviteRecordCodec.record(from: acceptedInvite.invite)
+        CloudKitPendingInviteRecordCodec.apply(acceptedInvite, to: pendingRecord)
+        let acceptanceRecord = CloudKitInviteAcceptanceRecordCodec.record(
+            from: acceptedInvite,
+            acceptedAt: acceptedInvite.invite.createdAt
+        )
+        recordsToApplyBeforeNextSave[pendingRecord.recordID] = pendingRecord
+        recordsToApplyBeforeNextSave[acceptanceRecord.recordID] = acceptanceRecord
     }
 
     func failSaves(for ids: [CKRecord.ID]) {
@@ -525,7 +601,8 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
         var results: [CKRecord.ID: Result<CKRecord, any Error>] = [:]
         for id in ids {
             if let record = records[id] {
-                results[id] = .success(record)
+                fetchedRecordIDs.insert(id)
+                results[id] = .success(clone(record))
             } else {
                 results[id] = .failure(CKError(.unknownItem))
             }
@@ -548,7 +625,7 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
                 return lhs > rhs
             }
             .prefix(resultsLimit)
-            .map { $0 }
+            .map(clone)
     }
 
     func modifyRecords(
@@ -569,15 +646,47 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
             )
         )
 
+        let serverChangedIDs = Set(recordsToApplyBeforeNextSave.keys)
+        for (id, record) in recordsToApplyBeforeNextSave {
+            records[id] = clone(record)
+            fetchedRecordIDs.remove(id)
+        }
+        recordsToApplyBeforeNextSave = [:]
+
         var saveResults: [CKRecord.ID: Result<CKRecord, any Error>] = [:]
-        for record in recordsToSave {
-            if failingSaveIDs.contains(record.recordID) {
-                saveResults[record.recordID] = .failure(CKError(.serverRecordChanged))
-            } else if savePolicy == .ifServerRecordUnchanged, records[record.recordID] != nil {
-                saveResults[record.recordID] = .failure(CKError(.serverRecordChanged))
-            } else {
-                records[record.recordID] = record
-                saveResults[record.recordID] = .success(record)
+        let saveFailuresByID = Dictionary(
+            uniqueKeysWithValues: recordsToSave.compactMap { record -> (CKRecord.ID, any Error)? in
+                if failingSaveIDs.contains(record.recordID) {
+                    return (record.recordID, CKError(.serverRecordChanged))
+                }
+                if savePolicy == .ifServerRecordUnchanged,
+                   records[record.recordID] != nil,
+                   (!fetchedRecordIDs.contains(record.recordID) || serverChangedIDs.contains(record.recordID)) {
+                    return (record.recordID, CKError(.serverRecordChanged))
+                }
+                return nil
+            }
+        )
+
+        if atomically, !saveFailuresByID.isEmpty {
+            for record in recordsToSave {
+                saveResults[record.recordID] = .failure(
+                    saveFailuresByID[record.recordID] ?? CKError(.batchRequestFailed)
+                )
+            }
+        } else {
+            for record in recordsToSave {
+                if failingSaveIDs.contains(record.recordID) {
+                    saveResults[record.recordID] = .failure(CKError(.serverRecordChanged))
+                } else if savePolicy == .ifServerRecordUnchanged,
+                          records[record.recordID] != nil,
+                          (!fetchedRecordIDs.contains(record.recordID) || serverChangedIDs.contains(record.recordID)) {
+                    saveResults[record.recordID] = .failure(CKError(.serverRecordChanged))
+                } else {
+                    records[record.recordID] = clone(record)
+                    fetchedRecordIDs.remove(record.recordID)
+                    saveResults[record.recordID] = .success(record)
+                }
             }
         }
 
@@ -592,6 +701,10 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
         }
 
         return (saveResults: saveResults, deleteResults: deleteResults)
+    }
+
+    private func clone(_ record: CKRecord) -> CKRecord {
+        record.copy() as! CKRecord
     }
 }
 

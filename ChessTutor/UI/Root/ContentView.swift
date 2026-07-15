@@ -139,6 +139,7 @@ struct ContentView: View {
             resumeRemoteSyncIfNeeded()
             prepareIncomingRemoteInviteNotificationIfPossible()
             startIncomingRemoteInvitePollLoopIfNeeded()
+            replayBufferedRemotePushNotifications()
         }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
@@ -1095,6 +1096,35 @@ struct ContentView: View {
         }
     }
 
+    private func replayBufferedRemotePushNotifications() {
+        let events = RemotePushNotificationInbox.shared.drain()
+        guard !events.isEmpty else {
+            return
+        }
+        logDiagnostics(
+            category: "push",
+            "replayingBufferedEvents",
+            fields: ["count": "\(events.count)"]
+        )
+        for event in events {
+            switch event {
+            case .remoteInviteAcceptance(let inviteID):
+                fetchAcceptedInviteAfterPush(id: inviteID)
+            case .remotePendingInvite(let playerID):
+                guard (try? remoteIdentityStore.loadLocalProfile().id) == playerID else {
+                    continue
+                }
+                Task { @MainActor in
+                    await fetchIncomingRemoteInviteIfNeeded()
+                }
+            case .remoteGameMove(let gameID):
+                fetchRemoteMovesAfterPush(gameID: gameID)
+            case .remoteGameStatus(let gameID):
+                fetchRemoteGameStatusAfterPush(gameID: gameID)
+            }
+        }
+    }
+
     private func startRemoteMoveFetchLoopIfNeeded() {
         guard remoteLifecycle.activeRemoteGameController != nil,
               !session.localCanActForCurrentTurn else {
@@ -1113,14 +1143,6 @@ struct ContentView: View {
                     remoteMoveFetchTask = nil
                     return
                 }
-
-                let didEnd = await fetchRemoteGameStatusIfNeeded()
-                if didEnd {
-                    remoteMoveFetchTask = nil
-                    return
-                }
-
-                await fetchRemotePresenceIfNeeded()
 
                 do {
                     let appliedMoves = try await activeRemoteGameController.fetchAndApplyRemoteMoves(to: session)
@@ -1150,6 +1172,14 @@ struct ContentView: View {
                         session.message = RemoteSyncMessage.fetchFailed
                     }
                 }
+
+                let didEnd = await fetchRemoteGameStatusIfNeeded()
+                if didEnd {
+                    remoteMoveFetchTask = nil
+                    return
+                }
+
+                await fetchRemotePresenceIfNeeded()
 
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }

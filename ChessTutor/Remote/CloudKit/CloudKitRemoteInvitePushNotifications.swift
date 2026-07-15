@@ -25,6 +25,35 @@ enum RemoteGameStatusPushUserInfoKey {
     static let gameID = "gameID"
 }
 
+enum RemotePushNotificationEvent: Equatable {
+    case remoteInviteAcceptance(RemoteInviteID)
+    case remotePendingInvite(RemotePlayerID)
+    case remoteGameMove(RemoteGameID)
+    case remoteGameStatus(RemoteGameID)
+}
+
+final class RemotePushNotificationInbox: @unchecked Sendable {
+    static let shared = RemotePushNotificationInbox()
+
+    private let lock = NSLock()
+    private var events: [RemotePushNotificationEvent] = []
+
+    private init() {}
+
+    func record(_ event: RemotePushNotificationEvent) {
+        lock.withLock {
+            events.append(event)
+        }
+    }
+
+    func drain() -> [RemotePushNotificationEvent] {
+        lock.withLock {
+            defer { events.removeAll() }
+            return events
+        }
+    }
+}
+
 final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -53,6 +82,7 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let gameID = CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscriptionID) {
+            bufferForReplayIfNeeded(.remoteGameStatus(gameID), application: application)
             Task {
                 await DiagnosticsLog.shared.append(
                     category: "push",
@@ -70,6 +100,7 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let gameID = CloudKitRemoteGameTransport.gameID(fromMoveSubscriptionID: subscriptionID) {
+            bufferForReplayIfNeeded(.remoteGameMove(gameID), application: application)
             Task {
                 await DiagnosticsLog.shared.append(
                     category: "push",
@@ -87,6 +118,7 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: subscriptionID) {
+            bufferForReplayIfNeeded(.remoteInviteAcceptance(inviteID), application: application)
             Task {
                 await DiagnosticsLog.shared.append(
                     category: "push",
@@ -104,6 +136,7 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromStatusSubscriptionID: subscriptionID) {
+            bufferForReplayIfNeeded(.remoteInviteAcceptance(inviteID), application: application)
             Task {
                 await DiagnosticsLog.shared.append(
                     category: "push",
@@ -121,6 +154,7 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         }
 
         if let playerID = CloudKitRemoteInviteTransport.playerID(fromIncomingInviteSubscriptionID: subscriptionID) {
+            bufferForReplayIfNeeded(.remotePendingInvite(playerID), application: application)
             Task {
                 await DiagnosticsLog.shared.append(
                     category: "push",
@@ -145,5 +179,12 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
             )
         }
         completionHandler(.noData)
+    }
+
+    private func bufferForReplayIfNeeded(_ event: RemotePushNotificationEvent, application: UIApplication) {
+        guard application.applicationState != .active else {
+            return
+        }
+        RemotePushNotificationInbox.shared.record(event)
     }
 }
