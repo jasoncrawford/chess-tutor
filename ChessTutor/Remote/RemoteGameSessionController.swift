@@ -80,6 +80,12 @@ final class RemoteGameSessionController {
             throw error
         }
         var appliedMoves: [Move] = []
+        if !events.isEmpty,
+           PositionFingerprinting.fingerprint(for: session.state)
+            == PositionFingerprinting.fingerprint(for: nextCoordinator.projectedState) {
+            coordinator = nextCoordinator
+            return []
+        }
 
         for event in events {
             let move = try RemoteMoveCodec.decode(event.move)

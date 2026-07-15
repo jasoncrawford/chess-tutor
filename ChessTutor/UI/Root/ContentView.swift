@@ -437,16 +437,18 @@ struct ContentView: View {
             fields: [
                 "target": diagnosticsTargetName(target),
                 "whiteChoice": "\(whiteChoice)",
-                "localPlayerID": profile.id.rawValue
+                "localPlayerID": profile.id.rawValue,
+                "inviteePlayerID": remoteInviteePlayerID(for: target)?.rawValue ?? "none"
             ]
         )
+        let notificationBody = remoteInviteNotificationBody(inviterDisplayName: displayName, target: target)
         let invite = try await remoteInviteTransport.createInvite(
             CreateRemoteInviteRequest(
                 inviter: RemotePlayerRef(id: profile.id, displayName: displayName),
                 inviteePlayerID: remoteInviteePlayerID(for: target),
                 inviteeDisplayName: remoteInviteeDisplayName(for: target),
                 whiteAssignment: remoteWhiteAssignment(from: whiteChoice),
-                notificationBody: remoteInviteNotificationBody(inviterDisplayName: displayName, target: target),
+                notificationBody: notificationBody,
                 now: now,
                 expiresAt: now.addingTimeInterval(10 * 60)
             )
@@ -459,7 +461,9 @@ struct ContentView: View {
                 "inviteID": invite.id.rawValue,
                 "code": invite.code.rawValue,
                 "tokenSuffix": DiagnosticsLog.tokenSuffix(invite.token),
-                "whiteAssignment": invite.whiteAssignment.rawValue
+                "whiteAssignment": invite.whiteAssignment.rawValue,
+                "inviteePlayerID": invite.inviteePlayerID?.rawValue ?? "none",
+                "notificationBody": notificationBody
             ]
         )
         return invite
@@ -1018,12 +1022,34 @@ struct ContentView: View {
         Task {
             let center = UNUserNotificationCenter.current()
             let settings = await center.notificationSettings()
+            logDiagnostics(
+                category: "notifications",
+                "authorizationStatusChecked",
+                fields: [
+                    "status": RemoteNotificationPermissionPolicy.diagnosticsName(
+                        for: settings.authorizationStatus
+                    )
+                ]
+            )
             guard RemoteNotificationPermissionPolicy.shouldRequestAuthorization(
                 for: settings.authorizationStatus
             ) else {
                 return
             }
-            _ = try? await center.requestAuthorization(options: [.alert])
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert])
+                logDiagnostics(
+                    category: "notifications",
+                    "authorizationRequested",
+                    fields: ["granted": granted ? "true" : "false"]
+                )
+            } catch {
+                logDiagnostics(
+                    category: "notifications",
+                    "authorizationRequestFailed",
+                    fields: ["error": String(describing: error)]
+                )
+            }
         }
     }
 
@@ -1032,6 +1058,7 @@ struct ContentView: View {
               profile.displayName != nil else {
             return
         }
+        requestRemoteNotificationAuthorizationIfNeeded()
         prepareIncomingRemoteInviteNotification(for: profile.id)
     }
 

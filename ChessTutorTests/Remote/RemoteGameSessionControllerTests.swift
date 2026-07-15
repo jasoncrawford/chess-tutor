@@ -96,6 +96,35 @@ final class RemoteGameSessionControllerTests: XCTestCase {
         XCTAssertEqual(restoredController.snapshot.lastAppliedSequence, 2)
     }
 
+    func testFetchReconcilesRemoteMoveAlreadyAppliedToSession() async throws {
+        let transport = InMemoryRemoteGameTransport()
+        let remoteMove = Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4))
+        let event = makeRemoteMoveEvent(
+            sequence: 1,
+            actor: whiteID,
+            move: remoteMove,
+            startingFrom: .startingPosition()
+        )
+        await transport.storeForTesting(event)
+        let blackSession = GameSession()
+        blackSession.whitePlayer = .remote(playerID: whiteID.rawValue)
+        blackSession.blackPlayer = .humanLocal
+        let controller = RemoteGameSessionController(
+            descriptor: descriptor(localPlayerID: blackID),
+            transport: transport,
+            initialState: .startingPosition()
+        )
+        XCTAssertTrue(blackSession.commitRemoteMove(remoteMove))
+
+        let fetchedMoves = try await controller.fetchAndApplyRemoteMoves(to: blackSession)
+
+        XCTAssertEqual(fetchedMoves, [])
+        XCTAssertNil(blackSession.message)
+        XCTAssertEqual(controller.snapshot.lastAppliedSequence, 1)
+        XCTAssertEqual(blackSession.state.sideToMove, .black)
+        XCTAssertTrue(blackSession.localCanActForCurrentTurn)
+    }
+
     private let gameID = RemoteGameID(rawValue: "game-1")
     private let whiteID = RemotePlayerID(rawValue: "white")
     private let blackID = RemotePlayerID(rawValue: "black")

@@ -10,4 +10,12 @@ final class RemoteNotificationPermissionPolicyTests: XCTestCase {
         XCTAssertFalse(RemoteNotificationPermissionPolicy.shouldRequestAuthorization(for: .provisional))
         XCTAssertFalse(RemoteNotificationPermissionPolicy.shouldRequestAuthorization(for: .ephemeral))
     }
+
+    func testDiagnosticsNameDescribesAuthorizationStatus() {
+        XCTAssertEqual(RemoteNotificationPermissionPolicy.diagnosticsName(for: .notDetermined), "notDetermined")
+        XCTAssertEqual(RemoteNotificationPermissionPolicy.diagnosticsName(for: .denied), "denied")
+        XCTAssertEqual(RemoteNotificationPermissionPolicy.diagnosticsName(for: .authorized), "authorized")
+        XCTAssertEqual(RemoteNotificationPermissionPolicy.diagnosticsName(for: .provisional), "provisional")
+        XCTAssertEqual(RemoteNotificationPermissionPolicy.diagnosticsName(for: .ephemeral), "ephemeral")
+    }
 }

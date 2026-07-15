@@ -321,12 +321,14 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
 
         try await transport.prepareAcceptanceNotification(for: invite)
 
-        let storedSubscription = await database.subscription(withID: "pending-invite-accepted-428193")
-        let subscription = try XCTUnwrap(storedSubscription)
-        XCTAssertEqual(subscription.subscriptionID, "pending-invite-accepted-428193")
-        let querySubscription = try XCTUnwrap(subscription as? CKQuerySubscription)
-        XCTAssertEqual(querySubscription.recordType, CloudKitInviteAcceptanceRecordCodec.recordType)
-        XCTAssertEqual(querySubscription.notificationInfo?.shouldSendContentAvailable, true)
+        let storedAcceptanceSubscription = await database.subscription(withID: "pending-invite-accepted-428193")
+        let acceptanceSubscription = try XCTUnwrap(storedAcceptanceSubscription as? CKQuerySubscription)
+        XCTAssertEqual(acceptanceSubscription.recordType, CloudKitInviteAcceptanceRecordCodec.recordType)
+        XCTAssertEqual(acceptanceSubscription.notificationInfo?.shouldSendContentAvailable, true)
+        let storedStatusSubscription = await database.subscription(withID: "pending-invite-status-428193")
+        let statusSubscription = try XCTUnwrap(storedStatusSubscription as? CKQuerySubscription)
+        XCTAssertEqual(statusSubscription.recordType, CloudKitPendingInviteRecordCodec.recordType)
+        XCTAssertEqual(statusSubscription.notificationInfo?.shouldSendContentAvailable, true)
     }
 
     func testPreparingIncomingInviteNotificationSavesAddressedInviteSubscription() async throws {
@@ -354,6 +356,18 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
         XCTAssertNil(
             CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: "remote-game-moves-game-1")
+        )
+    }
+
+    func testInviteStatusSubscriptionIDParsesInviteIDForPushNotificationRouting() {
+        XCTAssertEqual(
+            CloudKitRemoteInviteTransport.inviteID(
+                fromStatusSubscriptionID: "pending-invite-status-428193"
+            ),
+            RemoteInviteID(rawValue: "428193")
+        )
+        XCTAssertNil(
+            CloudKitRemoteInviteTransport.inviteID(fromStatusSubscriptionID: "remote-game-moves-game-1")
         )
     }
 

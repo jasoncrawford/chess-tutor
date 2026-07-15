@@ -103,6 +103,23 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
             return
         }
 
+        if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromStatusSubscriptionID: subscriptionID) {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "remoteInviteStatus",
+                    fields: ["inviteID": inviteID.rawValue, "subscriptionID": subscriptionID]
+                )
+            }
+            NotificationCenter.default.post(
+                name: .remoteInviteAcceptanceMayHaveChanged,
+                object: nil,
+                userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: inviteID.rawValue]
+            )
+            completionHandler(.newData)
+            return
+        }
+
         if let playerID = CloudKitRemoteInviteTransport.playerID(fromIncomingInviteSubscriptionID: subscriptionID) {
             Task {
                 await DiagnosticsLog.shared.append(
