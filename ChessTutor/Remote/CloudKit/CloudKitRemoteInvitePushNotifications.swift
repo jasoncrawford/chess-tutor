@@ -32,6 +32,82 @@ enum RemotePushNotificationEvent: Equatable {
     case remoteGameStatus(RemoteGameID)
 }
 
+enum RemotePushNotificationRouting {
+    struct RoutedNotification: Equatable {
+        let event: RemotePushNotificationEvent
+        let name: Notification.Name
+        let userInfo: [String: String]
+        let diagnosticsName: String
+        let diagnosticsFields: [String: String]
+    }
+
+    static func route(subscriptionID: String) -> RoutedNotification? {
+        if let gameID = CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscriptionID) {
+            return RoutedNotification(
+                event: .remoteGameStatus(gameID),
+                name: .remoteGameStatusMayHaveChanged,
+                userInfo: [RemoteGameStatusPushUserInfoKey.gameID: gameID.rawValue],
+                diagnosticsName: "remoteGameStatus",
+                diagnosticsFields: ["gameID": gameID.rawValue, "subscriptionID": subscriptionID]
+            )
+        }
+
+        if let gameID = CloudKitRemoteGameTransport.gameID(fromMoveSubscriptionID: subscriptionID) {
+            return RoutedNotification(
+                event: .remoteGameMove(gameID),
+                name: .remoteGameMovesMayHaveChanged,
+                userInfo: [RemoteGameMovePushUserInfoKey.gameID: gameID.rawValue],
+                diagnosticsName: "remoteGameMove",
+                diagnosticsFields: ["gameID": gameID.rawValue, "subscriptionID": subscriptionID]
+            )
+        }
+
+        if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: subscriptionID) {
+            return RoutedNotification(
+                event: .remoteInviteAcceptance(inviteID),
+                name: .remoteInviteAcceptanceMayHaveChanged,
+                userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: inviteID.rawValue],
+                diagnosticsName: "remoteInviteAcceptance",
+                diagnosticsFields: ["inviteID": inviteID.rawValue, "subscriptionID": subscriptionID]
+            )
+        }
+
+        if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromStatusSubscriptionID: subscriptionID) {
+            return RoutedNotification(
+                event: .remoteInviteAcceptance(inviteID),
+                name: .remoteInviteAcceptanceMayHaveChanged,
+                userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: inviteID.rawValue],
+                diagnosticsName: "remoteInviteStatus",
+                diagnosticsFields: ["inviteID": inviteID.rawValue, "subscriptionID": subscriptionID]
+            )
+        }
+
+        if let playerID = CloudKitRemoteInviteTransport.playerID(fromIncomingInviteSubscriptionID: subscriptionID) {
+            return RoutedNotification(
+                event: .remotePendingInvite(playerID),
+                name: .remotePendingInvitesMayHaveChanged,
+                userInfo: [RemotePendingInvitePushUserInfoKey.playerID: playerID.rawValue],
+                diagnosticsName: "remotePendingInvite",
+                diagnosticsFields: ["playerID": playerID.rawValue, "subscriptionID": subscriptionID]
+            )
+        }
+
+        return nil
+    }
+
+    @discardableResult
+    static func recordLaunchNotification(
+        subscriptionID: String,
+        inbox: RemotePushNotificationInbox = .shared
+    ) -> RoutedNotification? {
+        guard let routedNotification = route(subscriptionID: subscriptionID) else {
+            return nil
+        }
+        inbox.record(routedNotification.event)
+        return routedNotification
+    }
+}
+
 final class RemotePushNotificationInbox: @unchecked Sendable {
     static let shared = RemotePushNotificationInbox()
 
@@ -65,6 +141,9 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
                 category: "push",
                 "registrationRequested"
             )
+        }
+        if let userInfo = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            handleLaunchRemoteNotification(userInfo)
         }
         return true
     }
@@ -113,91 +192,13 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
             return
         }
 
-        if let gameID = CloudKitRemoteGameTransport.gameID(fromStatusSubscriptionID: subscriptionID) {
-            bufferForReplayIfNeeded(.remoteGameStatus(gameID), application: application)
-            Task {
-                await DiagnosticsLog.shared.append(
-                    category: "push",
-                    "remoteGameStatus",
-                    fields: ["gameID": gameID.rawValue, "subscriptionID": subscriptionID]
-                )
-            }
+        if let routedNotification = RemotePushNotificationRouting.route(subscriptionID: subscriptionID) {
+            bufferForReplayIfNeeded(routedNotification.event, application: application)
+            logRoutedNotification(routedNotification)
             NotificationCenter.default.post(
-                name: .remoteGameStatusMayHaveChanged,
+                name: routedNotification.name,
                 object: nil,
-                userInfo: [RemoteGameStatusPushUserInfoKey.gameID: gameID.rawValue]
-            )
-            completionHandler(.newData)
-            return
-        }
-
-        if let gameID = CloudKitRemoteGameTransport.gameID(fromMoveSubscriptionID: subscriptionID) {
-            bufferForReplayIfNeeded(.remoteGameMove(gameID), application: application)
-            Task {
-                await DiagnosticsLog.shared.append(
-                    category: "push",
-                    "remoteGameMove",
-                    fields: ["gameID": gameID.rawValue, "subscriptionID": subscriptionID]
-                )
-            }
-            NotificationCenter.default.post(
-                name: .remoteGameMovesMayHaveChanged,
-                object: nil,
-                userInfo: [RemoteGameMovePushUserInfoKey.gameID: gameID.rawValue]
-            )
-            completionHandler(.newData)
-            return
-        }
-
-        if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromAcceptanceSubscriptionID: subscriptionID) {
-            bufferForReplayIfNeeded(.remoteInviteAcceptance(inviteID), application: application)
-            Task {
-                await DiagnosticsLog.shared.append(
-                    category: "push",
-                    "remoteInviteAcceptance",
-                    fields: ["inviteID": inviteID.rawValue, "subscriptionID": subscriptionID]
-                )
-            }
-            NotificationCenter.default.post(
-                name: .remoteInviteAcceptanceMayHaveChanged,
-                object: nil,
-                userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: inviteID.rawValue]
-            )
-            completionHandler(.newData)
-            return
-        }
-
-        if let inviteID = CloudKitRemoteInviteTransport.inviteID(fromStatusSubscriptionID: subscriptionID) {
-            bufferForReplayIfNeeded(.remoteInviteAcceptance(inviteID), application: application)
-            Task {
-                await DiagnosticsLog.shared.append(
-                    category: "push",
-                    "remoteInviteStatus",
-                    fields: ["inviteID": inviteID.rawValue, "subscriptionID": subscriptionID]
-                )
-            }
-            NotificationCenter.default.post(
-                name: .remoteInviteAcceptanceMayHaveChanged,
-                object: nil,
-                userInfo: [RemoteInviteAcceptancePushUserInfoKey.inviteID: inviteID.rawValue]
-            )
-            completionHandler(.newData)
-            return
-        }
-
-        if let playerID = CloudKitRemoteInviteTransport.playerID(fromIncomingInviteSubscriptionID: subscriptionID) {
-            bufferForReplayIfNeeded(.remotePendingInvite(playerID), application: application)
-            Task {
-                await DiagnosticsLog.shared.append(
-                    category: "push",
-                    "remotePendingInvite",
-                    fields: ["playerID": playerID.rawValue, "subscriptionID": subscriptionID]
-                )
-            }
-            NotificationCenter.default.post(
-                name: .remotePendingInvitesMayHaveChanged,
-                object: nil,
-                userInfo: [RemotePendingInvitePushUserInfoKey.playerID: playerID.rawValue]
+                userInfo: routedNotification.userInfo
             )
             completionHandler(.newData)
             return
@@ -213,10 +214,56 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         completionHandler(.noData)
     }
 
+    private func handleLaunchRemoteNotification(_ userInfo: [AnyHashable: Any]) {
+        guard let queryNotification = CKNotification(fromRemoteNotificationDictionary: userInfo) as? CKQueryNotification,
+              let subscriptionID = queryNotification.subscriptionID else {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "launchIgnored",
+                    fields: ["reason": "notQueryNotification"]
+                )
+            }
+            return
+        }
+
+        guard let routedNotification = RemotePushNotificationRouting.recordLaunchNotification(
+            subscriptionID: subscriptionID
+        ) else {
+            Task {
+                await DiagnosticsLog.shared.append(
+                    category: "push",
+                    "launchIgnored",
+                    fields: ["reason": "unknownSubscription", "subscriptionID": subscriptionID]
+                )
+            }
+            return
+        }
+
+        logRoutedNotification(
+            routedNotification,
+            extraFields: ["source": "launchOptions"]
+        )
+    }
+
     private func bufferForReplayIfNeeded(_ event: RemotePushNotificationEvent, application: UIApplication) {
         guard application.applicationState != .active else {
             return
         }
         RemotePushNotificationInbox.shared.record(event)
+    }
+
+    private func logRoutedNotification(
+        _ routedNotification: RemotePushNotificationRouting.RoutedNotification,
+        extraFields: [String: String] = [:]
+    ) {
+        Task {
+            await DiagnosticsLog.shared.append(
+                category: "push",
+                routedNotification.diagnosticsName,
+                fields: routedNotification.diagnosticsFields
+                    .merging(extraFields) { current, _ in current }
+            )
+        }
     }
 }

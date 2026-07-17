@@ -146,6 +146,19 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         )
     }
 
+    func testPrepareGameStatusNotificationSurfacesSubscriptionSaveFailure() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        await database.failSubscriptionSaves(with: CKError(.networkUnavailable))
+        let transport = CloudKitRemoteGameTransport(database: database)
+
+        do {
+            try await transport.prepareGameStatusNotification(gameID: Self.gameID)
+            XCTFail("Expected prepareGameStatusNotification to surface the subscription save failure")
+        } catch let error as CKError {
+            XCTAssertEqual(error.code, .networkUnavailable)
+        }
+    }
+
     func testUpdatePresenceSavesAndFetchesPresenceRecord() async throws {
         let database = InMemoryCloudKitGameDatabase()
         let transport = CloudKitRemoteGameTransport(database: database)
