@@ -87,6 +87,27 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         )
     }
 
+    func testPrepareMoveNotificationSurfacesSubscriptionSaveFailure() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        await database.failSubscriptionSaves(with: CKError(.networkUnavailable))
+        let transport = CloudKitRemoteGameTransport(database: database)
+        let descriptor = RemoteGameDescriptor(
+            id: Self.gameID,
+            protocolVersion: 1,
+            status: .active,
+            whitePlayer: RemotePlayerRef(id: Self.whiteID, displayName: "White"),
+            blackPlayer: RemotePlayerRef(id: Self.blackID, displayName: "Black"),
+            localPlayerID: Self.whiteID
+        )
+
+        do {
+            try await transport.prepareMoveNotification(for: descriptor)
+            XCTFail("Expected prepareMoveNotification to surface the subscription save failure")
+        } catch let error as CKError {
+            XCTAssertEqual(error.code, .networkUnavailable)
+        }
+    }
+
     func testUpdateGameStatusSavesAndFetchesStatusRecord() async throws {
         let database = InMemoryCloudKitGameDatabase()
         let transport = CloudKitRemoteGameTransport(database: database)
@@ -204,6 +225,7 @@ private actor InMemoryCloudKitGameDatabase: CloudKitGameDatabase {
     private var records: [CKRecord.ID: CKRecord] = [:]
     private var failingSaveIDs: Set<CKRecord.ID> = []
     private var fetchFailures: [CKRecord.ID: any Error] = [:]
+    private var subscriptionSaveFailure: (any Error)?
     private var requests: [ModifyGameRecordsRequest] = []
     private var subscriptions: [CKSubscription] = []
 
@@ -226,6 +248,10 @@ private actor InMemoryCloudKitGameDatabase: CloudKitGameDatabase {
         }
     }
 
+    func failSubscriptionSaves(with error: any Error) {
+        subscriptionSaveFailure = error
+    }
+
     func lastModifyRequest() -> ModifyGameRecordsRequest? {
         requests.last
     }
@@ -235,6 +261,9 @@ private actor InMemoryCloudKitGameDatabase: CloudKitGameDatabase {
     }
 
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
+        if let subscriptionSaveFailure {
+            throw subscriptionSaveFailure
+        }
         subscriptions.append(subscription)
         return subscription
     }

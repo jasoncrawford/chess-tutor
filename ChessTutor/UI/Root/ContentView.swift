@@ -1001,21 +1001,67 @@ struct ContentView: View {
 
     private func prepareRemoteMoveNotification(for descriptor: RemoteGameDescriptor) {
         guard let notificationPreparing = remoteGameTransport as? any RemoteGameMoveNotificationPreparing else {
+            logDiagnostics(
+                category: "notifications",
+                "moveSubscriptionUnsupported",
+                fields: ["gameID": descriptor.id.rawValue]
+            )
             return
         }
 
         Task {
-            try? await notificationPreparing.prepareMoveNotification(for: descriptor)
+            do {
+                try await notificationPreparing.prepareMoveNotification(for: descriptor)
+                logDiagnostics(
+                    category: "notifications",
+                    "moveSubscriptionPrepared",
+                    fields: [
+                        "gameID": descriptor.id.rawValue,
+                        "localPlayerID": descriptor.localPlayerID.rawValue
+                    ]
+                )
+            } catch {
+                logDiagnostics(
+                    category: "notifications",
+                    "moveSubscriptionFailed",
+                    fields: [
+                        "gameID": descriptor.id.rawValue,
+                        "localPlayerID": descriptor.localPlayerID.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
+            }
         }
     }
 
     private func prepareRemoteGameStatusNotification(for gameID: RemoteGameID) {
         guard let notificationPreparing = remoteGameTransport as? any RemoteGameLifecycleNotificationPreparing else {
+            logDiagnostics(
+                category: "notifications",
+                "statusSubscriptionUnsupported",
+                fields: ["gameID": gameID.rawValue]
+            )
             return
         }
 
         Task {
-            try? await notificationPreparing.prepareGameStatusNotification(gameID: gameID)
+            do {
+                try await notificationPreparing.prepareGameStatusNotification(gameID: gameID)
+                logDiagnostics(
+                    category: "notifications",
+                    "statusSubscriptionPrepared",
+                    fields: ["gameID": gameID.rawValue]
+                )
+            } catch {
+                logDiagnostics(
+                    category: "notifications",
+                    "statusSubscriptionFailed",
+                    fields: [
+                        "gameID": gameID.rawValue,
+                        "error": String(describing: error)
+                    ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+                )
+            }
         }
     }
 
@@ -1082,15 +1128,33 @@ struct ContentView: View {
 
     private func fetchRemoteMovesAfterPush(gameID: RemoteGameID) {
         guard remoteLifecycle.activeRemoteGameController?.gameID == gameID else {
+            logDiagnostics(
+                category: "push",
+                "remoteGameMoveIgnored",
+                fields: [
+                    "gameID": gameID.rawValue,
+                    "activeGameID": remoteLifecycle.activeRemoteGameController?.gameID.rawValue ?? "none"
+                ]
+            )
             return
         }
+        logDiagnostics(category: "push", "remoteGameMoveHandled", fields: ["gameID": gameID.rawValue])
         startRemoteMoveFetchLoopIfNeeded()
     }
 
     private func fetchRemoteGameStatusAfterPush(gameID: RemoteGameID) {
         guard remoteLifecycle.activeRemoteGameController?.gameID == gameID else {
+            logDiagnostics(
+                category: "push",
+                "remoteGameStatusIgnored",
+                fields: [
+                    "gameID": gameID.rawValue,
+                    "activeGameID": remoteLifecycle.activeRemoteGameController?.gameID.rawValue ?? "none"
+                ]
+            )
             return
         }
+        logDiagnostics(category: "push", "remoteGameStatusHandled", fields: ["gameID": gameID.rawValue])
         Task { @MainActor in
             await fetchRemoteGameStatusIfNeeded()
         }

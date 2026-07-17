@@ -60,7 +60,39 @@ final class ChessTutorAppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         application.registerForRemoteNotifications()
+        Task {
+            await DiagnosticsLog.shared.append(
+                category: "push",
+                "registrationRequested"
+            )
+        }
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        Task {
+            await DiagnosticsLog.shared.append(
+                category: "push",
+                "registrationSucceeded",
+                fields: ["deviceTokenBytes": "\(deviceToken.count)"]
+            )
+        }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: any Error
+    ) {
+        Task {
+            await DiagnosticsLog.shared.append(
+                category: "push",
+                "registrationFailed",
+                fields: ["error": String(describing: error)]
+            )
+        }
     }
 
     func application(
