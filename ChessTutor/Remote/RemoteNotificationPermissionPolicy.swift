@@ -5,6 +5,10 @@ enum RemoteNotificationPermissionPolicy {
         status == .notDetermined
     }
 
+    static func shouldRegisterAfterAuthorizationRequest(granted: Bool) -> Bool {
+        granted
+    }
+
     static func diagnosticsName(for status: UNAuthorizationStatus) -> String {
         switch status {
         case .notDetermined:

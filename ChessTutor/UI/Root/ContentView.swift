@@ -1090,6 +1090,16 @@ struct ContentView: View {
                     "authorizationRequested",
                     fields: ["granted": granted ? "true" : "false"]
                 )
+                if RemoteNotificationPermissionPolicy.shouldRegisterAfterAuthorizationRequest(granted: granted) {
+                    await MainActor.run {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                    logDiagnostics(
+                        category: "notifications",
+                        "registrationRequestedAfterAuthorization",
+                        fields: ["granted": "true"]
+                    )
+                }
             } catch {
                 logDiagnostics(
                     category: "notifications",
