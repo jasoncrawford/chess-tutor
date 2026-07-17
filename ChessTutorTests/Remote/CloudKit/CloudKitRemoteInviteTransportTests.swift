@@ -150,7 +150,7 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
-    func testAcceptInviteeChoosesChosenWhiteMarksInviteAcceptedAndUsesConditionalPolicy() async throws {
+    func testAcceptInviteeChoosesChosenWhiteWritesPendingInviteAndResponseRecordConditionally() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
         let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
@@ -173,11 +173,64 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(acceptedFromPendingRecord, accepted)
         let acceptanceRecord = await database.record(withID: Self.acceptanceRecordID)
         XCTAssertNotNil(acceptanceRecord)
-        let lastRequest = await database.lastModifyRequest()
-        let requestMetadata = try XCTUnwrap(lastRequest)
-        XCTAssertEqual(requestMetadata.savedRecordIDs, [Self.recordID, Self.acceptanceRecordID])
-        XCTAssertEqual(requestMetadata.savePolicy, .ifServerRecordUnchanged)
-        XCTAssertTrue(requestMetadata.atomically)
+        let requests = await database.modifyRequests()
+        let acceptRequests = Array(requests.suffix(2))
+        XCTAssertEqual(acceptRequests.map(\.savedRecordIDs), [[Self.recordID], [Self.acceptanceRecordID]])
+        XCTAssertEqual(acceptRequests.map(\.savePolicy), [.ifServerRecordUnchanged, .ifServerRecordUnchanged])
+        XCTAssertEqual(acceptRequests.map(\.atomically), [true, true])
+    }
+
+    func testAcceptSucceedsWhenResponseRecordCannotBeSavedAfterPendingInviteIsAccepted() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        await database.failSaves(for: [Self.acceptanceRecordID])
+
+        let accepted = try await transport.acceptInvite(
+            JoinRemoteInviteRequest(
+                code: invite.code,
+                token: invite.token,
+                joiner: Self.joiner,
+                now: Self.joinedAt
+            ),
+            chosenColor: .black
+        )
+
+        XCTAssertEqual(accepted.joinerColor, .black)
+        let storedRecord = await database.record(withID: Self.recordID)
+        let savedRecord = try XCTUnwrap(storedRecord)
+        XCTAssertEqual(try CloudKitPendingInviteRecordCodec.acceptedInvite(from: savedRecord), accepted)
+        let acceptanceRecord = await database.record(withID: Self.acceptanceRecordID)
+        XCTAssertNil(acceptanceRecord)
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertEqual(fetchedAcceptance, accepted)
+    }
+
+    func testAcceptSucceedsWhenPendingInviteCannotBeUpdatedButResponseRecordIsSaved() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        await database.failSaves(for: [Self.recordID])
+
+        let accepted = try await transport.acceptInvite(
+            JoinRemoteInviteRequest(
+                code: invite.code,
+                token: invite.token,
+                joiner: Self.joiner,
+                now: Self.joinedAt
+            ),
+            chosenColor: .white
+        )
+
+        XCTAssertEqual(accepted.joinerColor, .white)
+        let storedRecord = await database.record(withID: Self.recordID)
+        let savedRecord = try XCTUnwrap(storedRecord)
+        let savedInvite = try CloudKitPendingInviteRecordCodec.invite(from: savedRecord)
+        XCTAssertEqual(savedInvite.status, .pending)
+        let acceptanceRecord = await database.record(withID: Self.acceptanceRecordID)
+        XCTAssertNotNil(acceptanceRecord)
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertEqual(fetchedAcceptance, accepted)
     }
 
     func testAcceptFixedWhiteAssignmentAllowsOmittedOrMatchingChosenColor() async throws {
@@ -471,11 +524,11 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         )
     }
 
-    func testAcceptInviteRecordLevelSaveFailureMapsToNotPending() async throws {
+    func testAcceptFailsWhenNeitherPendingInviteNorResponseRecordCanBeSaved() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
         let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
-        await database.failSaves(for: [Self.acceptanceRecordID])
+        await database.failSaves(for: [Self.recordID, Self.acceptanceRecordID])
 
         await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
             try await transport.acceptInvite(
@@ -622,6 +675,10 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
 
     func lastModifyRequest() -> ModifyRecordsRequest? {
         requests.last
+    }
+
+    func modifyRequests() -> [ModifyRecordsRequest] {
+        requests
     }
 
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {

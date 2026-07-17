@@ -340,26 +340,15 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             from: acceptedInvite,
             acceptedAt: request.now
         )
-        CloudKitPendingInviteRecordCodec.apply(acceptedInvite, to: fetched.record)
-        let result: (
-            saveResults: [CKRecord.ID: Result<CKRecord, any Error>],
-            deleteResults: [CKRecord.ID: Result<Void, any Error>]
+        let pendingInviteSaved = try await saveAcceptedInvitePendingRecord(
+            acceptedInvite,
+            record: fetched.record
         )
-        do {
-            result = try await database.modifyRecords(
-                saving: [fetched.record, acceptanceRecord],
-                deleting: [],
-                savePolicy: .ifServerRecordUnchanged,
-                atomically: true
-            )
-        } catch {
-            throw await inviteTransitionErrorAfterRejectedSave(
-                id: invite.id,
-                fallback: .notPending
-            )
-        }
-        guard savedRecord(fetched.record.recordID, in: result.saveResults) != nil,
-              savedRecord(acceptanceRecord.recordID, in: result.saveResults) != nil else {
+        let responseSaved = try await saveAcceptedInviteResponse(
+            acceptedInvite,
+            record: acceptanceRecord
+        )
+        guard pendingInviteSaved || responseSaved else {
             await diagnosticsLog.append(
                 category: "cloudKitInvite",
                 "acceptSaveRejected",
@@ -368,10 +357,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
                     "acceptanceRecordID": acceptanceRecord.recordID.recordName
                 ]
             )
-            throw await inviteTransitionErrorAfterRejectedSave(
-                id: invite.id,
-                fallback: .notPending
-            )
+            throw RemoteInviteTransportError.notPending
         }
         await diagnosticsLog.append(
             category: "cloudKitInvite",
@@ -380,10 +366,75 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
                 "inviteID": invite.id.rawValue,
                 "acceptanceRecordID": acceptanceRecord.recordID.recordName,
                 "joinerID": request.joiner.id.rawValue,
-                "joinerColor": joinerColor.rawValue
+                "joinerColor": joinerColor.rawValue,
+                "pendingInviteSaved": "\(pendingInviteSaved)",
+                "responseSaved": "\(responseSaved)"
             ]
         )
         return acceptedInvite
+    }
+
+    private func saveAcceptedInvitePendingRecord(
+        _ acceptedInvite: RemoteAcceptedInvite,
+        record: CKRecord
+    ) async throws -> Bool {
+        let recordID = record.recordID
+        CloudKitPendingInviteRecordCodec.apply(acceptedInvite, to: record)
+        do {
+            let result = try await database.modifyRecords(
+                saving: [record],
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+            guard savedRecord(recordID, in: result.saveResults) != nil else {
+                return try await acceptedInvitePendingSaveFallback(for: acceptedInvite.invite.id)
+            }
+            return true
+        } catch {
+            return try await acceptedInvitePendingSaveFallback(for: acceptedInvite.invite.id)
+        }
+    }
+
+    private func acceptedInvitePendingSaveFallback(for id: RemoteInviteID) async throws -> Bool {
+        do {
+            let (invite, _) = try await currentInviteRecord(id: id)
+            if let terminalError = terminalTransitionError(for: invite) {
+                throw terminalError
+            }
+            return false
+        } catch let error as RemoteInviteTransportError {
+            throw error
+        } catch {
+            return false
+        }
+    }
+
+    private func saveAcceptedInviteResponse(
+        _ acceptedInvite: RemoteAcceptedInvite,
+        record: CKRecord
+    ) async throws -> Bool {
+        do {
+            let result = try await database.modifyRecords(
+                saving: [record],
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+            guard savedRecord(record.recordID, in: result.saveResults) != nil else {
+                return try await acceptedInviteResponseSaveFallback(for: acceptedInvite.invite)
+            }
+            return true
+        } catch {
+            return try await acceptedInviteResponseSaveFallback(for: acceptedInvite.invite)
+        }
+    }
+
+    private func acceptedInviteResponseSaveFallback(for invite: RemotePendingInvite) async throws -> Bool {
+        if let responseError = try await terminalInviteResponseError(for: invite) {
+            throw responseError
+        }
+        return false
     }
 
     func acceptedInvite(id: RemoteInviteID, now: Date) async throws -> RemoteAcceptedInvite? {
