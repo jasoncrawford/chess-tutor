@@ -260,14 +260,15 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
     }
 
     func prepareMoveNotification(for descriptor: RemoteGameDescriptor) async throws {
+        let opponent = opponent(from: descriptor)
         let subscription = CKQuerySubscription(
             recordType: CloudKitRemoteMoveRecordCodec.recordType,
             predicate: NSPredicate(
-                format: "%K == %@ AND %K != %@",
+                format: "%K == %@ AND %K == %@",
                 CloudKitRemoteMoveRecordCodec.Field.gameID,
                 descriptor.id.rawValue,
                 CloudKitRemoteMoveRecordCodec.Field.actorPlayerID,
-                descriptor.localPlayerID.rawValue
+                opponent.id.rawValue
             ),
             subscriptionID: Self.moveSubscriptionID(for: descriptor.id),
             options: [.firesOnRecordCreation]
@@ -281,7 +282,12 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
         await diagnosticsLog.append(
             category: "cloudKitGame",
             "moveSubscriptionSaved",
-            fields: ["gameID": descriptor.id.rawValue, "subscriptionID": subscription.subscriptionID]
+            fields: [
+                "gameID": descriptor.id.rawValue,
+                "localPlayerID": descriptor.localPlayerID.rawValue,
+                "opponentPlayerID": opponent.id.rawValue,
+                "subscriptionID": subscription.subscriptionID
+            ]
         )
     }
 
@@ -337,6 +343,13 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             return nil
         }
         return RemoteGameID(rawValue: rawValue)
+    }
+
+    private func opponent(from descriptor: RemoteGameDescriptor) -> RemotePlayerRef {
+        if descriptor.localPlayerID == descriptor.whitePlayer.id {
+            return descriptor.blackPlayer
+        }
+        return descriptor.whitePlayer
     }
 
     private func existingEvent(for recordID: CKRecord.ID) async throws -> RemoteMoveEvent {

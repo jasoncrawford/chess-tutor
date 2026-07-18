@@ -81,10 +81,32 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         XCTAssertEqual(subscription.notificationInfo?.shouldSendContentAvailable, true)
         XCTAssertEqual(subscription.notificationInfo?.alertLocalizationKey, "REMOTE_MOVE_NOTIFICATION_BODY")
         XCTAssertEqual(subscription.notificationInfo?.alertLocalizationArgs, ["notificationSummary"])
+        XCTAssertFalse(subscription.predicate.predicateFormat.contains("!="))
+        XCTAssertTrue(subscription.predicate.predicateFormat.contains("actorPlayerID == \"black\""))
         XCTAssertEqual(
             CloudKitRemoteGameTransport.gameID(fromMoveSubscriptionID: subscription.subscriptionID),
             Self.gameID
         )
+    }
+
+    func testPrepareMoveNotificationSubscribesToWhiteMovesWhenLocalPlayerIsBlack() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        let transport = CloudKitRemoteGameTransport(database: database)
+        let descriptor = RemoteGameDescriptor(
+            id: Self.gameID,
+            protocolVersion: 1,
+            status: .active,
+            whitePlayer: RemotePlayerRef(id: Self.whiteID, displayName: "White"),
+            blackPlayer: RemotePlayerRef(id: Self.blackID, displayName: "Black"),
+            localPlayerID: Self.blackID
+        )
+
+        try await transport.prepareMoveNotification(for: descriptor)
+
+        let savedSubscription = await database.lastSubscription()
+        let subscription = try XCTUnwrap(savedSubscription as? CKQuerySubscription)
+        XCTAssertFalse(subscription.predicate.predicateFormat.contains("!="))
+        XCTAssertTrue(subscription.predicate.predicateFormat.contains("actorPlayerID == \"white\""))
     }
 
     func testPrepareMoveNotificationSurfacesSubscriptionSaveFailure() async throws {
