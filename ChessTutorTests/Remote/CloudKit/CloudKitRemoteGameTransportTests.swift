@@ -366,7 +366,7 @@ private actor InMemoryCloudKitGameDatabase: CloudKitGameDatabase {
         return subscription
     }
 
-    func allSubscriptions() async throws -> [CKSubscription] {
+    func subscriptionsForCleanup() async throws -> [CKSubscription] {
         Array(subscriptions.values)
     }
 

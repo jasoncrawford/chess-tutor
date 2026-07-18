@@ -3,7 +3,7 @@ import Foundation
 
 protocol CloudKitGameDatabase: Sendable {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription
-    func allSubscriptions() async throws -> [CKSubscription]
+    func subscriptionsForCleanup() async throws -> [CKSubscription]
 
     func modifySubscriptions(
         saving subscriptionsToSave: [CKSubscription],
@@ -369,7 +369,7 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             Self.statusSubscriptionID(for: gameID)
         ]
         do {
-            let staleSubscriptionIDs = try await database.allSubscriptions()
+            let staleSubscriptionIDs = try await database.subscriptionsForCleanup()
                 .map(\.subscriptionID)
                 .filter { subscriptionID in
                     (subscriptionID.hasPrefix(Self.moveSubscriptionIDPrefix)
@@ -379,19 +379,27 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             guard !staleSubscriptionIDs.isEmpty else {
                 return
             }
-            let result = try await database.modifySubscriptions(saving: [], deleting: staleSubscriptionIDs)
-            let failedDeletes = result.deleteResults.compactMap { subscriptionID, result -> String? in
-                guard case .failure = result else {
-                    return nil
-                }
-                return subscriptionID
+            var deletedCount = 0
+            var failedCount = 0
+            for startIndex in stride(from: 0, to: staleSubscriptionIDs.count, by: 100) {
+                let endIndex = min(startIndex + 100, staleSubscriptionIDs.count)
+                let batch = Array(staleSubscriptionIDs[startIndex..<endIndex])
+                let result = try await database.modifySubscriptions(saving: [], deleting: batch)
+                let batchFailedCount = result.deleteResults.values.filter { result in
+                    guard case .failure = result else {
+                        return false
+                    }
+                    return true
+                }.count
+                deletedCount += batch.count - batchFailedCount
+                failedCount += batchFailedCount
             }
             await diagnosticsLog.append(
                 category: "cloudKitGame",
                 "staleSubscriptionsDeleted",
                 fields: [
-                    "count": "\(staleSubscriptionIDs.count - failedDeletes.count)",
-                    "failedCount": "\(failedDeletes.count)",
+                    "count": "\(deletedCount)",
+                    "failedCount": "\(failedCount)",
                     "keptGameID": gameID.rawValue
                 ]
             )

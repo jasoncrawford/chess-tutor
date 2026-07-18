@@ -3,7 +3,7 @@ import Foundation
 
 protocol CloudKitInviteDatabase: Sendable {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription
-    func allSubscriptions() async throws -> [CKSubscription]
+    func subscriptionsForCleanup() async throws -> [CKSubscription]
 
     func modifySubscriptions(
         saving subscriptionsToSave: [CKSubscription],
@@ -40,9 +40,9 @@ extension CKDatabase: CloudKitInviteDatabase {
         try await save(subscription)
     }
 
-    func allSubscriptions() async throws -> [CKSubscription] {
+    func subscriptionsForCleanup() async throws -> [CKSubscription] {
         try await withCheckedThrowingContinuation { continuation in
-            let operation = CKFetchSubscriptionsOperation()
+            let operation = CKFetchSubscriptionsOperation.fetchAllSubscriptionsOperation()
             let lock = NSLock()
             var subscriptions: [CKSubscription] = []
             var firstSubscriptionError: (any Error)?
@@ -812,7 +812,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             statusSubscriptionID(for: inviteID)
         ]
         do {
-            let staleSubscriptionIDs = try await database.allSubscriptions()
+            let staleSubscriptionIDs = try await database.subscriptionsForCleanup()
                 .map(\.subscriptionID)
                 .filter { subscriptionID in
                     (subscriptionID.hasPrefix(Self.acceptanceSubscriptionIDPrefix)
@@ -822,19 +822,27 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             guard !staleSubscriptionIDs.isEmpty else {
                 return
             }
-            let result = try await database.modifySubscriptions(saving: [], deleting: staleSubscriptionIDs)
-            let failedDeletes = result.deleteResults.compactMap { subscriptionID, result -> String? in
-                guard case .failure = result else {
-                    return nil
-                }
-                return subscriptionID
+            var deletedCount = 0
+            var failedCount = 0
+            for startIndex in stride(from: 0, to: staleSubscriptionIDs.count, by: 100) {
+                let endIndex = min(startIndex + 100, staleSubscriptionIDs.count)
+                let batch = Array(staleSubscriptionIDs[startIndex..<endIndex])
+                let result = try await database.modifySubscriptions(saving: [], deleting: batch)
+                let batchFailedCount = result.deleteResults.values.filter { result in
+                    guard case .failure = result else {
+                        return false
+                    }
+                    return true
+                }.count
+                deletedCount += batch.count - batchFailedCount
+                failedCount += batchFailedCount
             }
             await diagnosticsLog.append(
                 category: "cloudKitInvite",
                 "staleSubscriptionsDeleted",
                 fields: [
-                    "count": "\(staleSubscriptionIDs.count - failedDeletes.count)",
-                    "failedCount": "\(failedDeletes.count)",
+                    "count": "\(deletedCount)",
+                    "failedCount": "\(failedCount)",
                     "keptInviteID": inviteID.rawValue
                 ]
             )

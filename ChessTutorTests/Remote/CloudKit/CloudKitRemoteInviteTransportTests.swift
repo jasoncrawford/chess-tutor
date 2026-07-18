@@ -721,7 +721,7 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
         return subscription
     }
 
-    func allSubscriptions() async throws -> [CKSubscription] {
+    func subscriptionsForCleanup() async throws -> [CKSubscription] {
         Array(subscriptions.values)
     }
 
