@@ -130,6 +130,33 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         }
     }
 
+    func testPrepareMoveNotificationDeletesStaleRemoteGameSubscriptionsBeforeSavingCurrentSubscription() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        await database.storeSubscription(subscription(id: "remote-game-moves-old-game"))
+        await database.storeSubscription(subscription(id: "remote-game-status-old-game"))
+        await database.storeSubscription(subscription(id: "pending-invite-for-maya"))
+        let transport = CloudKitRemoteGameTransport(database: database)
+        let descriptor = RemoteGameDescriptor(
+            id: Self.gameID,
+            protocolVersion: 1,
+            status: .active,
+            whitePlayer: RemotePlayerRef(id: Self.whiteID, displayName: "White"),
+            blackPlayer: RemotePlayerRef(id: Self.blackID, displayName: "Black"),
+            localPlayerID: Self.whiteID
+        )
+
+        try await transport.prepareMoveNotification(for: descriptor)
+
+        let staleMoveSubscription = await database.subscription(withID: "remote-game-moves-old-game")
+        let staleStatusSubscription = await database.subscription(withID: "remote-game-status-old-game")
+        let incomingInviteSubscription = await database.subscription(withID: "pending-invite-for-maya")
+        let currentMoveSubscription = await database.subscription(withID: "remote-game-moves-game-1")
+        XCTAssertNil(staleMoveSubscription)
+        XCTAssertNil(staleStatusSubscription)
+        XCTAssertNotNil(incomingInviteSubscription)
+        XCTAssertNotNil(currentMoveSubscription)
+    }
+
     func testUpdateGameStatusSavesAndFetchesStatusRecord() async throws {
         let database = InMemoryCloudKitGameDatabase()
         let transport = CloudKitRemoteGameTransport(database: database)
@@ -179,6 +206,25 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
         } catch let error as CKError {
             XCTAssertEqual(error.code, .networkUnavailable)
         }
+    }
+
+    func testPrepareGameStatusNotificationDeletesStaleRemoteGameSubscriptionsBeforeSavingCurrentSubscription() async throws {
+        let database = InMemoryCloudKitGameDatabase()
+        await database.storeSubscription(subscription(id: "remote-game-moves-old-game"))
+        await database.storeSubscription(subscription(id: "remote-game-status-old-game"))
+        await database.storeSubscription(subscription(id: "pending-invite-for-maya"))
+        let transport = CloudKitRemoteGameTransport(database: database)
+
+        try await transport.prepareGameStatusNotification(gameID: Self.gameID)
+
+        let staleMoveSubscription = await database.subscription(withID: "remote-game-moves-old-game")
+        let staleStatusSubscription = await database.subscription(withID: "remote-game-status-old-game")
+        let incomingInviteSubscription = await database.subscription(withID: "pending-invite-for-maya")
+        let currentStatusSubscription = await database.subscription(withID: "remote-game-status-game-1")
+        XCTAssertNil(staleMoveSubscription)
+        XCTAssertNil(staleStatusSubscription)
+        XCTAssertNotNil(incomingInviteSubscription)
+        XCTAssertNotNil(currentStatusSubscription)
     }
 
     func testUpdatePresenceSavesAndFetchesPresenceRecord() async throws {
@@ -248,6 +294,15 @@ final class CloudKitRemoteGameTransportTests: XCTestCase {
             notificationSummary: "White pawn to e4"
         )
     }
+
+    private func subscription(id: String) -> CKSubscription {
+        CKQuerySubscription(
+            recordType: "TestRecord",
+            predicate: NSPredicate(value: true),
+            subscriptionID: id,
+            options: [.firesOnRecordCreation]
+        )
+    }
 }
 
 private struct ModifyGameRecordsRequest: Equatable {
@@ -262,7 +317,7 @@ private actor InMemoryCloudKitGameDatabase: CloudKitGameDatabase {
     private var fetchFailures: [CKRecord.ID: any Error] = [:]
     private var subscriptionSaveFailure: (any Error)?
     private var requests: [ModifyGameRecordsRequest] = []
-    private var subscriptions: [CKSubscription] = []
+    private var subscriptions: [String: CKSubscription] = [:]
 
     func record(withID id: CKRecord.ID) -> CKRecord? {
         records[id]
@@ -292,15 +347,49 @@ private actor InMemoryCloudKitGameDatabase: CloudKitGameDatabase {
     }
 
     func lastSubscription() -> CKSubscription? {
-        subscriptions.last
+        Array(subscriptions.values).last
+    }
+
+    func subscription(withID id: String) -> CKSubscription? {
+        subscriptions[id]
+    }
+
+    func storeSubscription(_ subscription: CKSubscription) {
+        subscriptions[subscription.subscriptionID] = subscription
     }
 
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
         if let subscriptionSaveFailure {
             throw subscriptionSaveFailure
         }
-        subscriptions.append(subscription)
+        subscriptions[subscription.subscriptionID] = subscription
         return subscription
+    }
+
+    func allSubscriptions() async throws -> [CKSubscription] {
+        Array(subscriptions.values)
+    }
+
+    func modifySubscriptions(
+        saving subscriptionsToSave: [CKSubscription],
+        deleting subscriptionIDsToDelete: [CKSubscription.ID]
+    ) async throws -> (
+        saveResults: [CKSubscription.ID: Result<CKSubscription, any Error>],
+        deleteResults: [CKSubscription.ID: Result<Void, any Error>]
+    ) {
+        var saveResults: [CKSubscription.ID: Result<CKSubscription, any Error>] = [:]
+        for subscription in subscriptionsToSave {
+            subscriptions[subscription.subscriptionID] = subscription
+            saveResults[subscription.subscriptionID] = .success(subscription)
+        }
+
+        var deleteResults: [CKSubscription.ID: Result<Void, any Error>] = [:]
+        for subscriptionID in subscriptionIDsToDelete {
+            subscriptions.removeValue(forKey: subscriptionID)
+            deleteResults[subscriptionID] = .success(())
+        }
+
+        return (saveResults: saveResults, deleteResults: deleteResults)
     }
 
     func records(

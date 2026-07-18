@@ -472,6 +472,28 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
         XCTAssertEqual(statusSubscription.notificationInfo?.shouldSendContentAvailable, true)
     }
 
+    func testPreparingAcceptanceNotificationDeletesStaleInviteResponseSubscriptionsBeforeSavingCurrentSubscriptions() async throws {
+        let database = InMemoryCloudKitInviteDatabase()
+        await database.storeSubscription(subscription(id: "pending-invite-accepted-old"))
+        await database.storeSubscription(subscription(id: "pending-invite-status-old"))
+        await database.storeSubscription(subscription(id: "pending-invite-for-maya"))
+        let transport = makeTransport(database: database)
+        let invite = try await createInvite(on: transport, whiteAssignment: .invitee)
+
+        try await transport.prepareAcceptanceNotification(for: invite)
+
+        let staleAcceptanceSubscription = await database.subscription(withID: "pending-invite-accepted-old")
+        let staleStatusSubscription = await database.subscription(withID: "pending-invite-status-old")
+        let incomingInviteSubscription = await database.subscription(withID: "pending-invite-for-maya")
+        let currentAcceptanceSubscription = await database.subscription(withID: "pending-invite-accepted-428193")
+        let currentStatusSubscription = await database.subscription(withID: "pending-invite-status-428193")
+        XCTAssertNil(staleAcceptanceSubscription)
+        XCTAssertNil(staleStatusSubscription)
+        XCTAssertNotNil(incomingInviteSubscription)
+        XCTAssertNotNil(currentAcceptanceSubscription)
+        XCTAssertNotNil(currentStatusSubscription)
+    }
+
     func testPreparingIncomingInviteNotificationSavesAddressedInviteSubscription() async throws {
         let database = InMemoryCloudKitInviteDatabase()
         let transport = makeTransport(database: database)
@@ -613,6 +635,15 @@ final class CloudKitRemoteInviteTransportTests: XCTestCase {
             protocolVersion: 1
         )
     }
+
+    private func subscription(id: String) -> CKSubscription {
+        CKQuerySubscription(
+            recordType: "TestRecord",
+            predicate: NSPredicate(value: true),
+            subscriptionID: id,
+            options: [.firesOnRecordCreation]
+        )
+    }
 }
 
 private struct ModifyRecordsRequest: Equatable {
@@ -637,6 +668,10 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
 
     func subscription(withID id: String) -> CKSubscription? {
         subscriptions[id]
+    }
+
+    func storeSubscription(_ subscription: CKSubscription) {
+        subscriptions[subscription.subscriptionID] = subscription
     }
 
     func store(_ invite: RemotePendingInvite) {
@@ -684,6 +719,32 @@ private actor InMemoryCloudKitInviteDatabase: CloudKitInviteDatabase {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
         subscriptions[subscription.subscriptionID] = subscription
         return subscription
+    }
+
+    func allSubscriptions() async throws -> [CKSubscription] {
+        Array(subscriptions.values)
+    }
+
+    func modifySubscriptions(
+        saving subscriptionsToSave: [CKSubscription],
+        deleting subscriptionIDsToDelete: [CKSubscription.ID]
+    ) async throws -> (
+        saveResults: [CKSubscription.ID: Result<CKSubscription, any Error>],
+        deleteResults: [CKSubscription.ID: Result<Void, any Error>]
+    ) {
+        var saveResults: [CKSubscription.ID: Result<CKSubscription, any Error>] = [:]
+        for subscription in subscriptionsToSave {
+            subscriptions[subscription.subscriptionID] = subscription
+            saveResults[subscription.subscriptionID] = .success(subscription)
+        }
+
+        var deleteResults: [CKSubscription.ID: Result<Void, any Error>] = [:]
+        for subscriptionID in subscriptionIDsToDelete {
+            subscriptions.removeValue(forKey: subscriptionID)
+            deleteResults[subscriptionID] = .success(())
+        }
+
+        return (saveResults: saveResults, deleteResults: deleteResults)
     }
 
     func records(

@@ -3,6 +3,15 @@ import Foundation
 
 protocol CloudKitGameDatabase: Sendable {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription
+    func allSubscriptions() async throws -> [CKSubscription]
+
+    func modifySubscriptions(
+        saving subscriptionsToSave: [CKSubscription],
+        deleting subscriptionIDsToDelete: [CKSubscription.ID]
+    ) async throws -> (
+        saveResults: [CKSubscription.ID: Result<CKSubscription, any Error>],
+        deleteResults: [CKSubscription.ID: Result<Void, any Error>]
+    )
 
     func records(
         for ids: [CKRecord.ID],
@@ -261,6 +270,7 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
 
     func prepareMoveNotification(for descriptor: RemoteGameDescriptor) async throws {
         let opponent = opponent(from: descriptor)
+        await deleteStaleGameSubscriptions(keepingGameID: descriptor.id)
         let subscription = CKQuerySubscription(
             recordType: CloudKitRemoteMoveRecordCodec.recordType,
             predicate: NSPredicate(
@@ -292,6 +302,7 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
     }
 
     func prepareGameStatusNotification(gameID: RemoteGameID) async throws {
+        await deleteStaleGameSubscriptions(keepingGameID: gameID)
         let subscription = CKQuerySubscription(
             recordType: CloudKitRemoteGameStatusRecordCodec.recordType,
             predicate: NSPredicate(
@@ -350,6 +361,50 @@ actor CloudKitRemoteGameTransport: RemoteGameTransport,
             return descriptor.blackPlayer
         }
         return descriptor.whitePlayer
+    }
+
+    private func deleteStaleGameSubscriptions(keepingGameID gameID: RemoteGameID) async {
+        let currentSubscriptionIDs: Set<CKSubscription.ID> = [
+            Self.moveSubscriptionID(for: gameID),
+            Self.statusSubscriptionID(for: gameID)
+        ]
+        do {
+            let staleSubscriptionIDs = try await database.allSubscriptions()
+                .map(\.subscriptionID)
+                .filter { subscriptionID in
+                    (subscriptionID.hasPrefix(Self.moveSubscriptionIDPrefix)
+                        || subscriptionID.hasPrefix(Self.statusSubscriptionIDPrefix))
+                        && !currentSubscriptionIDs.contains(subscriptionID)
+                }
+            guard !staleSubscriptionIDs.isEmpty else {
+                return
+            }
+            let result = try await database.modifySubscriptions(saving: [], deleting: staleSubscriptionIDs)
+            let failedDeletes = result.deleteResults.compactMap { subscriptionID, result -> String? in
+                guard case .failure = result else {
+                    return nil
+                }
+                return subscriptionID
+            }
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "staleSubscriptionsDeleted",
+                fields: [
+                    "count": "\(staleSubscriptionIDs.count - failedDeletes.count)",
+                    "failedCount": "\(failedDeletes.count)",
+                    "keptGameID": gameID.rawValue
+                ]
+            )
+        } catch {
+            await diagnosticsLog.append(
+                category: "cloudKitGame",
+                "staleSubscriptionCleanupFailed",
+                fields: [
+                    "keptGameID": gameID.rawValue,
+                    "error": String(describing: error)
+                ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+            )
+        }
     }
 
     private func existingEvent(for recordID: CKRecord.ID) async throws -> RemoteMoveEvent {

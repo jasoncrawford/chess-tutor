@@ -3,6 +3,15 @@ import Foundation
 
 protocol CloudKitInviteDatabase: Sendable {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription
+    func allSubscriptions() async throws -> [CKSubscription]
+
+    func modifySubscriptions(
+        saving subscriptionsToSave: [CKSubscription],
+        deleting subscriptionIDsToDelete: [CKSubscription.ID]
+    ) async throws -> (
+        saveResults: [CKSubscription.ID: Result<CKSubscription, any Error>],
+        deleteResults: [CKSubscription.ID: Result<Void, any Error>]
+    )
 
     func records(
         for ids: [CKRecord.ID],
@@ -29,6 +38,42 @@ protocol CloudKitInviteDatabase: Sendable {
 extension CKDatabase: CloudKitInviteDatabase {
     func saveSubscription(_ subscription: CKSubscription) async throws -> CKSubscription {
         try await save(subscription)
+    }
+
+    func allSubscriptions() async throws -> [CKSubscription] {
+        try await withCheckedThrowingContinuation { continuation in
+            let operation = CKFetchSubscriptionsOperation()
+            let lock = NSLock()
+            var subscriptions: [CKSubscription] = []
+            var firstSubscriptionError: (any Error)?
+            operation.perSubscriptionResultBlock = { _, result in
+                lock.lock()
+                defer { lock.unlock() }
+                switch result {
+                case .success(let subscription):
+                    subscriptions.append(subscription)
+                case .failure(let error):
+                    firstSubscriptionError = firstSubscriptionError ?? error
+                }
+            }
+            operation.fetchSubscriptionsResultBlock = { result in
+                lock.lock()
+                let fetchedSubscriptions = subscriptions
+                let subscriptionError = firstSubscriptionError
+                lock.unlock()
+                switch result {
+                case .success:
+                    if let subscriptionError {
+                        continuation.resume(throwing: subscriptionError)
+                    } else {
+                        continuation.resume(returning: fetchedSubscriptions)
+                    }
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+            add(operation)
+        }
     }
 
     func records(
@@ -486,6 +531,7 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
     }
 
     func prepareAcceptanceNotification(for invite: RemotePendingInvite) async throws {
+        await deleteStaleInviteResponseSubscriptions(keepingInviteID: invite.id)
         let acceptanceSubscription = CKQuerySubscription(
             recordType: CloudKitInviteAcceptanceRecordCodec.recordType,
             predicate: NSPredicate(format: "%K == %@", "inviteCode", invite.code.rawValue),
@@ -758,6 +804,50 @@ actor CloudKitRemoteInviteTransport: RemoteInviteTransport {
             return false
         }
         return true
+    }
+
+    private func deleteStaleInviteResponseSubscriptions(keepingInviteID inviteID: RemoteInviteID) async {
+        let currentSubscriptionIDs: Set<CKSubscription.ID> = [
+            acceptanceSubscriptionID(for: inviteID),
+            statusSubscriptionID(for: inviteID)
+        ]
+        do {
+            let staleSubscriptionIDs = try await database.allSubscriptions()
+                .map(\.subscriptionID)
+                .filter { subscriptionID in
+                    (subscriptionID.hasPrefix(Self.acceptanceSubscriptionIDPrefix)
+                        || subscriptionID.hasPrefix(Self.statusSubscriptionIDPrefix))
+                        && !currentSubscriptionIDs.contains(subscriptionID)
+                }
+            guard !staleSubscriptionIDs.isEmpty else {
+                return
+            }
+            let result = try await database.modifySubscriptions(saving: [], deleting: staleSubscriptionIDs)
+            let failedDeletes = result.deleteResults.compactMap { subscriptionID, result -> String? in
+                guard case .failure = result else {
+                    return nil
+                }
+                return subscriptionID
+            }
+            await diagnosticsLog.append(
+                category: "cloudKitInvite",
+                "staleSubscriptionsDeleted",
+                fields: [
+                    "count": "\(staleSubscriptionIDs.count - failedDeletes.count)",
+                    "failedCount": "\(failedDeletes.count)",
+                    "keptInviteID": inviteID.rawValue
+                ]
+            )
+        } catch {
+            await diagnosticsLog.append(
+                category: "cloudKitInvite",
+                "staleSubscriptionCleanupFailed",
+                fields: [
+                    "keptInviteID": inviteID.rawValue,
+                    "error": String(describing: error)
+                ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
+            )
+        }
     }
 
     static func inviteID(fromAcceptanceSubscriptionID subscriptionID: String) -> RemoteInviteID? {
