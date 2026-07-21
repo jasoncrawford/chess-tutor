@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GameControlsPresentation: Equatable {
     enum PrimaryAction: Equatable {
+        case playRemotely
         case done
         case newGame
     }
@@ -14,12 +15,15 @@ struct GameControlsPresentation: Equatable {
     let primaryAction: PrimaryAction
     let secondaryActions: [SecondaryAction]
 
-    init(result: GameResult) {
-        switch result {
-        case .ongoing:
-            primaryAction = .done
+    init(result: GameResult, isRemoteGameEnded: Bool = false, isRemotePlayAvailable: Bool = false) {
+        switch (isRemoteGameEnded, result) {
+        case (true, _):
+            primaryAction = .newGame
+            secondaryActions = [.about]
+        case (false, .ongoing):
+            primaryAction = isRemotePlayAvailable ? .playRemotely : .done
             secondaryActions = [.newGame, .about]
-        case .checkmate, .stalemate:
+        case (false, .checkmate), (false, .stalemate):
             primaryAction = .newGame
             secondaryActions = [.about]
         }
@@ -28,13 +32,31 @@ struct GameControlsPresentation: Equatable {
 
 struct GameControlsView: View {
     @Bindable var session: GameSession
+    let isRemotePlayAvailable: Bool
+    let onPlayRemotely: () -> Void
+    let onNewGame: () -> Void
+    let onCommittedMove: (Move) -> Void
 
-    init(session: GameSession) {
+    init(
+        session: GameSession,
+        isRemotePlayAvailable: Bool = false,
+        onPlayRemotely: @escaping () -> Void = {},
+        onNewGame: @escaping () -> Void = {},
+        onCommittedMove: @escaping (Move) -> Void = { _ in }
+    ) {
         self.session = session
+        self.isRemotePlayAvailable = isRemotePlayAvailable
+        self.onPlayRemotely = onPlayRemotely
+        self.onNewGame = onNewGame
+        self.onCommittedMove = onCommittedMove
     }
 
     var body: some View {
-        let presentation = GameControlsPresentation(result: session.state.result)
+        let presentation = GameControlsPresentation(
+            result: session.state.result,
+            isRemoteGameEnded: session.isRemoteGameEnded,
+            isRemotePlayAvailable: isRemotePlayAvailable
+        )
 
         primaryButton(for: presentation.primaryAction)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,11 +71,24 @@ struct GameControlsView: View {
     @ViewBuilder
     private func primaryButton(for action: GameControlsPresentation.PrimaryAction) -> some View {
         switch action {
+        case .playRemotely:
+            playRemotelyButton
         case .done:
             doneButton
         case .newGame:
             primaryNewGameButton
         }
+    }
+
+    private var playRemotelyButton: some View {
+        Button(action: onPlayRemotely) {
+            Label("Play Remotely", systemImage: "person.2")
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+        }
+        .buttonStyle(PrimaryGameButtonStyle(isEnabled: true))
+        .font(.system(size: 19, weight: .semibold, design: .rounded))
+        .labelStyle(.titleAndIcon)
     }
 
     private var doneButton: some View {
@@ -62,7 +97,9 @@ struct GameControlsView: View {
                 return
             }
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                session.finishTurn()
+                if let move = session.finishTurn() {
+                    onCommittedMove(move)
+                }
             }
         } label: {
             Label("Done", systemImage: "checkmark.circle.fill")
@@ -76,9 +113,7 @@ struct GameControlsView: View {
     }
 
     private var primaryNewGameButton: some View {
-        Button {
-            session.newGame()
-        } label: {
+        Button(action: onNewGame) {
             Label("New Game", systemImage: "arrow.counterclockwise")
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
@@ -117,10 +152,20 @@ private struct PrimaryGameButtonStyle: ButtonStyle {
 
 struct AboutSheetView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var diagnosticsShareItem: DiagnosticsShareItem?
+    @State private var diagnosticsErrorMessage: String?
+    @State private var isPreparingDiagnostics = false
+    let diagnosticsLog: DiagnosticsLog
+    let buildInfo: AppBuildInfo
+
+    init(diagnosticsLog: DiagnosticsLog = .shared, buildInfo: AppBuildInfo = .current()) {
+        self.diagnosticsLog = diagnosticsLog
+        self.buildInfo = buildInfo
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text(AboutAttribution.appName)
                     .font(AppTheme.aboutTitleFont)
                     .foregroundStyle(AppTheme.ink)
@@ -128,6 +173,13 @@ struct AboutSheetView: View {
                 Text(AboutAttribution.appSummary)
                     .font(AppTheme.panelBodyFont)
                     .foregroundStyle(AppTheme.ink.opacity(0.72))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(buildInfo.versionDisplayText)
+                    Text(buildInfo.revisionDisplayText)
+                }
+                .font(.footnote)
+                .foregroundStyle(AppTheme.ink.opacity(0.58))
             }
 
             Divider()
@@ -148,6 +200,27 @@ struct AboutSheetView: View {
 
             Spacer(minLength: 0)
 
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    shareDiagnostics()
+                } label: {
+                    Label(
+                        isPreparingDiagnostics ? "Preparing Diagnostics..." : "Share Diagnostics",
+                        systemImage: "square.and.arrow.up"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isPreparingDiagnostics)
+                .foregroundStyle(AppTheme.boardFrame)
+
+                if let diagnosticsErrorMessage {
+                    Text(diagnosticsErrorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(Color(red: 0.72, green: 0.23, blue: 0.17))
+                }
+            }
+
             Button {
                 dismiss()
             } label: {
@@ -160,5 +233,22 @@ struct AboutSheetView: View {
         .padding(26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppTheme.panel)
+        .sheet(item: $diagnosticsShareItem) { item in
+            DiagnosticsShareSheet(url: item.url)
+        }
+    }
+
+    private func shareDiagnostics() {
+        isPreparingDiagnostics = true
+        diagnosticsErrorMessage = nil
+        Task { @MainActor in
+            do {
+                let exportURL = try await diagnosticsLog.exportFile()
+                diagnosticsShareItem = DiagnosticsShareItem(url: exportURL)
+            } catch {
+                diagnosticsErrorMessage = "Could not prepare diagnostics."
+            }
+            isPreparingDiagnostics = false
+        }
     }
 }

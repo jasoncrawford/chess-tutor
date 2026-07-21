@@ -198,6 +198,7 @@ struct ChessBoardView: View {
     var onPromotionTestRequest: (Square, PieceColor) -> Void = { _, _ in }
     #endif
     var onMoveAttempt: (MoveAttemptResult) -> Void = { _ in }
+    var onLocalBoardInteraction: () -> Void = {}
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
     @State private var settlingPieceID: UUID?
@@ -484,6 +485,7 @@ struct ChessBoardView: View {
                     $0.square == from && $0.piece == piece
                 }?.id
                 dragState = DragState(from: from, piece: piece, visualPieceID: visualPieceID, location: value.location)
+                reportLocalInteractionIfCurrentPiece(from)
             }
             .onEnded { value in
                 guard let dragState else {
@@ -516,6 +518,9 @@ struct ChessBoardView: View {
                 }
 
                 let result = session.moveSelectedPiece(to: destination)
+                if result.isLocalMovementInteraction {
+                    onLocalBoardInteraction()
+                }
                 onMoveAttempt(result)
                 switch result {
                 case .moved, .needsPromotion:
@@ -633,14 +638,70 @@ struct ChessBoardView: View {
 
         if session.selectedSquare == nil {
             session.select(square)
-        } else {
-            let result = session.moveSelectedPiece(to: square)
-            onMoveAttempt(result)
+            reportLocalInteractionIfCurrentPiece(square)
+            return
+        }
 
-            if case .illegal = result,
-               session.state.board[square]?.color == session.state.sideToMove {
+        if session.legalDestinations.contains(square) {
+            attemptMove(to: square)
+            return
+        }
+
+        guard let tappedPiece = session.state.board[square] else {
+            attemptMove(to: square)
+            return
+        }
+
+        if shouldAttemptMoveWithoutVisibleHint(to: tappedPiece) {
+            let result = attemptMove(to: square)
+            if case .illegal = result {
                 session.select(square)
             }
+            return
+        }
+
+        session.select(square)
+        reportLocalInteractionIfCurrentPiece(square)
+    }
+
+    @discardableResult
+    private func attemptMove(to square: Square) -> MoveAttemptResult {
+        let result = session.moveSelectedPiece(to: square)
+        if result.isLocalMovementInteraction {
+            onLocalBoardInteraction()
+        }
+        onMoveAttempt(result)
+        return result
+    }
+
+    private func shouldAttemptMoveWithoutVisibleHint(to tappedPiece: Piece) -> Bool {
+        guard !session.assistSettings.showLegalMovesOnSelection,
+              session.localCanActForCurrentTurn,
+              let selectedSquare = session.selectedSquare,
+              let selectedPiece = session.state.board[selectedSquare],
+              selectedPiece.color == session.state.sideToMove else {
+            return false
+        }
+
+        return tappedPiece.color != selectedPiece.color
+    }
+
+    private func reportLocalInteractionIfCurrentPiece(_ square: Square) {
+        guard session.localCanActForCurrentTurn,
+              session.state.board[square]?.color == session.state.sideToMove else {
+            return
+        }
+        onLocalBoardInteraction()
+    }
+}
+
+private extension MoveAttemptResult {
+    var isLocalMovementInteraction: Bool {
+        switch self {
+        case .moved, .needsPromotion:
+            return true
+        case .illegal:
+            return false
         }
     }
 }

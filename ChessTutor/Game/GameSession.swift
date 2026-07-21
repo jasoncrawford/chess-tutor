@@ -31,6 +31,7 @@ final class GameSession {
     var whitePlayer: PlayerSeat = .humanLocal
     var blackPlayer: PlayerSeat = .humanLocal
     var message: String?
+    private var boardLockMessage: String?
 
     var state: GameState {
         guard let tentativeMove else {
@@ -49,6 +50,17 @@ final class GameSession {
             return false
         }
         return isLegal(tentativeMove)
+    }
+
+    var localCanActForCurrentTurn: Bool {
+        guard boardLockMessage == nil else {
+            return false
+        }
+        return playerSeat(for: committedState.sideToMove).isLocal
+    }
+
+    var isRemoteGameEnded: Bool {
+        boardLockMessage != nil
     }
 
     var hasGameInProgress: Bool {
@@ -103,6 +115,10 @@ final class GameSession {
     }
 
     var statusText: String {
+        if boardLockMessage != nil {
+            return "Game forfeit."
+        }
+
         switch committedState.result {
         case .ongoing:
             return "\(committedState.sideToMove.rawValue.capitalized)'s turn"
@@ -116,6 +132,9 @@ final class GameSession {
     var guidanceText: String? {
         guard committedState.result == .ongoing else {
             return nil
+        }
+        if let boardLockMessage {
+            return boardLockMessage
         }
         if let checkRuleViolationMessage {
             return checkRuleViolationMessage
@@ -133,6 +152,13 @@ final class GameSession {
         self.committedState = state
     }
 
+    convenience init(replayingCommittedMoves moves: [Move]) {
+        self.init()
+        for move in moves {
+            commitRestoredMove(move)
+        }
+    }
+
     func select(_ square: Square) {
         guard committedState.result == .ongoing else {
             selectedSquare = nil
@@ -145,7 +171,7 @@ final class GameSession {
             self.tentativeMove = nil
         }
 
-        guard state.board[square]?.color == committedState.sideToMove else {
+        guard let piece = state.board[square] else {
             selectedSquare = nil
             legalMovesForSelection = []
             message = "Choose a \(committedState.sideToMove.rawValue) piece."
@@ -153,10 +179,12 @@ final class GameSession {
         }
 
         selectedSquare = square
-        legalMovesForSelection = assistSettings.showLegalMovesOnSelection
+        legalMovesForSelection = piece.color == committedState.sideToMove
+            && localCanActForCurrentTurn
+            && assistSettings.showLegalMovesOnSelection
             ? allowedMoves(forSelectionAt: square)
             : []
-        message = nil
+        message = boardLockMessage
     }
 
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
@@ -170,6 +198,16 @@ final class GameSession {
         guard let selectedSquare else {
             message = "Choose a piece first."
             return .illegal("Choose a piece first.")
+        }
+
+        if let boardLockMessage {
+            message = boardLockMessage
+            return .illegal(boardLockMessage)
+        }
+
+        guard localCanActForCurrentTurn else {
+            message = "It's not your turn."
+            return .illegal("It's not your turn.")
         }
 
         if let tentativeMove, selectedSquare == tentativeMove.to, destination == tentativeMove.from {
@@ -206,14 +244,15 @@ final class GameSession {
         message = nil
     }
 
-    func finishTurn() {
+    @discardableResult
+    func finishTurn() -> Move? {
         guard let tentativeMove else {
             message = "Make a move first."
-            return
+            return nil
         }
         guard isLegal(tentativeMove) else {
             message = checkRuleViolationMessage
-            return
+            return nil
         }
 
         if let capturedPiece = capturedPiece(for: tentativeMove, in: committedState) {
@@ -231,6 +270,40 @@ final class GameSession {
         selectedSquare = nil
         legalMovesForSelection = []
         message = committedState.result == .ongoing ? nil : statusText
+        return tentativeMove
+    }
+
+    @discardableResult
+    func commitRemoteMove(_ move: Move) -> Bool {
+        guard committedState.result == .ongoing else {
+            selectedSquare = nil
+            legalMovesForSelection = []
+            message = statusText
+            return false
+        }
+
+        guard !localCanActForCurrentTurn,
+              LegalMoveGenerator.allLegalMoves(in: committedState).contains(move) else {
+            message = "Something went wrong syncing this game."
+            return false
+        }
+
+        if let capturedPiece = capturedPiece(for: move, in: committedState) {
+            committedCapturedPieces.append(
+                CapturedPiece(
+                    id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
+                    piece: capturedPiece.piece,
+                    capturedAt: capturedPiece.square,
+                    state: .committed
+                )
+            )
+        }
+        committedState.apply(move)
+        tentativeMove = nil
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = committedState.result == .ongoing ? nil : statusText
+        return true
     }
 
     func newGame() {
@@ -239,7 +312,40 @@ final class GameSession {
         committedCapturedPieces = []
         selectedSquare = nil
         legalMovesForSelection = []
+        boardLockMessage = nil
         message = nil
+    }
+
+    func endRemoteGame(message: String) {
+        boardLockMessage = message
+        tentativeMove = nil
+        legalMovesForSelection = []
+        self.message = message
+    }
+
+    func clearMessage(matching expectedMessage: String) {
+        guard message == expectedMessage else {
+            return
+        }
+        message = nil
+    }
+
+    private func commitRestoredMove(_ move: Move) {
+        if let capturedPiece = capturedPiece(for: move, in: committedState) {
+            committedCapturedPieces.append(
+                CapturedPiece(
+                    id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
+                    piece: capturedPiece.piece,
+                    capturedAt: capturedPiece.square,
+                    state: .committed
+                )
+            )
+        }
+        committedState.apply(move)
+        tentativeMove = nil
+        selectedSquare = nil
+        legalMovesForSelection = []
+        message = committedState.result == .ongoing ? nil : statusText
     }
 
     #if DEBUG
@@ -289,6 +395,15 @@ final class GameSession {
             return LegalMoveGenerator.allowedMoves(for: tentativeMove.from, in: committedState)
         }
         return LegalMoveGenerator.allowedMoves(for: square, in: committedState)
+    }
+
+    private func playerSeat(for color: PieceColor) -> PlayerSeat {
+        switch color {
+        case .white:
+            return whitePlayer
+        case .black:
+            return blackPlayer
+        }
     }
 
     private func movementSummary(for kind: Piece.Kind) -> String {

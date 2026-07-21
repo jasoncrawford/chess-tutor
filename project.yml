@@ -4,10 +4,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    TARGETED_DEVICE_FAMILY: "2"
+    TARGETED_DEVICE_FAMILY: "1,2"
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "2"
     INFOPLIST_KEY_UILaunchScreen_Generation: true
 targets:
   ChessTutor:
@@ -15,6 +15,34 @@ targets:
     platform: iOS
     sources:
       - ChessTutor
+    postBuildScripts:
+      - name: Embed Build Info
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildInfo.plist"
+        script: |
+          set -euo pipefail
+
+          revision="unknown"
+          if command -v git >/dev/null 2>&1 && git -C "$SRCROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            revision="$(git -C "$SRCROOT" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+            if [ -n "$(git -C "$SRCROOT" status --porcelain 2>/dev/null)" ]; then
+              revision="${revision}-dirty"
+            fi
+          fi
+
+          output="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BuildInfo.plist"
+          mkdir -p "$(dirname "$output")"
+          cat > "$output" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>GitCommit</key>
+            <string>$revision</string>
+          </dict>
+          </plist>
+          EOF
     info:
       path: ChessTutor/Info.plist
       properties:
@@ -26,8 +54,14 @@ targets:
         CFBundleName: Beginners Chess
         CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: org.jasoncrawford.chesstutor
+            CFBundleURLSchemes:
+              - chesstutor
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
+        UIBackgroundModes:
+          - remote-notification
         UILaunchScreen:
           UILaunchScreen: {}
         UISupportedInterfaceOrientations~ipad:
@@ -37,11 +71,15 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: true
+        PRODUCT_BUNDLE_IDENTIFIER: org.jasoncrawford.chesstutor
+        CODE_SIGN_ENTITLEMENTS: ChessTutor/ChessTutor.entitlements
+        CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: T2YLUCCPQ3
-        PRODUCT_BUNDLE_IDENTIFIER: org.jasoncrawford.chesstutor
-        TARGETED_DEVICE_FAMILY: "2"
+        TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
   ChessTutorTests:
     type: bundle.unit-test
     platform: iOS
@@ -52,3 +90,17 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  ChessTutor:
+    build:
+      targets:
+        ChessTutor: all
+    run:
+      config: Debug
+      environmentVariables:
+        CHESSTUTOR_REMOTE_INVITES: cloudkit
+    test:
+      config: Debug
+      targets:
+        - ChessTutorTests

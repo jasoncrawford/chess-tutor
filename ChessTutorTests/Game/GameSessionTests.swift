@@ -232,6 +232,23 @@ final class GameSessionTests: XCTestCase {
         XCTAssertTrue(session.capturedPieces.isEmpty)
     }
 
+    func testReplayingCommittedMovesRestoresCapturedPieces() {
+        let session = GameSession(
+            replayingCommittedMoves: [
+                Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+                Move(from: Square(file: .d, rank: 7), to: Square(file: .d, rank: 5)),
+                Move(from: Square(file: .e, rank: 4), to: Square(file: .d, rank: 5)),
+            ]
+        )
+
+        XCTAssertEqual(session.state.board[Square(file: .d, rank: 5)], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+        XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertEqual(session.capturedPieces.map(\.piece), [Piece(kind: .pawn, color: .black)])
+        XCTAssertEqual(session.capturedPieces.map(\.capturedAt), [Square(file: .d, rank: 5)])
+        XCTAssertEqual(session.capturedPieces.map(\.state), [.committed])
+    }
+
     #if DEBUG
     func testCaptureForTestingRemovesPieceFromBoardAndAddsCommittedCapture() {
         let session = GameSession()
@@ -562,6 +579,109 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(result, .moved)
         XCTAssertEqual(session.state.board[Square(file: .e, rank: 4)], Piece(kind: .pawn, color: .white))
         XCTAssertNil(session.state.board[Square(file: .e, rank: 2)])
+    }
+
+    func testRemotePlayerPieceCanBeInspectedWithoutMoveAffordances() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+
+        session.select(Square(file: .e, rank: 2))
+
+        XCTAssertEqual(session.selectedPieceInfo?.title, "White pawn")
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertNil(session.message)
+    }
+
+    func testLocalWaitingPlayerCanInspectOwnPieceDuringRemoteTurn() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+        session.blackPlayer = .humanLocal
+
+        session.select(Square(file: .e, rank: 7))
+
+        XCTAssertEqual(session.selectedPieceInfo?.title, "Black pawn")
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertNil(session.message)
+    }
+
+    func testRemotePlayerCannotMovePieceOnTheirTurn() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+
+        session.select(Square(file: .e, rank: 2))
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertEqual(result, .illegal("It's not your turn."))
+        XCTAssertEqual(session.message, "It's not your turn.")
+    }
+
+    func testEndedRemoteGameAllowsInspectionButPreventsMovement() {
+        let session = GameSession()
+        session.endRemoteGame(message: "Maya ended this game.")
+
+        session.select(Square(file: .e, rank: 2))
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertEqual(session.selectedPieceInfo?.title, "White pawn")
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertEqual(result, .illegal("Maya ended this game."))
+        XCTAssertEqual(session.guidanceText, "Maya ended this game.")
+    }
+
+    func testNewGameClearsEndedRemoteGameLock() {
+        let session = GameSession()
+        session.endRemoteGame(message: "Maya ended this game.")
+
+        session.newGame()
+
+        XCTAssertTrue(session.localCanActForCurrentTurn)
+        XCTAssertNil(session.guidanceText)
+    }
+
+    func testFinishTurnReturnsCommittedMove() {
+        let session = GameSession()
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        let committedMove = session.finishTurn()
+
+        XCTAssertEqual(committedMove, Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)))
+    }
+
+    func testCommitRemoteMoveAppliesMoveOnRemoteTurn() {
+        let session = GameSession()
+        session.blackPlayer = .remote(playerID: "maya")
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        session.finishTurn()
+
+        let remoteMove = Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5))
+        let didCommit = session.commitRemoteMove(remoteMove)
+
+        XCTAssertTrue(didCommit)
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 5)], Piece(kind: .pawn, color: .black))
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 7)])
+        XCTAssertEqual(session.state.sideToMove, .white)
+        XCTAssertNil(session.message)
+    }
+
+    func testClearMessageMatchingClearsOnlyExpectedMessage() {
+        let session = GameSession()
+        session.message = "Could not sync remote move. Check your connection."
+
+        session.clearMessage(matching: "Could not sync remote move. Check your connection.")
+
+        XCTAssertNil(session.message)
+    }
+
+    func testClearMessageMatchingKeepsDifferentMessage() {
+        let session = GameSession()
+        session.message = "It's not your turn."
+
+        session.clearMessage(matching: "Could not sync remote move. Check your connection.")
+
+        XCTAssertEqual(session.message, "It's not your turn.")
     }
 
     func testCheckmateMoveShowsGameOverMessageAndBlocksFurtherSelection() {

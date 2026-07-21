@@ -6,7 +6,17 @@ struct SidePanelView: View {
     let readableRotationDegrees: Double
     let captureNamespace: Namespace.ID
     let sideLength: CGFloat
+    let remotePlayFlow: RemotePlayFlow?
     let onAbout: () -> Void
+    let onPlayRemotely: () -> Void
+    let onNewGame: () -> Void
+    let remoteNewGameOpponentName: String?
+    let remotePresence: RemotePresenceUpdate?
+    let onInviteRemoteNewGame: () -> Void
+    let onCommittedMove: (Move) -> Void
+    #if DEBUG
+    let fakeRemoteLab: FakeRemoteGameLab?
+    #endif
     @State private var isConfirmingNewGame = false
 
     var body: some View {
@@ -14,7 +24,10 @@ struct SidePanelView: View {
             for: sideLength,
             presentation: viewingAngle.presentsSidebarSegmentsHorizontally ? .horizontalSegments : .verticalColumn
         )
-        let secondaryActions = GameControlsPresentation(result: session.state.result).secondaryActions
+        let secondaryActions = GameControlsPresentation(
+            result: session.state.result,
+            isRemoteGameEnded: session.isRemoteGameEnded
+        ).secondaryActions
 
         VStack(spacing: 0) {
             if layout.showsColumnUtilityStrip,
@@ -33,14 +46,27 @@ struct SidePanelView: View {
         }
         .frame(width: PlaySurfaceLayout.sidePanelWidth, height: layout.columnHeight, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: viewingAngle.sidebarSegmentsInTabletopOrder)
-        .alert("Start a new game?", isPresented: $isConfirmingNewGame) {
-            Button("Keep Playing", role: .cancel) {}
-            Button("New Game", role: .destructive) {
-                session.newGame()
+        .alert(newGameConfirmationPresentation.title, isPresented: $isConfirmingNewGame) {
+            Button(newGameConfirmationPresentation.cancelActionTitle, role: .cancel) {}
+            if let remoteInviteActionTitle = newGameConfirmationPresentation.remoteInviteActionTitle {
+                Button(remoteInviteActionTitle) {
+                    onInviteRemoteNewGame()
+                }
+            }
+            Button(newGameConfirmationPresentation.localResetActionTitle, role: .destructive) {
+                onNewGame()
             }
         } message: {
-            Text("This will abandon the current game.")
+            Text(newGameConfirmationPresentation.message)
         }
+    }
+
+    private var newGameConfirmationPresentation: NewGameConfirmationPresentation {
+        NewGameConfirmationPresentation.presentation(
+            result: session.state.result,
+            isRemoteGameEnded: session.isRemoteGameEnded,
+            remoteOpponentName: remoteNewGameOpponentName
+        )
     }
 
     private func segmentStack(
@@ -70,10 +96,13 @@ struct SidePanelView: View {
     }
 
     private func requestNewGame() {
-        if session.hasGameInProgress {
+        if NewGameRequestPolicy.shouldConfirm(
+            hasGameInProgress: session.hasGameInProgress,
+            isRemoteGameActive: remoteNewGameOpponentName != nil
+        ) {
             isConfirmingNewGame = true
         } else {
-            session.newGame()
+            onNewGame()
         }
     }
 
@@ -88,7 +117,28 @@ struct SidePanelView: View {
         switch segment {
         case .messageAndDone:
             SidebarPanelView(panelSize: panelSize) {
-                TurnStatusPanelView(session: session)
+                #if DEBUG
+                TurnStatusPanelView(
+                    session: session,
+                    remotePlayFlow: remotePlayFlow,
+                    onPlayRemotely: onPlayRemotely,
+                    onNewGame: requestNewGame,
+                    onCommittedMove: onCommittedMove,
+                    remoteOpponentName: remoteNewGameOpponentName,
+                    remotePresence: remotePresence,
+                    fakeRemoteLab: fakeRemoteLab
+                )
+                #else
+                TurnStatusPanelView(
+                    session: session,
+                    remotePlayFlow: remotePlayFlow,
+                    onPlayRemotely: onPlayRemotely,
+                    onNewGame: requestNewGame,
+                    onCommittedMove: onCommittedMove,
+                    remoteOpponentName: remoteNewGameOpponentName,
+                    remotePresence: remotePresence
+                )
+                #endif
             }
         case .selectedPiece:
             SidebarPanelView(panelSize: panelSize) {

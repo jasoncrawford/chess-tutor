@@ -1,0 +1,254 @@
+import XCTest
+@testable import ChessTutor
+
+final class RemoteInviteTransportTests: XCTestCase {
+    func testCreatedInviteCanBeFetchedByCode() async throws {
+        let transport = makeTransport()
+
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: "Maya",
+                whiteAssignment: .inviteeChooses,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+        let fetched = try await transport.fetchInvite(code: Self.code, token: nil, now: Self.joinedAt)
+
+        XCTAssertEqual(fetched, invite)
+        XCTAssertEqual(fetched.inviteePlayerID, Self.joiner.id)
+        XCTAssertEqual(fetched.whiteAssignment, .inviteeChooses)
+    }
+
+    func testAddressedInviteCanBeFetchedByInviteePlayerID() async throws {
+        let transport = makeTransport()
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+
+        XCTAssertEqual(fetched, invite)
+    }
+
+    func testUnaddressedInviteIsNotFetchedByInviteePlayerID() async throws {
+        let transport = makeTransport()
+        _ = try await createInvite(on: transport, whiteAssignment: .invitee)
+
+        let fetched = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+
+        XCTAssertNil(fetched)
+    }
+
+    func testLinkTokenMustMatchWhenPresent() async throws {
+        let transport = makeTransport()
+        _ = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: nil,
+                inviteeDisplayName: nil,
+                whiteAssignment: .inviter,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.tokenMismatch,
+            try await transport.fetchInvite(
+                code: Self.code,
+                token: RemoteInviteToken(rawValue: "wrong"),
+                now: Self.joinedAt
+            )
+        )
+    }
+
+    func testInviteeChoosesAcceptsChosenWhiteAndPreventsSecondAccess() async throws {
+        let transport = makeTransport()
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        let request = JoinRemoteInviteRequest(
+            code: invite.code,
+            token: invite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let accepted = try await transport.acceptInvite(request, chosenColor: .white)
+
+        XCTAssertEqual(accepted.joinerColor, .white)
+        XCTAssertEqual(accepted.invite.status, .accepted)
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
+            try await transport.fetchInvite(code: invite.code, token: invite.token, now: Self.joinedAt)
+        )
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.notPending,
+            try await transport.acceptInvite(request, chosenColor: .white)
+        )
+    }
+
+    func testAcceptedInviteCanBeFetchedByInviter() async throws {
+        let transport = makeTransport()
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        let request = JoinRemoteInviteRequest(
+            code: invite.code,
+            token: invite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let beforeAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        XCTAssertNil(beforeAcceptance)
+        let accepted = try await transport.acceptInvite(request, chosenColor: .white)
+        let fetchedAcceptance = try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+
+        XCTAssertEqual(fetchedAcceptance, accepted)
+    }
+
+    func testFixedWhiteAssignmentRejectsIncompatibleChosenColor() async throws {
+        let transport = makeTransport()
+        let invite = try await createInvite(on: transport, whiteAssignment: .invitee)
+        let request = JoinRemoteInviteRequest(
+            code: invite.code,
+            token: invite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.colorChoiceNotAllowed,
+            try await transport.acceptInvite(request, chosenColor: .black)
+        )
+    }
+
+    func testFixedWhiteAssignmentAllowsOmittedOrMatchingChosenColor() async throws {
+        let noChoiceTransport = makeTransport()
+        let noChoiceInvite = try await createInvite(on: noChoiceTransport, whiteAssignment: .inviter)
+        let noChoiceRequest = JoinRemoteInviteRequest(
+            code: noChoiceInvite.code,
+            token: noChoiceInvite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let acceptedWithoutChoice = try await noChoiceTransport.acceptInvite(noChoiceRequest, chosenColor: nil)
+
+        XCTAssertEqual(acceptedWithoutChoice.joinerColor, .black)
+
+        let matchingChoiceTransport = makeTransport()
+        let matchingChoiceInvite = try await createInvite(on: matchingChoiceTransport, whiteAssignment: .invitee)
+        let matchingChoiceRequest = JoinRemoteInviteRequest(
+            code: matchingChoiceInvite.code,
+            token: matchingChoiceInvite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        let acceptedWithMatchingChoice = try await matchingChoiceTransport.acceptInvite(
+            matchingChoiceRequest,
+            chosenColor: .white
+        )
+
+        XCTAssertEqual(acceptedWithMatchingChoice.joinerColor, .white)
+    }
+
+    func testInviteeChoosesRequiresChosenColor() async throws {
+        let transport = makeTransport()
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviteeChooses)
+        let request = JoinRemoteInviteRequest(
+            code: invite.code,
+            token: invite.token,
+            joiner: Self.joiner,
+            now: Self.joinedAt
+        )
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.colorChoiceRequired,
+            try await transport.acceptInvite(request, chosenColor: nil)
+        )
+    }
+
+    func testCancelReportsInviterLeftOnSubsequentFetch() async throws {
+        let transport = makeTransport()
+        let invite = try await createInvite(on: transport, whiteAssignment: .inviter)
+
+        try await transport.cancelInvite(id: invite.id)
+
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.cancelled(inviterDisplayName: Self.inviter.displayName),
+            try await transport.fetchInvite(code: invite.code, token: invite.token, now: Self.joinedAt)
+        )
+    }
+
+    func testDeclinePreventsInviteePromptAndReportsDeclineToInviter() async throws {
+        let transport = makeTransport()
+        let invite = try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: Self.joiner.id,
+                inviteeDisplayName: Self.joiner.displayName,
+                whiteAssignment: .invitee,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+
+        try await transport.declineInvite(id: invite.id)
+
+        let pendingInvite = try await transport.fetchPendingInvite(for: Self.joiner.id, now: Self.joinedAt)
+        XCTAssertNil(pendingInvite)
+        await XCTAssertThrowsRemoteInviteTransportErrorAsync(.declined(inviteeDisplayName: Self.joiner.displayName),
+            try await transport.acceptedInvite(id: invite.id, now: Self.joinedAt)
+        )
+    }
+
+    private static let code = InviteCode(rawValue: "428193")
+    private static let token = RemoteInviteToken(rawValue: "token-1")
+    private static let inviter = RemotePlayerRef(id: RemotePlayerID(rawValue: "jason"), displayName: "Jason")
+    private static let joiner = RemotePlayerRef(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya")
+    private static let createdAt = Date(timeIntervalSince1970: 10)
+    private static let joinedAt = Date(timeIntervalSince1970: 20)
+    private static let expiresAt = Date(timeIntervalSince1970: 70)
+
+    private func makeTransport() -> InMemoryRemoteInviteTransport {
+        InMemoryRemoteInviteTransport(
+            codeGenerator: { Self.code },
+            tokenGenerator: { Self.token }
+        )
+    }
+
+    private func createInvite(
+        on transport: InMemoryRemoteInviteTransport,
+        whiteAssignment: RemoteInviteWhiteAssignment
+    ) async throws -> RemotePendingInvite {
+        try await transport.createInvite(
+            CreateRemoteInviteRequest(
+                inviter: Self.inviter,
+                inviteePlayerID: nil,
+                inviteeDisplayName: nil,
+                whiteAssignment: whiteAssignment,
+                now: Self.createdAt,
+                expiresAt: Self.expiresAt
+            )
+        )
+    }
+}
+
+private func XCTAssertThrowsRemoteInviteTransportErrorAsync<T>(
+    _ expectedError: RemoteInviteTransportError,
+    _ expression: @autoclosure () async throws -> T,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async {
+    do {
+        _ = try await expression()
+        XCTFail("Expected error", file: file, line: line)
+    } catch let error as RemoteInviteTransportError {
+        XCTAssertEqual(error, expectedError, file: file, line: line)
+    } catch {
+        XCTFail("Expected \(expectedError), got \(error)", file: file, line: line)
+    }
+}
