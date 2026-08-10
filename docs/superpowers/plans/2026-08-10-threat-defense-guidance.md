@@ -35,7 +35,7 @@
 - `ChessTutor/UI/Board/BoardGuidanceOverlay.swift` — visual shapes and rendering for trajectories, bursts, shields, supporter echoes, and coverage pips.
 - `ChessTutorTests/Core/PositionAnalyzerTests.swift` — aggregation, pin, special-move, immutability, and coverage tests.
 - `ChessTutorTests/Game/BoardGuidancePresentationTests.swift` — projection, visual-role, emphasis, terminal-state, and accessibility tests.
-- `ChessTutorTests/UI/BoardGuidanceStyleTests.swift` — stable style, shape, layer-order, and panel-fit assertions.
+- `ChessTutorTests/UI/BoardGuidanceStyleTests.swift` — rendered trajectory and contested-pip geometry behavior.
 
 ### Existing files
 
@@ -451,22 +451,27 @@ struct PositionAnalysis: Equatable, Sendable {
 
 `PositionAnalyzer.analyze(_:)` loops over `state.board.pieces`, calls only `LegalMoveGenerator` APIs, reverses legal capture results into `ThreatRelation`, reverses `legalSupportTargets` into supporter sets, and unions `allowedMoves.map(\.to)` with `controlledSquares` for coverage. It then adds checked-king threat relations from `checkingPieceSquares`. It contains no `switch` over `Piece.Kind`.
 
-- [ ] **Step 5: Add a source-level architecture guard**
+- [ ] **Step 5: Add a behavioral consistency test for the rules boundary**
 
-Add an XCTest that reads `PositionAnalyzer.swift` using `#filePath` to resolve the repository file and rejects rule tokens:
+For every occupied source square in a hand-built position containing all six piece kinds, compare the analyzer's facts to the generator's public answers. This catches an analyzer that drifts from Core without testing source text:
 
 ```swift
-func testAnalyzerDoesNotReimplementPieceRules() throws {
-    let testFile = URL(fileURLWithPath: #filePath)
-    let sourceURL = testFile
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("ChessTutor/Core/PositionAnalyzer.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+func testAnalyzerFactsMatchGeneratorAnswersForEverySource() {
+    let state = makeAllPieceKindsPosition()
+    let analysis = PositionAnalyzer.analyze(state)
 
-    for forbidden in ["switch piece.kind", "fileDelta", "rankDelta", "isKingInCheck", "enPassantTarget"] {
-        XCTAssertFalse(source.contains(forbidden), "PositionAnalyzer contains rule token: \(forbidden)")
+    for (source, piece) in state.board.pieces {
+        XCTAssertEqual(
+            Set(analysis.allowedMoves(from: source)),
+            Set(LegalMoveGenerator.allowedMoves(for: source, by: piece.color, in: state))
+        )
+
+        let expectedCoverage = Set(
+            LegalMoveGenerator.allowedMoves(for: source, by: piece.color, in: state).map(\.to)
+        ).union(
+            LegalMoveGenerator.controlledSquares(for: source, by: piece.color, in: state)
+        )
+        XCTAssertTrue(expectedCoverage.isSubset(of: analysis.coverage(for: piece.color)))
     }
 }
 ```
@@ -795,32 +800,35 @@ git commit -m "Add persistent coverage control"
 
 Add `BoardGuidanceOverlay.swift` to the app Board group/Sources phase and `BoardGuidanceStyleTests.swift` to the test UI group/test Sources phase. Verify project loading with `xcodebuild -project ChessTutor.xcodeproj -scheme ChessTutor -showBuildSettings`.
 
-- [ ] **Step 2: Write failing stable-style tests**
+- [ ] **Step 2: Write failing visual-layout behavior tests**
 
-Define testable constants rather than snapshotting pixels:
+Test the geometry consumed by the real views rather than checking constants in isolation:
 
 ```swift
-func testGuidanceUsesSmallArrowheadsAndQuietUnrelatedMarkers() {
-    let style = BoardGuidanceStyle.current
+func testContestedCoverageProducesTwoDistinctNonoverlappingMarkers() {
+    let markers = CoveragePipLayout.markers(
+        showsSideToMove: true,
+        showsOtherSide: true,
+        cellSize: 84
+    )
 
-    XCTAssertLessThanOrEqual(style.arrowheadLengthInCells, 0.16)
-    XCTAssertLessThanOrEqual(style.pathLineWidthInCells, 0.035)
-    XCTAssertEqual(style.unrelatedMarkerOpacity, 0.20, accuracy: 0.001)
+    XCTAssertEqual(markers.map(\.shape), [.circle, .diamond])
+    XCTAssertFalse(markers[0].frame.intersects(markers[1].frame))
 }
 
-func testCoverageUsesRoundYellowAndDiamondRedPips() {
-    XCTAssertEqual(CoveragePipStyle.sideToMove.shape, .circle)
-    XCTAssertEqual(CoveragePipStyle.otherSide.shape, .diamond)
-    XCTAssertNotEqual(CoveragePipStyle.sideToMove.offset, CoveragePipStyle.otherSide.offset)
-}
+func testTrajectoryLayoutKeepsArrowheadSmallRelativeToBoardCell() {
+    let layout = GuidancePathLayout.make(
+        from: CGPoint(x: 42, y: 42),
+        to: CGPoint(x: 210, y: 42),
+        cellSize: 84
+    )
 
-func testLayerOrderKeepsPathsBelowPiecesAndAboveCoverage() {
-    XCTAssertLessThan(GuidanceLayer.coverage.rawValue, GuidanceLayer.paths.rawValue)
-    XCTAssertLessThan(GuidanceLayer.paths.rawValue, GuidanceLayer.pieceMarkers.rawValue)
+    XCTAssertLessThanOrEqual(layout.arrowheadLength, 84 * 0.16)
+    XCTAssertGreaterThan(layout.shaftLength, layout.arrowheadLength * 4)
 }
 ```
 
-Update the old capture-glow tests to assert the obsolete glow and square-halo styles are removed.
+Delete the old `CaptureGuidanceStyle`/`CaptureGuidanceGlowStyle` tests when their production types are removed. Layer order is verified by the real `ZStack` during the visual scenarios in Task 7.
 
 - [ ] **Step 3: Run style tests and verify missing visual types fail**
 
@@ -830,19 +838,13 @@ Run:
 xcodebuild test -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/BoardGuidanceStyleTests -only-testing:ChessTutorTests/CaptureTrayLayoutTests
 ```
 
-Expected: build failures for `BoardGuidanceStyle`, `CoveragePipStyle`, and `GuidanceLayer`.
+Expected: build failures for `CoveragePipLayout` and `GuidancePathLayout`.
 
 - [ ] **Step 4: Implement the visual primitives**
 
 Use these stable values as the starting visual grammar:
 
 ```swift
-enum GuidanceLayer: Int {
-    case coverage
-    case paths
-    case pieceMarkers
-}
-
 struct BoardGuidanceStyle: Equatable {
     static let current = BoardGuidanceStyle(
         arrowheadLengthInCells: 0.14,
@@ -879,6 +881,7 @@ static let guidanceTeal = Color(red: 0.08, green: 0.55, blue: 0.50)
 - `DefenseShieldView`: a small filled `shield.fill` token positioned at the readable foot of the piece;
 - `SupporterEchoView`: a restrained teal ring around supporter pieces;
 - a `BoardGuidanceGeometry` helper that maps `Square` to centers using `BoardViewingAngle` and never reads game rules.
+- `CoveragePipLayout` and `GuidancePathLayout` pure geometry used directly by the rendered layers and by the behavior tests above.
 
 Guidance markers never pulse continuously. When Reduce Motion is off, a newly changed burst or shield may use one brief scale-and-opacity transition before settling; otherwise every marker remains static.
 
@@ -1014,17 +1017,18 @@ Apply the combined label to each occupied board square and hide decorative burst
 
 Read `@Environment(\.accessibilityReduceMotion)` in `ChessBoardView`. When true, use opacity-only transitions with no scale, travel, or spring for guidance changes. Piece movement keeps the app's established physical settling behavior; only guidance ornament motion is reduced.
 
-- [ ] **Step 5: Add final architecture assertions**
+- [ ] **Step 5: Verify local-only state behavior and review architecture**
 
-Add source inspections that verify:
+Assert `GameSession` coverage toggles do not affect remote position fingerprints or any serialized snapshot value by comparing `PositionFingerprinting.fingerprint(for:)` before and after local selection/coverage changes.
 
-```swift
-XCTAssertFalse(chessBoardSource.contains("LegalMoveGenerator"))
-XCTAssertFalse(chessBoardSource.contains("PositionAnalyzer"))
-XCTAssertFalse(positionAnalyzerSource.contains("switch piece.kind"))
+Then review the dependency boundary directly:
+
+```bash
+rg -n "LegalMoveGenerator|PositionAnalyzer" ChessTutor/UI/Board/ChessBoardView.swift ChessTutor/UI/Board/BoardGuidanceOverlay.swift
+rg -n "switch .*kind|fileDelta|rankDelta|enPassantTarget|castlingRights" ChessTutor/Core/PositionAnalyzer.swift
 ```
 
-Also assert `GameSession` coverage toggles do not affect remote position fingerprints or any serialized snapshot value by comparing `PositionFingerprinting.fingerprint(for:)` before and after local selection/coverage changes.
+Expected: the UI search has no matches. The analyzer search has no matches because it only aggregates `LegalMoveGenerator` output. This is a review gate, not an XCTest tied to source spelling.
 
 - [ ] **Step 6: Run the entire automated suite**
 
