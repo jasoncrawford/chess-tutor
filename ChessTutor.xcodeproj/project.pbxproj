@@ -25,6 +25,8 @@
 		1E2F2DA1B187A73FD815787F /* DiagnosticsLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16CEAE6DBECBB3E2DF889F02 /* DiagnosticsLogTests.swift */; };
 		2120969DF513B09CC78E4B06 /* LegalMoveGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */; };
 		A10000000000000000000004 /* PositionAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* PositionAnalyzer.swift */; };
+		A10000000000000000000006 /* BoardGuidancePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* BoardGuidancePresentation.swift */; };
+		A10000000000000000000008 /* BoardGuidancePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* BoardGuidancePresentationTests.swift */; };
 		267D190F22A792012F871772 /* SpecialMoveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */; };
 		A10000000000000000000002 /* PositionAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* PositionAnalyzerTests.swift */; };
 		2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */; };
@@ -158,6 +160,8 @@
 		54E571D9060609ECB4FB126C /* Move.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Move.swift; sourceTree = "<group>"; };
 		591116D639405BA9CF86BE05 /* LegalMoveGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalMoveGenerator.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* PositionAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionAnalyzer.swift; sourceTree = "<group>"; };
+		A10000000000000000000005 /* BoardGuidancePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGuidancePresentation.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 /* BoardGuidancePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGuidancePresentationTests.swift; sourceTree = "<group>"; };
 		61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPresentationTests.swift; sourceTree = "<group>"; };
 		6250F032F949E7618A1AC7AD /* RemotePresencePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePresencePolicy.swift; sourceTree = "<group>"; };
 		62C65BB76751EB9AD3B6B142 /* CloudKitRemoteInviteTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteInviteTransportTests.swift; sourceTree = "<group>"; };
@@ -534,6 +538,7 @@
 			isa = PBXGroup;
 			children = (
 				04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */,
+				A10000000000000000000005 /* BoardGuidancePresentation.swift */,
 				0849550B4C1E31C47EAC9E2B /* GameLifecycle.swift */,
 				9D517824035C75485AD4D712 /* GameSession.swift */,
 				CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */,
@@ -560,6 +565,7 @@
 		F18F72C04FB114566541767D /* Game */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000007 /* BoardGuidancePresentationTests.swift */,
 				F13E0EE4C35EED64A264EF55 /* GameLifecycleTests.swift */,
 				9DF66E252A80BDA67538D11C /* GameSessionTests.swift */,
 				F4471B31F5756F99709339DF /* MoveHistoryFormatterTests.swift */,
@@ -734,6 +740,7 @@
 				8497F717CD75D8D80EB9075A /* GameState.swift in Sources */,
 				2120969DF513B09CC78E4B06 /* LegalMoveGenerator.swift in Sources */,
 				A10000000000000000000004 /* PositionAnalyzer.swift in Sources */,
+				A10000000000000000000006 /* BoardGuidancePresentation.swift in Sources */,
 				1CB06F0430E219CB8DA57644 /* LegalMoveHighlighter.swift in Sources */,
 				1C16BC492A550B600532F28F /* Move.swift in Sources */,
 				9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */,
@@ -799,6 +806,7 @@
 				524833D5CADCD944546FC91D /* PieceAssetTests.swift in Sources */,
 				AB0F350A65D3E31C44F0CB03 /* PositionFingerprintingTests.swift in Sources */,
 				A10000000000000000000002 /* PositionAnalyzerTests.swift in Sources */,
+				A10000000000000000000008 /* BoardGuidancePresentationTests.swift in Sources */,
 				C4EBCC0DD5376FBF83164609 /* RemoteGameCoordinatorTests.swift in Sources */,
 				4B926330BBE351E7B27D2548 /* RemoteGameLifecycleControllerTests.swift in Sources */,
 				C74B7CEDFEA8023099061838 /* RemoteGameSessionControllerTests.swift in Sources */,

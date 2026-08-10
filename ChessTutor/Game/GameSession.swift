@@ -25,8 +25,11 @@ final class GameSession {
     private var committedState: GameState
     private var tentativeMove: Move?
     private var committedCapturedPieces: [CapturedPiece] = []
+    private var displayedAnalysis: PositionAnalysis
+    private var actionableMovesForSelection: [Move] = []
     var selectedSquare: Square?
-    var legalMovesForSelection: [Move] = []
+    private(set) var analysisRevision = 0
+    var isCoverageVisible = false
     var assistSettings = BeginnerAssistSettings()
     var whitePlayer: PlayerSeat = .humanLocal
     var blackPlayer: PlayerSeat = .humanLocal
@@ -99,7 +102,9 @@ final class GameSession {
     }
 
     var legalDestinations: Set<Square> {
-        var destinations = LegalMoveHighlighter.destinations(for: legalMovesForSelection)
+        var destinations = assistSettings.showLegalMovesOnSelection
+            ? LegalMoveHighlighter.destinations(for: actionableMovesForSelection)
+            : []
         if let tentativeMove, selectedSquare == tentativeMove.to {
             destinations.insert(tentativeMove.from)
         }
@@ -107,11 +112,43 @@ final class GameSession {
     }
 
     var captureIndicatorSquares: Set<Square> {
-        Set(
-            legalMovesForSelection.compactMap { move in
+        guard assistSettings.showLegalMovesOnSelection else {
+            return []
+        }
+        return Set(
+            actionableMovesForSelection.compactMap { move in
                 LegalMoveGenerator.capture(for: move, in: committedState)?.square
             }
         )
+    }
+
+    var boardGuidance: BoardGuidancePresentation {
+        guard boardLockMessage == nil else {
+            return .empty(sideToMove: state.sideToMove)
+        }
+
+        switch committedState.result {
+        case .ongoing:
+            return BoardGuidancePresentation.make(
+                state: state,
+                analysis: displayedAnalysis,
+                selectedSquare: selectedSquare,
+                showsSelectedReach: assistSettings.showLegalMovesOnSelection,
+                showsCoverage: isCoverageVisible,
+                keepsOnlyCheckmateKingThreat: false
+            )
+        case .checkmate:
+            return BoardGuidancePresentation.make(
+                state: state,
+                analysis: displayedAnalysis,
+                selectedSquare: selectedSquare,
+                showsSelectedReach: false,
+                showsCoverage: false,
+                keepsOnlyCheckmateKingThreat: true
+            )
+        case .stalemate:
+            return .empty(sideToMove: state.sideToMove)
+        }
     }
 
     var statusText: String {
@@ -150,6 +187,7 @@ final class GameSession {
 
     init(state: GameState = .startingPosition()) {
         self.committedState = state
+        self.displayedAnalysis = Self.makeAnalysis(for: state)
     }
 
     convenience init(replayingCommittedMoves moves: [Move]) {
@@ -161,36 +199,43 @@ final class GameSession {
 
     func select(_ square: Square) {
         guard committedState.result == .ongoing else {
-            selectedSquare = nil
-            legalMovesForSelection = []
+            selectedSquare = state.board[square] == nil ? nil : square
+            actionableMovesForSelection = []
             message = statusText
             return
         }
 
         if let tentativeMove, square != tentativeMove.to {
             self.tentativeMove = nil
+            refreshDisplayedAnalysis()
         }
 
         guard let piece = state.board[square] else {
             selectedSquare = nil
-            legalMovesForSelection = []
+            actionableMovesForSelection = []
             message = "Choose a \(committedState.sideToMove.rawValue) piece."
             return
         }
 
         selectedSquare = square
-        legalMovesForSelection = piece.color == committedState.sideToMove
+        actionableMovesForSelection = piece.color == committedState.sideToMove
             && localCanActForCurrentTurn
-            && assistSettings.showLegalMovesOnSelection
-            ? allowedMoves(forSelectionAt: square)
+            && tentativeMove == nil
+            ? displayedAnalysis.allowedMoves(from: square)
             : []
         message = boardLockMessage
     }
 
+    func toggleCoverage() {
+        guard committedState.result == .ongoing, boardLockMessage == nil else {
+            return
+        }
+        isCoverageVisible.toggle()
+    }
+
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
         guard committedState.result == .ongoing else {
-            selectedSquare = nil
-            legalMovesForSelection = []
+            actionableMovesForSelection = []
             message = statusText
             return .illegal(statusText)
         }
@@ -213,9 +258,17 @@ final class GameSession {
         if let tentativeMove, selectedSquare == tentativeMove.to, destination == tentativeMove.from {
             self.tentativeMove = nil
             self.selectedSquare = nil
-            legalMovesForSelection = []
+            actionableMovesForSelection = []
             message = nil
+            refreshDisplayedAnalysis()
             return .moved
+        }
+
+        guard let selectedPiece = state.board[selectedSquare],
+              selectedPiece.color == committedState.sideToMove else {
+            let message = "Choose a \(committedState.sideToMove.rawValue) piece."
+            self.message = message
+            return .illegal(message)
         }
 
         let allowedMoves = allowedMoves(forSelectionAt: selectedSquare)
@@ -230,18 +283,20 @@ final class GameSession {
         }
 
         tentativeMove = move
-        self.selectedSquare = nil
-        legalMovesForSelection = []
+        self.selectedSquare = move.to
+        actionableMovesForSelection = []
         message = nil
+        refreshDisplayedAnalysis()
         return .moved
     }
 
     func promote(from: Square, to: Square, to kind: Piece.Kind) {
         let move = Move(from: from, to: to, special: .promotion(kind))
         tentativeMove = move
-        selectedSquare = nil
-        legalMovesForSelection = []
+        selectedSquare = to
+        actionableMovesForSelection = []
         message = nil
+        refreshDisplayedAnalysis()
     }
 
     @discardableResult
@@ -265,19 +320,20 @@ final class GameSession {
                 )
             )
         }
-        committedState.apply(tentativeMove)
+        let committedMove = tentativeMove
+        committedState.apply(committedMove)
         self.tentativeMove = nil
         selectedSquare = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
+        isCoverageVisible = false
+        refreshDisplayedAnalysis()
         message = committedState.result == .ongoing ? nil : statusText
-        return tentativeMove
+        return committedMove
     }
 
     @discardableResult
     func commitRemoteMove(_ move: Move) -> Bool {
         guard committedState.result == .ongoing else {
-            selectedSquare = nil
-            legalMovesForSelection = []
             message = statusText
             return false
         }
@@ -301,7 +357,9 @@ final class GameSession {
         committedState.apply(move)
         tentativeMove = nil
         selectedSquare = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
+        isCoverageVisible = false
+        refreshDisplayedAnalysis()
         message = committedState.result == .ongoing ? nil : statusText
         return true
     }
@@ -311,15 +369,22 @@ final class GameSession {
         tentativeMove = nil
         committedCapturedPieces = []
         selectedSquare = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
+        isCoverageVisible = false
         boardLockMessage = nil
         message = nil
+        refreshDisplayedAnalysis()
     }
 
     func endRemoteGame(message: String) {
+        let wasShowingTentativePosition = tentativeMove != nil
         boardLockMessage = message
         tentativeMove = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
+        isCoverageVisible = false
+        if wasShowingTentativePosition {
+            refreshDisplayedAnalysis()
+        }
         self.message = message
     }
 
@@ -344,7 +409,9 @@ final class GameSession {
         committedState.apply(move)
         tentativeMove = nil
         selectedSquare = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
+        isCoverageVisible = false
+        refreshDisplayedAnalysis()
         message = committedState.result == .ongoing ? nil : statusText
     }
 
@@ -365,8 +432,9 @@ final class GameSession {
             )
         )
         selectedSquare = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
         message = nil
+        refreshDisplayedAnalysis()
     }
 
     func promoteForTesting(at square: Square, to kind: Piece.Kind) {
@@ -378,8 +446,9 @@ final class GameSession {
         tentativeMove = nil
         committedState.board[square] = Piece(kind: kind, color: piece.color)
         selectedSquare = nil
-        legalMovesForSelection = []
+        actionableMovesForSelection = []
         message = nil
+        refreshDisplayedAnalysis()
     }
     #endif
 
@@ -404,6 +473,24 @@ final class GameSession {
         case .black:
             return blackPlayer
         }
+    }
+
+    private func refreshDisplayedAnalysis() {
+        displayedAnalysis = Self.makeAnalysis(for: state)
+        analysisRevision += 1
+    }
+
+    private static func makeAnalysis(for state: GameState) -> PositionAnalysis {
+        guard LegalMoveGenerator.kingSquare(for: .white, in: state.board) != nil,
+              LegalMoveGenerator.kingSquare(for: .black, in: state.board) != nil else {
+            return PositionAnalysis(
+                allowedMovesBySource: [:],
+                threatsByTarget: [:],
+                supportersByTarget: [:],
+                coverageByColor: [:]
+            )
+        }
+        return PositionAnalyzer.analyze(state)
     }
 
     private func movementSummary(for kind: Piece.Kind) -> String {

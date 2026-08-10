@@ -94,7 +94,7 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(result, .needsPromotion(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 8)))
     }
 
-    func testPromoteStagesPromotionChoiceAndClearsSelection() {
+    func testPromoteStagesPromotionChoiceAndKeepsPromotedPieceSelected() {
         let promotionFrom = Square(file: .e, rank: 7)
         let promotionTo = Square(file: .e, rank: 8)
         var board = Board()
@@ -111,8 +111,8 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.state.board[promotionFrom])
         XCTAssertEqual(session.state.sideToMove, .white)
         XCTAssertTrue(session.canFinishTurn)
-        XCTAssertNil(session.selectedSquare)
-        XCTAssertTrue(session.legalMovesForSelection.isEmpty)
+        XCTAssertEqual(session.selectedSquare, promotionTo)
+        XCTAssertEqual(session.legalDestinations, [promotionFrom])
         XCTAssertNil(session.message)
     }
 
@@ -275,7 +275,7 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.state.board[movedPawn])
         XCTAssertFalse(session.canFinishTurn)
         XCTAssertNil(session.selectedSquare)
-        XCTAssertTrue(session.legalMovesForSelection.isEmpty)
+        XCTAssertTrue(session.legalDestinations.isEmpty)
         XCTAssertNil(session.message)
     }
 
@@ -707,7 +707,7 @@ final class GameSessionTests: XCTestCase {
 
         session.select(Square(file: .g, rank: 1))
 
-        XCTAssertNil(session.selectedSquare)
+        XCTAssertEqual(session.selectedSquare, Square(file: .g, rank: 1))
         XCTAssertEqual(session.message, "Checkmate. Black wins.")
     }
 
@@ -731,8 +731,8 @@ final class GameSessionTests: XCTestCase {
         let result = session.moveSelectedPiece(to: Square(file: .g, rank: 2))
 
         XCTAssertEqual(result, .illegal("Checkmate. Black wins."))
-        XCTAssertNil(session.selectedSquare)
-        XCTAssertTrue(session.legalMovesForSelection.isEmpty)
+        XCTAssertEqual(session.selectedSquare, Square(file: .g, rank: 1))
+        XCTAssertTrue(session.legalDestinations.isEmpty)
         XCTAssertEqual(session.message, "Checkmate. Black wins.")
     }
 
@@ -757,8 +757,233 @@ final class GameSessionTests: XCTestCase {
         let result = session.moveSelectedPiece(to: Square(file: .g, rank: 8))
 
         XCTAssertEqual(result, .illegal("Stalemate."))
-        XCTAssertNil(session.selectedSquare)
-        XCTAssertTrue(session.legalMovesForSelection.isEmpty)
+        XCTAssertEqual(session.selectedSquare, Square(file: .h, rank: 8))
+        XCTAssertTrue(session.legalDestinations.isEmpty)
         XCTAssertEqual(session.message, "Stalemate.")
+    }
+
+    func testSelectingOpponentPieceInspectsItWithoutMakingItActionable() {
+        let blackRook = Square(file: .d, rank: 6)
+        let session = GameSession(state: inspectionPosition())
+
+        session.select(blackRook)
+
+        XCTAssertEqual(session.selectedSquare, blackRook)
+        XCTAssertFalse(session.boardGuidance.selectedPaths.isEmpty)
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+        XCTAssertEqual(
+            session.moveSelectedPiece(to: Square(file: .d, rank: 5)),
+            .illegal("Choose a white piece.")
+        )
+    }
+
+    func testTentativeMoveStaysSelectedAndRefreshesItsDanger() {
+        let pawn = Square(file: .e, rank: 2)
+        let destination = Square(file: .e, rank: 4)
+        let session = GameSession(state: tentativeDangerPosition())
+        let initialRevision = session.analysisRevision
+
+        session.select(pawn)
+        session.toggleCoverage()
+
+        XCTAssertEqual(session.analysisRevision, initialRevision)
+
+        _ = session.moveSelectedPiece(to: destination)
+
+        XCTAssertEqual(session.selectedSquare, destination)
+        XCTAssertEqual(session.analysisRevision, initialRevision + 1)
+        XCTAssertTrue(session.boardGuidance.threatenedSquares.contains(destination))
+        XCTAssertTrue(session.isCoverageVisible)
+    }
+
+    func testCoveragePersistsThroughTentativeMoveAndReversion() {
+        let start = Square(file: .e, rank: 2)
+        let destination = Square(file: .e, rank: 4)
+        let session = GameSession()
+        session.toggleCoverage()
+        session.select(start)
+        _ = session.moveSelectedPiece(to: destination)
+
+        XCTAssertTrue(session.isCoverageVisible)
+        XCTAssertEqual(session.selectedSquare, destination)
+
+        _ = session.moveSelectedPiece(to: start)
+
+        XCTAssertTrue(session.isCoverageVisible)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertEqual(session.analysisRevision, 2)
+    }
+
+    func testFailedDoneKeepsCoverageVisible() {
+        let pinnedRook = Square(file: .e, rank: 2)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        pinnedRook: Piece(kind: .rook, color: .white),
+                        Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+        session.toggleCoverage()
+        session.select(pinnedRook)
+        _ = session.moveSelectedPiece(to: Square(file: .a, rank: 2))
+
+        XCTAssertNil(session.finishTurn())
+        XCTAssertTrue(session.isCoverageVisible)
+    }
+
+    func testSuccessfulLocalAndRemoteCommitsCloseCoverage() {
+        let session = GameSession()
+        session.blackPlayer = .remote(playerID: "maya")
+        session.toggleCoverage()
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertNotNil(session.finishTurn())
+        XCTAssertFalse(session.isCoverageVisible)
+
+        session.toggleCoverage()
+        XCTAssertTrue(session.isCoverageVisible)
+
+        XCTAssertTrue(
+            session.commitRemoteMove(
+                Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5))
+            )
+        )
+        XCTAssertFalse(session.isCoverageVisible)
+    }
+
+    func testNewGameAndRemoteGameEndCloseCoverage() {
+        let session = GameSession()
+        session.toggleCoverage()
+
+        session.newGame()
+
+        XCTAssertFalse(session.isCoverageVisible)
+
+        session.toggleCoverage()
+        session.endRemoteGame(message: "Maya ended this game.")
+
+        XCTAssertFalse(session.isCoverageVisible)
+        XCTAssertEqual(session.boardGuidance, .empty(sideToMove: .white))
+    }
+
+    func testPromotionKeepsPromotedPieceSelectedAndRefreshesAnalysis() {
+        let source = Square(file: .e, rank: 7)
+        let destination = Square(file: .e, rank: 8)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                        source: Piece(kind: .pawn, color: .white),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+
+        session.promote(from: source, to: destination, to: .knight)
+
+        XCTAssertEqual(session.selectedSquare, destination)
+        XCTAssertEqual(session.selectedPieceInfo?.piece, Piece(kind: .knight, color: .white))
+        XCTAssertEqual(session.analysisRevision, 1)
+    }
+
+    func testTerminalSelectionKeepsIdentityButSuppressesMovementGuidance() {
+        let losingKing = Square(file: .h, rank: 1)
+        let whiteRook = Square(file: .g, rank: 1)
+        let checkmateSession = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        losingKing: Piece(kind: .king, color: .white),
+                        whiteRook: Piece(kind: .rook, color: .white),
+                        Square(file: .f, rank: 2): Piece(kind: .queen, color: .black),
+                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white,
+                result: .checkmate(winner: .black)
+            )
+        )
+
+        checkmateSession.select(whiteRook)
+        checkmateSession.toggleCoverage()
+
+        XCTAssertEqual(checkmateSession.selectedSquare, whiteRook)
+        XCTAssertEqual(checkmateSession.boardGuidance.threatenedSquares, [losingKing])
+        XCTAssertTrue(checkmateSession.boardGuidance.selectedPaths.isEmpty)
+        XCTAssertNil(checkmateSession.boardGuidance.coverage)
+        XCTAssertFalse(checkmateSession.isCoverageVisible)
+
+        let stalemateKing = Square(file: .h, rank: 8)
+        let stalemateSession = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        stalemateKing: Piece(kind: .king, color: .black),
+                        Square(file: .g, rank: 6): Piece(kind: .king, color: .white),
+                        Square(file: .f, rank: 7): Piece(kind: .queen, color: .white),
+                    ]
+                ),
+                sideToMove: .black,
+                result: .stalemate
+            )
+        )
+
+        stalemateSession.select(stalemateKing)
+
+        XCTAssertEqual(stalemateSession.selectedSquare, stalemateKing)
+        XCTAssertEqual(stalemateSession.boardGuidance, .empty(sideToMove: .black))
+    }
+
+    func testRemoteTurnStillAllowsReadOnlyInspectionAndCoverage() {
+        let session = GameSession()
+        session.whitePlayer = .remote(playerID: "maya")
+        let blackPawn = Square(file: .e, rank: 7)
+
+        session.select(blackPawn)
+        session.toggleCoverage()
+
+        XCTAssertEqual(session.selectedSquare, blackPawn)
+        XCTAssertFalse(session.boardGuidance.selectedPaths.isEmpty)
+        XCTAssertNotNil(session.boardGuidance.coverage)
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+    }
+
+    private func inspectionPosition() -> GameState {
+        GameState(
+            board: Board(
+                pieces: [
+                    Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
+                    Square(file: .b, rank: 4): Piece(kind: .bishop, color: .white),
+                    Square(file: .d, rank: 1): Piece(kind: .rook, color: .white),
+                    Square(file: .d, rank: 6): Piece(kind: .rook, color: .black),
+                    Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                ]
+            ),
+            sideToMove: .white
+        )
+    }
+
+    private func tentativeDangerPosition() -> GameState {
+        GameState(
+            board: Board(
+                pieces: [
+                    Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
+                    Square(file: .e, rank: 2): Piece(kind: .pawn, color: .white),
+                    Square(file: .b, rank: 7): Piece(kind: .bishop, color: .black),
+                    Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                ]
+            ),
+            sideToMove: .white
+        )
     }
 }
