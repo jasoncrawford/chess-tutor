@@ -49,7 +49,7 @@ enum MoveHistoryFormatter {
             return "\(move.from.notation)-\(move.to.notation)"
         }
 
-        let isCapture = state.board[move.to] != nil || move.special == .enPassant
+        let isCapture = LegalMoveGenerator.capture(for: move, in: state) != nil
         let piecePrefix = piece.kind == .pawn ? "" : pieceLetter(for: piece.kind)
         let disambiguation = piece.kind == .pawn
             ? (isCapture ? "\(move.from.file)" : "")

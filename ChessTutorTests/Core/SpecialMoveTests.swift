@@ -143,4 +143,53 @@ final class SpecialMoveTests: XCTestCase {
 
         XCTAssertFalse(moves.contains(Move(from: Square(file: .e, rank: 5), to: Square(file: .d, rank: 6), special: .enPassant)))
     }
+
+    func testCaptureResolutionReturnsDestinationForOrdinaryCapture() {
+        let target = Square(file: .d, rank: 5)
+        let blackPawn = Piece(kind: .pawn, color: .black)
+        let state = GameState(
+            board: Board(
+                pieces: [
+                    Square(file: .e, rank: 4): Piece(kind: .pawn, color: .white),
+                    target: blackPawn,
+                    Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                    Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                ]
+            ),
+            sideToMove: .white
+        )
+        let move = Move(from: Square(file: .e, rank: 4), to: target)
+
+        XCTAssertEqual(
+            LegalMoveGenerator.capture(for: move, in: state),
+            MoveCapture(square: target, piece: blackPawn)
+        )
+    }
+
+    func testCaptureResolutionReturnsAdjacentPawnForEnPassant() {
+        let capturedSquare = Square(file: .d, rank: 5)
+        let blackPawn = Piece(kind: .pawn, color: .black)
+        let state = GameState(
+            board: Board(
+                pieces: [
+                    Square(file: .e, rank: 5): Piece(kind: .pawn, color: .white),
+                    capturedSquare: blackPawn,
+                    Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                    Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                ]
+            ),
+            sideToMove: .white,
+            enPassantTarget: Square(file: .d, rank: 6)
+        )
+        let move = Move(
+            from: Square(file: .e, rank: 5),
+            to: Square(file: .d, rank: 6),
+            special: .enPassant
+        )
+
+        XCTAssertEqual(
+            LegalMoveGenerator.capture(for: move, in: state),
+            MoveCapture(square: capturedSquare, piece: blackPawn)
+        )
+    }
 }

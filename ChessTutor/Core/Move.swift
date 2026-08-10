@@ -16,3 +16,8 @@ struct Move: Equatable, Hashable, Sendable {
         self.special = special
     }
 }
+
+struct MoveCapture: Equatable, Hashable, Sendable {
+    let square: Square
+    let piece: Piece
+}

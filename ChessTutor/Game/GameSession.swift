@@ -69,7 +69,7 @@ final class GameSession {
 
     var capturedPieces: [CapturedPiece] {
         guard let tentativeMove,
-              let capturedPiece = capturedPiece(for: tentativeMove, in: committedState) else {
+              let capturedPiece = LegalMoveGenerator.capture(for: tentativeMove, in: committedState) else {
             return committedCapturedPieces
         }
 
@@ -109,7 +109,7 @@ final class GameSession {
     var captureIndicatorSquares: Set<Square> {
         Set(
             legalMovesForSelection.compactMap { move in
-                capturedPiece(for: move, in: committedState)?.square
+                LegalMoveGenerator.capture(for: move, in: committedState)?.square
             }
         )
     }
@@ -255,7 +255,7 @@ final class GameSession {
             return nil
         }
 
-        if let capturedPiece = capturedPiece(for: tentativeMove, in: committedState) {
+        if let capturedPiece = LegalMoveGenerator.capture(for: tentativeMove, in: committedState) {
             committedCapturedPieces.append(
                 CapturedPiece(
                     id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
@@ -288,7 +288,7 @@ final class GameSession {
             return false
         }
 
-        if let capturedPiece = capturedPiece(for: move, in: committedState) {
+        if let capturedPiece = LegalMoveGenerator.capture(for: move, in: committedState) {
             committedCapturedPieces.append(
                 CapturedPiece(
                     id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
@@ -331,7 +331,7 @@ final class GameSession {
     }
 
     private func commitRestoredMove(_ move: Move) {
-        if let capturedPiece = capturedPiece(for: move, in: committedState) {
+        if let capturedPiece = LegalMoveGenerator.capture(for: move, in: committedState) {
             committedCapturedPieces.append(
                 CapturedPiece(
                     id: capturedID(for: capturedPiece.piece, at: capturedPiece.square),
@@ -436,15 +436,6 @@ final class GameSession {
             return "Your king would still be in check. Move to defend your king."
         }
         return "That move would put your king in check."
-    }
-
-    private func capturedPiece(for move: Move, in state: GameState) -> (square: Square, piece: Piece)? {
-        if case .enPassant = move.special {
-            let capturedSquare = Square(file: move.to.file, rank: move.from.rank)
-            return state.board[capturedSquare].map { (capturedSquare, $0) }
-        }
-
-        return state.board[move.to].map { (move.to, $0) }
     }
 
     private func capturedID(for piece: Piece, at square: Square) -> String {

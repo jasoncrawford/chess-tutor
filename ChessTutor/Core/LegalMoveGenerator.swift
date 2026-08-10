@@ -1,4 +1,17 @@
 enum LegalMoveGenerator {
+    static func capture(for move: Move, in state: GameState) -> MoveCapture? {
+        let capturedSquare: Square
+        if move.special == .enPassant {
+            capturedSquare = Square(file: move.to.file, rank: move.from.rank)
+        } else {
+            capturedSquare = move.to
+        }
+
+        return state.board[capturedSquare].map {
+            MoveCapture(square: capturedSquare, piece: $0)
+        }
+    }
+
     static func allowedMoves(for square: Square, in state: GameState) -> [Move] {
         guard let piece = state.board[square], piece.color == state.sideToMove else {
             return []

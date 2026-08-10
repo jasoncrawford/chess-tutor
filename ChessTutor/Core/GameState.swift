@@ -47,7 +47,7 @@ struct GameState: Equatable, Sendable {
         guard let movingPiece = next.board[move.from] else {
             return next
         }
-        let capturedPiece = next.board[move.to]
+        let capture = LegalMoveGenerator.capture(for: move, in: self)
         next.board[move.from] = nil
 
         switch move.special {
@@ -75,7 +75,12 @@ struct GameState: Equatable, Sendable {
             next.board[move.to] = movingPiece
         }
 
-        next.updateCastlingRights(for: movingPiece, from: move.from, capturedPiece: capturedPiece, capturedAt: move.to)
+        next.updateCastlingRights(
+            for: movingPiece,
+            from: move.from,
+            capturedPiece: capture?.piece,
+            capturedAt: capture?.square ?? move.to
+        )
         next.enPassantTarget = nil
         if movingPiece.kind == .pawn, abs(move.to.rank - move.from.rank) == 2 {
             next.enPassantTarget = Square(file: move.from.file, rank: (move.from.rank + move.to.rank) / 2)
