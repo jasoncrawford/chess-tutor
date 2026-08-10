@@ -1,4 +1,15 @@
 enum LegalMoveGenerator {
+    private static let knightDeltas = [
+        (1, 2), (2, 1), (2, -1), (1, -2),
+        (-1, -2), (-2, -1), (-2, 1), (-1, 2),
+    ]
+    private static let bishopDirections = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    private static let rookDirections = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    private static let kingDeltas = [
+        (1, 0), (-1, 0), (0, 1), (0, -1),
+        (1, 1), (1, -1), (-1, 1), (-1, -1),
+    ]
+
     static func capture(for move: Move, in state: GameState) -> MoveCapture? {
         let capturedSquare: Square
         if move.special == .enPassant {
@@ -13,21 +24,35 @@ enum LegalMoveGenerator {
     }
 
     static func allowedMoves(for square: Square, in state: GameState) -> [Move] {
-        guard let piece = state.board[square], piece.color == state.sideToMove else {
+        allowedMoves(for: square, by: state.sideToMove, in: state)
+    }
+
+    static func allowedMoves(
+        for square: Square,
+        by color: PieceColor,
+        in state: GameState
+    ) -> [Move] {
+        guard let piece = state.board[square], piece.color == color else {
             return []
         }
         return pseudoLegalMoves(for: square, piece: piece, in: state)
     }
 
     static func legalMoves(for square: Square, in state: GameState) -> [Move] {
-        guard let piece = state.board[square], piece.color == state.sideToMove else {
+        legalMoves(for: square, by: state.sideToMove, in: state)
+    }
+
+    static func legalMoves(
+        for square: Square,
+        by color: PieceColor,
+        in state: GameState
+    ) -> [Move] {
+        guard state.board[square]?.color == color else {
             return []
         }
-        return allowedMoves(for: square, in: state)
-            .filter { move in
-                let nextState = state.applyingUnchecked(move)
-                return !isKingInCheck(piece.color, in: nextState.board)
-            }
+        return allowedMoves(for: square, by: color, in: state).filter { move in
+            !isKingInCheck(color, in: state.applyingUnchecked(move).board)
+        }
     }
 
     static func allLegalMoves(in state: GameState) -> [Move] {
@@ -39,17 +64,59 @@ enum LegalMoveGenerator {
     }
 
     static func isKingInCheck(_ color: PieceColor, in board: Board) -> Bool {
+        !checkingPieceSquares(against: color, in: board).isEmpty
+    }
+
+    static func checkingPieceSquares(against color: PieceColor, in board: Board) -> Set<Square> {
         guard let kingSquare = kingSquare(for: color, in: board) else {
             preconditionFailure("Cannot determine check state: missing \(color.rawValue) king")
         }
-        return board.pieces.contains { square, piece in
-            piece.color != color && attacks(square: kingSquare, from: square, piece: piece, board: board)
+        return Set(board.pieces.compactMap { square, piece in
+            piece.color != color
+                && attacks(square: kingSquare, from: square, piece: piece, board: board)
+                ? square
+                : nil
+        })
+    }
+
+    static func controlledSquares(
+        for square: Square,
+        by color: PieceColor,
+        in state: GameState
+    ) -> Set<Square> {
+        guard let piece = state.board[square], piece.color == color else {
+            return []
         }
+        return controlledSquares(from: square, piece: piece, board: state.board)
+    }
+
+    static func legalSupportTargets(
+        for square: Square,
+        by color: PieceColor,
+        in state: GameState
+    ) -> Set<Square> {
+        guard state.board[square]?.color == color else {
+            return []
+        }
+
+        return Set(controlledSquares(for: square, by: color, in: state).filter { target in
+            guard let occupant = state.board[target],
+                  occupant.color == color,
+                  occupant.kind != .king else {
+                return false
+            }
+
+            var captureState = state
+            captureState.board[target] = Piece(kind: occupant.kind, color: color.opposite)
+            return legalMoves(for: square, by: color, in: captureState).contains { move in
+                move.to == target
+            }
+        })
     }
 
     private static func pseudoLegalMoves(for square: Square, piece: Piece, in state: GameState) -> [Move] {
         var moves = pseudoLegalMoves(for: square, piece: piece, board: state.board)
-        if piece.kind == .pawn {
+        if piece.kind == .pawn, piece.color == state.sideToMove {
             moves += enPassantMoves(from: square, piece: piece, state: state)
         }
         if piece.kind == .king {
@@ -63,18 +130,98 @@ enum LegalMoveGenerator {
         case .pawn:
             return pawnMoves(from: square, piece: piece, board: board, includesKingTargets: includesKingTargets)
         case .knight:
-            return jumpMoves(from: square, piece: piece, board: board, deltas: [
-                (1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1), (-2, 1), (-1, 2)
-            ], includesKingTargets: includesKingTargets)
+            return jumpMoves(
+                from: square,
+                piece: piece,
+                board: board,
+                deltas: knightDeltas,
+                includesKingTargets: includesKingTargets
+            )
         case .bishop:
-            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 1), (1, -1), (-1, 1), (-1, -1)], includesKingTargets: includesKingTargets)
+            return slidingMoves(
+                from: square,
+                piece: piece,
+                board: board,
+                directions: bishopDirections,
+                includesKingTargets: includesKingTargets
+            )
         case .rook:
-            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 0), (-1, 0), (0, 1), (0, -1)], includesKingTargets: includesKingTargets)
+            return slidingMoves(
+                from: square,
+                piece: piece,
+                board: board,
+                directions: rookDirections,
+                includesKingTargets: includesKingTargets
+            )
         case .queen:
-            return slidingMoves(from: square, piece: piece, board: board, directions: [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)], includesKingTargets: includesKingTargets)
+            return slidingMoves(
+                from: square,
+                piece: piece,
+                board: board,
+                directions: rookDirections + bishopDirections,
+                includesKingTargets: includesKingTargets
+            )
         case .king:
-            return jumpMoves(from: square, piece: piece, board: board, deltas: [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)], includesKingTargets: includesKingTargets)
+            return jumpMoves(
+                from: square,
+                piece: piece,
+                board: board,
+                deltas: kingDeltas,
+                includesKingTargets: includesKingTargets
+            )
         }
+    }
+
+    private static func controlledSquares(from square: Square, piece: Piece, board: Board) -> Set<Square> {
+        switch piece.kind {
+        case .pawn:
+            let direction = piece.color == .white ? 1 : -1
+            return Set([-1, 1].compactMap { fileDelta in
+                square.offset(fileDelta: fileDelta, rankDelta: direction)
+            })
+        case .knight:
+            return jumpControlSquares(from: square, deltas: knightDeltas)
+        case .bishop:
+            return slidingControlSquares(from: square, board: board, directions: bishopDirections)
+        case .rook:
+            return slidingControlSquares(from: square, board: board, directions: rookDirections)
+        case .queen:
+            return slidingControlSquares(
+                from: square,
+                board: board,
+                directions: rookDirections + bishopDirections
+            )
+        case .king:
+            return jumpControlSquares(from: square, deltas: kingDeltas)
+        }
+    }
+
+    private static func jumpControlSquares(
+        from square: Square,
+        deltas: [(Int, Int)]
+    ) -> Set<Square> {
+        Set(deltas.compactMap { fileDelta, rankDelta in
+            square.offset(fileDelta: fileDelta, rankDelta: rankDelta)
+        })
+    }
+
+    private static func slidingControlSquares(
+        from square: Square,
+        board: Board,
+        directions: [(Int, Int)]
+    ) -> Set<Square> {
+        var controlled: Set<Square> = []
+        for direction in directions {
+            var current = square
+            while let next = current.offset(fileDelta: direction.0, rankDelta: direction.1) {
+                controlled.insert(next)
+                if board[next] != nil {
+                    break
+                }
+                current = next
+            }
+        }
+        return controlled
     }
 
     private static func pawnMoves(from square: Square, piece: Piece, board: Board, includesKingTargets: Bool = false) -> [Move] {
@@ -208,11 +355,6 @@ enum LegalMoveGenerator {
     }
 
     private static func attacks(square target: Square, from square: Square, piece: Piece, board: Board) -> Bool {
-        if piece.kind == .pawn {
-            let direction = piece.color == .white ? 1 : -1
-            return square.offset(fileDelta: -1, rankDelta: direction) == target
-                || square.offset(fileDelta: 1, rankDelta: direction) == target
-        }
-        return pseudoLegalMoves(for: square, piece: piece, board: board, includesKingTargets: true).contains { $0.to == target }
+        controlledSquares(from: square, piece: piece, board: board).contains(target)
     }
 }
