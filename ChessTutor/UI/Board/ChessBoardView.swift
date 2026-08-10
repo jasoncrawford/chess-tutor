@@ -210,6 +210,7 @@ struct ChessBoardView: View {
                 x: (proxy.size.width - side) / 2,
                 y: (proxy.size.height - side) / 2
             )
+            let guidance = session.boardGuidance
 
             ZStack {
                 board(side: side)
@@ -222,7 +223,25 @@ struct ChessBoardView: View {
                     .shadow(color: .black.opacity(0.20), radius: 18, y: 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                piecesOverlay(side: side, origin: origin)
+                CoveragePipsLayer(
+                    guidance: guidance,
+                    side: side,
+                    origin: origin,
+                    viewingAngle: viewingAngle
+                )
+
+                GuidancePathsLayer(
+                    guidance: guidance,
+                    side: side,
+                    origin: origin,
+                    viewingAngle: viewingAngle
+                )
+
+                piecesOverlay(
+                    side: side,
+                    origin: origin,
+                    guidance: guidance
+                )
 
                 if let dragState {
                     PieceIconView(piece: dragState.piece)
@@ -263,22 +282,11 @@ struct ChessBoardView: View {
 
     @ViewBuilder
     private func squareView(_ square: Square) -> some View {
-        let isLegalDestination = session.legalDestinations.contains(square)
-        let isCaptureIndicator = session.captureIndicatorSquares.contains(square)
-
         let content = ZStack {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
             if session.selectedSquare == square {
                 selectedSquareHighlight()
-            }
-            if isCaptureIndicator, CaptureGuidanceStyle.current.showsSquareHalo {
-                captureGuidanceHalo()
-            }
-            if isLegalDestination {
-                if !isCaptureIndicator {
-                    legalMoveInlay()
-                }
             }
             coordinateLabels(for: square)
         }
@@ -354,59 +362,27 @@ struct ChessBoardView: View {
             }
     }
 
-    private func legalMoveInlay() -> some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        AppTheme.moveInlayHighlight,
-                        AppTheme.moveInlayBrass,
-                        AppTheme.moveInlayVerdigris,
-                    ],
-                    center: UnitPoint(x: 0.35, y: 0.30),
-                    startRadius: 1,
-                    endRadius: 13
-                )
-            )
-            .frame(width: 21, height: 21)
-            .overlay {
-                Circle()
-                    .stroke(Color.white.opacity(0.34), lineWidth: 1)
-            }
-            .shadow(color: AppTheme.boardFrame.opacity(0.18), radius: 3, y: 2)
-            .transition(.scale(scale: 0.72).combined(with: .opacity))
-    }
+    private func piecesOverlay(
+        side: CGFloat,
+        origin: CGPoint,
+        guidance: BoardGuidancePresentation
+    ) -> some View {
+        let cellSize = side / 8
 
-    private func captureGuidanceHalo() -> some View {
-        ZStack {
-            Circle()
-                .stroke(AppTheme.captureHaloGlow, lineWidth: 10)
-                .blur(radius: 3)
-                .padding(8)
-
-            Circle()
-                .stroke(AppTheme.captureHalo, lineWidth: 5)
-                .padding(11)
-                .shadow(color: AppTheme.captureHaloGlow, radius: 7)
-
-            Circle()
-                .stroke(Color.white.opacity(0.24), lineWidth: 1)
-                .padding(15)
-        }
-        .transition(.scale(scale: 0.82).combined(with: .opacity))
-    }
-
-    private func piecesOverlay(side: CGFloat, origin: CGPoint) -> some View {
-        ZStack {
+        return ZStack {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
-                    if CaptureGuidanceStyle.current.showsPieceGlow,
-                       session.captureIndicatorSquares.contains(visualPiece.square) {
-                        PieceCaptureGlowView(piece: visualPiece.piece)
-                            .rotationEffect(.degrees(readableRotationDegrees))
-                            .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
+                    let pieceCenter = center(of: visualPiece.square, side: side, origin: origin)
+                    let markerOpacity = guidance.markerOpacity(at: visualPiece.square)
+
+                    if guidance.threatenedSquares.contains(visualPiece.square) {
+                        DangerBurstView(cellSize: cellSize, opacity: markerOpacity)
+                            .position(pieceCenter)
+                    }
+
+                    if guidance.supporterSquares.contains(visualPiece.square) {
+                        SupporterEchoView(cellSize: cellSize)
                             .position(center(of: visualPiece.square, side: side, origin: origin))
-                            .transition(.scale(scale: 0.88).combined(with: .opacity))
                     }
 
                     PieceIconView(piece: visualPiece.piece)
@@ -415,9 +391,21 @@ struct ChessBoardView: View {
                             in: captureNamespace
                         )
                         .rotationEffect(.degrees(readableRotationDegrees))
-                        .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
-                        .position(center(of: visualPiece.square, side: side, origin: origin))
+                        .frame(width: cellSize * 0.82, height: cellSize * 0.82)
+                        .position(pieceCenter)
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
+
+                    if guidance.defendedSquares.contains(visualPiece.square) {
+                        DefenseShieldView(
+                            cellSize: cellSize,
+                            readableRotationDegrees: readableRotationDegrees,
+                            opacity: markerOpacity
+                        )
+                        .position(
+                            x: pieceCenter.x,
+                            y: pieceCenter.y + cellSize * 0.31
+                        )
+                    }
                 }
             }
         }
@@ -472,7 +460,8 @@ struct ChessBoardView: View {
                 }
                 #endif
 
-                guard let from = square(at: value.startLocation, side: side, origin: origin),
+                guard session.localCanActForCurrentTurn,
+                      let from = square(at: value.startLocation, side: side, origin: origin),
                       let piece = session.state.board[from],
                       piece.color == session.state.sideToMove else {
                     return
@@ -549,18 +538,11 @@ struct ChessBoardView: View {
     }
 
     private func center(of square: Square, side: CGFloat, origin: CGPoint) -> CGPoint {
-        let visibleFiles = viewingAngle.files
-        let visibleRanks = viewingAngle.ranks
-        guard let column = visibleFiles.firstIndex(of: square.file),
-              let row = visibleRanks.firstIndex(of: square.rank) else {
-            return origin
-        }
-
-        let cell = side / 8
-        return CGPoint(
-            x: origin.x + (CGFloat(column) + 0.5) * cell,
-            y: origin.y + (CGFloat(row) + 0.5) * cell
-        )
+        BoardGuidanceGeometry(
+            side: side,
+            origin: origin,
+            viewingAngle: viewingAngle
+        ).center(of: square)
     }
 
     private func syncVisualPieces(animated: Bool) {
@@ -713,13 +695,6 @@ private struct DragState {
     var location: CGPoint
 }
 
-struct CaptureGuidanceStyle: Equatable {
-    static let current = CaptureGuidanceStyle(showsPieceGlow: true, showsSquareHalo: false)
-
-    let showsPieceGlow: Bool
-    let showsSquareHalo: Bool
-}
-
 struct BoardCoordinateLabelStyle: Equatable {
     static let current = BoardCoordinateLabelStyle(
         padding: 9,
@@ -749,50 +724,6 @@ enum BoardCoordinateHighlightColor: Equatable {
         case .selectedSquare:
             return AppTheme.selectedSquareCenter
         }
-    }
-}
-
-struct CaptureGuidanceGlowStyle: Equatable {
-    static let current = CaptureGuidanceGlowStyle(
-        scale: 1.15,
-        opacity: 0.86,
-        blurRadius: 5.25,
-        rimOpacity: 0.36
-    )
-
-    let scale: CGFloat
-    let opacity: Double
-    let blurRadius: CGFloat
-    let rimOpacity: Double
-}
-
-private struct PieceCaptureGlowView: View {
-    let piece: Piece
-    private let glowStyle = CaptureGuidanceGlowStyle.current
-
-    var body: some View {
-        ZStack {
-            pieceRim(scale: glowStyle.scale, opacity: glowStyle.opacity, blur: glowStyle.blurRadius)
-            pieceRim(scale: 1.04, opacity: glowStyle.rimOpacity, blur: 1.2)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func pieceRim(
-        scale: CGFloat,
-        opacity: Double,
-        blur: CGFloat
-    ) -> some View {
-        Image(piece.assetName)
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
-            .padding(.vertical, 2)
-            .foregroundStyle(AppTheme.captureHalo)
-            .opacity(opacity)
-            .scaleEffect(scale)
-            .blur(radius: blur)
-            .shadow(color: AppTheme.captureHaloGlow.opacity(0.72), radius: 5)
     }
 }
 

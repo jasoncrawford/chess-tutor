@@ -2,19 +2,6 @@ import XCTest
 @testable import ChessTutor
 
 final class CaptureTrayLayoutTests: XCTestCase {
-    func testCaptureGuidanceUsesPieceShapedGlowInsteadOfSquareHalo() {
-        XCTAssertTrue(CaptureGuidanceStyle.current.showsPieceGlow)
-        XCTAssertFalse(CaptureGuidanceStyle.current.showsSquareHalo)
-    }
-
-    func testCaptureGuidanceGlowUsesSoftUnderPieceRim() {
-        XCTAssertGreaterThan(CaptureGuidanceGlowStyle.current.scale, 1)
-        XCTAssertGreaterThan(CaptureGuidanceGlowStyle.current.blurRadius, 4)
-        XCTAssertGreaterThanOrEqual(CaptureGuidanceGlowStyle.current.opacity, 0.84)
-        XCTAssertGreaterThanOrEqual(CaptureGuidanceGlowStyle.current.rimOpacity, 0.34)
-        XCTAssertLessThan(CaptureGuidanceGlowStyle.current.rimOpacity, CaptureGuidanceGlowStyle.current.opacity)
-    }
-
     func testBoardCoordinateLabelsAreInsetClearOfFrame() {
         XCTAssertEqual(BoardCoordinateLabelStyle.current.padding, 9, accuracy: 0.01)
         XCTAssertGreaterThan(BoardCoordinateLabelStyle.current.padding, 5)

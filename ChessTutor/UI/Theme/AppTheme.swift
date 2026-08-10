@@ -30,6 +30,10 @@ enum AppTheme {
     static let moveInlayVerdigris = Color(red: 0.37, green: 0.52, blue: 0.41).opacity(0.42)
     static let captureHalo = Color(red: 0.80, green: 0.50, blue: 0.18).opacity(0.76)
     static let captureHaloGlow = Color(red: 0.93, green: 0.63, blue: 0.22).opacity(0.42)
+    static let guidanceYellow = Color(red: 0.96, green: 0.72, blue: 0.12)
+    static let guidanceRed = Color(red: 0.86, green: 0.19, blue: 0.16)
+    static let guidanceCoral = Color(red: 0.94, green: 0.30, blue: 0.24)
+    static let guidanceTeal = Color(red: 0.08, green: 0.55, blue: 0.50)
     static let whitePiece = Color(red: 0.98, green: 0.94, blue: 0.84)
     static let blackPiece = Color(red: 0.17, green: 0.19, blue: 0.18)
 
