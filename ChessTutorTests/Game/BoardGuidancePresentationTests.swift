@@ -32,6 +32,42 @@ final class BoardGuidancePresentationTests: XCTestCase {
         )
     }
 
+    func testSelectedCheckingPieceShowsItsThreatToTheKing() {
+        let whiteKing = Square(file: .e, rank: 1)
+        let blackRook = Square(file: .e, rank: 8)
+        let state = GameState(
+            board: Board(
+                pieces: [
+                    whiteKing: Piece(kind: .king, color: .white),
+                    blackRook: Piece(kind: .rook, color: .black),
+                    Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                ]
+            ),
+            sideToMove: .white
+        )
+
+        let presentation = BoardGuidancePresentation.make(
+            state: state,
+            analysis: PositionAnalyzer.analyze(state),
+            selectedSquare: blackRook,
+            showsSelectedReach: true,
+            showsCoverage: false,
+            keepsOnlyCheckmateKingThreat: false
+        )
+
+        XCTAssertTrue(
+            presentation.selectedPaths.contains(
+                BoardGuidancePath(
+                    source: blackRook,
+                    destination: whiteKing,
+                    captureSquare: whiteKing,
+                    color: .black,
+                    role: .allowed
+                )
+            )
+        )
+    }
+
     func testSelectedPieceShowsSupporterAsEchoWithoutAddingDefenderPath() {
         let selected = Square(file: .d, rank: 4)
         let supporter = Square(file: .d, rank: 1)
@@ -181,6 +217,117 @@ final class BoardGuidancePresentationTests: XCTestCase {
         XCTAssertTrue(presentation.selectedPaths.isEmpty)
         XCTAssertTrue(presentation.supporterSquares.isEmpty)
         XCTAssertNil(presentation.coverage)
+    }
+
+    func testPieceAccessibilityIncludesThreatAndDefenseStatus() {
+        let target = Square(file: .d, rank: 4)
+        let presentation = BoardGuidancePresentation(
+            sideToMove: .white,
+            threatenedSquares: [target],
+            defendedSquares: [target],
+            selectedSquare: nil,
+            selectedPaths: [],
+            supporterSquares: [],
+            coverage: nil,
+            emphasizedSquares: []
+        )
+
+        XCTAssertEqual(
+            presentation.accessibilityLabel(
+                for: target,
+                piece: Piece(kind: .bishop, color: .white)
+            ),
+            "White bishop on d4, threatened and defended"
+        )
+    }
+
+    func testPieceAccessibilityNamesSingleAndAbsentStatuses() {
+        let threatened = Square(file: .a, rank: 2)
+        let defended = Square(file: .b, rank: 2)
+        let quiet = Square(file: .c, rank: 2)
+        let presentation = BoardGuidancePresentation(
+            sideToMove: .white,
+            threatenedSquares: [threatened],
+            defendedSquares: [defended],
+            selectedSquare: nil,
+            selectedPaths: [],
+            supporterSquares: [],
+            coverage: nil,
+            emphasizedSquares: []
+        )
+
+        XCTAssertEqual(
+            presentation.accessibilityLabel(
+                for: threatened,
+                piece: Piece(kind: .pawn, color: .white)
+            ),
+            "White pawn on a2, threatened"
+        )
+        XCTAssertEqual(
+            presentation.accessibilityLabel(
+                for: defended,
+                piece: Piece(kind: .knight, color: .white)
+            ),
+            "White knight on b2, defended"
+        )
+        XCTAssertEqual(
+            presentation.accessibilityLabel(
+                for: quiet,
+                piece: Piece(kind: .rook, color: .white)
+            ),
+            "White rook on c2"
+        )
+    }
+
+    func testCoverageAccessibilityNamesBothSidesOnContestedSquare() {
+        let contested = Square(file: .d, rank: 5)
+        let presentation = BoardGuidancePresentation(
+            sideToMove: .white,
+            threatenedSquares: [],
+            defendedSquares: [],
+            selectedSquare: nil,
+            selectedPaths: [],
+            supporterSquares: [],
+            coverage: BoardCoveragePresentation(
+                sideToMove: .white,
+                sideToMoveSquares: [contested],
+                otherSideSquares: [contested]
+            ),
+            emphasizedSquares: []
+        )
+
+        XCTAssertEqual(
+            presentation.coverageAccessibilityLabel(for: contested),
+            "d5, covered by White and Black"
+        )
+    }
+
+    func testCoverageAccessibilityNamesOneSideOrBareSquare() {
+        let blackOnly = Square(file: .f, rank: 6)
+        let uncovered = Square(file: .g, rank: 6)
+        let presentation = BoardGuidancePresentation(
+            sideToMove: .black,
+            threatenedSquares: [],
+            defendedSquares: [],
+            selectedSquare: nil,
+            selectedPaths: [],
+            supporterSquares: [],
+            coverage: BoardCoveragePresentation(
+                sideToMove: .black,
+                sideToMoveSquares: [blackOnly],
+                otherSideSquares: []
+            ),
+            emphasizedSquares: []
+        )
+
+        XCTAssertEqual(
+            presentation.coverageAccessibilityLabel(for: blackOnly),
+            "f6, covered by Black"
+        )
+        XCTAssertEqual(
+            presentation.coverageAccessibilityLabel(for: uncovered),
+            "g6"
+        )
     }
 
     private func inspectionPosition() -> GameState {

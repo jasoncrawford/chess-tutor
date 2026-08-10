@@ -31,6 +31,43 @@ struct BoardGuidancePresentation: Equatable, Sendable {
         selectedSquare == nil || emphasizedSquares.contains(square) ? 1 : 0.20
     }
 
+    func accessibilityLabel(for square: Square, piece: Piece) -> String {
+        let identity = "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue) on \(squareName(square))"
+        let isThreatened = threatenedSquares.contains(square)
+        let isDefended = defendedSquares.contains(square)
+
+        switch (isThreatened, isDefended) {
+        case (true, true):
+            return "\(identity), threatened and defended"
+        case (true, false):
+            return "\(identity), threatened"
+        case (false, true):
+            return "\(identity), defended"
+        case (false, false):
+            return identity
+        }
+    }
+
+    func coverageAccessibilityLabel(for square: Square) -> String {
+        let identity = squareName(square)
+        guard let coverage else {
+            return identity
+        }
+
+        let sideToMoveCovers = coverage.sideToMoveSquares.contains(square)
+        let otherSideCovers = coverage.otherSideSquares.contains(square)
+        switch (sideToMoveCovers, otherSideCovers) {
+        case (true, true):
+            return "\(identity), covered by \(coverage.sideToMove.rawValue.capitalized) and \(coverage.sideToMove.opposite.rawValue.capitalized)"
+        case (true, false):
+            return "\(identity), covered by \(coverage.sideToMove.rawValue.capitalized)"
+        case (false, true):
+            return "\(identity), covered by \(coverage.sideToMove.opposite.rawValue.capitalized)"
+        case (false, false):
+            return identity
+        }
+    }
+
     static func empty(sideToMove: PieceColor) -> BoardGuidancePresentation {
         BoardGuidancePresentation(
             sideToMove: sideToMove,
@@ -81,6 +118,21 @@ struct BoardGuidancePresentation: Equatable, Sendable {
                             source: selectedSquare,
                             destination: move.to,
                             captureSquare: LegalMoveGenerator.capture(for: move, in: state)?.square,
+                            color: selectedPiece.color,
+                            role: .allowed
+                        )
+                    )
+                }
+
+                for threat in analysis.threats(from: selectedSquare) where
+                    !selectedPaths.contains(where: {
+                        $0.source == selectedSquare && $0.destination == threat.destination
+                    }) {
+                    selectedPaths.insert(
+                        BoardGuidancePath(
+                            source: selectedSquare,
+                            destination: threat.destination,
+                            captureSquare: threat.target,
                             color: selectedPiece.color,
                             role: .allowed
                         )
@@ -138,5 +190,9 @@ struct BoardGuidancePresentation: Equatable, Sendable {
             coverage: coverage,
             emphasizedSquares: emphasizedSquares
         )
+    }
+
+    private func squareName(_ square: Square) -> String {
+        "\(square.file)\(square.rank)"
     }
 }

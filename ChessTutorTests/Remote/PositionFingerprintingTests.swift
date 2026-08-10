@@ -20,7 +20,7 @@ final class PositionFingerprintingTests: XCTestCase {
     }
 
     func testFingerprintIncludesSideToMove() {
-        var whiteToMove = GameState.startingPosition()
+        let whiteToMove = GameState.startingPosition()
         var blackToMove = GameState.startingPosition()
         blackToMove.sideToMove = .black
 
@@ -28,5 +28,16 @@ final class PositionFingerprintingTests: XCTestCase {
             PositionFingerprinting.fingerprint(for: whiteToMove),
             PositionFingerprinting.fingerprint(for: blackToMove)
         )
+    }
+
+    func testLocalGuidanceStateDoesNotChangePositionFingerprint() {
+        let session = GameSession()
+        let before = PositionFingerprinting.fingerprint(for: session.state)
+
+        session.select(Square(file: .e, rank: 2))
+        session.toggleCoverage()
+        let after = PositionFingerprinting.fingerprint(for: session.state)
+
+        XCTAssertEqual(after, before)
     }
 }

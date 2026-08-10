@@ -684,7 +684,7 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.message, "It's not your turn.")
     }
 
-    func testCheckmateMoveShowsGameOverMessageAndBlocksFurtherSelection() {
+    func testCheckmateMoveShowsGameOverMessageAndAllowsIdentitySelection() {
         var board = Board()
         board[Square(file: .h, rank: 1)] = Piece(kind: .king, color: .white)
         board[Square(file: .g, rank: 1)] = Piece(kind: .rook, color: .white)
@@ -956,6 +956,36 @@ final class GameSessionTests: XCTestCase {
         XCTAssertFalse(session.boardGuidance.selectedPaths.isEmpty)
         XCTAssertNotNil(session.boardGuidance.coverage)
         XCTAssertTrue(session.legalDestinations.isEmpty)
+    }
+
+    func testSelectionAndCoverageReuseAnalysisUntilPositionChanges() {
+        let session = GameSession()
+        let initialRevision = session.analysisRevision
+
+        session.select(Square(file: .e, rank: 2))
+        session.select(Square(file: .g, rank: 1))
+        session.select(Square(file: .e, rank: 7))
+        session.toggleCoverage()
+        session.toggleCoverage()
+
+        XCTAssertEqual(session.analysisRevision, initialRevision)
+
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        XCTAssertEqual(session.analysisRevision, initialRevision + 1)
+    }
+
+    func testTentativePieceCannotBeRedirectedWithoutPuttingItBack() {
+        let session = GameSession()
+        session.select(Square(file: .e, rank: 2))
+        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+
+        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 3))
+
+        XCTAssertEqual(result, .illegal("Put the piece back or press Done."))
+        XCTAssertEqual(session.state.board[Square(file: .e, rank: 4)], Piece(kind: .pawn, color: .white))
+        XCTAssertTrue(session.canFinishTurn)
     }
 
     private func inspectionPosition() -> GameState {

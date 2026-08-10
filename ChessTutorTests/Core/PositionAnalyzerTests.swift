@@ -171,4 +171,14 @@ final class PositionAnalyzerTests: XCTestCase {
             XCTAssertTrue(expectedCoverage.isSubset(of: analysis.coverage(for: piece.color)))
         }
     }
+
+    func testDensePositionAnalysisPerformance() {
+        let state = GameState.startingPosition()
+
+        measure {
+            for _ in 0..<100 {
+                _ = PositionAnalyzer.analyze(state)
+            }
+        }
+    }
 }

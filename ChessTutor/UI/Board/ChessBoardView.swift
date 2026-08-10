@@ -189,6 +189,7 @@ private extension Int {
 }
 
 struct ChessBoardView: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Bindable var session: GameSession
     let captureNamespace: Namespace.ID
     let viewingAngle: BoardViewingAngle
@@ -213,7 +214,7 @@ struct ChessBoardView: View {
             let guidance = session.boardGuidance
 
             ZStack {
-                board(side: side)
+                board(side: side, guidance: guidance)
                     .frame(width: side, height: side)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay {
@@ -249,6 +250,7 @@ struct ChessBoardView: View {
                         .frame(width: side / 8 * 0.82, height: side / 8 * 0.82)
                         .position(dragState.location)
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 8)
+                        .accessibilityHidden(true)
                 }
             }
             .contentShape(Rectangle())
@@ -263,7 +265,7 @@ struct ChessBoardView: View {
         .aspectRatio(1, contentMode: .fit)
     }
 
-    private func board(side: CGFloat) -> some View {
+    private func board(side: CGFloat, guidance: BoardGuidancePresentation) -> some View {
         let files = viewingAngle.files
         let ranks = viewingAngle.ranks
 
@@ -272,7 +274,7 @@ struct ChessBoardView: View {
                 GridRow {
                     ForEach(Array(files), id: \.self) { file in
                         let square = Square(file: file, rank: rank)
-                        squareView(square)
+                        squareView(square, guidance: guidance)
                             .frame(width: side / 8, height: side / 8)
                     }
                 }
@@ -281,7 +283,10 @@ struct ChessBoardView: View {
     }
 
     @ViewBuilder
-    private func squareView(_ square: Square) -> some View {
+    private func squareView(
+        _ square: Square,
+        guidance: BoardGuidancePresentation
+    ) -> some View {
         let content = ZStack {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
@@ -290,21 +295,24 @@ struct ChessBoardView: View {
             }
             coordinateLabels(for: square)
         }
+        let accessibleContent = content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel(for: square, guidance: guidance))
 
         #if DEBUG
         if isCaptureTestModeEnabled {
-            content
+            accessibleContent
                 .contentShape(Rectangle())
                 .gesture(captureTestTapGesture(for: square))
         } else {
-            content
+            accessibleContent
                 .contentShape(Rectangle())
                 .onTapGesture {
                     handleTap(square)
                 }
         }
         #else
-        content
+        accessibleContent
             .contentShape(Rectangle())
             .onTapGesture {
                 handleTap(square)
@@ -368,21 +376,34 @@ struct ChessBoardView: View {
         guidance: BoardGuidancePresentation
     ) -> some View {
         let cellSize = side / 8
+        let geometry = BoardGuidanceGeometry(
+            side: side,
+            origin: origin,
+            viewingAngle: viewingAngle
+        )
+        let shieldOffset = geometry.readableFootOffset(distance: cellSize * 0.31)
 
         return ZStack {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
-                    let pieceCenter = center(of: visualPiece.square, side: side, origin: origin)
+                    let pieceCenter = geometry.center(of: visualPiece.square)
                     let markerOpacity = guidance.markerOpacity(at: visualPiece.square)
 
                     if guidance.threatenedSquares.contains(visualPiece.square) {
-                        DangerBurstView(cellSize: cellSize, opacity: markerOpacity)
+                        DangerBurstView(
+                            cellSize: cellSize,
+                            opacity: markerOpacity,
+                            reducesMotion: accessibilityReduceMotion
+                        )
                             .position(pieceCenter)
                     }
 
                     if guidance.supporterSquares.contains(visualPiece.square) {
-                        SupporterEchoView(cellSize: cellSize)
-                            .position(center(of: visualPiece.square, side: side, origin: origin))
+                        SupporterEchoView(
+                            cellSize: cellSize,
+                            reducesMotion: accessibilityReduceMotion
+                        )
+                            .position(pieceCenter)
                     }
 
                     PieceIconView(piece: visualPiece.piece)
@@ -394,16 +415,18 @@ struct ChessBoardView: View {
                         .frame(width: cellSize * 0.82, height: cellSize * 0.82)
                         .position(pieceCenter)
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
+                        .accessibilityHidden(true)
 
                     if guidance.defendedSquares.contains(visualPiece.square) {
                         DefenseShieldView(
                             cellSize: cellSize,
                             readableRotationDegrees: readableRotationDegrees,
-                            opacity: markerOpacity
+                            opacity: markerOpacity,
+                            reducesMotion: accessibilityReduceMotion
                         )
                         .position(
-                            x: pieceCenter.x,
-                            y: pieceCenter.y + cellSize * 0.31
+                            x: pieceCenter.x + shieldOffset.x,
+                            y: pieceCenter.y + shieldOffset.y
                         )
                     }
                 }
@@ -411,6 +434,23 @@ struct ChessBoardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
+    }
+
+    private func accessibilityLabel(
+        for square: Square,
+        guidance: BoardGuidancePresentation
+    ) -> String {
+        guard let piece = session.state.board[square] else {
+            return guidance.coverageAccessibilityLabel(for: square)
+        }
+        let pieceLabel = guidance.accessibilityLabel(for: square, piece: piece)
+        let coverageLabel = guidance.coverageAccessibilityLabel(for: square)
+        guard guidance.coverage != nil, coverageLabel != "\(square.file)\(square.rank)" else {
+            return pieceLabel
+        }
+        let coverageStatus = coverageLabel.split(separator: ",", maxSplits: 1).last?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        return coverageStatus.isEmpty ? pieceLabel : "\(pieceLabel), \(coverageStatus)"
     }
 
     private func coordinateLabels(for square: Square) -> some View {

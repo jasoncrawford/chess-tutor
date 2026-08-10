@@ -81,4 +81,26 @@ final class BoardGuidanceStyleTests: XCTestCase {
             CGPoint(x: 642, y: 650)
         )
     }
+
+    func testReadableFootOffsetStaysBelowPieceThroughTabletopRotations() {
+        let distance: CGFloat = 24
+        let expectations: [(BoardViewingAngle, CGPoint)] = [
+            (.normal, CGPoint(x: 0, y: 24)),
+            (.clockwiseQuarterTurn, CGPoint(x: 24, y: 0)),
+            (.halfTurn, CGPoint(x: 0, y: -24)),
+            (.counterclockwiseQuarterTurn, CGPoint(x: -24, y: 0)),
+        ]
+
+        for (viewingAngle, expected) in expectations {
+            let geometry = BoardGuidanceGeometry(
+                side: 672,
+                origin: .zero,
+                viewingAngle: viewingAngle
+            )
+            let actual = geometry.readableFootOffset(distance: distance)
+
+            XCTAssertEqual(actual.x, expected.x, accuracy: 0.001)
+            XCTAssertEqual(actual.y, expected.y, accuracy: 0.001)
+        }
+    }
 }

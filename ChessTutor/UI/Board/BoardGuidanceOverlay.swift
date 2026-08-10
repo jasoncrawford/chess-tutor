@@ -4,15 +4,13 @@ struct BoardGuidanceStyle: Equatable {
     static let current = BoardGuidanceStyle(
         arrowheadLengthInCells: 0.14,
         pathLineWidthInCells: 0.028,
-        unrelatedMarkerOpacity: 0.20,
         dangerBurstScale: 0.92,
-        shieldScale: 0.22,
+        shieldScale: 0.16,
         supporterEchoScale: 0.94
     )
 
     let arrowheadLengthInCells: CGFloat
     let pathLineWidthInCells: CGFloat
-    let unrelatedMarkerOpacity: Double
     let dangerBurstScale: CGFloat
     let shieldScale: CGFloat
     let supporterEchoScale: CGFloat
@@ -161,6 +159,14 @@ struct BoardGuidanceGeometry {
     func origin(of square: Square) -> CGPoint {
         let center = center(of: square)
         return CGPoint(x: center.x - cellSize / 2, y: center.y - cellSize / 2)
+    }
+
+    func readableFootOffset(distance: CGFloat) -> CGPoint {
+        let radians = viewingAngle.tableRotationDegrees * .pi / 180
+        return CGPoint(
+            x: sin(radians) * distance,
+            y: cos(radians) * distance
+        )
     }
 }
 
@@ -335,6 +341,7 @@ struct DangerBurstShape: Shape {
 struct DangerBurstView: View {
     let cellSize: CGFloat
     let opacity: Double
+    let reducesMotion: Bool
 
     var body: some View {
         DangerBurstShape()
@@ -349,7 +356,11 @@ struct DangerBurstView: View {
             )
             .opacity(opacity)
             .shadow(color: AppTheme.guidanceRed.opacity(0.20), radius: 2, y: 1)
-            .transition(.scale(scale: 0.84).combined(with: .opacity))
+            .transition(
+                reducesMotion
+                    ? .opacity
+                    : .scale(scale: 0.84).combined(with: .opacity)
+            )
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -359,6 +370,7 @@ struct DefenseShieldView: View {
     let cellSize: CGFloat
     let readableRotationDegrees: Double
     let opacity: Double
+    let reducesMotion: Bool
 
     var body: some View {
         Image(systemName: "shield.fill")
@@ -366,9 +378,13 @@ struct DefenseShieldView: View {
             .symbolRenderingMode(.palette)
             .foregroundStyle(AppTheme.guidanceTeal, Color.white.opacity(0.92))
             .rotationEffect(.degrees(readableRotationDegrees))
-            .opacity(opacity)
+            .opacity(opacity * 0.80)
             .shadow(color: AppTheme.boardFrame.opacity(0.30), radius: 1.2, y: 0.7)
-            .transition(.scale(scale: 0.82).combined(with: .opacity))
+            .transition(
+                reducesMotion
+                    ? .opacity
+                    : .scale(scale: 0.82).combined(with: .opacity)
+            )
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -376,6 +392,7 @@ struct DefenseShieldView: View {
 
 struct SupporterEchoView: View {
     let cellSize: CGFloat
+    let reducesMotion: Bool
 
     var body: some View {
         Circle()
@@ -388,7 +405,11 @@ struct SupporterEchoView: View {
                 width: cellSize * BoardGuidanceStyle.current.supporterEchoScale,
                 height: cellSize * BoardGuidanceStyle.current.supporterEchoScale
             )
-            .transition(.scale(scale: 0.90).combined(with: .opacity))
+            .transition(
+                reducesMotion
+                    ? .opacity
+                    : .scale(scale: 0.90).combined(with: .opacity)
+            )
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

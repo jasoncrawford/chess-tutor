@@ -19,6 +19,10 @@ struct PositionAnalysis: Equatable, Sendable {
         threatsByTarget[square] ?? []
     }
 
+    func threats(from square: Square) -> Set<ThreatRelation> {
+        Set(threatsByTarget.values.flatMap { $0 }.filter { $0.source == square })
+    }
+
     func supporters(of square: Square) -> Set<Square> {
         supportersByTarget[square] ?? []
     }

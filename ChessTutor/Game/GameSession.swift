@@ -264,6 +264,12 @@ final class GameSession {
             return .moved
         }
 
+        if tentativeMove != nil {
+            let message = "Put the piece back or press Done."
+            self.message = message
+            return .illegal(message)
+        }
+
         guard let selectedPiece = state.board[selectedSquare],
               selectedPiece.color == committedState.sideToMove else {
             let message = "Choose a \(committedState.sideToMove.rawValue) piece."
