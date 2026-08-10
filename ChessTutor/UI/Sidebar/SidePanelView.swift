@@ -142,7 +142,12 @@ struct SidePanelView: View {
             }
         case .selectedPiece:
             SidebarPanelView(panelSize: panelSize) {
-                SelectedPiecePanelView(selectedPieceInfo: session.selectedPieceInfo)
+                SelectedPiecePanelView(
+                    selectedPieceInfo: session.selectedPieceInfo,
+                    isCoverageVisible: session.isCoverageVisible,
+                    isCoverageAvailable: session.state.result == .ongoing && !session.isRemoteGameEnded,
+                    onToggleCoverage: session.toggleCoverage
+                )
             }
         case .capturedPieces:
             if layout.showsCapturedPanelUtilityFooter {
@@ -260,7 +265,7 @@ struct SidebarColumnLayout: Equatable {
         case .verticalColumn:
             let segmentHeightBudget = sideLength - totalSpacing - utilityStripSpacing - utilityStripHeight
             let messageHeight = max(172, min(196, segmentHeightBudget * 0.28))
-            let selectedHeight = max(238, min(240, segmentHeightBudget * 0.345))
+            let selectedHeight: CGFloat = 240
             let capturedHeight = max(1, segmentHeightBudget - messageHeight - selectedHeight)
             let width = PlaySurfaceLayout.sidePanelWidth
 

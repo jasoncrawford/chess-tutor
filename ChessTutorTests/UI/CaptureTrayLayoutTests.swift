@@ -52,8 +52,8 @@ final class CaptureTrayLayoutTests: XCTestCase {
 
         XCTAssertEqual(layout.columnHeight, 760)
         XCTAssertEqual(layout.size(for: .messageAndDone).height, 192.64, accuracy: 0.01)
-        XCTAssertEqual(layout.size(for: .selectedPiece).height, 238, accuracy: 0.01)
-        XCTAssertEqual(layout.size(for: .capturedPieces).height, 257.36, accuracy: 0.01)
+        XCTAssertEqual(layout.size(for: .selectedPiece).height, 240, accuracy: 0.01)
+        XCTAssertEqual(layout.size(for: .capturedPieces).height, 255.36, accuracy: 0.01)
         XCTAssertEqual(layout.utilityStripHeight, 40)
         XCTAssertTrue(layout.showsColumnUtilityStrip)
         XCTAssertFalse(layout.showsCapturedPanelUtilityFooter)
@@ -91,6 +91,45 @@ final class CaptureTrayLayoutTests: XCTestCase {
         let expectedInset = layout.remainingSlack(inPanelLength: columnLayout.segmentLength) / 2
 
         XCTAssertEqual(layout.verticalInset(inPanelLength: columnLayout.segmentLength), expectedInset, accuracy: 0.01)
+    }
+
+    func testSelectedPiecePanelFitsCoverageButtonWithoutGrowingPanel() {
+        let column = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
+        let layout = SelectedPiecePanelLayout.current
+
+        XCTAssertEqual(column.size(for: .selectedPiece).height, 240, accuracy: 0.01)
+        XCTAssertEqual(column.size(for: .capturedPieces).height, 255.36, accuracy: 0.01)
+        XCTAssertEqual(layout.coverageButtonHeight, 36, accuracy: 0.01)
+        XCTAssertEqual(layout.coverageButtonSpacing, 8, accuracy: 0.01)
+        XCTAssertEqual(layout.coverageFooterHeight, 44, accuracy: 0.01)
+        XCTAssertGreaterThanOrEqual(
+            column.size(for: .selectedPiece).height - SidebarPanelMetrics.contentPadding * 2,
+            layout.requiredContentHeight + layout.coverageButtonSpacing + layout.coverageButtonHeight
+        )
+    }
+
+    func testCoverageButtonCopyMatchesExpandedState() {
+        XCTAssertEqual(CoverageButtonPresentation(isVisible: false).title, "Show coverage")
+        XCTAssertEqual(CoverageButtonPresentation(isVisible: true).title, "Hide coverage")
+        XCTAssertEqual(CoverageButtonPresentation(isVisible: false).systemImage, "eye")
+        XCTAssertEqual(CoverageButtonPresentation(isVisible: true).systemImage, "eye.slash")
+    }
+
+    func testSelectedPieceContentCompressesToFitSmallestHorizontalPanelWithCoverage() {
+        let column = SidebarColumnLayout.make(for: 676, presentation: .horizontalSegments)
+        let layout = SelectedPiecePanelLayout.current
+        let contentHeight = column.size(for: .selectedPiece).height
+            - SidebarPanelMetrics.contentPadding * 2
+            - layout.coverageButtonSpacing
+            - layout.coverageButtonHeight
+        let fittedIconHeight = layout.fittedIconSlotHeight(inContentLength: contentHeight)
+
+        XCTAssertLessThan(fittedIconHeight, layout.iconSlotHeight)
+        XCTAssertGreaterThanOrEqual(fittedIconHeight, 68)
+        XCTAssertLessThanOrEqual(
+            fittedIconHeight + layout.selectedPieceSpacing + layout.textSlotHeight,
+            contentHeight
+        )
     }
 
     func testCaptureTrayStartsWithLargePieces() {
