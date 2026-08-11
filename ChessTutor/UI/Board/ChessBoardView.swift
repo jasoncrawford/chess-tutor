@@ -500,6 +500,21 @@ struct ChessBoardView: View {
                 }
                 #endif
 
+                if var dragState {
+                    dragState.location = value.location
+                    if !dragState.isPrepared,
+                       hypot(value.translation.width, value.translation.height) > 8,
+                       let preparedSource = session.prepareDrag(from: dragState.from),
+                       let preparedPiece = session.state.board[preparedSource] {
+                        dragState.from = preparedSource
+                        dragState.piece = preparedPiece
+                        dragState.isPrepared = true
+                    }
+                    self.dragState = dragState
+                    reportLocalInteractionIfCurrentPiece(dragState.from)
+                    return
+                }
+
                 guard session.localCanActForCurrentTurn,
                       let from = square(at: value.startLocation, side: side, origin: origin),
                       let piece = session.state.board[from],
@@ -507,14 +522,26 @@ struct ChessBoardView: View {
                     return
                 }
 
-                if dragState == nil {
-                    session.select(from)
-                }
-                let visualPieceID = dragState?.visualPieceID ?? visualPieces.first {
+                session.select(from)
+                let visualPieceID = visualPieces.first {
                     $0.square == from && $0.piece == piece
                 }?.id
-                dragState = DragState(from: from, piece: piece, visualPieceID: visualPieceID, location: value.location)
-                reportLocalInteractionIfCurrentPiece(from)
+                var newDragState = DragState(
+                    from: from,
+                    piece: piece,
+                    visualPieceID: visualPieceID,
+                    location: value.location,
+                    isPrepared: false
+                )
+                if hypot(value.translation.width, value.translation.height) > 8,
+                   let preparedSource = session.prepareDrag(from: from),
+                   let preparedPiece = session.state.board[preparedSource] {
+                    newDragState.from = preparedSource
+                    newDragState.piece = preparedPiece
+                    newDragState.isPrepared = true
+                }
+                dragState = newDragState
+                reportLocalInteractionIfCurrentPiece(newDragState.from)
             }
             .onEnded { value in
                 guard let dragState else {
@@ -729,10 +756,11 @@ private extension MoveAttemptResult {
 }
 
 private struct DragState {
-    let from: Square
-    let piece: Piece
+    var from: Square
+    var piece: Piece
     let visualPieceID: UUID?
     var location: CGPoint
+    var isPrepared: Bool
 }
 
 struct BoardCoordinateLabelStyle: Equatable {

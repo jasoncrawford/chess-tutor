@@ -976,15 +976,54 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.analysisRevision, initialRevision + 1)
     }
 
-    func testTentativePieceCannotBeRedirectedWithoutPuttingItBack() {
+    func testEmptySquareAttemptAfterTentativeMoveRestoresCommittedBoard() {
+        let origin = Square(file: .e, rank: 2)
+        let stagedDestination = Square(file: .e, rank: 4)
+        let emptySquare = Square(file: .a, rank: 3)
         let session = GameSession()
-        session.select(Square(file: .e, rank: 2))
-        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
+        session.toggleCoverage()
+        session.select(origin)
+        _ = session.moveSelectedPiece(to: stagedDestination)
 
-        let result = session.moveSelectedPiece(to: Square(file: .e, rank: 3))
+        let result = session.moveSelectedPiece(to: emptySquare)
 
-        XCTAssertEqual(result, .illegal("Put the piece back or press Done."))
-        XCTAssertEqual(session.state.board[Square(file: .e, rank: 4)], Piece(kind: .pawn, color: .white))
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[origin], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[stagedDestination])
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertTrue(session.isCoverageVisible)
+    }
+
+    func testPreparingSecondDragRestoresOriginAndAllowsAlternativeMove() {
+        let origin = Square(file: .e, rank: 2)
+        let stagedDestination = Square(file: .e, rank: 4)
+        let alternativeDestination = Square(file: .e, rank: 3)
+        let session = GameSession()
+        session.toggleCoverage()
+        session.select(origin)
+        _ = session.moveSelectedPiece(to: stagedDestination)
+
+        let preparedSource = session.prepareDrag(from: stagedDestination)
+
+        XCTAssertEqual(preparedSource, origin)
+        XCTAssertEqual(session.state.board[origin], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[stagedDestination])
+        XCTAssertEqual(session.selectedSquare, origin)
+        XCTAssertEqual(session.boardGuidance.selectedSquare, origin)
+        XCTAssertTrue(session.legalDestinations.contains(alternativeDestination))
+        XCTAssertTrue(session.isCoverageVisible)
+
+        let result = session.moveSelectedPiece(to: alternativeDestination)
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(
+            session.state.board[alternativeDestination],
+            Piece(kind: .pawn, color: .white)
+        )
+        XCTAssertNil(session.state.board[origin])
+        XCTAssertNil(session.state.board[stagedDestination])
+        XCTAssertEqual(session.selectedSquare, alternativeDestination)
         XCTAssertTrue(session.canFinishTurn)
     }
 

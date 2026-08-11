@@ -233,6 +233,25 @@ final class GameSession {
         isCoverageVisible.toggle()
     }
 
+    func prepareDrag(from square: Square) -> Square? {
+        guard committedState.result == .ongoing,
+              localCanActForCurrentTurn,
+              let piece = state.board[square],
+              piece.color == committedState.sideToMove else {
+            return nil
+        }
+
+        if let tentativeMove, square == tentativeMove.to {
+            let originalSquare = tentativeMove.from
+            restoreCommittedPosition()
+            select(originalSquare)
+            return selectedSquare
+        }
+
+        select(square)
+        return selectedSquare
+    }
+
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
         guard committedState.result == .ongoing else {
             actionableMovesForSelection = []
@@ -255,19 +274,9 @@ final class GameSession {
             return .illegal("It's not your turn.")
         }
 
-        if let tentativeMove, selectedSquare == tentativeMove.to, destination == tentativeMove.from {
-            self.tentativeMove = nil
-            self.selectedSquare = nil
-            actionableMovesForSelection = []
-            message = nil
-            refreshDisplayedAnalysis()
-            return .moved
-        }
-
         if tentativeMove != nil {
-            let message = "Put the piece back or press Done."
-            self.message = message
-            return .illegal(message)
+            restoreCommittedPosition()
+            return .moved
         }
 
         guard let selectedPiece = state.board[selectedSquare],
@@ -484,6 +493,14 @@ final class GameSession {
     private func refreshDisplayedAnalysis() {
         displayedAnalysis = Self.makeAnalysis(for: state)
         analysisRevision += 1
+    }
+
+    private func restoreCommittedPosition() {
+        tentativeMove = nil
+        selectedSquare = nil
+        actionableMovesForSelection = []
+        message = nil
+        refreshDisplayedAnalysis()
     }
 
     private static func makeAnalysis(for state: GameState) -> PositionAnalysis {
