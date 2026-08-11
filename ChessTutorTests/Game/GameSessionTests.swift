@@ -1038,6 +1038,41 @@ final class GameSessionTests: XCTestCase {
         XCTAssertTrue(session.isCoverageVisible)
     }
 
+    func testTappingAlternativeDestinationAtomicallyRedirectsTentativeMove() {
+        let origin = Square(file: .d, rank: 1)
+        let stagedDestination = Square(file: .d, rank: 3)
+        let alternativeDestination = Square(file: .d, rank: 2)
+        let queen = Piece(kind: .queen, color: .white)
+        let session = GameSession(
+            state: GameState(
+                board: Board(
+                    pieces: [
+                        origin: queen,
+                        Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
+                        Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                sideToMove: .white
+            )
+        )
+        session.assistSettings.showLegalMovesOnSelection = false
+        session.toggleCoverage()
+        session.select(origin)
+        _ = session.moveSelectedPiece(to: stagedDestination)
+        let revisionAfterFirstMove = session.analysisRevision
+
+        let result = session.tapEmptySquare(at: alternativeDestination)
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[alternativeDestination], queen)
+        XCTAssertNil(session.state.board[origin])
+        XCTAssertNil(session.state.board[stagedDestination])
+        XCTAssertEqual(session.selectedSquare, alternativeDestination)
+        XCTAssertTrue(session.canFinishTurn)
+        XCTAssertTrue(session.isCoverageVisible)
+        XCTAssertEqual(session.analysisRevision, revisionAfterFirstMove + 1)
+    }
+
     func testPreparingSecondDragRestoresOriginAndAllowsAlternativeMove() {
         let origin = Square(file: .e, rank: 2)
         let stagedDestination = Square(file: .e, rank: 4)

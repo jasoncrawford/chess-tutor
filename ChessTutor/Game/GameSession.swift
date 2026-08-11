@@ -229,9 +229,14 @@ final class GameSession {
             return nil
         }
 
-        if tentativeMove != nil {
-            restoreCommittedPosition()
-            return nil
+        if let tentativeMove {
+            guard let replacementMove = allowedMoves(forSelectionAt: tentativeMove.from)
+                .first(where: { $0.to == square }) else {
+                restoreCommittedPosition()
+                return nil
+            }
+
+            return stage(replacementMove)
         }
 
         guard actionableMovesForSelection.contains(where: { $0.to == square }) else {
@@ -308,17 +313,7 @@ final class GameSession {
             return .illegal("That piece can't move there.")
         }
 
-        if case .promotion = move.special {
-            message = nil
-            return .needsPromotion(from: move.from, to: destination)
-        }
-
-        tentativeMove = move
-        self.selectedSquare = move.to
-        actionableMovesForSelection = []
-        message = nil
-        refreshDisplayedAnalysis()
-        return .moved
+        return stage(move)
     }
 
     func promote(from: Square, to: Square, to kind: Piece.Kind) {
@@ -515,6 +510,20 @@ final class GameSession {
         tentativeMove = nil
         clearSelection()
         refreshDisplayedAnalysis()
+    }
+
+    private func stage(_ move: Move) -> MoveAttemptResult {
+        if case .promotion = move.special {
+            message = nil
+            return .needsPromotion(from: move.from, to: move.to)
+        }
+
+        tentativeMove = move
+        selectedSquare = move.to
+        actionableMovesForSelection = []
+        message = nil
+        refreshDisplayedAnalysis()
+        return .moved
     }
 
     private func clearSelection() {
