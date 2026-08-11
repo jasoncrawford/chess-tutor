@@ -224,13 +224,6 @@ struct ChessBoardView: View {
                     .shadow(color: .black.opacity(0.20), radius: 18, y: 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                CoveragePipsLayer(
-                    guidance: guidance,
-                    side: side,
-                    origin: origin,
-                    viewingAngle: viewingAngle
-                )
-
                 GuidancePathsLayer(
                     guidance: guidance,
                     side: side,
@@ -290,11 +283,26 @@ struct ChessBoardView: View {
         let content = ZStack {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
+            if let coverage = guidance.coverage {
+                CoverageSurfaceView(
+                    state: CoverageSurfaceState(
+                        sideToMoveCovers: coverage.sideToMoveSquares.contains(square),
+                        otherSideCovers: coverage.otherSideSquares.contains(square)
+                    )
+                )
+                .transition(.opacity)
+            }
             if session.selectedSquare == square {
                 selectedSquareHighlight()
             }
             coordinateLabels(for: square)
         }
+        .animation(
+            accessibilityReduceMotion
+                ? nil
+                : .easeInOut(duration: BoardGuidanceStyle.current.coverageTransitionDuration),
+            value: guidance.coverage
+        )
         let accessibleContent = content
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel(for: square, guidance: guidance))

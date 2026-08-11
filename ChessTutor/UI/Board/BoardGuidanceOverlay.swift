@@ -7,7 +7,12 @@ struct BoardGuidanceStyle: Equatable {
         ambientDangerBadgeScale: 0.28,
         prominentDangerBurstScale: 0.92,
         shieldScale: 0.22,
-        supporterEchoScale: 0.94
+        supporterEchoScale: 0.94,
+        coverageSideToMoveOpacity: 0.50,
+        coverageOtherSideOpacity: 0.44,
+        coverageNeitherOpacity: 0.18,
+        coverageRecessedPieceOpacity: 0.68,
+        coverageTransitionDuration: 0.18
     )
 
     let arrowheadLengthInCells: CGFloat
@@ -16,56 +21,82 @@ struct BoardGuidanceStyle: Equatable {
     let prominentDangerBurstScale: CGFloat
     let shieldScale: CGFloat
     let supporterEchoScale: CGFloat
+    let coverageSideToMoveOpacity: Double
+    let coverageOtherSideOpacity: Double
+    let coverageNeitherOpacity: Double
+    let coverageRecessedPieceOpacity: Double
+    let coverageTransitionDuration: Double
 }
 
-enum CoveragePipShape: Equatable {
-    case circle
-    case diamond
-}
+enum CoverageSurfaceState: Equatable {
+    case neither
+    case sideToMoveOnly
+    case otherSideOnly
+    case both
 
-struct CoveragePipMarker: Equatable {
-    let shape: CoveragePipShape
-    let frame: CGRect
-}
-
-enum CoveragePipLayout {
-    static func markers(
-        showsSideToMove: Bool,
-        showsOtherSide: Bool,
-        cellSize: CGFloat
-    ) -> [CoveragePipMarker] {
-        let markerSize = cellSize * 0.11
-        let y = cellSize * 0.76
-        var markers: [CoveragePipMarker] = []
-
-        if showsSideToMove {
-            markers.append(
-                CoveragePipMarker(
-                    shape: .circle,
-                    frame: CGRect(
-                        x: cellSize * 0.10,
-                        y: y,
-                        width: markerSize,
-                        height: markerSize
-                    )
-                )
-            )
+    init(sideToMoveCovers: Bool, otherSideCovers: Bool) {
+        switch (sideToMoveCovers, otherSideCovers) {
+        case (false, false):
+            self = .neither
+        case (true, false):
+            self = .sideToMoveOnly
+        case (false, true):
+            self = .otherSideOnly
+        case (true, true):
+            self = .both
         }
-        if showsOtherSide {
-            markers.append(
-                CoveragePipMarker(
-                    shape: .diamond,
-                    frame: CGRect(
-                        x: cellSize * 0.25,
-                        y: y,
-                        width: markerSize,
-                        height: markerSize
-                    )
-                )
-            )
-        }
+    }
+}
 
-        return markers
+struct CoverageDiagonalHalfShape: Shape {
+    enum Half {
+        case sideToMove
+        case otherSide
+    }
+
+    let half: Half
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        switch half {
+        case .sideToMove:
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        case .otherSide:
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct CoverageSurfaceView: View {
+    let state: CoverageSurfaceState
+
+    var body: some View {
+        let style = BoardGuidanceStyle.current
+
+        switch state {
+        case .neither:
+            Rectangle()
+                .fill(AppTheme.boardFrame.opacity(style.coverageNeitherOpacity))
+        case .sideToMoveOnly:
+            Rectangle()
+                .fill(AppTheme.guidanceYellow.opacity(style.coverageSideToMoveOpacity))
+        case .otherSideOnly:
+            Rectangle()
+                .fill(AppTheme.guidanceRed.opacity(style.coverageOtherSideOpacity))
+        case .both:
+            ZStack {
+                CoverageDiagonalHalfShape(half: .sideToMove)
+                    .fill(AppTheme.guidanceYellow.opacity(style.coverageSideToMoveOpacity))
+                CoverageDiagonalHalfShape(half: .otherSide)
+                    .fill(AppTheme.guidanceRed.opacity(style.coverageOtherSideOpacity))
+            }
+        }
     }
 }
 
@@ -198,77 +229,6 @@ struct BoardPieceMarkerLayout: Equatable {
             ambientDangerCenter: footCenter,
             defenseCenter: footCenter
         )
-    }
-}
-
-struct CoveragePipsLayer: View {
-    let guidance: BoardGuidancePresentation
-    let side: CGFloat
-    let origin: CGPoint
-    let viewingAngle: BoardViewingAngle
-
-    var body: some View {
-        if let coverage = guidance.coverage {
-            let geometry = BoardGuidanceGeometry(
-                side: side,
-                origin: origin,
-                viewingAngle: viewingAngle
-            )
-            let squares = coverage.sideToMoveSquares
-                .union(coverage.otherSideSquares)
-                .sorted(by: squareOrder)
-
-            ZStack {
-                ForEach(squares, id: \.self) { square in
-                    let squareOrigin = geometry.origin(of: square)
-                    let markers = CoveragePipLayout.markers(
-                        showsSideToMove: coverage.sideToMoveSquares.contains(square),
-                        showsOtherSide: coverage.otherSideSquares.contains(square),
-                        cellSize: geometry.cellSize
-                    )
-
-                    ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
-                        coverageMarker(marker.shape)
-                            .frame(width: marker.frame.width, height: marker.frame.height)
-                            .position(
-                                x: squareOrigin.x + marker.frame.midX,
-                                y: squareOrigin.y + marker.frame.midY
-                            )
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
-    }
-
-    @ViewBuilder
-    private func coverageMarker(_ shape: CoveragePipShape) -> some View {
-        switch shape {
-        case .circle:
-            Circle()
-                .fill(AppTheme.guidanceYellow)
-                .overlay {
-                    Circle().stroke(AppTheme.boardFrame.opacity(0.48), lineWidth: 0.8)
-                }
-                .shadow(color: AppTheme.boardFrame.opacity(0.18), radius: 1, y: 0.5)
-        case .diamond:
-            GuidanceDiamondShape()
-                .fill(AppTheme.guidanceRed)
-                .overlay {
-                    GuidanceDiamondShape()
-                        .stroke(AppTheme.boardFrame.opacity(0.48), lineWidth: 0.8)
-                }
-                .shadow(color: AppTheme.boardFrame.opacity(0.18), radius: 1, y: 0.5)
-        }
-    }
-
-    private func squareOrder(_ lhs: Square, _ rhs: Square) -> Bool {
-        if lhs.rank == rhs.rank {
-            return lhs.file.rawValue < rhs.file.rawValue
-        }
-        return lhs.rank < rhs.rank
     }
 }
 

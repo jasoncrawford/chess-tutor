@@ -3,38 +3,22 @@ import XCTest
 @testable import ChessTutor
 
 final class BoardGuidanceStyleTests: XCTestCase {
-    func testContestedCoverageProducesTwoDistinctNonoverlappingMarkers() {
-        let markers = CoveragePipLayout.markers(
-            showsSideToMove: true,
-            showsOtherSide: true,
-            cellSize: 84
-        )
-
-        XCTAssertEqual(markers.map(\.shape), [.circle, .diamond])
-        XCTAssertFalse(markers[0].frame.intersects(markers[1].frame))
-    }
-
-    func testSingleCoverageMarkersKeepTheirShapeAndStablePosition() {
-        let sideToMove = CoveragePipLayout.markers(
-            showsSideToMove: true,
-            showsOtherSide: false,
-            cellSize: 84
-        )
-        let otherSide = CoveragePipLayout.markers(
-            showsSideToMove: false,
-            showsOtherSide: true,
-            cellSize: 84
-        )
-
-        XCTAssertEqual(sideToMove.map(\.shape), [.circle])
-        XCTAssertEqual(otherSide.map(\.shape), [.diamond])
+    func testCoverageSurfaceClassifiesEveryReachCombination() {
         XCTAssertEqual(
-            sideToMove[0].frame,
-            CoveragePipLayout.markers(
-                showsSideToMove: true,
-                showsOtherSide: true,
-                cellSize: 84
-            )[0].frame
+            CoverageSurfaceState(sideToMoveCovers: false, otherSideCovers: false),
+            .neither
+        )
+        XCTAssertEqual(
+            CoverageSurfaceState(sideToMoveCovers: true, otherSideCovers: false),
+            .sideToMoveOnly
+        )
+        XCTAssertEqual(
+            CoverageSurfaceState(sideToMoveCovers: false, otherSideCovers: true),
+            .otherSideOnly
+        )
+        XCTAssertEqual(
+            CoverageSurfaceState(sideToMoveCovers: true, otherSideCovers: true),
+            .both
         )
     }
 
