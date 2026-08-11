@@ -280,6 +280,9 @@ struct ChessBoardView: View {
         _ square: Square,
         guidance: BoardGuidancePresentation
     ) -> some View {
+        let renderingPolicy = CoverageMapRenderingPolicy(
+            isCoverageVisible: guidance.coverage != nil
+        )
         let content = ZStack {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
@@ -295,7 +298,9 @@ struct ChessBoardView: View {
             if session.selectedSquare == square {
                 selectedSquareHighlight()
             }
-            coordinateLabels(for: square)
+            if renderingPolicy.showsCoordinates {
+                coordinateLabels(for: square)
+            }
         }
         .animation(
             accessibilityReduceMotion
@@ -390,6 +395,10 @@ struct ChessBoardView: View {
             viewingAngle: viewingAngle
         )
         let footOffset = geometry.readableFootOffset(distance: cellSize * 0.31)
+        let renderingPolicy = CoverageMapRenderingPolicy(
+            isCoverageVisible: guidance.coverage != nil
+        )
+        let contextualSquares = CoverageContext.squares(in: guidance)
 
         return ZStack {
             ForEach(visualPieces) { visualPiece in
@@ -401,6 +410,9 @@ struct ChessBoardView: View {
                     )
                     let isThreatened = guidance.threatenedSquares.contains(visualPiece.square)
                     let isProminentThreat = guidance.prominentThreatSquares.contains(visualPiece.square)
+                    let pieceOpacity = renderingPolicy.pieceOpacity(
+                        isContextual: contextualSquares.contains(visualPiece.square)
+                    )
 
                     if isThreatened {
                         DangerBurstView(
@@ -429,11 +441,18 @@ struct ChessBoardView: View {
                         .rotationEffect(.degrees(readableRotationDegrees))
                         .frame(width: cellSize * 0.82, height: cellSize * 0.82)
                         .position(pieceCenter)
+                        .opacity(pieceOpacity)
                         .zIndex(BoardPieceMarkerLayer.piece.zIndex)
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
+                        .animation(
+                            accessibilityReduceMotion
+                                ? nil
+                                : .easeInOut(duration: BoardGuidanceStyle.current.coverageTransitionDuration),
+                            value: pieceOpacity
+                        )
                         .accessibilityHidden(true)
 
-                    if isThreatened {
+                    if isThreatened && renderingPolicy.showsAmbientThreats {
                         DangerBurstView(
                             cellSize: cellSize,
                             treatment: .ambient,

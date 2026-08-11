@@ -22,6 +22,68 @@ final class BoardGuidanceStyleTests: XCTestCase {
         )
     }
 
+    func testCoverageRenderingPolicyQuietsAmbientBoardButKeepsContextProminent() {
+        let coveragePolicy = CoverageMapRenderingPolicy(isCoverageVisible: true)
+
+        XCTAssertFalse(coveragePolicy.showsCoordinates)
+        XCTAssertFalse(coveragePolicy.showsAmbientThreats)
+        XCTAssertEqual(coveragePolicy.pieceOpacity(isContextual: true), 1)
+        XCTAssertLessThan(coveragePolicy.pieceOpacity(isContextual: false), 1)
+
+        let normalPolicy = CoverageMapRenderingPolicy(isCoverageVisible: false)
+        XCTAssertTrue(normalPolicy.showsCoordinates)
+        XCTAssertTrue(normalPolicy.showsAmbientThreats)
+        XCTAssertEqual(normalPolicy.pieceOpacity(isContextual: false), 1)
+    }
+
+    func testCoverageContextContainsOnlySelectedRelationships() {
+        let selected = Square(file: .c, rank: 4)
+        let destination = Square(file: .f, rank: 7)
+        let attacker = Square(file: .b, rank: 6)
+        let supporter = Square(file: .e, rank: 3)
+        let unrelated = Square(file: .h, rank: 8)
+        let guidance = BoardGuidancePresentation(
+            sideToMove: .white,
+            threatenedSquares: [selected],
+            prominentThreatSquares: [selected],
+            defendedSquares: [selected],
+            visibleDefenseSquares: [selected],
+            selectedSquare: selected,
+            selectedPaths: [
+                BoardGuidancePath(
+                    source: selected,
+                    destination: destination,
+                    captureSquare: destination,
+                    color: .white,
+                    role: .allowed
+                ),
+                BoardGuidancePath(
+                    source: attacker,
+                    destination: selected,
+                    captureSquare: selected,
+                    color: .black,
+                    role: .attacker
+                ),
+            ],
+            supporterSquares: [supporter],
+            coverage: BoardCoveragePresentation(
+                sideToMove: .white,
+                sideToMoveSquares: [selected, destination, unrelated],
+                otherSideSquares: [selected, attacker]
+            )
+        )
+
+        let contextualSquares = CoverageContext.squares(in: guidance)
+
+        XCTAssertTrue(contextualSquares.isSuperset(of: [
+            selected,
+            destination,
+            attacker,
+            supporter,
+        ]))
+        XCTAssertFalse(contextualSquares.contains(unrelated))
+    }
+
     func testTrajectoryLayoutKeepsArrowheadSmallRelativeToBoardCell() {
         let layout = GuidancePathLayout.make(
             from: CGPoint(x: 42, y: 42),

@@ -100,6 +100,46 @@ struct CoverageSurfaceView: View {
     }
 }
 
+struct CoverageMapRenderingPolicy: Equatable {
+    let isCoverageVisible: Bool
+
+    var showsCoordinates: Bool {
+        !isCoverageVisible
+    }
+
+    var showsAmbientThreats: Bool {
+        !isCoverageVisible
+    }
+
+    func pieceOpacity(isContextual: Bool) -> Double {
+        guard isCoverageVisible, !isContextual else {
+            return 1
+        }
+        return BoardGuidanceStyle.current.coverageRecessedPieceOpacity
+    }
+}
+
+enum CoverageContext {
+    static func squares(in guidance: BoardGuidancePresentation) -> Set<Square> {
+        guard let selectedSquare = guidance.selectedSquare else {
+            return []
+        }
+
+        var squares: Set<Square> = [selectedSquare]
+        for path in guidance.selectedPaths {
+            squares.insert(path.source)
+            squares.insert(path.destination)
+            if let captureSquare = path.captureSquare {
+                squares.insert(captureSquare)
+            }
+        }
+        squares.formUnion(guidance.supporterSquares)
+        squares.formUnion(guidance.prominentThreatSquares)
+        squares.formUnion(guidance.visibleDefenseSquares)
+        return squares
+    }
+}
+
 struct GuidancePathLayout: Equatable {
     let start: CGPoint
     let shaftEnd: CGPoint
