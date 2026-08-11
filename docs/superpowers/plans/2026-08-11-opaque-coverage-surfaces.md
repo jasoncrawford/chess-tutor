@@ -41,37 +41,82 @@ xcrun xcresulttool get test-results summary --path /tmp/ChessTutor-opaque-covera
 
 Expected: the branch has no uncommitted tracked files, and all `BoardGuidanceStyleTests` pass with zero failures and zero skipped tests.
 
-- [ ] **Step 2: Write the failing opacity-contract test**
+- [ ] **Step 2: Write the failing rendered-appearance test**
 
-Add to `ChessTutorTests/UI/BoardGuidanceStyleTests.swift` immediately after `testCoverageSurfaceClassifiesEveryReachCombination()`:
+Add `SwiftUI` and `UIKit` imports to `ChessTutorTests/UI/BoardGuidanceStyleTests.swift`, then add this test and real-render helper inside `BoardGuidanceStyleTests` immediately after `testCoverageSurfaceClassifiesEveryReachCombination()`:
 
 ```swift
-func testCoverageSurfaceColorsAreOpaqueAndDistinct() {
-    let style = BoardGuidanceStyle.current
-    let colors = [
-        style.coverageSideToMoveColor,
-        style.coverageOtherSideColor,
-        style.coverageNeitherColor,
+@MainActor
+func testCoverageSurfaceAppearanceDoesNotDependOnUnderlyingSquareColor() {
+    let states: [CoverageSurfaceState] = [
+        .neither,
+        .sideToMoveOnly,
+        .otherSideOnly,
+        .both,
     ]
 
-    XCTAssertTrue(colors.allSatisfy { $0.alpha == 1 })
-    XCTAssertNotEqual(style.coverageSideToMoveColor, style.coverageOtherSideColor)
-    XCTAssertNotEqual(style.coverageSideToMoveColor, style.coverageNeitherColor)
-    XCTAssertNotEqual(style.coverageOtherSideColor, style.coverageNeitherColor)
+    for state in states {
+        XCTAssertEqual(
+            renderedCoveragePixels(state: state, baseColor: AppTheme.lightSquare),
+            renderedCoveragePixels(state: state, baseColor: AppTheme.darkSquare),
+            "\(state) inherited the underlying board-square color"
+        )
+    }
+}
+
+@MainActor
+private func renderedCoveragePixels(
+    state: CoverageSurfaceState,
+    baseColor: Color
+) -> [[UInt8]] {
+    let side = 16
+    let renderer = ImageRenderer(
+        content: ZStack {
+            Rectangle().fill(baseColor)
+            CoverageSurfaceView(state: state)
+        }
+        .frame(width: CGFloat(side), height: CGFloat(side))
+    )
+    renderer.scale = 1
+
+    guard let image = renderer.uiImage?.cgImage else {
+        XCTFail("Coverage surface did not render")
+        return []
+    }
+
+    var bytes = [UInt8](repeating: 0, count: side * side * 4)
+    bytes.withUnsafeMutableBytes { buffer in
+        let context = CGContext(
+            data: buffer.baseAddress,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
+        context?.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+    }
+
+    let points = state == .both ? [(3, 3), (12, 12)] : [(8, 8)]
+    return points.map { x, y in
+        let offset = (y * side + x) * 4
+        return Array(bytes[offset..<(offset + 4)])
+    }
 }
 ```
 
-This test specifies the perceptual contract without tying it to the underlying light/dark square: the renderer receives three opaque surface colors, and the fourth contested treatment is their existing geometric split.
+This exercises the real `CoverageSurfaceView` with the real board colors. The solid states are sampled at their centers, while the contested state is sampled well inside each diagonal half to avoid testing anti-aliasing at the seam.
 
 - [ ] **Step 3: Run the new test and verify RED**
 
 Run:
 
 ```bash
-xcodebuild test -quiet -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/BoardGuidanceStyleTests/testCoverageSurfaceColorsAreOpaqueAndDistinct -resultBundlePath /tmp/ChessTutor-opaque-coverage-red.xcresult
+xcodebuild test -quiet -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/BoardGuidanceStyleTests/testCoverageSurfaceAppearanceDoesNotDependOnUnderlyingSquareColor -resultBundlePath /tmp/ChessTutor-opaque-coverage-red.xcresult
 ```
 
-Expected: compilation fails because `BoardGuidanceStyle` has no members named `coverageSideToMoveColor`, `coverageOtherSideColor`, or `coverageNeitherColor`. The failure must be caused by the new contract, not by an unrelated compile error.
+Expected: the test compiles and fails because the pixels rendered over `AppTheme.lightSquare` differ from the pixels rendered over `AppTheme.darkSquare`. The failure must name at least one `CoverageSurfaceState` that inherited its underlying square color.
 
 - [ ] **Step 4: Add the opaque surface color token**
 
