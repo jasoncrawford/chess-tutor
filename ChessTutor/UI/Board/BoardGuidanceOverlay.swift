@@ -170,15 +170,33 @@ struct BoardGuidanceGeometry {
             y: cos(radians) * distance
         )
     }
+}
 
-    func readableShoulderOffset(
-        horizontal: CGFloat,
-        vertical: CGFloat
-    ) -> CGPoint {
-        let radians = viewingAngle.tableRotationDegrees * .pi / 180
-        return CGPoint(
-            x: horizontal * cos(radians) + vertical * sin(radians),
-            y: -horizontal * sin(radians) + vertical * cos(radians)
+enum BoardPieceMarkerLayer: Double, Equatable {
+    case prominentDanger = 0
+    case piece = 1
+    case foregroundStatus = 2
+
+    var zIndex: Double { rawValue }
+}
+
+struct BoardPieceMarkerLayout: Equatable {
+    let prominentDangerCenter: CGPoint
+    let ambientDangerCenter: CGPoint
+    let defenseCenter: CGPoint
+
+    static func make(
+        pieceCenter: CGPoint,
+        readableFootOffset: CGPoint
+    ) -> BoardPieceMarkerLayout {
+        let footCenter = CGPoint(
+            x: pieceCenter.x + readableFootOffset.x,
+            y: pieceCenter.y + readableFootOffset.y
+        )
+        return BoardPieceMarkerLayout(
+            prominentDangerCenter: pieceCenter,
+            ambientDangerCenter: footCenter,
+            defenseCenter: footCenter
         )
     }
 }
@@ -351,60 +369,18 @@ struct DangerBurstShape: Shape {
     }
 }
 
+enum DangerBurstTreatment: Equatable {
+    case ambient
+    case prominent
+}
+
 struct DangerBurstView: View {
     let cellSize: CGFloat
-    let readableShoulderOffset: CGPoint
-    let isProminent: Bool
+    let treatment: DangerBurstTreatment
+    let isVisible: Bool
     let reducesMotion: Bool
 
     var body: some View {
-        Group {
-            if reducesMotion {
-                ZStack {
-                    burst(
-                        scale: BoardGuidanceStyle.current.ambientDangerBadgeScale,
-                        isProminent: false
-                    )
-                    .offset(
-                        x: readableShoulderOffset.x,
-                        y: readableShoulderOffset.y
-                    )
-                    .opacity(isProminent ? 0 : 1)
-
-                    burst(
-                        scale: BoardGuidanceStyle.current.prominentDangerBurstScale,
-                        isProminent: true
-                    )
-                    .opacity(isProminent ? 1 : 0)
-                }
-                .animation(.easeOut(duration: 0.16), value: isProminent)
-            } else {
-                burst(
-                    scale: isProminent
-                        ? BoardGuidanceStyle.current.prominentDangerBurstScale
-                        : BoardGuidanceStyle.current.ambientDangerBadgeScale,
-                    isProminent: isProminent
-                )
-                .offset(
-                    x: isProminent ? 0 : readableShoulderOffset.x,
-                    y: isProminent ? 0 : readableShoulderOffset.y
-                )
-                .animation(
-                    .spring(response: 0.28, dampingFraction: 0.84),
-                    value: isProminent
-                )
-            }
-        }
-        .transition(
-            reducesMotion
-                ? .opacity
-                : .scale(scale: 0.84).combined(with: .opacity)
-        )
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private func burst(scale: CGFloat, isProminent: Bool) -> some View {
         DangerBurstShape()
             .fill(
                 AppTheme.guidanceCoral.opacity(isProminent ? 0.76 : 0.58)
@@ -417,11 +393,40 @@ struct DangerBurstView: View {
                     )
             }
             .frame(width: cellSize * scale, height: cellSize * scale)
+            .opacity(isVisible ? 1 : 0)
+            .scaleEffect(reducesMotion ? 1 : (isVisible ? 1 : hiddenScale))
             .shadow(
                 color: AppTheme.guidanceRed.opacity(isProminent ? 0.20 : 0.12),
                 radius: isProminent ? 2 : 1,
                 y: isProminent ? 1 : 0.5
             )
+            .animation(
+                reducesMotion
+                    ? .easeOut(duration: 0.16)
+                    : .spring(response: 0.28, dampingFraction: 0.84),
+                value: isVisible
+            )
+            .transition(
+                reducesMotion
+                    ? .opacity
+                    : .scale(scale: 0.84).combined(with: .opacity)
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private var isProminent: Bool {
+        treatment == .prominent
+    }
+
+    private var scale: CGFloat {
+        isProminent
+            ? BoardGuidanceStyle.current.prominentDangerBurstScale
+            : BoardGuidanceStyle.current.ambientDangerBadgeScale
+    }
+
+    private var hiddenScale: CGFloat {
+        isProminent ? 0.30 : 0.86
     }
 }
 

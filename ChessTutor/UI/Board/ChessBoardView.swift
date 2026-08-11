@@ -381,25 +381,28 @@ struct ChessBoardView: View {
             origin: origin,
             viewingAngle: viewingAngle
         )
-        let shieldOffset = geometry.readableFootOffset(distance: cellSize * 0.31)
-        let shoulderOffset = geometry.readableShoulderOffset(
-            horizontal: cellSize * 0.25,
-            vertical: -cellSize * 0.23
-        )
+        let footOffset = geometry.readableFootOffset(distance: cellSize * 0.31)
 
         return ZStack {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
                     let pieceCenter = geometry.center(of: visualPiece.square)
+                    let markerLayout = BoardPieceMarkerLayout.make(
+                        pieceCenter: pieceCenter,
+                        readableFootOffset: footOffset
+                    )
+                    let isThreatened = guidance.threatenedSquares.contains(visualPiece.square)
+                    let isProminentThreat = guidance.prominentThreatSquares.contains(visualPiece.square)
 
-                    if guidance.threatenedSquares.contains(visualPiece.square) {
+                    if isThreatened {
                         DangerBurstView(
                             cellSize: cellSize,
-                            readableShoulderOffset: shoulderOffset,
-                            isProminent: guidance.prominentThreatSquares.contains(visualPiece.square),
+                            treatment: .prominent,
+                            isVisible: isProminentThreat,
                             reducesMotion: accessibilityReduceMotion
                         )
-                            .position(pieceCenter)
+                        .position(markerLayout.prominentDangerCenter)
+                        .zIndex(BoardPieceMarkerLayer.prominentDanger.zIndex)
                     }
 
                     if guidance.supporterSquares.contains(visualPiece.square) {
@@ -418,8 +421,20 @@ struct ChessBoardView: View {
                         .rotationEffect(.degrees(readableRotationDegrees))
                         .frame(width: cellSize * 0.82, height: cellSize * 0.82)
                         .position(pieceCenter)
+                        .zIndex(BoardPieceMarkerLayer.piece.zIndex)
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
                         .accessibilityHidden(true)
+
+                    if isThreatened {
+                        DangerBurstView(
+                            cellSize: cellSize,
+                            treatment: .ambient,
+                            isVisible: !isProminentThreat,
+                            reducesMotion: accessibilityReduceMotion
+                        )
+                        .position(markerLayout.ambientDangerCenter)
+                        .zIndex(BoardPieceMarkerLayer.foregroundStatus.zIndex)
+                    }
 
                     if guidance.visibleDefenseSquares.contains(visualPiece.square) {
                         DefenseShieldView(
@@ -427,10 +442,8 @@ struct ChessBoardView: View {
                             readableRotationDegrees: readableRotationDegrees,
                             reducesMotion: accessibilityReduceMotion
                         )
-                        .position(
-                            x: pieceCenter.x + shieldOffset.x,
-                            y: pieceCenter.y + shieldOffset.y
-                        )
+                        .position(markerLayout.defenseCenter)
+                        .zIndex(BoardPieceMarkerLayer.foregroundStatus.zIndex)
                     }
                 }
             }

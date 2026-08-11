@@ -115,29 +115,28 @@ final class BoardGuidanceStyleTests: XCTestCase {
         XCTAssertGreaterThan(style.shieldScale, 0.16)
     }
 
-    func testReadableShoulderOffsetTracksUpperRightShoulderThroughRotations() {
-        let horizontal: CGFloat = 21
-        let vertical: CGFloat = -19
-        let expectations: [(BoardViewingAngle, CGPoint)] = [
-            (.normal, CGPoint(x: 21, y: -19)),
-            (.clockwiseQuarterTurn, CGPoint(x: -19, y: -21)),
-            (.halfTurn, CGPoint(x: -21, y: 19)),
-            (.counterclockwiseQuarterTurn, CGPoint(x: 19, y: 21)),
-        ]
+    func testCompactDangerAndShieldShareReadableFootWhileProminentDangerStaysCentered() {
+        let pieceCenter = CGPoint(x: 42, y: 42)
+        let readableFootOffset = CGPoint(x: 0, y: 24)
 
-        for (viewingAngle, expected) in expectations {
-            let geometry = BoardGuidanceGeometry(
-                side: 672,
-                origin: .zero,
-                viewingAngle: viewingAngle
-            )
-            let actual = geometry.readableShoulderOffset(
-                horizontal: horizontal,
-                vertical: vertical
-            )
+        let layout = BoardPieceMarkerLayout.make(
+            pieceCenter: pieceCenter,
+            readableFootOffset: readableFootOffset
+        )
 
-            XCTAssertEqual(actual.x, expected.x, accuracy: 0.001)
-            XCTAssertEqual(actual.y, expected.y, accuracy: 0.001)
-        }
+        XCTAssertEqual(layout.prominentDangerCenter, pieceCenter)
+        XCTAssertEqual(layout.ambientDangerCenter, CGPoint(x: 42, y: 66))
+        XCTAssertEqual(layout.defenseCenter, layout.ambientDangerCenter)
+    }
+
+    func testCompactDangerIsForegroundAndProminentDangerIsBackground() {
+        XCTAssertLessThan(
+            BoardPieceMarkerLayer.prominentDanger.zIndex,
+            BoardPieceMarkerLayer.piece.zIndex
+        )
+        XCTAssertGreaterThan(
+            BoardPieceMarkerLayer.foregroundStatus.zIndex,
+            BoardPieceMarkerLayer.piece.zIndex
+        )
     }
 }
