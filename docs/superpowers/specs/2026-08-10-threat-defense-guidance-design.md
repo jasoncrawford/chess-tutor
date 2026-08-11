@@ -28,8 +28,8 @@ This guidance is a set of training wheels for live play. It should be proactive 
 
 Guidance has four layers, each adding detail only when the player asks for or creates the relevant context.
 
-1. **Resting board:** Show a compact danger marker on every legally capturable piece and a compact shield on every legally supported non-king piece, on both sides.
-2. **Piece inspection:** Tapping either side's piece reveals that piece's outward movement and capture paths, its legal attackers, and its legal supporters. Unrelated ambient markers become faint while the selection is active.
+1. **Resting board:** Show a small, quiet danger badge on every legally capturable piece, on both sides. Defense markers remain hidden until they are relevant to a selection.
+2. **Piece inspection:** Tapping either side's piece reveals that piece's outward movement and capture paths, its legal attackers, and its legal supporters. Danger markers on the selected piece and its legal capture targets expand to full size. A shield appears only when the selected piece or one of those legal capture targets is defended.
 3. **Tentative move:** After a piece is moved but before **Done**, analyze the displayed tentative position and automatically inspect the moved piece. This answers “did I just put it in danger?” before the move is committed.
 4. **Coverage lens:** A button in the selected-piece panel reveals a persistent, whole-board summary of both sides' reach using small pips rather than arrows.
 
@@ -66,7 +66,7 @@ The danger marker does not estimate whether the capture is wise. A defended piec
 
 ### Legal support and defense
 
-A non-king piece receives a shield when at least one friendly piece legally supports its occupied square: if that square held an opposing capturable piece instead, the supporter could capture it without exposing its own king. The Core rules API must supply this relationship directly; `PositionAnalyzer` must not recreate piece geometry to infer it.
+A non-king piece qualifies as defended when at least one friendly piece legally supports its occupied square: if that square held an opposing capturable piece instead, the supporter could capture it without exposing its own king. The Core rules API must supply this relationship directly; `PositionAnalyzer` must not recreate piece geometry to infer it. This fact is always available to presentation and accessibility, but a shield is drawn only when the defended piece is relevant to the current selection.
 
 A pinned piece counts as a supporter only when the corresponding capture would remain legal. A piece that is merely geometrically aimed at the square but legally unable to capture does not confer a shield.
 
@@ -78,11 +78,10 @@ Kings do not receive shield markers. This keeps check communication unambiguous 
 
 Both colors receive the same ambient treatment:
 
-- Every threatened piece has a coral-red comic burst behind it.
-- Every defended non-king piece has a tiny teal shield token at its foot.
-- A piece may show both markers at once.
+- Every threatened piece has a small, quiet coral-red comic burst badge near its shoulder.
+- Defended pieces do not show shields without a relevant selection.
 
-These markers are present by default while a game is in progress. They do not pulse continuously. A status change may briefly pop or brighten, then settles into a static marker.
+The danger badges are present by default while a game is in progress. They do not pulse continuously. A status change may briefly appear, then settles into a static marker.
 
 ### Symmetric piece inspection
 
@@ -108,7 +107,9 @@ In both cases, outward movement and capture paths show broad allowed reach. Inbo
 
 The selected piece's outward paths use the selected side's relative color: yellow for the side to move and red for the other side. Inbound attacker paths use the attacker's relative color. Friendly supporters receive a teal echo around their pieces; there are no defender arrows.
 
-While a piece is selected, unrelated ambient bursts and shields fade to roughly one-fifth emphasis. Markers and paths involved in the selected piece's relationships remain fully emphasized. Clearing the selection restores the ambient board.
+When a piece is selected, its danger badge expands into the full coral burst behind it if it is threatened. The danger badges on pieces it can legally capture expand in the same way. Other threatened pieces retain their small ambient badges without an additional selected-state fade.
+
+A larger, clearer teal shield appears at the readable foot of the selected piece if it is defended and on each of its legal capture targets that is defended. Attackers, supporters, and unrelated pieces do not show shields unless they are also legal capture targets. Clearing the selection returns every threat to its small ambient badge and removes all shields. A relevant piece may show both a full burst and a shield.
 
 Tapping an empty square that is not a valid destination quietly clears the selection and its guidance. It does not show an illegal-move or choose-a-piece message; those explanations are reserved for an invalid drag attempt. A valid empty-square tap still stages the move when selection hints are hidden.
 
@@ -138,7 +139,7 @@ Coverage uses pips rather than arrows because whole-board arrows obscured both p
 
 Coverage is deliberately persistent. Tapping pieces, inspecting the other side, starting a drag, staging a move, or reverting a move does not close it. The pips recompute for the displayed position after a piece lands. Coverage closes only when the player explicitly presses **Hide coverage**, a move is committed through local **Done** or remote play, or the game is reset/ended.
 
-If a piece is selected while coverage is open, selected-piece paths and relationship emphasis appear above the coverage pips. Ambient danger and shield markers continue to participate in the usual selected/unselected emphasis behavior.
+If a piece is selected while coverage is open, selected-piece paths and relationship emphasis appear above the coverage pips. Small ambient danger badges remain visible, while full bursts and shields follow the same relevance rule as they do without coverage.
 
 ## Visual Grammar
 
@@ -146,8 +147,9 @@ The board uses a small, consistent visual vocabulary:
 
 | Meaning | Treatment |
 | --- | --- |
-| Legally threatened piece | Coral-red comic burst behind the piece |
-| Legally defended non-king piece | Tiny teal shield token at the piece's foot |
+| Legally threatened piece at rest | Small coral-red comic burst badge near the piece's shoulder |
+| Threatened selected piece or legal capture target | Full coral-red comic burst behind the piece |
+| Defended selected piece or legal capture target | Clear teal shield token at the piece's readable foot |
 | Selected side's allowed path | Thin yellow or red trajectory, according to side |
 | Legal attacker of selected piece | Thin inbound trajectory in the attacker's side color |
 | Legal supporter of selected piece | Teal echo around the supporting piece |
@@ -156,16 +158,16 @@ The board uses a small, consistent visual vocabulary:
 
 Selected trajectories sit above the board squares and coverage pips but below the pieces and piece markers. They use small arrowheads and restrained line weight. They are limited to the selected piece and its legal attackers; there are no whole-board arrows and no defender arrows.
 
-Ordinary capture targets do not need an additional glowing outline when the target already has the danger burst and a selected path terminates at it. En passant remains the exception because its landing square and captured piece occupy different squares.
+Ordinary legal capture targets do not need an additional glowing outline when the target already has the full danger burst and a selected path terminates at it. En passant remains the exception because its landing square and captured piece occupy different squares.
 
-All markers rotate and settle with the physical board. Text stays readable in every supported tabletop orientation. With Reduce Motion enabled, status changes cross-fade without popping or traveling.
+All markers rotate and settle with the physical board. The small danger badge stays at a consistent readable shoulder and the shield stays at a consistent readable foot in every supported tabletop orientation. With Reduce Motion disabled, a newly relevant danger badge may move and expand into the full burst; with Reduce Motion enabled, small and full treatments cross-fade without traveling or scaling.
 
 ## Game-End Behavior
 
 The finished board is not an implicit analysis or review mode.
 
 - Coverage closes and its control becomes unavailable.
-- Ambient danger and shield markers clear.
+- All live-play guidance markers clear.
 - Tapping a piece may update the identity information in the selected-piece panel, but it shows no movement, capture, attacker, supporter, or coverage guidance.
 - Checkmate keeps the coral danger burst on the losing king as part of the checkmate message.
 - Stalemate adds no board annotation.
@@ -254,7 +256,7 @@ This boundary prevents the threat/defense feature from creating a second chess e
 - closure of coverage on **Done**, reset, or game end;
 - suppression of move guidance after game end.
 
-`BoardGuidancePresentation` should provide SwiftUI-ready sets and connections for ambient markers, selected trajectories, attacker emphasis, supporter echoes, and coverage pips. This separates read-only inspection from move validation; the existing `legalMovesForSelection` property currently combines those concerns and should not become the general analysis API.
+`BoardGuidancePresentation` should provide SwiftUI-ready sets and connections for ambient markers, selected trajectories, attacker emphasis, supporter echoes, and coverage pips. In particular, it derives a prominent-threat set containing a threatened selected piece and the selected piece's legal capture targets, plus a visible-defense set containing defended members of that same relevant group. These are presentation projections of existing analysis facts; they add no chess-rule logic. Read-only inspection and move validation remain separate: guidance may describe either color, while the session's actionable-move state continues to govern what the player may stage.
 
 ### `ChessBoardView`: rendering and interaction only
 
@@ -325,7 +327,8 @@ Test:
 - symmetric inspection of current-side and other-side pieces;
 - other-side pieces remaining immovable;
 - selected-path, attacker, and supporter projection;
-- unrelated ambient markers quieting and restoring;
+- small ambient danger badges remaining quiet while selected danger markers expand and restore;
+- shields appearing only for a defended selected piece and defended legal capture targets;
 - tentative-position analysis after landing and committed-position analysis after reversal;
 - coverage remaining open through selection changes, drags, tentative landings, and reversals;
 - explicit **Hide coverage**, **Done**, reset, and game end closing coverage;
@@ -334,12 +337,13 @@ Test:
 
 ### Presentation and accessibility
 
-Add stable presentation/layout tests for layer ordering, coverage shape assignments, selected-panel control fit, orientation behavior, Reduce Motion behavior, and accessibility descriptions. Prefer value and layout assertions to fragile pixel snapshots.
+Add stable presentation/layout tests for layer ordering, ambient/prominent threat projection, visible-defense projection, coverage shape assignments, selected-panel control fit, orientation behavior, Reduce Motion behavior, and accessibility descriptions. VoiceOver continues to report threat and defense facts for every piece even when a shield is visually suppressed. Prefer value and layout assertions to fragile pixel snapshots.
 
 Visually inspect representative board states in every supported rotation:
 
 - a sparse position with a single danger and defense relationship;
-- a dense middlegame with many ambient markers;
+- a dense middlegame with many small ambient danger badges and no selection shields;
+- a selected piece with a threatened-and-defended target, confirming full bursts and shields remain legible together;
 - both coverage colors on many contested squares;
 - a staged blunder that newly exposes the moved piece;
 - checkmate, stalemate, castling, promotion, and en passant.
@@ -348,6 +352,6 @@ Add a performance test for a dense legal position and verify that one position c
 
 ## Deferred Training-Wheel Controls
 
-The first release starts with ambient danger and defense on by default, selection guidance enabled, and coverage available on demand. It does not decide when a learner has outgrown any layer.
+The first release starts with small ambient danger badges on by default, contextual defense visible on selection, selection guidance enabled, and coverage available on demand. It does not decide when a learner has outgrown any layer.
 
 A later design may introduce independent manual controls or a guided reduction path. That work must preserve the separation between ambient status, selected-piece inspection, and invoked whole-board coverage instead of reducing them through one opaque difficulty switch.
