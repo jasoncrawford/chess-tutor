@@ -835,6 +835,7 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.selectedSquare, destination)
         XCTAssertEqual(session.analysisRevision, initialRevision + 1)
         XCTAssertTrue(session.boardGuidance.threatenedSquares.contains(destination))
+        XCTAssertTrue(session.boardGuidance.prominentThreatSquares.contains(destination))
         XCTAssertTrue(session.isCoverageVisible)
     }
 

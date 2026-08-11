@@ -20,15 +20,20 @@ struct BoardCoveragePresentation: Equatable, Sendable {
 struct BoardGuidancePresentation: Equatable, Sendable {
     let sideToMove: PieceColor
     let threatenedSquares: Set<Square>
+    let prominentThreatSquares: Set<Square>
     let defendedSquares: Set<Square>
+    let visibleDefenseSquares: Set<Square>
     let selectedSquare: Square?
     let selectedPaths: Set<BoardGuidancePath>
     let supporterSquares: Set<Square>
     let coverage: BoardCoveragePresentation?
-    let emphasizedSquares: Set<Square>
 
     func markerOpacity(at square: Square) -> Double {
-        selectedSquare == nil || emphasizedSquares.contains(square) ? 1 : 0.20
+        selectedSquare == nil
+            || prominentThreatSquares.contains(square)
+            || visibleDefenseSquares.contains(square)
+            ? 1
+            : 0.20
     }
 
     func accessibilityLabel(for square: Square, piece: Piece) -> String {
@@ -72,12 +77,13 @@ struct BoardGuidancePresentation: Equatable, Sendable {
         BoardGuidancePresentation(
             sideToMove: sideToMove,
             threatenedSquares: [],
+            prominentThreatSquares: [],
             defendedSquares: [],
+            visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
             supporterSquares: [],
-            coverage: nil,
-            emphasizedSquares: []
+            coverage: nil
         )
     }
 
@@ -98,12 +104,13 @@ struct BoardGuidancePresentation: Equatable, Sendable {
             return BoardGuidancePresentation(
                 sideToMove: state.sideToMove,
                 threatenedSquares: threatenedSquares,
+                prominentThreatSquares: threatenedSquares,
                 defendedSquares: [],
+                visibleDefenseSquares: [],
                 selectedSquare: selectedSquare,
                 selectedPaths: [],
                 supporterSquares: [],
-                coverage: nil,
-                emphasizedSquares: threatenedSquares
+                coverage: nil
             )
         }
 
@@ -159,18 +166,15 @@ struct BoardGuidancePresentation: Equatable, Sendable {
             defendedSquares.remove(square)
         }
 
-        var emphasizedSquares: Set<Square> = []
-        if let selectedSquare {
-            emphasizedSquares.insert(selectedSquare)
+        var relevantSquares: Set<Square> = []
+        if let selectedSquare, state.board[selectedSquare] != nil {
+            relevantSquares.insert(selectedSquare)
+            relevantSquares.formUnion(
+                analysis.threats(from: selectedSquare).map(\.target)
+            )
         }
-        for path in selectedPaths {
-            emphasizedSquares.insert(path.source)
-            emphasizedSquares.insert(path.destination)
-            if let captureSquare = path.captureSquare {
-                emphasizedSquares.insert(captureSquare)
-            }
-        }
-        emphasizedSquares.formUnion(supporterSquares)
+        let prominentThreatSquares = analysis.threatenedSquares.intersection(relevantSquares)
+        let visibleDefenseSquares = defendedSquares.intersection(relevantSquares)
 
         let coverage = showsCoverage
             ? BoardCoveragePresentation(
@@ -183,12 +187,13 @@ struct BoardGuidancePresentation: Equatable, Sendable {
         return BoardGuidancePresentation(
             sideToMove: state.sideToMove,
             threatenedSquares: analysis.threatenedSquares,
+            prominentThreatSquares: prominentThreatSquares,
             defendedSquares: defendedSquares,
+            visibleDefenseSquares: visibleDefenseSquares,
             selectedSquare: selectedSquare,
             selectedPaths: selectedPaths,
             supporterSquares: supporterSquares,
-            coverage: coverage,
-            emphasizedSquares: emphasizedSquares
+            coverage: coverage
         )
     }
 

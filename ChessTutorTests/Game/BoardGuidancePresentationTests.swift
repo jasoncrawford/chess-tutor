@@ -139,36 +139,68 @@ final class BoardGuidancePresentationTests: XCTestCase {
         )
     }
 
-    func testSelectionQuietsOnlyUnrelatedAmbientMarkers() {
-        let selected = Square(file: .d, rank: 4)
-        let relatedAttacker = Square(file: .b, rank: 6)
-        let unrelatedThreat = Square(file: .h, rank: 2)
+    func testEnPassantCapturePromotesCapturedPawnRatherThanLandingSquare() {
+        let whitePawn = Square(file: .e, rank: 5)
+        let blackPawn = Square(file: .d, rank: 5)
+        let landing = Square(file: .d, rank: 6)
         let state = GameState(
             board: Board(
                 pieces: [
-                    Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
-                    selected: Piece(kind: .bishop, color: .white),
-                    unrelatedThreat: Piece(kind: .pawn, color: .white),
-                    Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
-                    relatedAttacker: Piece(kind: .bishop, color: .black),
-                    Square(file: .f, rank: 3): Piece(kind: .knight, color: .black),
+                    Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                    whitePawn: Piece(kind: .pawn, color: .white),
+                    blackPawn: Piece(kind: .pawn, color: .black),
+                    Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
                 ]
             ),
-            sideToMove: .white
+            sideToMove: .white,
+            enPassantTarget: landing
         )
 
         let presentation = BoardGuidancePresentation.make(
             state: state,
             analysis: PositionAnalyzer.analyze(state),
-            selectedSquare: selected,
+            selectedSquare: whitePawn,
             showsSelectedReach: true,
             showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
 
-        XCTAssertEqual(presentation.markerOpacity(at: selected), 1)
-        XCTAssertEqual(presentation.markerOpacity(at: relatedAttacker), 1)
-        XCTAssertEqual(presentation.markerOpacity(at: unrelatedThreat), 0.20)
+        XCTAssertEqual(presentation.prominentThreatSquares, [blackPawn])
+        XCTAssertFalse(presentation.prominentThreatSquares.contains(landing))
+    }
+
+    func testSelectionPromotesOnlyThreatenedSelectionAndLegalCaptureTargets() {
+        let selected = Square(file: .d, rank: 4)
+        let captureTarget = Square(file: .f, rank: 6)
+        let unrelatedThreat = Square(file: .h, rank: 2)
+        let presentation = markerRelevancePresentation(selectedSquare: selected)
+
+        XCTAssertTrue(presentation.threatenedSquares.isSuperset(of: [
+            selected, captureTarget, unrelatedThreat,
+        ]))
+        XCTAssertEqual(presentation.prominentThreatSquares, [selected, captureTarget])
+        XCTAssertFalse(presentation.prominentThreatSquares.contains(unrelatedThreat))
+    }
+
+    func testSelectionShowsDefenseOnlyForSelectionAndLegalCaptureTargets() {
+        let selected = Square(file: .d, rank: 4)
+        let captureTarget = Square(file: .f, rank: 6)
+        let unrelatedDefendedPiece = Square(file: .h, rank: 2)
+        let presentation = markerRelevancePresentation(selectedSquare: selected)
+
+        XCTAssertTrue(presentation.defendedSquares.isSuperset(of: [
+            selected, captureTarget, unrelatedDefendedPiece,
+        ]))
+        XCTAssertEqual(presentation.visibleDefenseSquares, [selected, captureTarget])
+    }
+
+    func testNoSelectionKeepsAllFactsButHasNoProminentThreatsOrVisibleDefense() {
+        let presentation = markerRelevancePresentation(selectedSquare: nil)
+
+        XCTAssertFalse(presentation.threatenedSquares.isEmpty)
+        XCTAssertFalse(presentation.defendedSquares.isEmpty)
+        XCTAssertTrue(presentation.prominentThreatSquares.isEmpty)
+        XCTAssertTrue(presentation.visibleDefenseSquares.isEmpty)
     }
 
     func testCoverageSeparatesSideToMoveFromOtherSide() {
@@ -213,7 +245,9 @@ final class BoardGuidancePresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.threatenedSquares, [losingKing])
+        XCTAssertEqual(presentation.prominentThreatSquares, [losingKing])
         XCTAssertTrue(presentation.defendedSquares.isEmpty)
+        XCTAssertTrue(presentation.visibleDefenseSquares.isEmpty)
         XCTAssertTrue(presentation.selectedPaths.isEmpty)
         XCTAssertTrue(presentation.supporterSquares.isEmpty)
         XCTAssertNil(presentation.coverage)
@@ -224,12 +258,13 @@ final class BoardGuidancePresentationTests: XCTestCase {
         let presentation = BoardGuidancePresentation(
             sideToMove: .white,
             threatenedSquares: [target],
+            prominentThreatSquares: [],
             defendedSquares: [target],
+            visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
             supporterSquares: [],
-            coverage: nil,
-            emphasizedSquares: []
+            coverage: nil
         )
 
         XCTAssertEqual(
@@ -248,12 +283,13 @@ final class BoardGuidancePresentationTests: XCTestCase {
         let presentation = BoardGuidancePresentation(
             sideToMove: .white,
             threatenedSquares: [threatened],
+            prominentThreatSquares: [],
             defendedSquares: [defended],
+            visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
             supporterSquares: [],
-            coverage: nil,
-            emphasizedSquares: []
+            coverage: nil
         )
 
         XCTAssertEqual(
@@ -284,7 +320,9 @@ final class BoardGuidancePresentationTests: XCTestCase {
         let presentation = BoardGuidancePresentation(
             sideToMove: .white,
             threatenedSquares: [],
+            prominentThreatSquares: [],
             defendedSquares: [],
+            visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
             supporterSquares: [],
@@ -292,8 +330,7 @@ final class BoardGuidancePresentationTests: XCTestCase {
                 sideToMove: .white,
                 sideToMoveSquares: [contested],
                 otherSideSquares: [contested]
-            ),
-            emphasizedSquares: []
+            )
         )
 
         XCTAssertEqual(
@@ -308,7 +345,9 @@ final class BoardGuidancePresentationTests: XCTestCase {
         let presentation = BoardGuidancePresentation(
             sideToMove: .black,
             threatenedSquares: [],
+            prominentThreatSquares: [],
             defendedSquares: [],
+            visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
             supporterSquares: [],
@@ -316,8 +355,7 @@ final class BoardGuidancePresentationTests: XCTestCase {
                 sideToMove: .black,
                 sideToMoveSquares: [blackOnly],
                 otherSideSquares: []
-            ),
-            emphasizedSquares: []
+            )
         )
 
         XCTAssertEqual(
@@ -342,6 +380,36 @@ final class BoardGuidancePresentationTests: XCTestCase {
                 ]
             ),
             sideToMove: .white
+        )
+    }
+
+    private func markerRelevancePresentation(
+        selectedSquare: Square?
+    ) -> BoardGuidancePresentation {
+        let state = GameState(
+            board: Board(
+                pieces: [
+                    Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
+                    Square(file: .d, rank: 4): Piece(kind: .bishop, color: .white),
+                    Square(file: .d, rank: 1): Piece(kind: .rook, color: .white),
+                    Square(file: .h, rank: 2): Piece(kind: .pawn, color: .white),
+                    Square(file: .h, rank: 1): Piece(kind: .rook, color: .white),
+                    Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                    Square(file: .d, rank: 8): Piece(kind: .rook, color: .black),
+                    Square(file: .f, rank: 6): Piece(kind: .knight, color: .black),
+                    Square(file: .f, rank: 8): Piece(kind: .rook, color: .black),
+                    Square(file: .f, rank: 3): Piece(kind: .knight, color: .black),
+                ]
+            ),
+            sideToMove: .white
+        )
+        return BoardGuidancePresentation.make(
+            state: state,
+            analysis: PositionAnalyzer.analyze(state),
+            selectedSquare: selectedSquare,
+            showsSelectedReach: true,
+            showsCoverage: false,
+            keepsOnlyCheckmateKingThreat: false
         )
     }
 }
