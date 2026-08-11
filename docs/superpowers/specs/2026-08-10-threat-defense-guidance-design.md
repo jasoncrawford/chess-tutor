@@ -31,7 +31,7 @@ Guidance has four layers, each adding detail only when the player asks for or cr
 1. **Resting board:** Show a small, quiet danger badge over the readable foot of every legally capturable piece, on both sides. Defense markers remain hidden until they are relevant to a selection.
 2. **Piece inspection:** Tapping either side's piece reveals that piece's outward movement and capture paths, its legal attackers, and its legal supporters. Danger markers on the selected piece and its legal capture targets expand to full size. A shield appears only when the selected piece or one of those legal capture targets is defended.
 3. **Tentative move:** After a piece is moved but before **Done**, analyze the displayed tentative position and automatically inspect the moved piece. This answers “did I just put it in danger?” before the move is committed.
-4. **Coverage lens:** A button in the selected-piece panel reveals a persistent, whole-board summary of both sides' reach using small pips rather than arrows.
+4. **Coverage lens:** A button in the selected-piece panel switches the board into a persistent, dedicated coverage map that summarizes both sides' reach through quiet square-surface states rather than repeated symbols or whole-board arrows.
 
 This layered approach is preferred to two alternatives:
 
@@ -128,18 +128,20 @@ This state persists until the player presses **Done**, reverts the tentative mov
 
 The selected-piece panel gains a full-width button at its bottom. It reads **Show coverage** when closed and **Hide coverage** when open. The current panel geometry has enough vertical room for this control without adding a new sidebar or reducing the board.
 
-Coverage shows both sides simultaneously:
+Coverage shows both sides simultaneously by making every square one of four surface states:
 
-- a small round yellow pip means the square is in the side-to-move's allowed reach;
-- a small red diamond means the square is in the other side's allowed reach;
-- a contested square shows both pips with a consistent small offset;
-- each side gets at most one pip per square; the lens does not encode the number of pieces reaching it.
+- warm yellow means the square is reached only by the side to move;
+- coral means the square is reached only by the other side;
+- a diagonal yellow-and-coral split means both sides reach the square;
+- a slightly dimmed neutral treatment means neither side reaches the square.
 
-Coverage uses pips rather than arrows because whole-board arrows obscured both pieces and one another. Color and shape both carry meaning so the distinction does not rely on color vision alone.
+Each square has one coherent state; the map does not encode the number of pieces reaching it. The yellow and coral treatments deliberately differ in luminance as well as hue, while the contested state uses split geometry and the neither state uses dimming. VoiceOver continues to name the side or sides reaching each square.
 
-Coverage is deliberately persistent. Tapping pieces, inspecting the other side, starting a drag, staging a move, or reverting a move does not close it. The pips recompute for the displayed position after a piece lands. Coverage closes only when the player explicitly presses **Hide coverage**, a move is committed through local **Done** or remote play, or the game is reset/ended.
+Coverage is a dedicated visual mode rather than another annotation layer. At rest, pieces recede slightly, coordinate labels and coordinate emphasis are hidden, and trajectories, danger bursts, shields, and supporter echoes are suppressed. This lets the player read the board as a small number of connected visual regions instead of dozens of independent marks. Exact opacity, saturation, dimming, and transition values remain view-style constants that should be tuned on the real iPad board.
 
-If a piece is selected while coverage is open, selected-piece paths and relationship emphasis appear above the coverage pips. Small ambient danger badges remain visible, while full bursts and shields follow the same relevance rule as they do without coverage.
+Coverage is deliberately persistent. Tapping pieces, inspecting the other side, starting a drag, staging a move, or reverting a move does not close it. The map recomputes for the displayed position after a piece lands. Coverage closes only when the player explicitly presses **Hide coverage**, a move is committed through local **Done** or remote play, or the game is reset/ended.
+
+If a piece is selected while coverage is open, the map remains visible and the board remains fully playable. The selected piece and its contextual pieces regain emphasis. Its selected-piece paths, legal attackers, supporter echoes, relevant full danger bursts, and relevant shields appear above the map using their normal semantics. Unrelated pieces stay slightly recessed, and unrelated ambient danger badges and status markers remain hidden. This bounds the additional information to the question created by the selection instead of recreating the resting-board clutter.
 
 ## Visual Grammar
 
@@ -153,10 +155,12 @@ The board uses a small, consistent visual vocabulary:
 | Selected side's allowed path | Thin yellow or red trajectory, according to side |
 | Legal attacker of selected piece | Thin inbound trajectory in the attacker's side color |
 | Legal supporter of selected piece | Teal echo around the supporting piece |
-| Side-to-move coverage | Small round yellow pip |
-| Other-side coverage | Small red diamond |
+| Side-to-move-only coverage | Warm yellow square surface |
+| Other-side-only coverage | Coral square surface |
+| Both-side coverage | Diagonally split yellow-and-coral square surface |
+| Neither-side coverage | Slightly dimmed neutral square surface |
 
-Selected trajectories sit above the board squares and coverage pips but below the pieces and piece markers. Prominent danger bursts sit behind pieces; compact ambient bursts, shields, and other foreground status markers sit in front. Trajectories use small arrowheads and restrained line weight. They are limited to the selected piece and its legal attackers; there are no whole-board arrows and no defender arrows.
+Selected trajectories sit above the board squares and coverage surfaces but below the pieces and piece markers. Prominent danger bursts sit behind pieces; compact ambient bursts, shields, and other foreground status markers sit in front. Trajectories use small arrowheads and restrained line weight. They are limited to the selected piece and its legal attackers; there are no whole-board arrows and no defender arrows.
 
 Ordinary legal capture targets do not need an additional glowing outline when the target already has the full danger burst and a selected path terminates at it. En passant remains the exception because its landing square and captured piece occupy different squares.
 
@@ -207,7 +211,7 @@ During an opponent's remote turn, local dragging remains locked, but read-only p
 
 ## Accessibility
 
-- Yellow round pips and red diamond pips distinguish coverage by shape as well as color.
+- Coverage uses luminance, dimming, and contested-square split geometry in addition to yellow and coral hue.
 - VoiceOver identifies piece color, kind, and square, then states whether the piece is threatened and/or defended.
 - When coverage is visible, square accessibility descriptions identify which side or sides reach each square.
 - The coverage button exposes its expanded/collapsed state and has a comfortable touch target.
@@ -256,11 +260,13 @@ This boundary prevents the threat/defense feature from creating a second chess e
 - closure of coverage on **Done**, reset, or game end;
 - suppression of move guidance after game end.
 
-`BoardGuidancePresentation` should provide SwiftUI-ready sets and connections for ambient markers, selected trajectories, attacker emphasis, supporter echoes, and coverage pips. In particular, it derives a prominent-threat set containing a threatened selected piece and the selected piece's legal capture targets, plus a visible-defense set containing defended members of that same relevant group. These are presentation projections of existing analysis facts; they add no chess-rule logic. Read-only inspection and move validation remain separate: guidance may describe either color, while the session's actionable-move state continues to govern what the player may stage.
+`BoardGuidancePresentation` provides SwiftUI-ready sets and connections for ambient markers, selected trajectories, attacker emphasis, supporter echoes, and the two existing coverage sets. In particular, it derives a prominent-threat set containing a threatened selected piece and the selected piece's legal capture targets, plus a visible-defense set containing defended members of that same relevant group. These are presentation projections of existing analysis facts; they add no chess-rule logic. Read-only inspection and move validation remain separate: guidance may describe either color, while the session's actionable-move state continues to govern what the player may stage.
 
 ### `ChessBoardView`: rendering and interaction only
 
 `ChessBoardView` consumes `BoardGuidancePresentation`, draws its layers, and forwards taps and drags to `GameSession`. It does not query the move generator, infer captures, determine pins, or derive support from board geometry.
+
+The dedicated coverage-map experiment is purely a view-level rendering change. SwiftUI derives each square's visual state from the two coverage sets already present in `BoardGuidancePresentation`, replaces the pip layer with square surfaces, and adjusts coordinate, piece, and marker emphasis while coverage is visible. It does not change `PositionAnalyzer`, `BoardGuidancePresentation`, `GameSession`, coverage semantics, persistence, or accessibility facts.
 
 ### Canonical capture resolution
 
@@ -337,14 +343,14 @@ Test:
 
 ### Presentation and accessibility
 
-Add stable presentation/layout tests for foreground/background layer ordering, the shared readable-foot anchor, ambient/prominent threat projection, visible-defense projection, coverage shape assignments, selected-panel control fit, orientation behavior, Reduce Motion behavior, and accessibility descriptions. VoiceOver continues to report threat and defense facts for every piece even when a shield is visually suppressed. Prefer value and layout assertions to fragile pixel snapshots.
+Add stable presentation/layout tests for foreground/background layer ordering, the shared readable-foot anchor, ambient/prominent threat projection, visible-defense projection, the four view-derived coverage surface states, selected-panel control fit, orientation behavior, Reduce Motion behavior, and accessibility descriptions. Verify that resting coverage suppresses coordinate and status rendering, while selection restores only contextual paths and markers. VoiceOver continues to report threat and defense facts for every piece even when its visual marker is suppressed. Prefer value and layout assertions to fragile pixel snapshots.
 
 Visually inspect representative board states in every supported rotation:
 
 - a sparse position with a single danger and defense relationship;
 - a dense middlegame with many small ambient danger badges and no selection shields;
 - a selected piece with a threatened-and-defended target, confirming full bursts and shields remain legible together;
-- both coverage colors on many contested squares;
+- all four coverage surface states in a dense position, both at rest and with a piece selected;
 - a staged blunder that newly exposes the moved piece;
 - checkmate, stalemate, castling, promotion, and en passant.
 
