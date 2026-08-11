@@ -128,16 +128,16 @@ This state persists until the player presses **Done**, reverts the tentative mov
 
 The selected-piece panel gains a full-width button at its bottom. It reads **Show coverage** when closed and **Hide coverage** when open. The current panel geometry has enough vertical room for this control without adding a new sidebar or reducing the board.
 
-Coverage shows both sides simultaneously by making every square one of four surface states:
+Coverage shows both sides simultaneously by temporarily replacing the checkerboard with four opaque square-surface states:
 
-- warm yellow means the square is reached only by the side to move;
-- coral means the square is reached only by the other side;
+- opaque warm yellow means the square is reached only by the side to move;
+- opaque coral means the square is reached only by the other side;
 - a diagonal yellow-and-coral split means both sides reach the square;
-- a slightly dimmed neutral treatment means neither side reaches the square.
+- an opaque neutral treatment means neither side reaches the square.
 
-Each square has one coherent state; the map does not encode the number of pieces reaching it. The yellow and coral treatments deliberately differ in luminance as well as hue, while the contested state uses split geometry and the neither state uses dimming. VoiceOver continues to name the side or sides reaching each square.
+Each logical state has the same stable color on every square, independent of whether the underlying chess square is light or dark. Coverage colors never blend with, inherit luminance from, or otherwise reveal the checkerboard beneath them. This prevents the four logical states from becoming eight perceptual states. The map does not encode the number of pieces reaching a square. Yellow and coral deliberately differ in luminance as well as hue, the contested state uses split geometry, and the neither state uses a distinct neutral surface. VoiceOver continues to name the side or sides reaching each square.
 
-Coverage is a dedicated visual mode rather than another annotation layer. At rest, pieces recede slightly, coordinate labels and coordinate emphasis are hidden, and trajectories, danger bursts, shields, and supporter echoes are suppressed. This lets the player read the board as a small number of connected visual regions instead of dozens of independent marks. Exact opacity, saturation, dimming, and transition values remain view-style constants that should be tuned on the real iPad board.
+Coverage is a dedicated visual mode rather than another annotation layer. The ordinary light/dark pattern disappears while the lens is open; the wooden frame, 8×8 grid boundaries, and chess pieces preserve the object's identity as a chessboard. At rest, pieces recede slightly, coordinate labels and coordinate emphasis are hidden, and trajectories, danger bursts, shields, and supporter echoes are suppressed. This lets the player read the board as a small number of connected visual regions instead of dozens of independent marks. Exact opaque surface colors, piece recession, and transition values remain view-style constants that should be tuned on the real iPad board. Per-square opacity or light/dark modulation is not allowed because it would recreate the ambiguity this treatment is intended to remove.
 
 Coverage is deliberately persistent. Tapping pieces, inspecting the other side, starting a drag, staging a move, or reverting a move does not close it. The map recomputes for the displayed position after a piece lands. Coverage closes only when the player explicitly presses **Hide coverage**, a move is committed through local **Done** or remote play, or the game is reset/ended.
 
@@ -155,10 +155,10 @@ The board uses a small, consistent visual vocabulary:
 | Selected side's allowed path | Thin yellow or red trajectory, according to side |
 | Legal attacker of selected piece | Thin inbound trajectory in the attacker's side color |
 | Legal supporter of selected piece | Teal echo around the supporting piece |
-| Side-to-move-only coverage | Warm yellow square surface |
-| Other-side-only coverage | Coral square surface |
-| Both-side coverage | Diagonally split yellow-and-coral square surface |
-| Neither-side coverage | Slightly dimmed neutral square surface |
+| Side-to-move-only coverage | Opaque warm yellow square surface |
+| Other-side-only coverage | Opaque coral square surface |
+| Both-side coverage | Opaque, diagonally split yellow-and-coral square surface |
+| Neither-side coverage | Opaque neutral square surface |
 
 Selected trajectories sit above the board squares and coverage surfaces but below the pieces and piece markers. Prominent danger bursts sit behind pieces; compact ambient bursts, shields, and other foreground status markers sit in front. Trajectories use small arrowheads and restrained line weight. They are limited to the selected piece and its legal attackers; there are no whole-board arrows and no defender arrows.
 
@@ -211,7 +211,7 @@ During an opponent's remote turn, local dragging remains locked, but read-only p
 
 ## Accessibility
 
-- Coverage uses luminance, dimming, and contested-square split geometry in addition to yellow and coral hue.
+- Coverage uses distinct luminance, a neutral neither-state, and contested-square split geometry in addition to yellow and coral hue.
 - VoiceOver identifies piece color, kind, and square, then states whether the piece is threatened and/or defended.
 - When coverage is visible, square accessibility descriptions identify which side or sides reach each square.
 - The coverage button exposes its expanded/collapsed state and has a comfortable touch target.
