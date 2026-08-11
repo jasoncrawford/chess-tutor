@@ -382,17 +382,21 @@ struct ChessBoardView: View {
             viewingAngle: viewingAngle
         )
         let shieldOffset = geometry.readableFootOffset(distance: cellSize * 0.31)
+        let shoulderOffset = geometry.readableShoulderOffset(
+            horizontal: cellSize * 0.25,
+            vertical: -cellSize * 0.23
+        )
 
         return ZStack {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
                     let pieceCenter = geometry.center(of: visualPiece.square)
-                    let markerOpacity = guidance.markerOpacity(at: visualPiece.square)
 
                     if guidance.threatenedSquares.contains(visualPiece.square) {
                         DangerBurstView(
                             cellSize: cellSize,
-                            opacity: markerOpacity,
+                            readableShoulderOffset: shoulderOffset,
+                            isProminent: guidance.prominentThreatSquares.contains(visualPiece.square),
                             reducesMotion: accessibilityReduceMotion
                         )
                             .position(pieceCenter)
@@ -417,11 +421,10 @@ struct ChessBoardView: View {
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
                         .accessibilityHidden(true)
 
-                    if guidance.defendedSquares.contains(visualPiece.square) {
+                    if guidance.visibleDefenseSquares.contains(visualPiece.square) {
                         DefenseShieldView(
                             cellSize: cellSize,
                             readableRotationDegrees: readableRotationDegrees,
-                            opacity: markerOpacity,
                             reducesMotion: accessibilityReduceMotion
                         )
                         .position(

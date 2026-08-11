@@ -103,4 +103,41 @@ final class BoardGuidanceStyleTests: XCTestCase {
             XCTAssertEqual(actual.y, expected.y, accuracy: 0.001)
         }
     }
+
+    func testAmbientDangerBadgeIsMuchSmallerThanProminentBurst() {
+        let style = BoardGuidanceStyle.current
+
+        XCTAssertLessThanOrEqual(style.ambientDangerBadgeScale, 0.30)
+        XCTAssertGreaterThan(
+            style.prominentDangerBurstScale,
+            style.ambientDangerBadgeScale * 2.5
+        )
+        XCTAssertGreaterThan(style.shieldScale, 0.16)
+    }
+
+    func testReadableShoulderOffsetTracksUpperRightShoulderThroughRotations() {
+        let horizontal: CGFloat = 21
+        let vertical: CGFloat = -19
+        let expectations: [(BoardViewingAngle, CGPoint)] = [
+            (.normal, CGPoint(x: 21, y: -19)),
+            (.clockwiseQuarterTurn, CGPoint(x: -19, y: -21)),
+            (.halfTurn, CGPoint(x: -21, y: 19)),
+            (.counterclockwiseQuarterTurn, CGPoint(x: 19, y: 21)),
+        ]
+
+        for (viewingAngle, expected) in expectations {
+            let geometry = BoardGuidanceGeometry(
+                side: 672,
+                origin: .zero,
+                viewingAngle: viewingAngle
+            )
+            let actual = geometry.readableShoulderOffset(
+                horizontal: horizontal,
+                vertical: vertical
+            )
+
+            XCTAssertEqual(actual.x, expected.x, accuracy: 0.001)
+            XCTAssertEqual(actual.y, expected.y, accuracy: 0.001)
+        }
+    }
 }

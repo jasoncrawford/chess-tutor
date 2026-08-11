@@ -4,14 +4,16 @@ struct BoardGuidanceStyle: Equatable {
     static let current = BoardGuidanceStyle(
         arrowheadLengthInCells: 0.14,
         pathLineWidthInCells: 0.028,
-        dangerBurstScale: 0.92,
-        shieldScale: 0.16,
+        ambientDangerBadgeScale: 0.28,
+        prominentDangerBurstScale: 0.92,
+        shieldScale: 0.22,
         supporterEchoScale: 0.94
     )
 
     let arrowheadLengthInCells: CGFloat
     let pathLineWidthInCells: CGFloat
-    let dangerBurstScale: CGFloat
+    let ambientDangerBadgeScale: CGFloat
+    let prominentDangerBurstScale: CGFloat
     let shieldScale: CGFloat
     let supporterEchoScale: CGFloat
 }
@@ -166,6 +168,17 @@ struct BoardGuidanceGeometry {
         return CGPoint(
             x: sin(radians) * distance,
             y: cos(radians) * distance
+        )
+    }
+
+    func readableShoulderOffset(
+        horizontal: CGFloat,
+        vertical: CGFloat
+    ) -> CGPoint {
+        let radians = viewingAngle.tableRotationDegrees * .pi / 180
+        return CGPoint(
+            x: horizontal * cos(radians) + vertical * sin(radians),
+            y: -horizontal * sin(radians) + vertical * cos(radians)
         )
     }
 }
@@ -340,36 +353,81 @@ struct DangerBurstShape: Shape {
 
 struct DangerBurstView: View {
     let cellSize: CGFloat
-    let opacity: Double
+    let readableShoulderOffset: CGPoint
+    let isProminent: Bool
     let reducesMotion: Bool
 
     var body: some View {
+        Group {
+            if reducesMotion {
+                ZStack {
+                    burst(
+                        scale: BoardGuidanceStyle.current.ambientDangerBadgeScale,
+                        isProminent: false
+                    )
+                    .offset(
+                        x: readableShoulderOffset.x,
+                        y: readableShoulderOffset.y
+                    )
+                    .opacity(isProminent ? 0 : 1)
+
+                    burst(
+                        scale: BoardGuidanceStyle.current.prominentDangerBurstScale,
+                        isProminent: true
+                    )
+                    .opacity(isProminent ? 1 : 0)
+                }
+                .animation(.easeOut(duration: 0.16), value: isProminent)
+            } else {
+                burst(
+                    scale: isProminent
+                        ? BoardGuidanceStyle.current.prominentDangerBurstScale
+                        : BoardGuidanceStyle.current.ambientDangerBadgeScale,
+                    isProminent: isProminent
+                )
+                .offset(
+                    x: isProminent ? 0 : readableShoulderOffset.x,
+                    y: isProminent ? 0 : readableShoulderOffset.y
+                )
+                .animation(
+                    .spring(response: 0.28, dampingFraction: 0.84),
+                    value: isProminent
+                )
+            }
+        }
+        .transition(
+            reducesMotion
+                ? .opacity
+                : .scale(scale: 0.84).combined(with: .opacity)
+        )
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func burst(scale: CGFloat, isProminent: Bool) -> some View {
         DangerBurstShape()
-            .fill(AppTheme.guidanceCoral.opacity(0.76))
+            .fill(
+                AppTheme.guidanceCoral.opacity(isProminent ? 0.76 : 0.58)
+            )
             .overlay {
                 DangerBurstShape()
-                    .stroke(AppTheme.guidanceRed.opacity(0.88), lineWidth: 1.2)
+                    .stroke(
+                        AppTheme.guidanceRed.opacity(isProminent ? 0.88 : 0.70),
+                        lineWidth: isProminent ? 1.2 : 1
+                    )
             }
-            .frame(
-                width: cellSize * BoardGuidanceStyle.current.dangerBurstScale,
-                height: cellSize * BoardGuidanceStyle.current.dangerBurstScale
+            .frame(width: cellSize * scale, height: cellSize * scale)
+            .shadow(
+                color: AppTheme.guidanceRed.opacity(isProminent ? 0.20 : 0.12),
+                radius: isProminent ? 2 : 1,
+                y: isProminent ? 1 : 0.5
             )
-            .opacity(opacity)
-            .shadow(color: AppTheme.guidanceRed.opacity(0.20), radius: 2, y: 1)
-            .transition(
-                reducesMotion
-                    ? .opacity
-                    : .scale(scale: 0.84).combined(with: .opacity)
-            )
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }
 
 struct DefenseShieldView: View {
     let cellSize: CGFloat
     let readableRotationDegrees: Double
-    let opacity: Double
     let reducesMotion: Bool
 
     var body: some View {
@@ -378,7 +436,7 @@ struct DefenseShieldView: View {
             .symbolRenderingMode(.palette)
             .foregroundStyle(AppTheme.guidanceTeal, Color.white.opacity(0.92))
             .rotationEffect(.degrees(readableRotationDegrees))
-            .opacity(opacity * 0.80)
+            .opacity(0.90)
             .shadow(color: AppTheme.boardFrame.opacity(0.30), radius: 1.2, y: 0.7)
             .transition(
                 reducesMotion

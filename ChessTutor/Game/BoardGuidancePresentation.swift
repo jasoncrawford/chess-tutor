@@ -28,14 +28,6 @@ struct BoardGuidancePresentation: Equatable, Sendable {
     let supporterSquares: Set<Square>
     let coverage: BoardCoveragePresentation?
 
-    func markerOpacity(at square: Square) -> Double {
-        selectedSquare == nil
-            || prominentThreatSquares.contains(square)
-            || visibleDefenseSquares.contains(square)
-            ? 1
-            : 0.20
-    }
-
     func accessibilityLabel(for square: Square, piece: Piece) -> String {
         let identity = "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue) on \(squareName(square))"
         let isThreatened = threatenedSquares.contains(square)
