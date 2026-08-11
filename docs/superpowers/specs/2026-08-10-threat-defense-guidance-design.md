@@ -122,7 +122,7 @@ After a successful drag or tap move stages a piece:
 - refresh its allowed reach, legal attackers, supporters, danger marker, and shield;
 - refresh ambient markers for every piece on the displayed board.
 
-This state persists until the player presses **Done**, reverts the tentative move, or starts a new game. Tapping an empty square reverts the tentative move. Starting a new drag from the staged piece first restores the committed position and its original-source guidance, then allows the same piece to be staged at a different legal destination in one gesture. Reverting restores guidance for the committed position.
+This state persists until the player presses **Done**, reverts the tentative move, or starts a new game. Tapping an empty square that is a valid alternative destination from the piece's original square replaces the tentative move atomically. The replacement is still evaluated as one move from the committed position, while the displayed piece animates directly from its staged square to the new destination without visiting its original square. If the tapped square is not a valid alternative destination from the original square, the tentative move reverts quietly. Starting a new drag from the staged piece first restores the committed position and its original-source guidance, then allows the same piece to be staged at a different legal destination in one gesture. Reverting restores guidance for the committed position.
 
 ### Whole-board coverage lens
 
