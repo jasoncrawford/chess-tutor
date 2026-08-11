@@ -28,7 +28,7 @@ This guidance is a set of training wheels for live play. It should be proactive 
 
 Guidance has four layers, each adding detail only when the player asks for or creates the relevant context.
 
-1. **Resting board:** Show a small, quiet danger badge on every legally capturable piece, on both sides. Defense markers remain hidden until they are relevant to a selection.
+1. **Resting board:** Show a small, quiet danger badge over the readable foot of every legally capturable piece, on both sides. Defense markers remain hidden until they are relevant to a selection.
 2. **Piece inspection:** Tapping either side's piece reveals that piece's outward movement and capture paths, its legal attackers, and its legal supporters. Danger markers on the selected piece and its legal capture targets expand to full size. A shield appears only when the selected piece or one of those legal capture targets is defended.
 3. **Tentative move:** After a piece is moved but before **Done**, analyze the displayed tentative position and automatically inspect the moved piece. This answers “did I just put it in danger?” before the move is committed.
 4. **Coverage lens:** A button in the selected-piece panel reveals a persistent, whole-board summary of both sides' reach using small pips rather than arrows.
@@ -78,7 +78,7 @@ Kings do not receive shield markers. This keeps check communication unambiguous 
 
 Both colors receive the same ambient treatment:
 
-- Every threatened piece has a small, quiet coral-red comic burst badge near its shoulder.
+- Every threatened piece has a small, quiet coral-red comic burst badge overlaid in front of the lower part of its silhouette, at its readable foot.
 - Defended pieces do not show shields without a relevant selection.
 
 The danger badges are present by default while a game is in progress. They do not pulse continuously. A status change may briefly appear, then settles into a static marker.
@@ -107,9 +107,9 @@ In both cases, outward movement and capture paths show broad allowed reach. Inbo
 
 The selected piece's outward paths use the selected side's relative color: yellow for the side to move and red for the other side. Inbound attacker paths use the attacker's relative color. Friendly supporters receive a teal echo around their pieces; there are no defender arrows.
 
-When a piece is selected, its danger badge expands into the full coral burst behind it if it is threatened. The danger badges on pieces it can legally capture expand in the same way. Other threatened pieces retain their small ambient badges without an additional selected-state fade.
+When a piece is selected, its foreground danger badge hands off to the full coral burst behind it if it is threatened. The danger badges on pieces it can legally capture make the same handoff. Other threatened pieces retain their small foreground ambient badges without an additional selected-state fade.
 
-A larger, clearer teal shield appears at the readable foot of the selected piece if it is defended and on each of its legal capture targets that is defended. Attackers, supporters, and unrelated pieces do not show shields unless they are also legal capture targets. Clearing the selection returns every threat to its small ambient badge and removes all shields. A relevant piece may show both a full burst and a shield.
+A larger, clearer teal shield appears in front of the readable foot of the selected piece if it is defended and on each of its legal capture targets that is defended. The ambient burst and shield deliberately share this status slot: a relevant threat uses the full burst behind the piece, freeing the foreground foot for a shield. Attackers, supporters, and unrelated pieces do not show shields unless they are also legal capture targets. Clearing the selection returns every threat to its small ambient badge and removes all shields. A relevant piece may show both a full burst and a shield without the two markers colliding.
 
 Tapping an empty square that is not a valid destination quietly clears the selection and its guidance. It does not show an illegal-move or choose-a-piece message; those explanations are reserved for an invalid drag attempt. A valid empty-square tap still stages the move when selection hints are hidden.
 
@@ -147,7 +147,7 @@ The board uses a small, consistent visual vocabulary:
 
 | Meaning | Treatment |
 | --- | --- |
-| Legally threatened piece at rest | Small coral-red comic burst badge near the piece's shoulder |
+| Legally threatened piece at rest | Small coral-red comic burst overlaid in front of the piece's readable foot |
 | Threatened selected piece or legal capture target | Full coral-red comic burst behind the piece |
 | Defended selected piece or legal capture target | Clear teal shield token at the piece's readable foot |
 | Selected side's allowed path | Thin yellow or red trajectory, according to side |
@@ -156,11 +156,11 @@ The board uses a small, consistent visual vocabulary:
 | Side-to-move coverage | Small round yellow pip |
 | Other-side coverage | Small red diamond |
 
-Selected trajectories sit above the board squares and coverage pips but below the pieces and piece markers. They use small arrowheads and restrained line weight. They are limited to the selected piece and its legal attackers; there are no whole-board arrows and no defender arrows.
+Selected trajectories sit above the board squares and coverage pips but below the pieces and piece markers. Prominent danger bursts sit behind pieces; compact ambient bursts, shields, and other foreground status markers sit in front. Trajectories use small arrowheads and restrained line weight. They are limited to the selected piece and its legal attackers; there are no whole-board arrows and no defender arrows.
 
 Ordinary legal capture targets do not need an additional glowing outline when the target already has the full danger burst and a selected path terminates at it. En passant remains the exception because its landing square and captured piece occupy different squares.
 
-All markers rotate and settle with the physical board. The small danger badge stays at a consistent readable shoulder and the shield stays at a consistent readable foot in every supported tabletop orientation. With Reduce Motion disabled, a newly relevant danger badge may move and expand into the full burst; with Reduce Motion enabled, small and full treatments cross-fade without traveling or scaling.
+All markers rotate and settle with the physical board. The small danger badge and shield share a consistent readable-foot anchor in every supported tabletop orientation. With Reduce Motion disabled, a newly relevant danger badge uses a quick scale-and-fade handoff into the full burst behind the piece; with Reduce Motion enabled, the foreground and background treatments cross-fade without traveling or scaling.
 
 ## Game-End Behavior
 
@@ -337,7 +337,7 @@ Test:
 
 ### Presentation and accessibility
 
-Add stable presentation/layout tests for layer ordering, ambient/prominent threat projection, visible-defense projection, coverage shape assignments, selected-panel control fit, orientation behavior, Reduce Motion behavior, and accessibility descriptions. VoiceOver continues to report threat and defense facts for every piece even when a shield is visually suppressed. Prefer value and layout assertions to fragile pixel snapshots.
+Add stable presentation/layout tests for foreground/background layer ordering, the shared readable-foot anchor, ambient/prominent threat projection, visible-defense projection, coverage shape assignments, selected-panel control fit, orientation behavior, Reduce Motion behavior, and accessibility descriptions. VoiceOver continues to report threat and defense facts for every piece even when a shield is visually suppressed. Prefer value and layout assertions to fragile pixel snapshots.
 
 Visually inspect representative board states in every supported rotation:
 
