@@ -685,6 +685,16 @@ struct ChessBoardView: View {
         }
         #endif
 
+        if session.state.board[square] == nil {
+            if let result = session.tapEmptySquare(at: square) {
+                if result.isLocalMovementInteraction {
+                    onLocalBoardInteraction()
+                }
+                onMoveAttempt(result)
+            }
+            return
+        }
+
         if session.selectedSquare == nil {
             session.select(square)
             reportLocalInteractionIfCurrentPiece(square)
@@ -697,7 +707,6 @@ struct ChessBoardView: View {
         }
 
         guard let tappedPiece = session.state.board[square] else {
-            attemptMove(to: square)
             return
         }
 

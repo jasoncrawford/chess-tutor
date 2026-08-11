@@ -29,13 +29,25 @@ final class GameSessionTests: XCTestCase {
         )
     }
 
-    func testSelectedPieceInfoClearsWhenSelectionClears() {
+    func testTappingEmptySquareAfterSelectionClearsQuietly() {
         let session = GameSession()
 
         session.select(Square(file: .g, rank: 1))
         session.select(Square(file: .a, rank: 6))
 
         XCTAssertNil(session.selectedPieceInfo)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertNil(session.message)
+        XCTAssertTrue(session.legalDestinations.isEmpty)
+    }
+
+    func testTappingEmptySquareWithoutSelectionStaysQuiet() {
+        let session = GameSession()
+
+        session.select(Square(file: .a, rank: 6))
+
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertNil(session.message)
     }
 
     func testSelectedPieceInfoIncludesSquareCoordinates() {
@@ -55,6 +67,36 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(result, .illegal("That piece can't move there."))
         XCTAssertEqual(session.message, "That piece can't move there.")
         XCTAssertEqual(session.state.sideToMove, .white)
+    }
+
+    func testTappingInvalidEmptySquareClearsSelectionWithoutMoveMessage() {
+        let origin = Square(file: .e, rank: 2)
+        let emptySquare = Square(file: .a, rank: 3)
+        let session = GameSession()
+        session.select(origin)
+
+        let result = session.tapEmptySquare(at: emptySquare)
+
+        XCTAssertNil(result)
+        XCTAssertEqual(session.state.board[origin], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertNil(session.message)
+    }
+
+    func testTappingValidEmptySquareMovesWhenHintsAreHidden() {
+        let origin = Square(file: .e, rank: 2)
+        let destination = Square(file: .e, rank: 4)
+        let session = GameSession()
+        session.assistSettings.showLegalMovesOnSelection = false
+        session.select(origin)
+
+        let result = session.tapEmptySquare(at: destination)
+
+        XCTAssertEqual(result, .moved)
+        XCTAssertEqual(session.state.board[destination], Piece(kind: .pawn, color: .white))
+        XCTAssertNil(session.state.board[origin])
+        XCTAssertEqual(session.selectedSquare, destination)
+        XCTAssertTrue(session.canFinishTurn)
     }
 
     func testPromotionRequestClearsStaleIllegalMoveMessage() {
@@ -985,9 +1027,9 @@ final class GameSessionTests: XCTestCase {
         session.select(origin)
         _ = session.moveSelectedPiece(to: stagedDestination)
 
-        let result = session.moveSelectedPiece(to: emptySquare)
+        let result = session.tapEmptySquare(at: emptySquare)
 
-        XCTAssertEqual(result, .moved)
+        XCTAssertNil(result)
         XCTAssertEqual(session.state.board[origin], Piece(kind: .pawn, color: .white))
         XCTAssertNil(session.state.board[stagedDestination])
         XCTAssertFalse(session.canFinishTurn)

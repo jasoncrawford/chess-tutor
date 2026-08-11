@@ -211,9 +211,7 @@ final class GameSession {
         }
 
         guard let piece = state.board[square] else {
-            selectedSquare = nil
-            actionableMovesForSelection = []
-            message = "Choose a \(committedState.sideToMove.rawValue) piece."
+            clearSelection()
             return
         }
 
@@ -224,6 +222,24 @@ final class GameSession {
             ? displayedAnalysis.allowedMoves(from: square)
             : []
         message = boardLockMessage
+    }
+
+    func tapEmptySquare(at square: Square) -> MoveAttemptResult? {
+        guard state.board[square] == nil else {
+            return nil
+        }
+
+        if tentativeMove != nil {
+            restoreCommittedPosition()
+            return nil
+        }
+
+        guard actionableMovesForSelection.contains(where: { $0.to == square }) else {
+            clearSelection()
+            return nil
+        }
+
+        return moveSelectedPiece(to: square)
     }
 
     func toggleCoverage() {
@@ -497,10 +513,14 @@ final class GameSession {
 
     private func restoreCommittedPosition() {
         tentativeMove = nil
+        clearSelection()
+        refreshDisplayedAnalysis()
+    }
+
+    private func clearSelection() {
         selectedSquare = nil
         actionableMovesForSelection = []
         message = nil
-        refreshDisplayedAnalysis()
     }
 
     private static func makeAnalysis(for state: GameState) -> PositionAnalysis {

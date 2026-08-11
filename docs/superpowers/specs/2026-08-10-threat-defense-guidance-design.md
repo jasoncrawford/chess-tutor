@@ -110,6 +110,8 @@ The selected piece's outward paths use the selected side's relative color: yello
 
 While a piece is selected, unrelated ambient bursts and shields fade to roughly one-fifth emphasis. Markers and paths involved in the selected piece's relationships remain fully emphasized. Clearing the selection restores the ambient board.
 
+Tapping an empty square that is not a valid destination quietly clears the selection and its guidance. It does not show an illegal-move or choose-a-piece message; those explanations are reserved for an invalid drag attempt. A valid empty-square tap still stages the move when selection hints are hidden.
+
 ### Tentative moves
 
 After a successful drag or tap move stages a piece:
