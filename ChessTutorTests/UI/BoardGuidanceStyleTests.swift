@@ -189,6 +189,65 @@ final class BoardGuidanceStyleTests: XCTestCase {
         XCTAssertFalse(contextualSquares.contains(unrelated))
     }
 
+    func testTrajectoryRenderingKeepsOnlyFarthestPathOnEachRay() {
+        let source = Square(file: .d, rank: 4)
+        let rightNear = guidancePath(
+            from: source,
+            to: Square(file: .f, rank: 4)
+        )
+        let rightFar = guidancePath(
+            from: source,
+            to: Square(file: .h, rank: 4),
+            captureSquare: Square(file: .h, rank: 4)
+        )
+        let left = guidancePath(
+            from: source,
+            to: Square(file: .a, rank: 4)
+        )
+        let up = guidancePath(
+            from: source,
+            to: Square(file: .d, rank: 8)
+        )
+
+        let visible = GuidancePathRenderingPolicy.visiblePaths(
+            in: [rightNear, rightFar, left, up]
+        )
+
+        XCTAssertEqual(visible, [rightFar, left, up])
+        XCTAssertEqual(
+            visible.first(where: { $0.destination == rightFar.destination })?.captureSquare,
+            rightFar.captureSquare
+        )
+    }
+
+    func testTrajectoryRenderingDoesNotMergeDifferentSourcesRolesOrColors() {
+        let source = Square(file: .d, rank: 4)
+        let allowedWhite = guidancePath(
+            from: source,
+            to: Square(file: .h, rank: 4)
+        )
+        let attackerWhite = guidancePath(
+            from: source,
+            to: Square(file: .g, rank: 4),
+            role: .attacker
+        )
+        let allowedBlack = guidancePath(
+            from: source,
+            to: Square(file: .f, rank: 4),
+            color: .black
+        )
+        let otherSource = guidancePath(
+            from: Square(file: .c, rank: 4),
+            to: Square(file: .h, rank: 4)
+        )
+
+        let visible = GuidancePathRenderingPolicy.visiblePaths(
+            in: [allowedWhite, attackerWhite, allowedBlack, otherSource]
+        )
+
+        XCTAssertEqual(visible, [allowedWhite, attackerWhite, allowedBlack, otherSource])
+    }
+
     func testTrajectoryLayoutKeepsArrowheadSmallRelativeToBoardCell() {
         let layout = GuidancePathLayout.make(
             from: CGPoint(x: 42, y: 42),
@@ -288,6 +347,22 @@ final class BoardGuidanceStyleTests: XCTestCase {
         XCTAssertGreaterThan(
             BoardPieceMarkerLayer.foregroundStatus.zIndex,
             BoardPieceMarkerLayer.piece.zIndex
+        )
+    }
+
+    private func guidancePath(
+        from source: Square,
+        to destination: Square,
+        captureSquare: Square? = nil,
+        color: PieceColor = .white,
+        role: BoardGuidancePath.Role = .allowed
+    ) -> BoardGuidancePath {
+        BoardGuidancePath(
+            source: source,
+            destination: destination,
+            captureSquare: captureSquare,
+            color: color,
+            role: role
         )
     }
 }

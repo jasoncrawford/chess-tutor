@@ -331,6 +331,62 @@ struct BoardPieceMarkerLayout: Equatable {
     }
 }
 
+enum GuidancePathRenderingPolicy {
+    private struct Ray: Hashable {
+        let source: Square
+        let role: BoardGuidancePath.Role
+        let color: PieceColor
+        let fileStep: Int
+        let rankStep: Int
+    }
+
+    static func visiblePaths(
+        in paths: Set<BoardGuidancePath>
+    ) -> Set<BoardGuidancePath> {
+        var farthestByRay: [Ray: BoardGuidancePath] = [:]
+
+        for path in paths {
+            let fileDelta = path.destination.file.rawValue - path.source.file.rawValue
+            let rankDelta = path.destination.rank - path.source.rank
+            let divisor = greatestCommonDivisor(abs(fileDelta), abs(rankDelta))
+            let ray = Ray(
+                source: path.source,
+                role: path.role,
+                color: path.color,
+                fileStep: divisor == 0 ? 0 : fileDelta / divisor,
+                rankStep: divisor == 0 ? 0 : rankDelta / divisor
+            )
+
+            guard let current = farthestByRay[ray] else {
+                farthestByRay[ray] = path
+                continue
+            }
+            if distanceSquared(of: path) > distanceSquared(of: current) {
+                farthestByRay[ray] = path
+            }
+        }
+
+        return Set(farthestByRay.values)
+    }
+
+    private static func distanceSquared(of path: BoardGuidancePath) -> Int {
+        let fileDelta = path.destination.file.rawValue - path.source.file.rawValue
+        let rankDelta = path.destination.rank - path.source.rank
+        return fileDelta * fileDelta + rankDelta * rankDelta
+    }
+
+    private static func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
+        var dividend = lhs
+        var divisor = rhs
+        while divisor != 0 {
+            let remainder = dividend % divisor
+            dividend = divisor
+            divisor = remainder
+        }
+        return dividend
+    }
+}
+
 struct GuidancePathsLayer: View {
     let guidance: BoardGuidancePresentation
     let side: CGFloat
@@ -343,7 +399,9 @@ struct GuidancePathsLayer: View {
             origin: origin,
             viewingAngle: viewingAngle
         )
-        let paths = guidance.selectedPaths.sorted(by: pathOrder)
+        let paths = GuidancePathRenderingPolicy.visiblePaths(
+            in: guidance.selectedPaths
+        ).sorted(by: pathOrder)
 
         Canvas { context, _ in
             for guidancePath in paths {
