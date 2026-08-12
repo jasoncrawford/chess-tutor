@@ -119,6 +119,13 @@ final class CaptureTrayLayoutTests: XCTestCase {
         )
     }
 
+    func testSelectedPiecePanelReservesFullHeightForTwoLineMovementSummary() {
+        XCTAssertGreaterThanOrEqual(
+            SelectedPiecePanelLayout.current.twoLineSummaryHeight,
+            41
+        )
+    }
+
     func testCaptureTrayStartsWithLargePieces() {
         let layout = CaptureTrayLayout.make(for: 3, in: CGSize(width: 204, height: 85))
 

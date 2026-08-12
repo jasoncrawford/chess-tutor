@@ -2,12 +2,12 @@ import SwiftUI
 
 struct SelectedPiecePanelLayout: Equatable {
     static let current = SelectedPiecePanelLayout(
-        iconSlotHeight: 96,
+        iconSlotHeight: 90,
         selectedPieceSpacing: 6,
         squareBadgeHeight: 22,
         titleLineHeight: 24,
         titleSummarySpacing: 3,
-        twoLineSummaryHeight: 35,
+        twoLineSummaryHeight: 41,
         coverageButtonSpacing: 8,
         coverageButtonHeight: 36
     )
