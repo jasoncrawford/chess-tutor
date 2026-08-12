@@ -49,29 +49,47 @@ Add this test inside `BoardGuidanceStyleTests`:
 
 ```swift
 @MainActor
-func testCoverageGridDrawsEveryInternalBoundaryWithoutAnOuterStroke() {
+func testCoverageBoardRendersEveryInternalSquareBoundary() {
+    let session = GameSession(
+        state: GameState(board: Board(), sideToMove: .white)
+    )
+    session.toggleCoverage()
     let side = 128
-    let interiorPoint = (8, 8)
+    let interiorPoint = (24, 24)
     let internalBoundaryPoints = (1..<8).flatMap { index in
         let coordinate = index * side / 8
-        return [(coordinate, 8), (8, coordinate)]
+        return [(coordinate, 24), (24, coordinate)]
     }
-    let outerPoints = [(1, 8), (8, 1), (side - 2, 8), (8, side - 2)]
-    let points = [interiorPoint] + internalBoundaryPoints + outerPoints
+    let points = [interiorPoint] + internalBoundaryPoints
     let pixels = renderedPixels(
-        content: ZStack {
-            Rectangle().fill(BoardGuidanceStyle.current.coverageSideToMoveColor.color)
-            CoverageGridView()
-        },
+        content: CoverageBoardRenderingHarness(session: session),
         side: side,
         points: points
     )
     let interiorPixel = pixels[0]
-    let boundaryPixels = pixels[1...(internalBoundaryPoints.count)]
-    let outerPixels = pixels.suffix(outerPoints.count)
+    let boundaryPixels = pixels.dropFirst()
 
     XCTAssertTrue(boundaryPixels.allSatisfy { $0 != interiorPixel })
-    XCTAssertTrue(outerPixels.allSatisfy { $0 == interiorPixel })
+}
+```
+
+Add this test-only harness below `BoardGuidanceStyleTests`:
+
+```swift
+@MainActor
+private struct CoverageBoardRenderingHarness: View {
+    @Namespace private var captureNamespace
+    let session: GameSession
+
+    var body: some View {
+        ChessBoardView(
+            session: session,
+            captureNamespace: captureNamespace,
+            viewingAngle: .normal,
+            readableRotationDegrees: 0,
+            isCaptureTestModeEnabled: false
+        )
+    }
 }
 ```
 
@@ -122,10 +140,10 @@ Refactor the existing `renderedCoveragePixels(state:baseColor:)` to create its `
 Run:
 
 ```bash
-xcodebuild test -quiet -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/BoardGuidanceStyleTests/testCoverageGridDrawsEveryInternalBoundaryWithoutAnOuterStroke -resultBundlePath /tmp/ChessTutor-coverage-grid-red.xcresult
+xcodebuild test -quiet -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/BoardGuidanceStyleTests/testCoverageBoardRendersEveryInternalSquareBoundary -resultBundlePath /tmp/ChessTutor-coverage-grid-red.xcresult
 ```
 
-Expected: compilation fails because `CoverageGridView` does not exist. Confirm there are no unrelated compile errors.
+Expected: the test compiles and fails because every sampled internal boundary pixel equals the interior pixel on the current boundary-free opaque map. Confirm the failure comes from the boundary assertion rather than an unrelated render error.
 
 - [ ] **Step 4: Add the grid style constants and geometry**
 
