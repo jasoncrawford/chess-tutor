@@ -71,11 +71,12 @@ func testCoverageBoardRendersEveryInternalSquareBoundary() {
 
     XCTAssertTrue(
         boundaryPixels.allSatisfy { pixel in
-            pixel[0] < interiorPixel[0]
-                && pixel[1] < interiorPixel[1]
-                && pixel[2] < interiorPixel[2]
+            let redShift = Int(pixel[0]) - Int(interiorPixel[0])
+            let greenShift = Int(pixel[1]) - Int(interiorPixel[1])
+            let blueShift = Int(pixel[2]) - Int(interiorPixel[2])
+            return greenShift < redShift && blueShift < redShift
         },
-        "Every internal boundary should be a darker grid line"
+        "Every internal boundary should carry the board-frame tint"
     )
 }
 ```
@@ -150,7 +151,7 @@ Run:
 xcodebuild test -quiet -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:ChessTutorTests/BoardGuidanceStyleTests/testCoverageBoardRendersEveryInternalSquareBoundary -resultBundlePath /tmp/ChessTutor-coverage-grid-red.xcresult
 ```
 
-Expected: the test compiles and fails because the current implicit cell seams are lighter than the interior surface instead of rendering the approved darker grid lines. Confirm the failure comes from the boundary assertion rather than an unrelated render error.
+Expected: the test compiles and fails because the current implicit cell seams shift the red, green, and blue channels equally instead of carrying the approved warm-brown `AppTheme.boardFrame` tint. Confirm the failure comes from the boundary assertion rather than an unrelated render error.
 
 - [ ] **Step 4: Add the grid style constants and geometry**
 
