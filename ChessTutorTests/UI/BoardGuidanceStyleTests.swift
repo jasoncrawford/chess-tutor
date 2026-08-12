@@ -1,4 +1,6 @@
 import CoreGraphics
+import SwiftUI
+import UIKit
 import XCTest
 @testable import ChessTutor
 
@@ -20,6 +22,65 @@ final class BoardGuidanceStyleTests: XCTestCase {
             CoverageSurfaceState(sideToMoveCovers: true, otherSideCovers: true),
             .both
         )
+    }
+
+    @MainActor
+    func testCoverageSurfaceAppearanceDoesNotDependOnUnderlyingSquareColor() {
+        let states: [CoverageSurfaceState] = [
+            .neither,
+            .sideToMoveOnly,
+            .otherSideOnly,
+            .both,
+        ]
+
+        for state in states {
+            XCTAssertEqual(
+                renderedCoveragePixels(state: state, baseColor: AppTheme.lightSquare),
+                renderedCoveragePixels(state: state, baseColor: AppTheme.darkSquare),
+                "\(state) inherited the underlying board-square color"
+            )
+        }
+    }
+
+    @MainActor
+    private func renderedCoveragePixels(
+        state: CoverageSurfaceState,
+        baseColor: Color
+    ) -> [[UInt8]] {
+        let side = 16
+        let renderer = ImageRenderer(
+            content: ZStack {
+                Rectangle().fill(baseColor)
+                CoverageSurfaceView(state: state)
+            }
+            .frame(width: CGFloat(side), height: CGFloat(side))
+        )
+        renderer.scale = 1
+
+        guard let image = renderer.uiImage?.cgImage else {
+            XCTFail("Coverage surface did not render")
+            return []
+        }
+
+        var bytes = [UInt8](repeating: 0, count: side * side * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(
+                data: buffer.baseAddress,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            context?.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        }
+
+        let points = state == .both ? [(3, 3), (12, 12)] : [(8, 8)]
+        return points.map { x, y in
+            let offset = (y * side + x) * 4
+            return Array(bytes[offset..<(offset + 4)])
+        }
     }
 
     func testCoverageRenderingPolicyQuietsAmbientBoardButKeepsContextProminent() {

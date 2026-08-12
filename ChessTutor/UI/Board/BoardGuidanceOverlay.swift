@@ -1,5 +1,16 @@
 import SwiftUI
 
+struct CoverageSurfaceColor: Equatable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let alpha: Double
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+}
+
 struct BoardGuidanceStyle: Equatable {
     static let current = BoardGuidanceStyle(
         arrowheadLengthInCells: 0.14,
@@ -8,9 +19,24 @@ struct BoardGuidanceStyle: Equatable {
         prominentDangerBurstScale: 0.92,
         shieldScale: 0.22,
         supporterEchoScale: 0.94,
-        coverageSideToMoveOpacity: 0.50,
-        coverageOtherSideOpacity: 0.44,
-        coverageNeitherOpacity: 0.18,
+        coverageSideToMoveColor: CoverageSurfaceColor(
+            red: 0.94,
+            green: 0.78,
+            blue: 0.37,
+            alpha: 1
+        ),
+        coverageOtherSideColor: CoverageSurfaceColor(
+            red: 0.86,
+            green: 0.50,
+            blue: 0.42,
+            alpha: 1
+        ),
+        coverageNeitherColor: CoverageSurfaceColor(
+            red: 0.50,
+            green: 0.51,
+            blue: 0.47,
+            alpha: 1
+        ),
         coverageRecessedPieceOpacity: 0.68,
         coverageTransitionDuration: 0.18
     )
@@ -21,9 +47,9 @@ struct BoardGuidanceStyle: Equatable {
     let prominentDangerBurstScale: CGFloat
     let shieldScale: CGFloat
     let supporterEchoScale: CGFloat
-    let coverageSideToMoveOpacity: Double
-    let coverageOtherSideOpacity: Double
-    let coverageNeitherOpacity: Double
+    let coverageSideToMoveColor: CoverageSurfaceColor
+    let coverageOtherSideColor: CoverageSurfaceColor
+    let coverageNeitherColor: CoverageSurfaceColor
     let coverageRecessedPieceOpacity: Double
     let coverageTransitionDuration: Double
 }
@@ -82,19 +108,19 @@ struct CoverageSurfaceView: View {
         switch state {
         case .neither:
             Rectangle()
-                .fill(AppTheme.boardFrame.opacity(style.coverageNeitherOpacity))
+                .fill(style.coverageNeitherColor.color)
         case .sideToMoveOnly:
             Rectangle()
-                .fill(AppTheme.guidanceYellow.opacity(style.coverageSideToMoveOpacity))
+                .fill(style.coverageSideToMoveColor.color)
         case .otherSideOnly:
             Rectangle()
-                .fill(AppTheme.guidanceRed.opacity(style.coverageOtherSideOpacity))
+                .fill(style.coverageOtherSideColor.color)
         case .both:
             ZStack {
                 CoverageDiagonalHalfShape(half: .sideToMove)
-                    .fill(AppTheme.guidanceYellow.opacity(style.coverageSideToMoveOpacity))
+                    .fill(style.coverageSideToMoveColor.color)
                 CoverageDiagonalHalfShape(half: .otherSide)
-                    .fill(AppTheme.guidanceRed.opacity(style.coverageOtherSideOpacity))
+                    .fill(style.coverageOtherSideColor.color)
             }
         }
     }
