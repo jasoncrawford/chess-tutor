@@ -37,6 +37,8 @@ struct BoardGuidanceStyle: Equatable {
             blue: 0.47,
             alpha: 1
         ),
+        coverageGridLineWidth: 0.75,
+        coverageGridOpacity: 0.18,
         coverageRecessedPieceOpacity: 0.68,
         coverageTransitionDuration: 0.18
     )
@@ -50,6 +52,8 @@ struct BoardGuidanceStyle: Equatable {
     let coverageSideToMoveColor: CoverageSurfaceColor
     let coverageOtherSideColor: CoverageSurfaceColor
     let coverageNeitherColor: CoverageSurfaceColor
+    let coverageGridLineWidth: CGFloat
+    let coverageGridOpacity: Double
     let coverageRecessedPieceOpacity: Double
     let coverageTransitionDuration: Double
 }
@@ -123,6 +127,35 @@ struct CoverageSurfaceView: View {
                     .fill(style.coverageOtherSideColor.color)
             }
         }
+    }
+}
+
+struct CoverageGridShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for index in 1..<8 {
+            let progress = CGFloat(index) / 8
+            let x = rect.minX + rect.width * progress
+            let y = rect.minY + rect.height * progress
+            path.move(to: CGPoint(x: x, y: rect.minY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+            path.move(to: CGPoint(x: rect.minX, y: y))
+            path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        }
+        return path
+    }
+}
+
+struct CoverageGridView: View {
+    var body: some View {
+        let style = BoardGuidanceStyle.current
+        CoverageGridShape()
+            .stroke(
+                AppTheme.boardFrame.opacity(style.coverageGridOpacity),
+                lineWidth: style.coverageGridLineWidth
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

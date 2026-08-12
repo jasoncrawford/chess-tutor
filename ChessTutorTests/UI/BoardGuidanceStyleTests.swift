@@ -43,22 +43,67 @@ final class BoardGuidanceStyleTests: XCTestCase {
     }
 
     @MainActor
+    func testCoverageBoardRendersEveryInternalSquareBoundary() {
+        let session = GameSession(
+            state: GameState(board: Board(), sideToMove: .white)
+        )
+        session.toggleCoverage()
+        let side = 128
+        let interiorPoint = (24, 24)
+        let internalBoundaryPoints = (1..<8).flatMap { index in
+            let coordinate = index * side / 8
+            return [(coordinate, 24), (24, coordinate)]
+        }
+        let points = [interiorPoint] + internalBoundaryPoints
+        let pixels = renderedPixels(
+            content: CoverageBoardRenderingHarness(session: session),
+            side: side,
+            points: points
+        )
+        let interiorPixel = pixels[0]
+        let boundaryPixels = pixels.dropFirst()
+
+        XCTAssertTrue(
+            boundaryPixels.allSatisfy { pixel in
+                let redShift = Int(pixel[0]) - Int(interiorPixel[0])
+                let greenShift = Int(pixel[1]) - Int(interiorPixel[1])
+                let blueShift = Int(pixel[2]) - Int(interiorPixel[2])
+                return greenShift < redShift && blueShift < redShift
+            },
+            "Every internal boundary should carry the board-frame tint"
+        )
+    }
+
+    @MainActor
     private func renderedCoveragePixels(
         state: CoverageSurfaceState,
         baseColor: Color
     ) -> [[UInt8]] {
         let side = 16
-        let renderer = ImageRenderer(
+        let points = state == .both ? [(3, 3), (12, 12)] : [(8, 8)]
+        return renderedPixels(
             content: ZStack {
                 Rectangle().fill(baseColor)
                 CoverageSurfaceView(state: state)
-            }
-            .frame(width: CGFloat(side), height: CGFloat(side))
+            },
+            side: side,
+            points: points
+        )
+    }
+
+    @MainActor
+    private func renderedPixels<Content: View>(
+        content: Content,
+        side: Int,
+        points: [(Int, Int)]
+    ) -> [[UInt8]] {
+        let renderer = ImageRenderer(
+            content: content.frame(width: CGFloat(side), height: CGFloat(side))
         )
         renderer.scale = 1
 
         guard let image = renderer.uiImage?.cgImage else {
-            XCTFail("Coverage surface did not render")
+            XCTFail("View did not render")
             return []
         }
 
@@ -76,7 +121,6 @@ final class BoardGuidanceStyleTests: XCTestCase {
             context?.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
         }
 
-        let points = state == .both ? [(3, 3), (12, 12)] : [(8, 8)]
         return points.map { x, y in
             let offset = (y * side + x) * 4
             return Array(bytes[offset..<(offset + 4)])
@@ -244,6 +288,22 @@ final class BoardGuidanceStyleTests: XCTestCase {
         XCTAssertGreaterThan(
             BoardPieceMarkerLayer.foregroundStatus.zIndex,
             BoardPieceMarkerLayer.piece.zIndex
+        )
+    }
+}
+
+@MainActor
+private struct CoverageBoardRenderingHarness: View {
+    @Namespace private var captureNamespace
+    let session: GameSession
+
+    var body: some View {
+        ChessBoardView(
+            session: session,
+            captureNamespace: captureNamespace,
+            viewingAngle: .normal,
+            readableRotationDegrees: 0,
+            isCaptureTestModeEnabled: false
         )
     }
 }

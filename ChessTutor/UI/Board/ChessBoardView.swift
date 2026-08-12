@@ -273,6 +273,12 @@ struct ChessBoardView: View {
                 }
             }
         }
+        .overlay {
+            if guidance.coverage != nil {
+                CoverageGridView()
+                    .transition(.opacity)
+            }
+        }
     }
 
     @ViewBuilder
