@@ -261,7 +261,7 @@ final class BoardGuidanceStyleTests: XCTestCase {
 
     func testTrajectoryStopsClearOfPieceCenters() {
         let source = CGPoint(x: 42, y: 42)
-        let destination = CGPoint(x: 126, y: 42)
+        let destination = CGPoint(x: 294, y: 42)
 
         let layout = GuidancePathLayout.make(
             from: source,
@@ -271,6 +271,11 @@ final class BoardGuidanceStyleTests: XCTestCase {
 
         XCTAssertGreaterThan(layout.start.x, source.x)
         XCTAssertLessThan(layout.tip.x, destination.x)
+        XCTAssertEqual(
+            destination.x - layout.tip.x,
+            84 * 0.22,
+            accuracy: 0.001
+        )
         XCTAssertGreaterThan(layout.shaftLength, 0)
         XCTAssertFalse(layout.arrowhead.contains(layout.start))
     }

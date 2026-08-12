@@ -225,7 +225,7 @@ struct GuidancePathLayout: Equatable {
         let unitX = deltaX / distance
         let unitY = deltaY / distance
         let sourceInset = min(cellSize * 0.26, distance * 0.20)
-        let destinationInset = min(cellSize * 0.30, distance * 0.22)
+        let destinationInset = min(cellSize * 0.22, distance * 0.22)
         let arrowheadLength = min(
             BoardGuidanceStyle.current.arrowheadLengthInCells * cellSize,
             max(0, distance - sourceInset - destinationInset) * 0.32

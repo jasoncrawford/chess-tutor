@@ -256,7 +256,13 @@ Expected: one view-layer implementation commit containing the reducer, its rende
 
 - [ ] **Step 1: Tighten the existing endpoint test**
 
-Add this assertion to `testTrajectoryStopsClearOfPieceCenters()` after `XCTAssertLessThan(layout.tip.x, destination.x)`:
+In `testTrajectoryStopsClearOfPieceCenters()`, change the destination to a long ray so the cell-based inset is exercised:
+
+```swift
+let destination = CGPoint(x: 294, y: 42)
+```
+
+Then add this assertion after `XCTAssertLessThan(layout.tip.x, destination.x)`:
 
 ```swift
 XCTAssertEqual(
@@ -337,4 +343,3 @@ git commit -m "Extend guidance arrows into destination squares"
 ```
 
 Expected: a second small view-layer commit containing only the endpoint geometry and its regression assertion. Leave the tested build running in the iPad simulator.
-
