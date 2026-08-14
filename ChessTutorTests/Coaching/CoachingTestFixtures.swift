@@ -23,4 +23,299 @@ enum CoachingTestFixtures {
             enPassantTarget: enPassantTarget
         )
     }
+
+    static let whiteKing = Square(file: .e, rank: 1)
+    static let blackKing = Square(file: .e, rank: 8)
+    static let whiteQueen = Square(file: .d, rank: 4)
+    static let whiteRook = Square(file: .f, rank: 4)
+    static let blackBishop = Square(file: .b, rank: 8)
+    static let blackRook = Square(file: .f, rank: 7)
+    static let openingKnight = Square(file: .b, rank: 1)
+    static let openingKnightMove = Move(
+        from: openingKnight,
+        to: Square(file: .c, rank: 3)
+    )
+    static let alternateKnight = Square(file: .g, rank: 1)
+    static let alternateKnightMove = Move(
+        from: alternateKnight,
+        to: Square(file: .f, rank: 3)
+    )
+    static let safeMove = Move(
+        from: whiteQueen,
+        to: Square(file: .e, rank: 3)
+    )
+    static let profitableCapture = Move(
+        from: whiteQueen,
+        to: blackRook
+    )
+    static let fallbackMove = Move(
+        from: Square(file: .a, rank: 2),
+        to: Square(file: .a, rank: 3)
+    )
+
+    static let coachingState = state(
+        sideToMove: .white,
+        pieces: [
+            whiteKing: Piece(kind: .king, color: .white),
+            blackKing: Piece(kind: .king, color: .black),
+            whiteQueen: Piece(kind: .queen, color: .white),
+            whiteRook: Piece(kind: .rook, color: .white),
+            openingKnight: Piece(kind: .knight, color: .white),
+            alternateKnight: Piece(kind: .knight, color: .white),
+            Square(file: .a, rank: 2): Piece(kind: .pawn, color: .white),
+            blackBishop: Piece(kind: .bishop, color: .black),
+            blackRook: Piece(kind: .rook, color: .black),
+        ]
+    )
+
+    static let startingPositionAdvice = advice(
+        state: .startingPosition(),
+        opponentHasCapture: false,
+        learnerHasCapture: false,
+        wake: [
+            opportunity(
+                concept: .developsKnightOrBishop,
+                subjects: [openingKnight],
+                moves: [openingKnightMove],
+                evidence: .development(
+                    source: openingKnight,
+                    destination: openingKnightMove.to
+                )
+            ),
+            opportunity(
+                concept: .developsKnightOrBishop,
+                subjects: [alternateKnight],
+                moves: [alternateKnightMove],
+                evidence: .development(
+                    source: alternateKnight,
+                    destination: alternateKnightMove.to
+                )
+            ),
+        ],
+        assessments: [
+            acceptableAssessment(
+                openingKnightMove,
+                concepts: [.developsKnightOrBishop]
+            ),
+            acceptableAssessment(
+                alternateKnightMove,
+                concepts: [.developsKnightOrBishop]
+            ),
+        ],
+        opening: true
+    )
+
+    static let multipleDangerAdvice: CoachingAdvice = {
+        let queenCapture = capture(
+            move: Move(from: blackBishop, to: whiteQueen),
+            captured: Piece(kind: .queen, color: .white),
+            capturedSquare: whiteQueen,
+            net: 9
+        )
+        let rookCapture = capture(
+            move: Move(from: blackRook, to: whiteRook),
+            captured: Piece(kind: .rook, color: .white),
+            capturedSquare: whiteRook,
+            net: 5
+        )
+        return advice(
+            opponentHasCapture: true,
+            learnerHasCapture: false,
+            opponentCaptures: [queenCapture, rookCapture],
+            urgent: [
+                CoachingUrgentProblem(
+                    target: whiteQueen,
+                    piece: Piece(kind: .queen, color: .white),
+                    captures: [queenCapture],
+                    worstEstimatedLoss: 9
+                ),
+                CoachingUrgentProblem(
+                    target: whiteRook,
+                    piece: Piece(kind: .rook, color: .white),
+                    captures: [rookCapture],
+                    worstEstimatedLoss: 5
+                ),
+            ],
+            assessments: [
+                acceptableAssessment(
+                    safeMove,
+                    resolvesRequiredDanger: true,
+                    concepts: [.pieceNeedsHelp]
+                ),
+            ]
+        )
+    }()
+
+    static let nontrivialSafeClearAdvice = advice(
+        opponentHasCapture: true,
+        learnerHasCapture: false
+    )
+
+    static let takeAdvice: CoachingAdvice = {
+        let estimate = capture(
+            move: profitableCapture,
+            captured: Piece(kind: .rook, color: .black),
+            capturedSquare: blackRook,
+            net: 5
+        )
+        return advice(
+            opponentHasCapture: false,
+            learnerHasCapture: true,
+            learnerCaptures: [estimate],
+            take: [opportunity(
+                concept: .profitableCapture,
+                subjects: [blackRook],
+                moves: [profitableCapture],
+                evidence: .capture(estimate)
+            )],
+            assessments: [acceptableAssessment(
+                profitableCapture,
+                concepts: [.profitableCapture]
+            )]
+        )
+    }()
+
+    static let nontrivialTakeClearAdvice = advice(
+        opponentHasCapture: false,
+        learnerHasCapture: true
+    )
+
+    static let fallbackAdvice = advice(
+        opponentHasCapture: false,
+        learnerHasCapture: false,
+        assessments: [acceptableAssessment(fallbackMove)],
+        confidence: .unsupported
+    )
+
+    static func adviceForTentativeMove(
+        _ move: Move,
+        origin: CoachingMoveOrigin,
+        assessment: CoachingMoveAssessment,
+        learnerCaptures: [CoachingCaptureEstimate] = [],
+        urgent: [CoachingUrgentProblem] = [],
+        confidence: CoachingConfidence = .high
+    ) -> CoachingAdvice {
+        advice(
+            tentativeMove: move,
+            context: .tentativeMove(origin: origin),
+            opponentHasCapture: false,
+            learnerHasCapture: !learnerCaptures.isEmpty,
+            learnerCaptures: learnerCaptures,
+            urgent: urgent,
+            assessments: [assessment],
+            confidence: confidence
+        )
+    }
+
+    static func acceptableAssessment(
+        _ move: Move,
+        resolvesRequiredDanger: Bool = true,
+        issues: [CoachingOpponentIssue] = [],
+        concepts: [CoachingConcept] = [],
+        isAcceptable: Bool = true
+    ) -> CoachingMoveAssessment {
+        CoachingMoveAssessment(
+            move: move,
+            isLegal: true,
+            resolvesRequiredDanger: resolvesRequiredDanger,
+            opponentIssues: issues,
+            concepts: concepts,
+            isAcceptable: isAcceptable
+        )
+    }
+
+    static func issue(
+        reply: Move,
+        kind: CoachingOpponentIssueKind,
+        severity: CoachingOpponentIssueSeverity,
+        answers: Set<Square>
+    ) -> CoachingOpponentIssue {
+        CoachingOpponentIssue(
+            reply: reply,
+            kind: kind,
+            severity: severity,
+            answerSquares: answers
+        )
+    }
+
+    static func capture(
+        move: Move,
+        captured: Piece,
+        capturedSquare: Square,
+        recapture: Move? = nil,
+        net: Int
+    ) -> CoachingCaptureEstimate {
+        CoachingCaptureEstimate(
+            move: move,
+            capturedPiece: captured,
+            capturedSquare: capturedSquare,
+            immediateRecapture: recapture,
+            netGainForMover: net
+        )
+    }
+
+    static func opportunity(
+        concept: CoachingConcept,
+        subjects: Set<Square>,
+        moves: [Move],
+        evidence: CoachingEvidence
+    ) -> CoachingOpportunity {
+        CoachingOpportunity(
+            concept: concept,
+            subjectSquares: subjects,
+            moves: moves,
+            priority: 1,
+            evidence: evidence
+        )
+    }
+
+    static func advice(
+        state: GameState = coachingState,
+        tentativeMove: Move? = nil,
+        context: CoachingRequest.Context = .start,
+        checking: Set<Square> = [],
+        opponentHasCapture: Bool,
+        learnerHasCapture: Bool,
+        opponentCaptures: [CoachingCaptureEstimate] = [],
+        learnerCaptures: [CoachingCaptureEstimate] = [],
+        mateInOne: Set<Move> = [],
+        urgent: [CoachingUrgentProblem] = [],
+        take: [CoachingOpportunity] = [],
+        wake: [CoachingOpportunity] = [],
+        assessments: [CoachingMoveAssessment] = [],
+        opening: Bool = false,
+        confidence: CoachingConfidence = .high
+    ) -> CoachingAdvice {
+        let request = CoachingRequest(
+            committedState: state,
+            tentativeMove: tentativeMove,
+            learner: .white,
+            positionRevision: 7,
+            context: context
+        )
+        let assessmentMap = Dictionary(
+            uniqueKeysWithValues: assessments.map { ($0.move, $0) }
+        )
+        let evaluation = CoachingEvaluation(
+            request: request,
+            checkingPieces: checking,
+            opponentHasAnyLegalCapture: opponentHasCapture,
+            learnerHasAnyLegalCapture: learnerHasCapture,
+            opponentCaptureEstimates: opponentCaptures,
+            urgentProblems: urgent,
+            learnerCaptureEstimates: learnerCaptures,
+            mateInOneMoves: mateInOne,
+            moveAssessments: assessmentMap
+        )
+        return CoachingAdvice(
+            evaluation: evaluation,
+            insights: [],
+            urgentProblems: urgent,
+            takeOpportunities: take,
+            wakeOpportunities: wake,
+            moveAssessments: assessmentMap,
+            openingDevelopmentIsRelevant: opening,
+            confidence: confidence
+        )
+    }
 }
