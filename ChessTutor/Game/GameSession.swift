@@ -1,5 +1,10 @@
 import Observation
 
+private enum CoachingSquareInteractionIntent {
+    case tap
+    case dragStart
+}
+
 struct CapturedPiece: Equatable, Identifiable, Sendable {
     enum State: Equatable, Sendable {
         case tentative
@@ -638,14 +643,34 @@ final class GameSession {
 
     @discardableResult
     func handleCoachingSquareTap(_ square: Square) -> Bool {
+        handleCoachingSquareInteraction(square, intent: .tap)
+    }
+
+    @discardableResult
+    func handleCoachingSquareDragStart(_ square: Square) -> Bool {
+        handleCoachingSquareInteraction(square, intent: .dragStart)
+    }
+
+    private func handleCoachingSquareInteraction(
+        _ square: Square,
+        intent: CoachingSquareInteractionIntent
+    ) -> Bool {
         guard case let .identify(allowsMoveRevision) = coachingPresentation?.boardTask else {
             return false
         }
 
-        if allowsMoveRevision,
-           !isAcceptedCoachingAnswer(square),
-           isActionableCoachingMoveRevision(at: square) {
-            return false
+        if allowsMoveRevision {
+            switch intent {
+            case .tap:
+                if !isAcceptedCoachingAnswer(square),
+                   isActionableCoachingTapRevision(at: square) {
+                    return false
+                }
+            case .dragStart:
+                if isActionableCoachingDragRevision(at: square) {
+                    return false
+                }
+            }
         }
 
         let directives = coachingSession?.handle(.squareTapped(square)) ?? []
@@ -724,7 +749,7 @@ final class GameSession {
         return probe.stage != currentStage
     }
 
-    private func isActionableCoachingMoveRevision(at square: Square) -> Bool {
+    private func isActionableCoachingTapRevision(at square: Square) -> Bool {
         guard localCanActForCurrentTurn,
               let tentativeMove else { return false }
 
@@ -737,14 +762,23 @@ final class GameSession {
             return replacementMoves.contains(where: { $0.to == square })
         }
 
-        if square == selectedSquare,
-           state.board[square]?.color == committedState.sideToMove {
-            return !replacementMoves.isEmpty
-        }
-
         guard committedState.board[square]?.color == committedState.sideToMove else {
             return false
         }
+        return !LegalMoveGenerator.allowedMoves(for: square, in: committedState).isEmpty
+    }
+
+    private func isActionableCoachingDragRevision(at square: Square) -> Bool {
+        guard localCanActForCurrentTurn,
+              let tentativeMove,
+              state.board[square]?.color == committedState.sideToMove else {
+            return false
+        }
+
+        if square == tentativeMove.to {
+            return !allowedMoves(forSelectionAt: square).isEmpty
+        }
+
         return !LegalMoveGenerator.allowedMoves(for: square, in: committedState).isEmpty
     }
 

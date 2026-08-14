@@ -596,7 +596,7 @@ struct ChessBoardView: View {
                     guard distance > 8 else {
                         return
                     }
-                    if session.handleCoachingSquareTap(from) {
+                    if session.handleCoachingSquareDragStart(from) {
                         coachingConsumedDrag = true
                         return
                     }
