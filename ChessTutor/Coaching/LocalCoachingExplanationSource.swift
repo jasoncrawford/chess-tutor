@@ -4,12 +4,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         let instruction = instruction(for: context, base: base.instruction)
 
         return CoachingPresentation(
-            headline: context.feedback.map {
-                feedbackHeadline(
-                    for: $0,
-                    opponent: opponentColor(for: context)
-                )
-            } ?? base.headline,
+            headline: headline(for: context, base: base.headline),
             instruction: instruction,
             routine: context.routine,
             actions: context.actions.map {
@@ -21,6 +16,29 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             boardTask: context.boardTask,
             focus: context.focus
         )
+    }
+
+    private func headline(
+        for context: CoachingPresentationContext,
+        base: String
+    ) -> String {
+        guard let feedback = context.feedback else { return base }
+        let acknowledgement = feedbackHeadline(
+            for: feedback,
+            opponent: opponentColor(for: context)
+        )
+        guard case let .complete(_, idea) = context.prompt else {
+            return acknowledgement
+        }
+
+        switch feedback {
+        case .harmlessCheckFound:
+            return "\(acknowledgement) \(completionPurpose(for: idea))"
+        case .concreteFlaw:
+            return "\(acknowledgement) Your move still works. \(completionPurpose(for: idea))"
+        default:
+            return acknowledgement
+        }
     }
 
     private func baseCopy(for prompt: CoachingPrompt) -> (headline: String, instruction: String?) {
@@ -210,6 +228,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     }
 
     private func completionHeadline(for idea: CoachingCompletionIdea) -> String {
+        "That works. \(completionPurpose(for: idea))"
+    }
+
+    private func completionPurpose(for idea: CoachingCompletionIdea) -> String {
         let concept: String
         switch idea {
         case let .resolvesDanger(piece):
@@ -233,7 +255,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .verifiedSafe:
             concept = "Your move stays safe after the reply."
         }
-        return "That works. \(concept)"
+        return concept
     }
 
     private func actionPresentation(

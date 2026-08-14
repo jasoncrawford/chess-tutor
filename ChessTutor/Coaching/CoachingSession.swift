@@ -36,6 +36,7 @@ struct CoachingSession: Sendable {
     private var selectedWakePiece: Square?
     private var selectedWakeOpening = false
     private var tentativeMove: Move?
+    private var positionRevision: Int?
     private var feedback: CoachingFeedback?
     private var promptOverride: CoachingPrompt?
     private var pulseID = 0
@@ -60,6 +61,7 @@ struct CoachingSession: Sendable {
     @discardableResult
     mutating func receive(_ advice: CoachingAdvice) -> [CoachingDirective] {
         latestAdvice = advice
+        positionRevision = advice.evaluation.request.positionRevision
         switch advice.evaluation.request.context {
         case .start:
             tentativeMove = nil
@@ -91,7 +93,8 @@ struct CoachingSession: Sendable {
             return handleStagedMove(move)
         case let .actionChosen(action):
             return handleAction(action)
-        case .positionChanged:
+        case let .positionChanged(revision):
+            positionRevision = revision
             invalidateTentativeMoveIfNeeded()
             return []
         }
@@ -177,11 +180,16 @@ struct CoachingSession: Sendable {
             }
             recordMiss(.unrelatedTap)
         case let .opponentCheck(move, origin):
-            guard let assessment = advice.moveAssessments[move],
-                  let issue = assessment.opponentIssues.first(where: {
-                      $0.answerSquares.contains(square)
-                  })
-            else {
+            guard let assessment = advice.moveAssessments[move] else {
+                recordMiss(.unrelatedTap)
+                return []
+            }
+            let matchingIssues = assessment.opponentIssues.filter {
+                $0.answerSquares.contains(square)
+            }
+            guard let issue = matchingIssues.first(where: {
+                $0.severity == .reviseMove
+            }) ?? matchingIssues.first else {
                 recordMiss(.unrelatedTap)
                 return []
             }
@@ -197,7 +205,7 @@ struct CoachingSession: Sendable {
         guard let origin else { return [] }
 
         tentativeMove = move
-        transition(to: .awaitingAdvice(origin: origin))
+        transition(to: .awaitingAdvice(origin: origin), resetsQuestion: false)
         return [.requestAdvice(context: .tentativeMove(origin: origin))]
     }
 
@@ -253,26 +261,40 @@ struct CoachingSession: Sendable {
 
         tentativeMove = move
         if !assessment.isLegal {
-            returnToOrigin(origin, feedback: nil, prompt: .illegalKingSafety)
+            returnToOrigin(
+                origin,
+                feedback: nil,
+                prompt: .illegalKingSafety,
+                preservingQuestionProgress: true
+            )
             return
         }
 
         if origin == .take && !hasTakePurpose(assessment.concepts) {
             returnToOrigin(
                 origin,
-                feedback: unprofitableCaptureFeedback(for: move, advice: advice)
+                feedback: unprofitableCaptureFeedback(for: move, advice: advice),
+                preservingQuestionProgress: true
             )
             return
         }
 
         if (origin == .safe || origin == .check) && !assessment.resolvesRequiredDanger {
             let piece = unresolvedPieceKind(for: origin, advice: advice)
-            returnToOrigin(origin, feedback: .dangerStillPresent(piece: piece))
+            returnToOrigin(
+                origin,
+                feedback: .dangerStillPresent(piece: piece),
+                preservingQuestionProgress: true
+            )
             return
         }
 
         if origin == .wake && !hasWakePurpose(assessment.concepts) {
-            returnToOrigin(origin, feedback: .noRecognizedPurpose)
+            returnToOrigin(
+                origin,
+                feedback: .noRecognizedPurpose,
+                preservingQuestionProgress: true
+            )
             return
         }
 
@@ -364,7 +386,8 @@ struct CoachingSession: Sendable {
     private mutating func returnToOrigin(
         _ origin: CoachingMoveOrigin,
         feedback: CoachingFeedback?,
-        prompt: CoachingPrompt? = nil
+        prompt: CoachingPrompt? = nil,
+        preservingQuestionProgress: Bool = false
     ) {
         let returnStage: CoachingStage
         switch origin {
@@ -391,7 +414,15 @@ struct CoachingSession: Sendable {
         case .fallback:
             returnStage = .fallbackChooseMove
         }
-        transition(to: returnStage, feedback: feedback, prompt: prompt)
+        stage = returnStage
+        if !preservingQuestionProgress {
+            hintLevel = 0
+            missesAtCurrentLevel = 0
+        }
+        missesAtCurrentLevel += 1
+        self.feedback = feedback
+        promptOverride = prompt
+        rebuildPresentation()
     }
 
     private func moveOrigin(for stage: CoachingStage) -> CoachingMoveOrigin? {
@@ -477,11 +508,14 @@ struct CoachingSession: Sendable {
     private mutating func transition(
         to newStage: CoachingStage,
         feedback newFeedback: CoachingFeedback? = nil,
-        prompt: CoachingPrompt? = nil
+        prompt: CoachingPrompt? = nil,
+        resetsQuestion: Bool = true
     ) {
         stage = newStage
-        hintLevel = 0
-        missesAtCurrentLevel = 0
+        if resetsQuestion {
+            hintLevel = 0
+            missesAtCurrentLevel = 0
+        }
         feedback = newFeedback
         promptOverride = prompt
         rebuildPresentation()
@@ -618,9 +652,10 @@ struct CoachingSession: Sendable {
             )
         }
         let candidates = answerSquares(for: stage)
-        let paths = hintLevel >= 3 ? focusPaths(for: stage) : []
+        let relationshipPaths = hintLevel >= 3 ? focusPaths(for: stage) : []
+        let paths = hintLevel >= 4 ? relationshipPaths : []
         let emphasized = hintLevel >= 3
-            ? candidates.union(paths.flatMap { [$0.source, $0.destination] })
+            ? candidates.union(relationshipPaths.flatMap { [$0.source, $0.destination] })
             : []
         return CoachFocusPresentation(
             emphasizedSquares: emphasized,

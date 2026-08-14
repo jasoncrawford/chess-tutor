@@ -170,6 +170,39 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.headline, "Black could take your queen.")
     }
 
+    func testRepeatedUnprofitableCapturesPreserveHintLevelAndExposeHintOffer() {
+        let move = CoachingTestFixtures.profitableCapture
+        let estimate = CoachingTestFixtures.capture(
+            move: move,
+            captured: Piece(kind: .rook, color: .black),
+            capturedSquare: move.to,
+            recapture: Move(from: CoachingTestFixtures.blackKing, to: move.to),
+            net: -4
+        )
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .take,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                concepts: [],
+                isAcceptable: false
+            ),
+            learnerCaptures: [estimate]
+        )
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.takeAdvice)
+        session.handle(.actionChosen(.hint))
+
+        for expectedMisses in 1...2 {
+            session.handle(.moveStaged(move))
+            session.receive(advice)
+            XCTAssertEqual(session.stage, .takeChooseMove)
+            XCTAssertEqual(session.hintLevel, 1)
+            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
+        }
+        XCTAssertTrue(session.presentation?.instruction?.contains("Want a hint?") == true)
+    }
+
     func testEveryWakeSourceAlternativeSelectsExactlyThatPiece() {
         for source in [CoachingTestFixtures.openingKnight, CoachingTestFixtures.alternateKnight] {
             var session = CoachingSession(learner: .white)
@@ -221,6 +254,35 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
+    func testRepeatedPurposelessWakeMovesPreserveHintLevelAndCountMisses() {
+        let move = CoachingTestFixtures.openingKnightMove
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .wake,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                concepts: [],
+                isAcceptable: false
+            )
+        )
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.startingPositionAdvice)
+        session.handle(.squareTapped(CoachingTestFixtures.openingKnight))
+        session.handle(.actionChosen(.hint))
+
+        for expectedMisses in 1...2 {
+            session.handle(.moveStaged(move))
+            session.receive(advice)
+            XCTAssertEqual(
+                session.stage,
+                .wakeChooseMove(piece: CoachingTestFixtures.openingKnight, opening: true)
+            )
+            XCTAssertEqual(session.hintLevel, 1)
+            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
+        }
+        XCTAssertTrue(session.presentation?.instruction?.contains("Want a hint?") == true)
+    }
+
     func testUnsupportedAdviceAndExplicitUnsupportedPositionUseGenericFallback() {
         var fromAdvice = CoachingSession(learner: .white)
         fromAdvice.receive(CoachingTestFixtures.fallbackAdvice)
@@ -263,6 +325,38 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.headline, "Black could take your pawn.")
     }
 
+    func testReviseIssueWinsWhenTappedSquareAlsoMatchesNoticeIssue() {
+        let move = CoachingTestFixtures.openingKnightMove
+        let reply = Move(from: CoachingTestFixtures.blackBishop, to: move.to)
+        let sharedAnswer = reply.from
+        let notice = CoachingTestFixtures.issue(
+            reply: reply,
+            kind: .check,
+            severity: .notice,
+            answers: [sharedAnswer]
+        )
+        let revise = CoachingTestFixtures.issue(
+            reply: reply,
+            kind: .materialLoss(points: 3),
+            severity: .reviseMove,
+            answers: [sharedAnswer, reply.to]
+        )
+        var session = opponentCheckSession(
+            move: move,
+            origin: .wake,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                issues: [notice, revise],
+                concepts: [.developsKnightOrBishop],
+                isAcceptable: false
+            )
+        )
+
+        XCTAssertTrue(session.handle(.squareTapped(sharedAnswer)).isEmpty)
+        XCTAssertEqual(session.stage, .reviseMove(origin: .wake))
+        XCTAssertEqual(session.presentation?.headline, "Black could take your knight.")
+    }
+
     func testHarmlessCheckCanBeFoundAndCompletesAnAcceptableMove() {
         let move = CoachingTestFixtures.openingKnightMove
         let reply = Move(from: CoachingTestFixtures.blackBishop, to: CoachingTestFixtures.whiteKing)
@@ -289,13 +383,14 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "Yes. Black could check your king, but your move still works."
+            "Yes. Black could check your king, but your move still works. "
+                + "Your knight joined the game and helps in the center."
         )
     }
 
     func testNoticeLevelBestCaseMaterialLossCanBeFoundAndAccepted() {
-        let move = CoachingTestFixtures.fallbackMove
-        let reply = Move(from: CoachingTestFixtures.blackRook, to: move.to)
+        let move = CoachingTestFixtures.openingKnightMove
+        let reply = Move(from: CoachingTestFixtures.blackBishop, to: move.to)
         let issue = CoachingTestFixtures.issue(
             reply: reply,
             kind: .materialLoss(points: 1),
@@ -304,19 +399,24 @@ final class CoachingSessionTests: XCTestCase {
         )
         var session = opponentCheckSession(
             move: move,
-            origin: .fallback,
+            origin: .wake,
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
-                issues: [issue]
+                issues: [issue],
+                concepts: [.developsKnightOrBishop]
             )
         )
 
         XCTAssertTrue(session.handle(.squareTapped(reply.from)).isEmpty)
         XCTAssertEqual(
             session.stage,
-            .complete(move: move, origin: .fallback, concepts: [])
+            .complete(move: move, origin: .wake, concepts: [.developsKnightOrBishop])
         )
-        XCTAssertEqual(session.presentation?.headline, "Black could take your pawn.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Black could take your knight. Your move still works. "
+                + "Your knight joined the game and helps in the center."
+        )
     }
 
     func testLooksSafeMissesAnExistingReplyIssueWithoutChangingStage() {
@@ -513,6 +613,34 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.headline, "Your king would still need help.")
     }
 
+    func testRepeatedUnresolvedSafeMovesPreserveHintLevelAndCountMisses() {
+        let move = CoachingTestFixtures.safeMove
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .safe,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                resolvesRequiredDanger: false,
+                isAcceptable: false
+            ),
+            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+        )
+        var session = preparedSession(for: .safe)
+        session.handle(.actionChosen(.hint))
+
+        for expectedMisses in 1...2 {
+            session.handle(.moveStaged(move))
+            session.receive(advice)
+            XCTAssertEqual(
+                session.stage,
+                .safeResolve(target: CoachingTestFixtures.whiteQueen)
+            )
+            XCTAssertEqual(session.hintLevel, 1)
+            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
+        }
+        XCTAssertTrue(session.presentation?.instruction?.contains("Want a hint?") == true)
+    }
+
     func testPreexistingMoveWithoutPurposeReturnsToRevisionAfterReplyCheck() {
         let move = CoachingTestFixtures.fallbackMove
         var session = opponentCheckSession(
@@ -622,6 +750,35 @@ final class CoachingSessionTests: XCTestCase {
         }
     }
 
+    func testRepeatedIllegalMovesPreserveHintLevelAndCountMisses() {
+        let move = CoachingTestFixtures.fallbackMove
+        let illegal = CoachingMoveAssessment(
+            move: move,
+            isLegal: false,
+            resolvesRequiredDanger: false,
+            opponentIssues: [],
+            concepts: [],
+            isAcceptable: false
+        )
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .fallback,
+            assessment: illegal,
+            confidence: .unsupported
+        )
+        var session = preparedSession(for: .fallback)
+        session.handle(.actionChosen(.hint))
+
+        for expectedMisses in 1...2 {
+            session.handle(.moveStaged(move))
+            session.receive(advice)
+            XCTAssertEqual(session.stage, .fallbackChooseMove)
+            XCTAssertEqual(session.hintLevel, 1)
+            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
+        }
+        XCTAssertTrue(session.presentation?.instruction?.contains("Want a hint?") == true)
+    }
+
     func testEveryOriginCanReachOpponentCheckAndCompletion() {
         let move = CoachingTestFixtures.safeMove
         for origin in [
@@ -648,6 +805,36 @@ final class CoachingSessionTests: XCTestCase {
                 .complete(move: move, origin: origin, concepts: [concept])
             )
         }
+    }
+
+    func testLevelThreeFocusShowsRelationshipWithoutCandidatePath() {
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.multipleDangerAdvice)
+        session.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
+
+        session.handle(.actionChosen(.hint))
+        session.handle(.actionChosen(.hint))
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.hintLevel, 3)
+        XCTAssertEqual(
+            session.presentation?.focus.candidateSquares,
+            [CoachingTestFixtures.blackBishop]
+        )
+        XCTAssertEqual(
+            session.presentation?.focus.emphasizedSquares,
+            [CoachingTestFixtures.blackBishop, CoachingTestFixtures.whiteQueen]
+        )
+        XCTAssertEqual(session.presentation?.focus.paths, [])
+
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.hintLevel, 4)
+        XCTAssertEqual(session.presentation?.focus.paths, [CoachFocusPath(
+            source: CoachingTestFixtures.blackBishop,
+            destination: CoachingTestFixtures.whiteQueen,
+            role: .attacker
+        )])
     }
 
     private func opponentCheckSession(
