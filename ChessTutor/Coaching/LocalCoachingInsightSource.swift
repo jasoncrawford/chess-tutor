@@ -15,7 +15,11 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
     func insights(for evaluation: CoachingEvaluation) -> CoachingInsightSet {
         var insights: [CoachingInsight] = []
         var takeOpportunities: [CoachingOpportunity] = []
-        let resolvingMoves = evaluation.moveAssessments.values
+        let legalMoves = evaluation.moveAssessments.values
+            .filter(\.isLegal)
+            .map(\.move)
+            .sorted { stableMoveKey($0) < stableMoveKey($1) }
+        let requiredDangerResolvingMoves = evaluation.moveAssessments.values
             .filter { $0.isLegal && $0.resolvesRequiredDanger }
             .map(\.move)
             .sorted { stableMoveKey($0) < stableMoveKey($1) }
@@ -25,7 +29,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                 CoachingInsight(
                     concept: .kingInCheck,
                     subjectSquares: evaluation.checkingPieces,
-                    candidateMoves: resolvingMoves,
+                    candidateMoves: legalMoves,
                     priority: 1_000,
                     confidence: .high,
                     evidence: .check(attackers: evaluation.checkingPieces)
@@ -37,7 +41,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                     CoachingInsight(
                         concept: .checkingPiece,
                         subjectSquares: [checkingPiece],
-                        candidateMoves: resolvingMoves,
+                        candidateMoves: legalMoves,
                         priority: 990,
                         confidence: .high,
                         evidence: .check(attackers: evaluation.checkingPieces)
@@ -51,7 +55,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                 CoachingInsight(
                     concept: .pieceNeedsHelp,
                     subjectSquares: [problem.target],
-                    candidateMoves: resolvingMoves,
+                    candidateMoves: requiredDangerResolvingMoves,
                     priority: 900 - index,
                     confidence: .high,
                     evidence: .danger(

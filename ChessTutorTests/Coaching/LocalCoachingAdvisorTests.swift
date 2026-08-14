@@ -78,6 +78,36 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         )
     }
 
+    func testCheckInsightIncludesEvasionsThatLeaveSeparateMaterialDanger() async throws {
+        let checkingRook = Square(file: .e, rank: 8)
+        let looseBishop = Square(file: .c, rank: 2)
+        let materialAttacker = Square(file: .c, rank: 8)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                looseBishop: Piece(kind: .bishop, color: .white),
+                checkingRook: Piece(kind: .rook, color: .black),
+                materialAttacker: Piece(kind: .rook, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let checkInsight = try XCTUnwrap(
+            advice.insights.first { $0.concept == .kingInCheck }
+        )
+        let allLegalEvasions = Set(LegalMoveGenerator.allLegalMoves(in: state))
+        let materialResolvingMoves = Set(
+            advice.evaluation.moveAssessments.values
+                .filter { $0.isLegal && $0.resolvesRequiredDanger }
+                .map(\.move)
+        )
+
+        XCTAssertGreaterThan(allLegalEvasions.count, materialResolvingMoves.count)
+        XCTAssertEqual(Set(checkInsight.candidateMoves), allLegalEvasions)
+    }
+
     func testPieceNeedsHelpIncludesMovingDefendingAndExchangingMoves() async throws {
         let target = Square(file: .d, rank: 4)
         let attacker = Square(file: .b, rank: 6)
