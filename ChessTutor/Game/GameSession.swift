@@ -667,7 +667,8 @@ final class GameSession {
                     return false
                 }
             case .dragStart:
-                if isActionableCoachingDragRevision(at: square) {
+                if !isAcceptedCoachingAnswer(square),
+                   isActionableCoachingDragRevision(at: square) {
                     return false
                 }
             }

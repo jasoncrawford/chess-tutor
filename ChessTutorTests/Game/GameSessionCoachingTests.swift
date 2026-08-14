@@ -186,6 +186,30 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
     }
 
+    func testAcceptedOpponentIssueDragStartIsConsumedBeforeMoveRevisionRouting() async {
+        let move = CoachingTestFixtures.openingKnightMove
+        let issue = CoachingTestFixtures.issue(
+            reply: Move(from: CoachingTestFixtures.blackBishop, to: move.to),
+            kind: .materialLoss(points: 3),
+            severity: .reviseMove,
+            answers: [move.to]
+        )
+        let session = GameSession(
+            coachingAdvisor: ImmediateCoachingAdvisor(
+                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+            )
+        )
+        stage(move, in: session)
+        let tentativeBoard = session.state.board
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertTrue(session.handleCoachingSquareDragStart(move.to))
+        XCTAssertEqual(session.state.board, tentativeBoard)
+        XCTAssertEqual(session.selectedSquare, move.to)
+        XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
+    }
+
     func testOpponentCheckConsumesTapOnStagedPieceWhenItIsNotAnAcceptedAnswer() async {
         let move = CoachingTestFixtures.openingKnightMove
         let issueSquare = Square(file: .a, rank: 7)
