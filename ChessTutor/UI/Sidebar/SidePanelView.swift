@@ -69,7 +69,23 @@ struct SidePanelView: View {
         )
     }
 
+    @ViewBuilder
     private func segmentStack(
+        layout: SidebarColumnLayout,
+        secondaryActions: [GameControlsPresentation.SecondaryAction]
+    ) -> some View {
+        if let coaching = session.coachingPresentation {
+            coachingSegmentStack(
+                coaching,
+                layout: layout,
+                secondaryActions: secondaryActions
+            )
+        } else {
+            ordinarySegmentStack(layout: layout, secondaryActions: secondaryActions)
+        }
+    }
+
+    private func ordinarySegmentStack(
         layout: SidebarColumnLayout,
         secondaryActions: [GameControlsPresentation.SecondaryAction]
     ) -> some View {
@@ -81,6 +97,41 @@ struct SidePanelView: View {
                     secondaryActions: secondaryActions
                 )
                     .rotationEffect(.degrees(readableRotationDegrees))
+            }
+        }
+    }
+
+    private func coachingSegmentStack(
+        _ presentation: CoachingPresentation,
+        layout: SidebarColumnLayout,
+        secondaryActions: [GameControlsPresentation.SecondaryAction]
+    ) -> some View {
+        let panelLayout = CoachingPanelLayout.make(sidebar: layout)
+        let regions = CoachingPanelLayout.sidebarRegions(
+            inTabletopOrder: viewingAngle.sidebarSegmentsInTabletopOrder
+        )
+
+        return VStack(spacing: SidebarColumnLayout.segmentSpacing) {
+            ForEach(regions, id: \.self) { region in
+                switch region {
+                case .coaching:
+                    SidebarPanelView(panelSize: panelLayout.tabletopRegionSize) {
+                        CoachingPanelView(
+                            session: session,
+                            presentation: presentation,
+                            layout: panelLayout,
+                            readableRotationDegrees: readableRotationDegrees,
+                            onCommittedMove: onCommittedMove
+                        )
+                    }
+                case .capturedPieces:
+                    sidebarSegment(
+                        .capturedPieces,
+                        layout: layout,
+                        secondaryActions: secondaryActions
+                    )
+                    .rotationEffect(.degrees(readableRotationDegrees))
+                }
             }
         }
     }

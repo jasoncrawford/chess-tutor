@@ -127,11 +127,13 @@
 		EB1D829BCA30B1D146B5A8A5 /* Square.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67BD6175E66BC35A9C4D85B /* Square.swift */; };
 		EC48C411114A5BBE02880751 /* RemoteNotificationPermissionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C339C62676A1C4FD53E9925B /* RemoteNotificationPermissionPolicyTests.swift */; };
 		ECD7007B94C5DF6E15FF1FAB /* PieceAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C023C83EDC2217984A48D59 /* PieceAsset.swift */; };
+		EFF38B2F41B0F52B7B90E9CC /* CoachingPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B21DFCD21891E4A984445C3 /* CoachingPanelView.swift */; };
 		F15211BBA75E01951F06F80E /* RemoteGameStartAnnouncementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6272F403D8734ADC645DF74 /* RemoteGameStartAnnouncementTests.swift */; };
 		F4D684FBA8255C666B2867D3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1FD039B8AE083CF7D10F392D /* Assets.xcassets */; };
 		F706F9AB19DEFA024F69624A /* PlayerSeat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D00A39AD12F2E4C69496C2 /* PlayerSeat.swift */; };
 		FA028842BCC17A5BF340E241 /* RemoteGameCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E134EABED5BC244A5466A161 /* RemoteGameCoordinator.swift */; };
 		FC0D4EE21EA4C5486A78ECCB /* RemoteNotificationPermissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D6FE364A75A39D0558E368 /* RemoteNotificationPermissionPolicy.swift */; };
+		FC860691205E22BE1F0D07B4 /* CoachingPanelLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D265BFC81E90DFAB44B84E63 /* CoachingPanelLayoutTests.swift */; };
 		FCFA0B46EB4FD66EF135D6D0 /* RemoteGameStartAnnouncementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EAA3445235303F429994C6 /* RemoteGameStartAnnouncementView.swift */; };
 		FF08B2DC05C4A77D6DA9DF51 /* GameLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0849550B4C1E31C47EAC9E2B /* GameLifecycle.swift */; };
 /* End PBXBuildFile section */
@@ -197,6 +199,7 @@
 		77A18F57D50181F0900479AA /* RemoteInviteTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteTransportTests.swift; sourceTree = "<group>"; };
 		7A0F3FDB75BB35C0F746BB2C /* RemoteIdentityStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdentityStoreTests.swift; sourceTree = "<group>"; };
 		7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPiecesPanelView.swift; sourceTree = "<group>"; };
+		7B21DFCD21891E4A984445C3 /* CoachingPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelView.swift; sourceTree = "<group>"; };
 		7C023C83EDC2217984A48D59 /* PieceAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAsset.swift; sourceTree = "<group>"; };
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicy.swift; sourceTree = "<group>"; };
@@ -245,6 +248,7 @@
 		CDC95ADAD92823942641574B /* DiagnosticsLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLog.swift; sourceTree = "<group>"; };
 		CE7CC99F1AFBDFF2319176EF /* RemoteGameSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameSessionController.swift; sourceTree = "<group>"; };
 		CEAF84C004414D1A30475620 /* ChessTutor.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ChessTutor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D265BFC81E90DFAB44B84E63 /* CoachingPanelLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelLayoutTests.swift; sourceTree = "<group>"; };
 		D2BC563D672A7031E80AD195 /* RemotePushNotificationRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePushNotificationRoutingTests.swift; sourceTree = "<group>"; };
 		D3272E453609A9FD096EE431 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		D4D93E7407EE5AA7D111C6A2 /* Piece.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Piece.swift; sourceTree = "<group>"; };
@@ -286,6 +290,7 @@
 			isa = PBXGroup;
 			children = (
 				AC9988CA1AC7A852511F0DB5 /* Board */,
+				39B0853115831B3A4DD89DB9 /* Coaching */,
 				130DC77DF7EBCE3841EDF6D8 /* Controls */,
 				1B7B335D7FCA708D96BFCE95 /* History */,
 				D7881F94F01DEAA43019D98C /* Remote */,
@@ -352,12 +357,21 @@
 				B6D6B6AF2C346C3AF85A3603 /* BoardGuidanceStyleTests.swift */,
 				E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */,
 				2BB009AF4B482B6921F6970A /* CoachFocusOverlayTests.swift */,
+				D265BFC81E90DFAB44B84E63 /* CoachingPanelLayoutTests.swift */,
 				A74C6E2BAF6CCA621D32B749 /* GameControlsPresentationTests.swift */,
 				C9308E7E1B991F5BB293B8F6 /* NewGameConfirmationPresentationTests.swift */,
 				C6E9624C2684FDBA93CBB823 /* PieceAssetTests.swift */,
 				61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */,
 			);
 			path = UI;
+			sourceTree = "<group>";
+		};
+		39B0853115831B3A4DD89DB9 /* Coaching */ = {
+			isa = PBXGroup;
+			children = (
+				7B21DFCD21891E4A984445C3 /* CoachingPanelView.swift */,
+			);
+			path = Coaching;
 			sourceTree = "<group>";
 		};
 		5620B9DA5A30AC514ACF1ECF /* Theme */ = {
@@ -796,6 +810,7 @@
 				C551286CA206D2F6A8E84A67 /* CloudKitRemotePresenceRecordCodec.swift in Sources */,
 				853090D9BA16CCD07E7EAB2C /* CoachFocusOverlay.swift in Sources */,
 				4E94DA99DE03B06340A79728 /* CoachingModels.swift in Sources */,
+				EFF38B2F41B0F52B7B90E9CC /* CoachingPanelView.swift in Sources */,
 				65B3FF7D887073A1CE36085B /* CoachingSession.swift in Sources */,
 				D067C5720A19D345CD3388A8 /* Color.swift in Sources */,
 				1E0F241523729CE2E6663C3F /* ContentView.swift in Sources */,
@@ -868,6 +883,7 @@
 				477E4C7C0B7864B625DA5727 /* CloudKitRemoteGameTransportTests.swift in Sources */,
 				75DDC809D991FCF2BE49A675 /* CloudKitRemoteInviteTransportTests.swift in Sources */,
 				A614994937F0E3414B41A8AB /* CoachFocusOverlayTests.swift in Sources */,
+				FC860691205E22BE1F0D07B4 /* CoachingPanelLayoutTests.swift in Sources */,
 				4F2CC69B811D139640260727 /* CoachingSessionTests.swift in Sources */,
 				3E6419F184A380CA90C52662 /* CoachingTestFixtures.swift in Sources */,
 				1E2F2DA1B187A73FD815787F /* DiagnosticsLogTests.swift in Sources */,

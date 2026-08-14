@@ -12,10 +12,22 @@ struct GameControlsPresentation: Equatable {
         case about
     }
 
+    enum SupplementalAction: Equatable {
+        case help
+    }
+
     let primaryAction: PrimaryAction
+    let supplementalActions: [SupplementalAction]
     let secondaryActions: [SecondaryAction]
 
-    init(result: GameResult, isRemoteGameEnded: Bool = false, isRemotePlayAvailable: Bool = false) {
+    init(
+        result: GameResult,
+        isRemoteGameEnded: Bool = false,
+        isRemotePlayAvailable: Bool = false,
+        canRequestCoaching: Bool = false
+    ) {
+        supplementalActions = canRequestCoaching ? [.help] : []
+
         switch (isRemoteGameEnded, result) {
         case (true, _):
             primaryAction = .newGame
@@ -55,10 +67,17 @@ struct GameControlsView: View {
         let presentation = GameControlsPresentation(
             result: session.state.result,
             isRemoteGameEnded: session.isRemoteGameEnded,
-            isRemotePlayAvailable: isRemotePlayAvailable
+            isRemotePlayAvailable: isRemotePlayAvailable,
+            canRequestCoaching: session.canRequestCoaching
         )
 
-        primaryButton(for: presentation.primaryAction)
+        HStack(spacing: 8) {
+            primaryButton(for: presentation.primaryAction)
+
+            ForEach(presentation.supplementalActions, id: \.self) { action in
+                supplementalButton(for: action)
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .lineLimit(1)
         .minimumScaleFactor(0.85)
@@ -123,6 +142,26 @@ struct GameControlsView: View {
         .labelStyle(.titleAndIcon)
     }
 
+    @ViewBuilder
+    private func supplementalButton(
+        for action: GameControlsPresentation.SupplementalAction
+    ) -> some View {
+        switch action {
+        case .help:
+            Button {
+                session.startCoaching()
+            } label: {
+                Label("Help me", systemImage: "questionmark.circle")
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+            }
+            .frame(width: 94)
+            .buttonStyle(SupplementalGameButtonStyle())
+            .font(.system(size: 17, weight: .semibold, design: .rounded))
+            .labelStyle(.titleAndIcon)
+        }
+    }
+
 }
 
 private struct PrimaryGameButtonStyle: ButtonStyle {
@@ -147,6 +186,24 @@ private struct PrimaryGameButtonStyle: ButtonStyle {
             .shadow(color: isEnabled ? AppTheme.panelShadow : .clear, radius: 8, y: 4)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.24, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
+private struct SupplementalGameButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(AppTheme.mutedInk)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(AppTheme.panelWarmth.opacity(configuration.isPressed ? 0.94 : 0.58))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(AppTheme.panelStroke, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.84), value: configuration.isPressed)
     }
 }
 
