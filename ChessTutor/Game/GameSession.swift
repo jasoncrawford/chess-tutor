@@ -638,9 +638,16 @@ final class GameSession {
 
     @discardableResult
     func handleCoachingSquareTap(_ square: Square) -> Bool {
-        guard case .identify = coachingPresentation?.boardTask else {
+        guard case let .identify(allowsMoveRevision) = coachingPresentation?.boardTask else {
             return false
         }
+
+        if allowsMoveRevision,
+           !isAcceptedCoachingAnswer(square),
+           isActionableCoachingMoveRevision(at: square) {
+            return false
+        }
+
         let directives = coachingSession?.handle(.squareTapped(square)) ?? []
         _ = applyCoachingDirectives(directives)
         return true
@@ -708,6 +715,37 @@ final class GameSession {
         pendingCoachingRequest = nil
         let directives = coachingSession?.handle(.positionChanged(revision: analysisRevision)) ?? []
         _ = applyCoachingDirectives(directives)
+    }
+
+    private func isAcceptedCoachingAnswer(_ square: Square) -> Bool {
+        guard var probe = coachingSession else { return false }
+        let currentStage = probe.stage
+        _ = probe.handle(.squareTapped(square))
+        return probe.stage != currentStage
+    }
+
+    private func isActionableCoachingMoveRevision(at square: Square) -> Bool {
+        guard localCanActForCurrentTurn,
+              let tentativeMove else { return false }
+
+        if legalDestinations.contains(square) {
+            return true
+        }
+
+        let replacementMoves = allowedMoves(forSelectionAt: tentativeMove.from)
+        if state.board[square] == nil {
+            return replacementMoves.contains(where: { $0.to == square })
+        }
+
+        if square == selectedSquare,
+           state.board[square]?.color == committedState.sideToMove {
+            return !replacementMoves.isEmpty
+        }
+
+        guard committedState.board[square]?.color == committedState.sideToMove else {
+            return false
+        }
+        return !LegalMoveGenerator.allowedMoves(for: square, in: committedState).isEmpty
     }
 
     private func stopCoachingIfCurrentSeatBecameRemote(
