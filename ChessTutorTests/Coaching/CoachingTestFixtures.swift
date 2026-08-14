@@ -1,5 +1,57 @@
 @testable import ChessTutor
 
+actor ControllableCoachingAdvisor: CoachingAdvising {
+    private var continuations: [Int: [CheckedContinuation<CoachingAdvice, any Error>]] = [:]
+
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        try await withCheckedThrowingContinuation { continuation in
+            continuations[request.positionRevision, default: []].append(continuation)
+        }
+    }
+
+    func resolve(revision: Int, with advice: CoachingAdvice) {
+        guard var queued = continuations[revision], !queued.isEmpty else { return }
+        let continuation = queued.removeFirst()
+        continuations[revision] = queued.isEmpty ? nil : queued
+        continuation.resume(returning: advice)
+    }
+
+    func fail(revision: Int, with error: any Error = Failure()) {
+        guard var queued = continuations[revision], !queued.isEmpty else { return }
+        let continuation = queued.removeFirst()
+        continuations[revision] = queued.isEmpty ? nil : queued
+        continuation.resume(throwing: error)
+    }
+
+    func hasPending(revision: Int) -> Bool {
+        !(continuations[revision] ?? []).isEmpty
+    }
+
+    struct Failure: Error, Sendable {}
+}
+
+struct ImmediateCoachingAdvisor: CoachingAdvising {
+    let advice: CoachingAdvice
+
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        advice
+    }
+}
+
+struct FailingCoachingAdvisor: CoachingAdvising {
+    struct Failure: Error, Sendable {}
+
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        throw Failure()
+    }
+}
+
+struct CancellingCoachingAdvisor: CoachingAdvising {
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        throw CancellationError()
+    }
+}
+
 enum CoachingTestFixtures {
     static func state(
         sideToMove: PieceColor,

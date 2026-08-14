@@ -141,6 +141,9 @@ struct ContentView: View {
             startIncomingRemoteInvitePollLoopIfNeeded()
             replayBufferedRemotePushNotifications()
         }
+        .task(id: session.pendingCoachingRequestID) {
+            await session.resolvePendingCoachingAdvice()
+        }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
         }
@@ -179,7 +182,10 @@ struct ContentView: View {
             }
             fetchRemoteGameStatusAfterPush(gameID: RemoteGameID(rawValue: rawGameID))
         }
-        .sheet(item: $pendingPromotion) { promotion in
+        .sheet(
+            item: $pendingPromotion,
+            onDismiss: session.cancelPromotionChoice
+        ) { promotion in
             PromotionPickerView(color: promotion.color) { kind in
                 #if DEBUG
                 if let testingSquare = promotion.testingSquare {
