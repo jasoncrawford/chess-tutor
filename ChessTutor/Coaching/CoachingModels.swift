@@ -146,3 +146,121 @@ struct CoachingAdvice: Equatable, Sendable {
 
     var checkingPieces: Set<Square> { evaluation.checkingPieces }
 }
+
+enum CoachingAction: Equatable, Hashable, Sendable {
+    case noAnswer
+    case looksSafe
+    case hint
+    case stop
+    case done
+    case keepLooking
+}
+
+enum CoachingBoardTask: Equatable, Sendable {
+    case none
+    case identify(allowsMoveRevision: Bool)
+    case move
+}
+
+enum CoachingPrompt: Equatable, Sendable {
+    case checkLocate
+    case checkResolve
+    case safeLocate
+    case safeIdentifyAttacker(piece: Piece.Kind)
+    case safeResolve(piece: Piece.Kind)
+    case takeChooseMove
+    case wakeChoosePiece(opening: Bool)
+    case wakeChooseMove(piece: Piece.Kind)
+    case opponentReply(opponent: PieceColor)
+    case fallbackChooseMove
+    case reviseMove
+    case illegalKingSafety
+    case complete(origin: CoachingMoveOrigin, idea: CoachingCompletionIdea)
+}
+
+enum CoachingCompletionIdea: Equatable, Sendable {
+    case resolvesDanger(piece: Piece.Kind)
+    case mate
+    case profitableCapture(captured: Piece.Kind)
+    case develops(piece: Piece.Kind)
+    case advancesCenterPawn
+    case castles
+    case addsDefender(piece: Piece.Kind)
+    case createsThreat(piece: Piece.Kind)
+    case centralizes(piece: Piece.Kind)
+    case verifiedSafe
+}
+
+enum CoachingFeedback: Equatable, Sendable {
+    case correct
+    case correctAlternative
+    case relevantButNonurgent(piece: Piece.Kind)
+    case unrelatedTap
+    case correctAbsence
+    case missedExistingAnswer
+    case concreteFlaw(kind: CoachingOpponentIssueKind, affectedPiece: Piece.Kind?)
+    case dangerStillPresent(piece: Piece.Kind)
+    case noRecognizedPurpose
+    case harmlessCheckFound
+}
+
+enum CoachingRoutineState: Equatable, Sendable {
+    case safeCurrent, safeCleared
+    case takePending, takeCurrent, takeCleared
+    case wakePending, wakeCurrent, wakeCleared
+}
+
+struct CoachFocusPath: Equatable, Hashable, Sendable {
+    enum Role: Equatable, Hashable, Sendable { case attacker, candidate }
+    let source: Square
+    let destination: Square
+    let role: Role
+}
+
+struct CoachFocusPresentation: Equatable, Sendable {
+    static let empty = CoachFocusPresentation(
+        emphasizedSquares: [], candidateSquares: [], paths: [], pulseID: 0
+    )
+    let emphasizedSquares: Set<Square>
+    let candidateSquares: Set<Square>
+    let paths: Set<CoachFocusPath>
+    let pulseID: Int
+}
+
+enum CoachingActionProminence: Equatable, Sendable {
+    case primary
+    case secondary
+    case quiet
+}
+
+struct CoachingActionPresentation: Equatable, Sendable {
+    let action: CoachingAction
+    let title: String
+    let accessibilityLabel: String
+    let prominence: CoachingActionProminence
+}
+
+struct CoachingPresentationContext: Equatable, Sendable {
+    let prompt: CoachingPrompt
+    let feedback: CoachingFeedback?
+    let learner: PieceColor
+    let hintLevel: Int
+    let missesAtCurrentLevel: Int
+    let routine: [CoachingRoutineState]
+    let actions: [CoachingAction]
+    let boardTask: CoachingBoardTask
+    let focus: CoachFocusPresentation
+}
+
+struct CoachingPresentation: Equatable, Sendable {
+    let headline: String
+    let instruction: String?
+    let routine: [CoachingRoutineState]
+    let actions: [CoachingActionPresentation]
+    let boardTask: CoachingBoardTask
+    let focus: CoachFocusPresentation
+}
+
+protocol CoachingExplaining: Sendable {
+    func presentation(for context: CoachingPresentationContext) -> CoachingPresentation
+}
