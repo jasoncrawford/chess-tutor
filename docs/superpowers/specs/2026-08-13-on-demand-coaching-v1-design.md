@@ -437,24 +437,30 @@ Feedback names one visible fact and returns to the question. It does not display
 
 ## Presentation Design
 
-### Stable coach panel
+### Responsive coaching region
 
-The existing message-and-Done sidebar segment temporarily becomes the coaching panel. It contains:
+During an active episode, the existing message/control segment and selected-piece guidance segment are replaced by one combined coaching region spanning both slots. The captured-pieces segment remains separate and visible. When coaching ends, the two original segments and their ordinary content return.
 
-- the current question or feedback;
-- a short instruction describing the required board action;
-- a compact Safe–Take–Wake stage indicator when that routine is active;
-- up to two primary contextual actions;
-- a quiet **Stop** action throughout the episode.
+The combined region is one visual surface with two semantic areas:
+
+- a conversation area containing the current question or feedback, a short board-action instruction, and the Safe–Take–Wake stage indicator when relevant;
+- an action area containing up to two primary contextual actions and a quiet **Stop** action throughout the episode.
+
+The region follows the existing responsive sidebar arrangement:
+
+- when the sidebar segments stack vertically in landscape, the conversation area appears above the action area;
+- when the sidebar segments sit side-by-side in portrait, the conversation area appears beside the action area.
+
+The coaching presentation does not refer to “top” or “middle” panels. It supplies semantic content; SwiftUI chooses the axis and sizing from the existing sidebar presentation and keeps the content readable for the current tabletop orientation. Selected-piece identity or movement information needed for the current task is incorporated into the coaching copy rather than competing with it in a separate panel.
 
 Questions never float over the board. The board remains fully visible and playable whenever the current task expects a move.
 
 ### Help and Done
 
 - **Help me** appears in the normal turn controls whenever Help is available.
-- During an active episode, ordinary **Done** is withheld until the coach reaches completion.
+- During an active episode, the combined region’s action area replaces the ordinary turn action, and **Done** is withheld until the coach reaches completion.
 - The player can always use **Stop** to exit coaching and return to ordinary Done behavior.
-- At completion, **Done** commits through the existing `GameSession.finishTurn()` flow; coaching does not duplicate move execution.
+- At completion, the action area offers **Done** and **Keep looking**. **Done** commits through the existing `GameSession.finishTurn()` flow; coaching does not duplicate move execution.
 
 ### Coach emphasis
 
@@ -576,7 +582,7 @@ SwiftUI consumes a value presentation containing:
 - board task mode;
 - coach-focus presentation.
 
-Expected answers, material calculations, and move classifications remain in the coaching model rather than the view.
+The presentation describes semantic conversation and action content, not a horizontal or vertical layout. Expected answers, material calculations, and move classifications remain in the coaching model rather than the view.
 
 ## State Changes and Cancellation
 
@@ -595,6 +601,7 @@ Expected answers, material calculations, and move classifications remain in the 
 - Coach emphasis never carries meaning without accompanying text.
 - Stage labels expose completed/current state without relying only on color.
 - Hint, Stop, absence, and completion actions use comfortable touch targets and unambiguous labels.
+- VoiceOver reads the conversation area before the action area in either orientation.
 - Board orientation and piece readability continue to follow the existing tabletop behavior.
 
 ## Testing Strategy
@@ -660,7 +667,7 @@ Verify:
 
 ### Presentation tests
 
-Verify canonical copy, stage labels, action labels, board-task instructions, and accessibility descriptions as pure presentation values. SwiftUI tests should remain limited to rendering and event wiring.
+Verify canonical copy, stage labels, action labels, board-task instructions, and accessibility descriptions as pure presentation values. Layout tests verify that the combined coaching region spans the message/control and selected-piece slots, uses a vertical internal arrangement when those slots stack, uses a horizontal internal arrangement when they sit side-by-side, and leaves the captured-pieces segment visible. Other SwiftUI tests should remain limited to rendering and event wiring.
 
 ### Invariants
 
@@ -680,6 +687,7 @@ V1 is complete when:
 - a child can choose a Wake piece and stage one of several acceptable purposeful moves;
 - every coached tentative move receives the opponent reply check;
 - incorrect taps receive factual feedback and optional progressive hints;
+- coaching uses one combined responsive region across the two guidance/control slots in landscape and portrait while captured pieces remain visible;
 - the child can stop at any time without hidden board rollback;
 - the tutor never commits a move or insists on a unique best move;
 - all coaching works offline and produces deterministic results for the same position and interaction history;
