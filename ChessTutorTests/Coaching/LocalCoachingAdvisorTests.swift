@@ -4,6 +4,451 @@ import XCTest
 final class LocalCoachingAdvisorTests: XCTestCase {
     private let advisor = LocalCoachingAdvisor()
 
+    func testStartingPositionOffersMinorAndCenterPawnWakeMoves() async throws {
+        let request = CoachingRequest(
+            committedState: .startingPosition(),
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 0,
+            context: .start
+        )
+
+        let advice = try await advisor.advice(for: request)
+        let wakeMoves = Set(advice.wakeOpportunities.flatMap(\.moves))
+
+        XCTAssertTrue(advice.openingDevelopmentIsRelevant)
+        XCTAssertTrue(wakeMoves.contains(Move(
+            from: Square(file: .g, rank: 1),
+            to: Square(file: .f, rank: 3)
+        )))
+        XCTAssertTrue(wakeMoves.contains(Move(
+            from: Square(file: .e, rank: 2),
+            to: Square(file: .e, rank: 4)
+        )))
+        XCTAssertFalse(wakeMoves.contains(Move(
+            from: Square(file: .a, rank: 2),
+            to: Square(file: .a, rank: 3)
+        )))
+    }
+
+    func testUnsupportedQuietPositionUsesFallbackConfidence() async throws {
+        let advice = try await advisor.advice(for: CoachingTestFixtures.noRecognizedPurposeRequest)
+
+        XCTAssertTrue(advice.urgentProblems.isEmpty)
+        XCTAssertTrue(advice.takeOpportunities.isEmpty)
+        XCTAssertTrue(advice.wakeOpportunities.isEmpty)
+        XCTAssertEqual(advice.confidence, .unsupported)
+    }
+
+    func testBlackOpeningUsesBlackHomeSquaresAndForwardDirection() async throws {
+        var state = GameState.startingPosition()
+        state.sideToMove = .black
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let wakeMoves = Set(advice.wakeOpportunities.flatMap(\.moves))
+
+        XCTAssertTrue(advice.openingDevelopmentIsRelevant)
+        XCTAssertTrue(wakeMoves.contains(Move(
+            from: Square(file: .g, rank: 8),
+            to: Square(file: .f, rank: 6)
+        )))
+        XCTAssertTrue(wakeMoves.contains(Move(
+            from: Square(file: .e, rank: 7),
+            to: Square(file: .e, rank: 5)
+        )))
+        XCTAssertFalse(wakeMoves.contains(Move(
+            from: Square(file: .a, rank: 7),
+            to: Square(file: .a, rank: 6)
+        )))
+    }
+
+    func testOpeningDevelopmentUsesThePiecesTrueOriginalHomeSquares() async throws {
+        var state = GameState.startingPosition()
+        state.board[Square(file: .b, rank: 1)] = Piece(kind: .bishop, color: .white)
+        state.board[Square(file: .c, rank: 1)] = Piece(kind: .knight, color: .white)
+        state.board[Square(file: .a, rank: 2)] = nil
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let developmentMoves = advice.wakeOpportunities
+            .filter { $0.concept == .developsKnightOrBishop }
+            .flatMap(\.moves)
+
+        XCTAssertTrue(advice.openingDevelopmentIsRelevant)
+        XCTAssertFalse(developmentMoves.contains { $0.from == Square(file: .b, rank: 1) })
+        XCTAssertFalse(developmentMoves.contains { $0.from == Square(file: .c, rank: 1) })
+    }
+
+    func testOpeningContextRequiresEveryPositionEvidenceCondition() async throws {
+        let starting = GameState.startingPosition()
+        let startingAdvice = try await advisor.advice(for: request(for: starting))
+        XCTAssertTrue(startingAdvice.openingDevelopmentIsRelevant)
+
+        var noLearnerMinorAtHome = starting
+        for file in [Square.File.b, .c, .f, .g] {
+            noLearnerMinorAtHome.board[Square(file: file, rank: 1)] = nil
+        }
+        let noLearnerMinorAdvice = try await advisor.advice(
+            for: request(for: noLearnerMinorAtHome)
+        )
+        XCTAssertFalse(noLearnerMinorAdvice.openingDevelopmentIsRelevant)
+
+        var missingOpponentQueen = starting
+        missingOpponentQueen.board[Square(file: .d, rank: 8)] = nil
+        let missingOpponentQueenAdvice = try await advisor.advice(
+            for: request(for: missingOpponentQueen)
+        )
+        XCTAssertFalse(missingOpponentQueenAdvice.openingDevelopmentIsRelevant)
+
+        var tooFewOpponentPieces = starting
+        for file in [Square.File.b, .c, .f, .g, .h] {
+            tooFewOpponentPieces.board[Square(file: file, rank: 8)] = nil
+        }
+        let tooFewOpponentPiecesAdvice = try await advisor.advice(
+            for: request(for: tooFewOpponentPieces)
+        )
+        XCTAssertFalse(tooFewOpponentPiecesAdvice.openingDevelopmentIsRelevant)
+    }
+
+    func testLegalCastleIsAGeneralWakeOpportunity() async throws {
+        let castle = Move(
+            from: Square(file: .e, rank: 1),
+            to: Square(file: .g, rank: 1),
+            special: .castleKingside
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                castle.from: Piece(kind: .king, color: .white),
+                Square(file: .h, rank: 1): Piece(kind: .rook, color: .white),
+                Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+            ],
+            castlingRights: CastlingRights(whiteKingside: true)
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let opportunity = advice.wakeOpportunities.first { $0.moves == [castle] }
+
+        XCTAssertFalse(advice.openingDevelopmentIsRelevant)
+        XCTAssertEqual(opportunity?.concept, .castlesForKingSafety)
+        XCTAssertEqual(opportunity?.evidence, .castle(castle))
+    }
+
+    func testMovedPieceCanAddANewLegalDefenderToCapturablePiece() async throws {
+        let defendingMove = Move(
+            from: Square(file: .b, rank: 1),
+            to: Square(file: .c, rank: 3)
+        )
+        let target = Square(file: .e, rank: 4)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                defendingMove.from: Piece(kind: .knight, color: .white),
+                target: Piece(kind: .bishop, color: .white),
+                Square(file: .b, rank: 7): Piece(kind: .bishop, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let opportunity = advice.wakeOpportunities.first { $0.moves == [defendingMove] }
+
+        XCTAssertFalse(advice.openingDevelopmentIsRelevant)
+        XCTAssertEqual(opportunity?.concept, .addsUsefulDefender)
+        XCTAssertEqual(
+            opportunity?.evidence,
+            .defender(source: defendingMove.from, target: target)
+        )
+    }
+
+    func testMovedPieceCanCreateSafeThreatAgainstUndefendedPiece() async throws {
+        let threateningMove = Move(
+            from: Square(file: .b, rank: 1),
+            to: Square(file: .c, rank: 3)
+        )
+        let target = Square(file: .d, rank: 5)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                threateningMove.from: Piece(kind: .knight, color: .white),
+                target: Piece(kind: .pawn, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let opportunity = advice.wakeOpportunities.first {
+            $0.concept == .createsSafeImmediateThreat && $0.moves == [threateningMove]
+        }
+
+        XCTAssertEqual(
+            opportunity?.evidence,
+            .threat(source: threateningMove.from, target: target)
+        )
+    }
+
+    func testMovedPieceCanCreateSafeThreatAgainstMoreValuableDefendedPiece() async throws {
+        let threateningMove = Move(
+            from: Square(file: .b, rank: 1),
+            to: Square(file: .c, rank: 3)
+        )
+        let target = Square(file: .d, rank: 5)
+        let defender = Square(file: .e, rank: 6)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                threateningMove.from: Piece(kind: .knight, color: .white),
+                target: Piece(kind: .rook, color: .black),
+                defender: Piece(kind: .pawn, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+        let after = state.applyingUnchecked(threateningMove)
+        XCTAssertTrue(PositionAnalyzer.analyze(after).supporters(of: target).contains(defender))
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let opportunity = advice.wakeOpportunities.first {
+            $0.concept == .createsSafeImmediateThreat && $0.moves == [threateningMove]
+        }
+
+        XCTAssertEqual(
+            opportunity?.evidence,
+            .threat(source: threateningMove.from, target: target)
+        )
+    }
+
+    func testNonPawnMovingTowardCentralSixteenWithTwoMoreMovesImprovesActivity() async throws {
+        let activityMove = Move(
+            from: Square(file: .a, rank: 1),
+            to: Square(file: .b, rank: 2)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                activityMove.from: Piece(kind: .bishop, color: .white),
+                Square(file: .h, rank: 7): Piece(kind: .king, color: .black),
+            ]
+        )
+        let beforeMobility = LegalMoveGenerator.legalMoves(
+            for: activityMove.from,
+            by: .white,
+            in: state
+        ).count
+        let after = state.applyingUnchecked(activityMove)
+        let afterMobility = LegalMoveGenerator.legalMoves(
+            for: activityMove.to,
+            by: .white,
+            in: after
+        ).count
+        XCTAssertEqual(afterMobility, beforeMobility + 2)
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let opportunity = advice.wakeOpportunities.first {
+            $0.concept == .improvesCentralActivity && $0.moves == [activityMove]
+        }
+
+        XCTAssertEqual(
+            opportunity?.evidence,
+            .mobility(
+                source: activityMove.from,
+                destination: activityMove.to,
+                before: beforeMobility,
+                after: afterMobility
+            )
+        )
+    }
+
+    func testMovingCloserToCenterWithoutTwoMoreMovesDoesNotImproveActivity() async throws {
+        let quietMove = Move(
+            from: Square(file: .a, rank: 1),
+            to: Square(file: .b, rank: 1)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                quietMove.from: Piece(kind: .rook, color: .white),
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+        let beforeMobility = LegalMoveGenerator.legalMoves(
+            for: quietMove.from,
+            by: .white,
+            in: state
+        ).count
+        let after = state.applyingUnchecked(quietMove)
+        let afterMobility = LegalMoveGenerator.legalMoves(
+            for: quietMove.to,
+            by: .white,
+            in: after
+        ).count
+        XCTAssertLessThan(afterMobility, beforeMobility + 2)
+
+        let advice = try await advisor.advice(for: request(for: state))
+
+        XCTAssertFalse(advice.wakeOpportunities.contains {
+            $0.concept == .improvesCentralActivity && $0.moves == [quietMove]
+        })
+    }
+
+    func testPurposefulOpeningMoveThatLeavesRequiredDangerIsExcluded() async throws {
+        let unsafeDevelopment = Move(
+            from: Square(file: .g, rank: 1),
+            to: Square(file: .f, rank: 3)
+        )
+        var state = GameState.startingPosition()
+        state.board[Square(file: .d, rank: 1)] = nil
+        state.board[Square(file: .b, rank: 3)] = Piece(kind: .queen, color: .white)
+        state.board[Square(file: .c, rank: 8)] = nil
+        state.board[Square(file: .a, rank: 4)] = Piece(kind: .bishop, color: .black)
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let assessment = try XCTUnwrap(advice.moveAssessments[unsafeDevelopment])
+
+        XCTAssertTrue(advice.openingDevelopmentIsRelevant)
+        XCTAssertTrue(assessment.isLegal)
+        XCTAssertFalse(assessment.resolvesRequiredDanger)
+        XCTAssertFalse(advice.wakeOpportunities.contains {
+            $0.moves.contains(unsafeDevelopment)
+        })
+    }
+
+    func testOtherwiseDevelopingMoveThatIsIllegalIsExcluded() async throws {
+        let pinnedDevelopment = Move(
+            from: Square(file: .g, rank: 1),
+            to: Square(file: .f, rank: 3)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                pinnedDevelopment.from: Piece(kind: .knight, color: .white),
+                Square(file: .d, rank: 2): Piece(kind: .queen, color: .white),
+                Square(file: .c, rank: 2): Piece(kind: .bishop, color: .white),
+                Square(file: .e, rank: 2): Piece(kind: .rook, color: .white),
+                Square(file: .a, rank: 1): Piece(kind: .rook, color: .black),
+                Square(file: .d, rank: 8): Piece(kind: .queen, color: .black),
+                Square(file: .c, rank: 8): Piece(kind: .bishop, color: .black),
+                Square(file: .b, rank: 8): Piece(kind: .knight, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let assessment = try XCTUnwrap(advice.moveAssessments[pinnedDevelopment])
+
+        XCTAssertTrue(advice.openingDevelopmentIsRelevant)
+        XCTAssertFalse(assessment.isLegal)
+        XCTAssertFalse(advice.wakeOpportunities.contains {
+            $0.moves.contains(pinnedDevelopment)
+        })
+    }
+
+    func testPurposefulMoveWithReviseLevelReplyIsExcluded() async throws {
+        let unsafeActivity = Move(
+            from: Square(file: .a, rank: 1),
+            to: Square(file: .b, rank: 2)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                unsafeActivity.from: Piece(kind: .bishop, color: .white),
+                Square(file: .b, rank: 8): Piece(kind: .rook, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+        let assessment = try XCTUnwrap(advice.moveAssessments[unsafeActivity])
+
+        XCTAssertTrue(assessment.isLegal)
+        XCTAssertTrue(assessment.resolvesRequiredDanger)
+        XCTAssertTrue(assessment.opponentIssues.contains { $0.severity == .reviseMove })
+        XCTAssertFalse(advice.wakeOpportunities.contains {
+            $0.moves.contains(unsafeActivity)
+        })
+    }
+
+    func testWakeOrdersPurposeBeforeStableSourceAndRetainsEveryAlternative() async throws {
+        let startingAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: .startingPosition(),
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 0,
+            context: .start
+        ))
+        let expectedOpeningMoves: Set<Move> = [
+            Move(from: Square(file: .b, rank: 1), to: Square(file: .a, rank: 3)),
+            Move(from: Square(file: .b, rank: 1), to: Square(file: .c, rank: 3)),
+            Move(from: Square(file: .d, rank: 2), to: Square(file: .d, rank: 3)),
+            Move(from: Square(file: .d, rank: 2), to: Square(file: .d, rank: 4)),
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 3)),
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+            Move(from: Square(file: .g, rank: 1), to: Square(file: .f, rank: 3)),
+            Move(from: Square(file: .g, rank: 1), to: Square(file: .h, rank: 3)),
+        ]
+        let retainedOpeningMoves = Set(
+            startingAdvice.wakeOpportunities
+                .filter {
+                    $0.concept == .developsKnightOrBishop
+                        || $0.concept == .advancesCenterPawn
+                }
+                .flatMap(\.moves)
+        )
+
+        XCTAssertEqual(retainedOpeningMoves, expectedOpeningMoves)
+        XCTAssertEqual(
+            startingAdvice.wakeOpportunities.first?.moves.first?.from,
+            Square(file: .b, rank: 1)
+        )
+        for move in expectedOpeningMoves {
+            XCTAssertTrue(try XCTUnwrap(startingAdvice.moveAssessments[move]).isAcceptable)
+        }
+
+        let multiPurposeMove = Move(
+            from: Square(file: .b, rank: 1),
+            to: Square(file: .c, rank: 3)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                multiPurposeMove.from: Piece(kind: .knight, color: .white),
+                Square(file: .e, rank: 2): Piece(kind: .bishop, color: .white),
+                Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+                Square(file: .d, rank: 5): Piece(kind: .pawn, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let multiPurposeAdvice = try await advisor.advice(for: request(for: state))
+        let orderedConcepts = multiPurposeAdvice.wakeOpportunities
+            .filter { $0.moves == [multiPurposeMove] }
+            .map(\.concept)
+
+        XCTAssertEqual(
+            orderedConcepts,
+            [.addsUsefulDefender, .createsSafeImmediateThreat, .improvesCentralActivity]
+        )
+        let assessmentWakeConcepts = try XCTUnwrap(
+            multiPurposeAdvice.moveAssessments[multiPurposeMove]
+        ).concepts.filter {
+            [
+                CoachingConcept.addsUsefulDefender,
+                .createsSafeImmediateThreat,
+                .improvesCentralActivity,
+            ].contains($0)
+        }
+        XCTAssertEqual(
+            assessmentWakeConcepts,
+            [.addsUsefulDefender, .createsSafeImmediateThreat, .improvesCentralActivity]
+        )
+    }
+
     func testCheckRanksBeforeMaterialDanger() async throws {
         let checkingRook = Square(file: .e, rank: 8)
         let looseQueen = Square(file: .b, rank: 3)
@@ -430,5 +875,24 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         advice.insights.first {
             $0.concept == concept && $0.candidateMoves == [move]
         }
+    }
+}
+
+private extension CoachingTestFixtures {
+    static var noRecognizedPurposeRequest: CoachingRequest {
+        CoachingRequest(
+            committedState: state(
+                sideToMove: .white,
+                pieces: [
+                    Square(file: .d, rank: 4): Piece(kind: .king, color: .white),
+                    Square(file: .a, rank: 2): Piece(kind: .pawn, color: .white),
+                    Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                ]
+            ),
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 1,
+            context: .start
+        )
     }
 }
