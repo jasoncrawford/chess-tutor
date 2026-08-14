@@ -351,6 +351,13 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 pulseID: 4
             ),
         ]
+        let instructionByLevel: [Int: String] = [
+            0: "Tap the attacker.",
+            1: "Follow the danger marker to the attacker, then tap it.",
+            2: "Look at the highlighted choices. Tap the attacker.",
+            3: "Look at the highlighted pieces and their connection. Tap the attacker.",
+            4: "Follow the highlighted path, then make the move yourself.",
+        ]
 
         for level in 0...4 {
             let expectedFocus = try XCTUnwrap(focusByLevel[level])
@@ -370,7 +377,40 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 presentation.boardTask,
                 level == 4 ? .move : .identify(allowsMoveRevision: false)
             )
+            XCTAssertEqual(
+                presentation.instruction,
+                try XCTUnwrap(instructionByLevel[level])
+            )
         }
+    }
+
+    func testLevelFourIdentificationNamesTheSuppliedPathWithoutMovingAPiece() {
+        let focus = CoachFocusPresentation(
+            emphasizedSquares: [Square(file: .d, rank: 7), Square(file: .d, rank: 4)],
+            candidateSquares: [Square(file: .d, rank: 7)],
+            paths: [CoachFocusPath(
+                source: Square(file: .d, rank: 7),
+                destination: Square(file: .d, rank: 4),
+                role: .attacker
+            )],
+            pulseID: 4
+        )
+
+        let presentation = explainer.presentation(
+            for: context(
+                prompt: .safeIdentifyAttacker(piece: .queen),
+                hintLevel: 4,
+                boardTask: .identify(allowsMoveRevision: false),
+                focus: focus
+            )
+        )
+
+        XCTAssertEqual(
+            presentation.instruction,
+            "Follow the highlighted path, then tap the piece yourself."
+        )
+        XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
+        XCTAssertEqual(presentation.focus, focus)
     }
 
     func testLevelOneInstructionsReferToExistingBoardGuidance() {
