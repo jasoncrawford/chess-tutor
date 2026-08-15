@@ -113,6 +113,66 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         XCTAssertEqual(evaluation.urgentProblems.map(\.worstEstimatedLoss), [2, 2])
     }
 
+    func testOpponentPromotionCapturesRetainStableLegalMoveIdentities() {
+        let attacker = Square(file: .b, rank: 2)
+        let target = Square(file: .c, rank: 1)
+        let expectedCaptures = [
+            Move(from: attacker, to: target, special: .promotion(.queen)),
+            Move(from: attacker, to: target, special: .promotion(.rook)),
+            Move(from: attacker, to: target, special: .promotion(.bishop)),
+            Move(from: attacker, to: target, special: .promotion(.knight)),
+        ]
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .white),
+                Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                attacker: Piece(kind: .pawn, color: .black),
+                target: Piece(kind: .queen, color: .white),
+            ]
+        )
+        var opponentState = state
+        opponentState.sideToMove = .black
+
+        XCTAssertEqual(
+            LegalMoveGenerator.legalMoves(for: attacker, in: opponentState)
+                .filter { $0.to == target },
+            expectedCaptures
+        )
+
+        let evaluation = evaluator.evaluate(request(for: state))
+
+        XCTAssertTrue(evaluation.opponentHasAnyLegalCapture)
+        XCTAssertEqual(evaluation.opponentCaptureEstimates.map(\.move), expectedCaptures)
+    }
+
+    func testOpponentPromotionCaptureCreatesSingleUrgentSafeTarget() throws {
+        let attacker = Square(file: .b, rank: 2)
+        let target = Square(file: .c, rank: 1)
+        let expectedCaptures = [
+            Move(from: attacker, to: target, special: .promotion(.queen)),
+            Move(from: attacker, to: target, special: .promotion(.rook)),
+            Move(from: attacker, to: target, special: .promotion(.bishop)),
+            Move(from: attacker, to: target, special: .promotion(.knight)),
+        ]
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .white),
+                Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+                attacker: Piece(kind: .pawn, color: .black),
+                target: Piece(kind: .queen, color: .white),
+            ]
+        )
+
+        let evaluation = evaluator.evaluate(request(for: state))
+        let problem = try XCTUnwrap(evaluation.urgentProblems.first)
+
+        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [target])
+        XCTAssertEqual(problem.captures.map(\.move), expectedCaptures)
+        XCTAssertEqual(problem.worstEstimatedLoss, 9)
+    }
+
     func testIncludesGainOneLearnerCaptureForTakePolicy() throws {
         let attacker = Square(file: .c, rank: 4)
         let target = Square(file: .d, rank: 5)

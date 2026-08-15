@@ -142,15 +142,8 @@ struct MaterialTacticalEvaluator: Sendable {
         opponentState.sideToMove = learner.opposite
         opponentState.enPassantTarget = nil
 
-        return PositionAnalyzer.analyze(state).threatsByTarget.values
-            .flatMap { $0 }
-            .filter { $0.color == learner.opposite }
-            .compactMap { threat in
-                captureEstimate(
-                    for: Move(from: threat.source, to: threat.destination),
-                    in: opponentState
-                )
-            }
+        return LegalMoveGenerator.allLegalMoves(in: opponentState)
+            .compactMap { captureEstimate(for: $0, in: opponentState) }
             .sorted { stableMoveKey($0.move) < stableMoveKey($1.move) }
     }
 
