@@ -212,8 +212,10 @@ struct CoachingSession: Sendable {
     private mutating func handleAction(_ action: CoachingAction) -> [CoachingDirective] {
         switch action {
         case .hint:
-            guard presentation != nil else { return [] }
-            hintLevel = min(hintLevel + 1, 4)
+            guard presentation != nil,
+                  hintLevel < maximumHintLevel(for: stage)
+            else { return [] }
+            hintLevel += 1
             missesAtCurrentLevel = 0
             feedback = nil
             pulseID += 1
@@ -279,7 +281,7 @@ struct CoachingSession: Sendable {
             return
         }
 
-        if (origin == .safe || origin == .check) && !assessment.resolvesRequiredDanger {
+        if origin == .safe && !assessment.resolvesRequiredDanger {
             let piece = unresolvedPieceKind(for: origin, advice: advice)
             returnToOrigin(
                 origin,
@@ -331,6 +333,14 @@ struct CoachingSession: Sendable {
                 )
             )
         case .notice:
+            if issue.kind == .check,
+               assessment.opponentIssues.contains(where: { $0.severity == .reviseMove }) {
+                missesAtCurrentLevel = 0
+                feedback = .correct
+                promptOverride = nil
+                rebuildPresentation()
+                return
+            }
             let foundFeedback: CoachingFeedback
             if issue.kind == .check {
                 foundFeedback = .harmlessCheckFound
@@ -628,17 +638,30 @@ struct CoachingSession: Sendable {
     }
 
     private func actions(for stage: CoachingStage) -> [CoachingAction] {
+        let hintActions: [CoachingAction] = hintLevel < maximumHintLevel(for: stage)
+            ? [.hint]
+            : []
         switch stage {
         case .safeLocate, .takeChooseMove:
-            return [.noAnswer, .hint, .stop]
+            return [.noAnswer] + hintActions + [.stop]
         case .opponentCheck:
-            return [.looksSafe, .hint, .stop]
+            return [.looksSafe] + hintActions + [.stop]
         case .complete:
             return [.done, .keepLooking, .stop]
         case .awaitingAdvice:
             return [.stop]
         default:
-            return [.hint, .stop]
+            return hintActions + [.stop]
+        }
+    }
+
+    private func maximumHintLevel(for stage: CoachingStage) -> Int {
+        switch stage {
+        case .awaitingAdvice, .complete:
+            return 0
+        default:
+            if answerSquares(for: stage).isEmpty { return 1 }
+            return focusPaths(for: stage).isEmpty ? 2 : 4
         }
     }
 
@@ -719,7 +742,7 @@ struct CoachingSession: Sendable {
         switch stage {
         case .checkResolve:
             return advice.moveAssessments.values
-                .filter { $0.isLegal && $0.resolvesRequiredDanger }
+                .filter(\.isLegal)
                 .map(\.move)
         case .safeResolve:
             return advice.moveAssessments.values
