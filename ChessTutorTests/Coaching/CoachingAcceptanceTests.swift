@@ -426,6 +426,30 @@ final class CoachingAcceptanceTests: XCTestCase {
         ))
         XCTAssertEqual(first.moveHistory, [first.committedMove])
         XCTAssertEqual(first.sideToMove, .black)
+        XCTAssertEqual(first.publicEffects, [
+            .squareTap(
+                consumed: true,
+                selectedSquare: Square(file: .g, rank: 1),
+                moveHistory: []
+            ),
+            .moveStaged(
+                result: .moved,
+                selectedSquare: Square(file: .f, rank: 3),
+                moveHistory: []
+            ),
+            .action(
+                action: .looksSafe,
+                returnedMove: nil,
+                selectedSquare: Square(file: .f, rank: 3),
+                moveHistory: []
+            ),
+            .action(
+                action: .done,
+                returnedMove: first.committedMove,
+                selectedSquare: nil,
+                moveHistory: [first.committedMove]
+            ),
+        ])
     }
 
     private func makeSession(state: GameState = .startingPosition()) -> GameSession {
@@ -468,20 +492,44 @@ final class CoachingAcceptanceTests: XCTestCase {
             to: Square(file: .f, rank: 3)
         )
         var presentations: [CoachingPresentation] = []
+        var publicEffects: [TranscriptPublicEffect] = []
 
         await beginCoaching(in: session)
         presentations.append(session.coachingPresentation!)
-        _ = session.handleCoachingSquareTap(move.from)
+        let tapWasConsumed = session.handleCoachingSquareTap(move.from)
+        publicEffects.append(.squareTap(
+            consumed: tapWasConsumed,
+            selectedSquare: session.selectedSquare,
+            moveHistory: session.state.moveHistory
+        ))
         presentations.append(session.coachingPresentation!)
-        stage(move, in: session)
+        let moveResult = session.moveSelectedPiece(to: move.to)
+        publicEffects.append(.moveStaged(
+            result: moveResult,
+            selectedSquare: session.selectedSquare,
+            moveHistory: session.state.moveHistory
+        ))
         await session.resolvePendingCoachingAdvice()
         presentations.append(session.coachingPresentation!)
-        _ = session.chooseCoachingAction(.looksSafe)
+        let looksSafeReturn = session.chooseCoachingAction(.looksSafe)
+        publicEffects.append(.action(
+            action: .looksSafe,
+            returnedMove: looksSafeReturn,
+            selectedSquare: session.selectedSquare,
+            moveHistory: session.state.moveHistory
+        ))
         presentations.append(session.coachingPresentation!)
         let committed = session.chooseCoachingAction(.done)!
+        publicEffects.append(.action(
+            action: .done,
+            returnedMove: committed,
+            selectedSquare: session.selectedSquare,
+            moveHistory: session.state.moveHistory
+        ))
 
         return TranscriptResult(
             presentations: presentations,
+            publicEffects: publicEffects,
             committedMove: committed,
             moveHistory: session.state.moveHistory,
             sideToMove: session.state.sideToMove,
@@ -504,8 +552,20 @@ final class CoachingAcceptanceTests: XCTestCase {
 
 private struct TranscriptResult: Equatable {
     let presentations: [CoachingPresentation]
+    let publicEffects: [TranscriptPublicEffect]
     let committedMove: Move
     let moveHistory: [Move]
     let sideToMove: PieceColor
     let finalBoard: Board
+}
+
+private enum TranscriptPublicEffect: Equatable {
+    case squareTap(consumed: Bool, selectedSquare: Square?, moveHistory: [Move])
+    case moveStaged(result: MoveAttemptResult, selectedSquare: Square?, moveHistory: [Move])
+    case action(
+        action: CoachingAction,
+        returnedMove: Move?,
+        selectedSquare: Square?,
+        moveHistory: [Move]
+    )
 }

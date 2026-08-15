@@ -164,6 +164,10 @@ struct MaterialTacticalEvaluator: Sendable {
                     against: replyState.sideToMove,
                     in: replyState.board
                 )
+                let checkingAnswerSquares = visibleCheckingSquares(
+                    for: checkingPieces,
+                    after: reply
+                )
                 if LegalMoveGenerator.allLegalMoves(in: replyState).isEmpty,
                    !checkingPieces.isEmpty {
                     return [
@@ -171,7 +175,7 @@ struct MaterialTacticalEvaluator: Sendable {
                             reply: reply,
                             kind: .mateInOne,
                             severity: .reviseMove,
-                            answerSquares: checkingPieces
+                            answerSquares: checkingAnswerSquares
                         )
                     ]
                 }
@@ -183,7 +187,7 @@ struct MaterialTacticalEvaluator: Sendable {
                             reply: reply,
                             kind: .check,
                             severity: .notice,
-                            answerSquares: checkingPieces.union([reply.from])
+                            answerSquares: checkingAnswerSquares
                         )
                     )
                 }
@@ -200,6 +204,37 @@ struct MaterialTacticalEvaluator: Sendable {
                 }
                 return issues
             }
+    }
+
+    private func visibleCheckingSquares(
+        for checkingPieces: Set<Square>,
+        after reply: Move
+    ) -> Set<Square> {
+        let secondaryMove: (from: Square, to: Square)?
+        switch reply.special {
+        case .castleKingside:
+            secondaryMove = (
+                Square(file: .h, rank: reply.from.rank),
+                Square(file: .f, rank: reply.from.rank)
+            )
+        case .castleQueenside:
+            secondaryMove = (
+                Square(file: .a, rank: reply.from.rank),
+                Square(file: .d, rank: reply.from.rank)
+            )
+        case nil, .enPassant, .promotion:
+            secondaryMove = nil
+        }
+
+        return Set(checkingPieces.map { checker in
+            if checker == reply.to {
+                return reply.from
+            }
+            if let secondaryMove, checker == secondaryMove.to {
+                return secondaryMove.from
+            }
+            return checker
+        })
     }
 
     private func largestOpponentMaterialLoss(after move: Move, in state: GameState) -> Int {

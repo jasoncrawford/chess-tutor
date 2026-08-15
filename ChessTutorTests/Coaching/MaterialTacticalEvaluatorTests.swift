@@ -227,7 +227,7 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             $0.reply == matingReply
                 && $0.kind == .mateInOne
                 && $0.severity == .reviseMove
-                && $0.answerSquares == [matingReply.to]
+                && $0.answerSquares == [matingReply.from]
         })
         XCTAssertFalse(assessment.opponentIssues.contains {
             $0.reply == matingReply && $0.kind == .check
@@ -291,11 +291,118 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             $0.reply == checkingReply
                 && $0.kind == .check
                 && $0.severity == .notice
-                && $0.answerSquares == [checkingReply.from, checkingReply.to]
+                && $0.answerSquares == [checkingReply.from]
         })
         XCTAssertFalse(assessment.opponentIssues.contains {
             $0.reply == checkingReply && $0.kind == .mateInOne
         })
+    }
+
+    func testDiscoveredCheckMapsUnchangedCheckerRatherThanMovedBlocker() throws {
+        let learnerMove = Move(
+            from: Square(file: .a, rank: 2),
+            to: Square(file: .a, rank: 3)
+        )
+        let checker = Square(file: .e, rank: 8)
+        let blocker = Square(file: .e, rank: 7)
+        let reply = Move(from: blocker, to: Square(file: .d, rank: 6))
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                learnerMove.from: Piece(kind: .pawn, color: .white),
+                checker: Piece(kind: .rook, color: .black),
+                blocker: Piece(kind: .bishop, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let evaluation = evaluator.evaluate(request(for: state))
+        let assessment = try XCTUnwrap(evaluation.moveAssessments[learnerMove])
+        let issue = try XCTUnwrap(assessment.opponentIssues.first {
+            $0.reply == reply && $0.kind == .check
+        })
+
+        XCTAssertEqual(issue, CoachingOpponentIssue(
+            reply: reply,
+            kind: .check,
+            severity: .notice,
+            answerSquares: [checker]
+        ))
+        XCTAssertFalse(issue.answerSquares.contains(blocker))
+    }
+
+    func testDoubleCheckMapsMovedAndUnchangedCheckersToTheirVisibleSquares() throws {
+        let learnerMove = Move(
+            from: Square(file: .a, rank: 2),
+            to: Square(file: .a, rank: 3)
+        )
+        let unchangedChecker = Square(file: .e, rank: 8)
+        let movedChecker = Square(file: .e, rank: 7)
+        let reply = Move(from: movedChecker, to: Square(file: .b, rank: 4))
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                learnerMove.from: Piece(kind: .pawn, color: .white),
+                unchangedChecker: Piece(kind: .rook, color: .black),
+                movedChecker: Piece(kind: .bishop, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+
+        let evaluation = evaluator.evaluate(request(for: state))
+        let assessment = try XCTUnwrap(evaluation.moveAssessments[learnerMove])
+        let issue = try XCTUnwrap(assessment.opponentIssues.first {
+            $0.reply == reply && $0.kind == .check
+        })
+
+        XCTAssertEqual(issue, CoachingOpponentIssue(
+            reply: reply,
+            kind: .check,
+            severity: .notice,
+            answerSquares: [unchangedChecker, movedChecker]
+        ))
+        XCTAssertFalse(issue.answerSquares.contains(reply.to))
+    }
+
+    func testCastlingCheckMapsRookToItsVisiblePreCastleSquare() throws {
+        let learnerMove = Move(
+            from: Square(file: .a, rank: 2),
+            to: Square(file: .a, rank: 3)
+        )
+        let king = Square(file: .e, rank: 8)
+        let rook = Square(file: .h, rank: 8)
+        let reply = Move(
+            from: king,
+            to: Square(file: .g, rank: 8),
+            special: .castleKingside
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .f, rank: 1): Piece(kind: .king, color: .white),
+                learnerMove.from: Piece(kind: .pawn, color: .white),
+                king: Piece(kind: .king, color: .black),
+                rook: Piece(kind: .rook, color: .black),
+            ],
+            castlingRights: CastlingRights(blackKingside: true)
+        )
+
+        let evaluation = evaluator.evaluate(request(for: state))
+        let assessment = try XCTUnwrap(evaluation.moveAssessments[learnerMove])
+        let issue = try XCTUnwrap(assessment.opponentIssues.first {
+            $0.reply == reply && $0.kind == .check
+        })
+
+        XCTAssertEqual(issue, CoachingOpponentIssue(
+            reply: reply,
+            kind: .check,
+            severity: .notice,
+            answerSquares: [rook]
+        ))
+        XCTAssertFalse(issue.answerSquares.contains(king))
+        XCTAssertFalse(issue.answerSquares.contains(Square(file: .f, rank: 8)))
     }
 
     func testIncludesPinnedAllowedMoveAsIllegalAssessment() throws {

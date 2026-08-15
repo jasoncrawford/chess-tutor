@@ -642,6 +642,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             assessment.opponentIssues.first { $0.kind == .mateInOne }
         )
 
+        XCTAssertEqual(mateIssue.answerSquares, [Square(file: .g, rank: 3)])
         XCTAssertTrue(assessment.concepts.contains(.profitableCapture))
         XCTAssertTrue(assessment.concepts.contains(.allowsMateInOne))
         XCTAssertEqual(
@@ -735,6 +736,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             assessment.opponentIssues.first { $0.reply == checkingReply && $0.kind == .check }
         )
 
+        XCTAssertEqual(issue.answerSquares, [checkingReply.from])
         XCTAssertEqual(
             moveInsight(.allowsCheck, move: learnerMove, in: advice)?.evidence,
             .opponentReply(issue)
