@@ -291,7 +291,7 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             $0.reply == checkingReply
                 && $0.kind == .check
                 && $0.severity == .notice
-                && $0.answerSquares == [checkingReply.to]
+                && $0.answerSquares == [checkingReply.from, checkingReply.to]
         })
         XCTAssertFalse(assessment.opponentIssues.contains {
             $0.reply == checkingReply && $0.kind == .mateInOne

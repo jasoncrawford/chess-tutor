@@ -183,7 +183,7 @@ struct MaterialTacticalEvaluator: Sendable {
                             reply: reply,
                             kind: .check,
                             severity: .notice,
-                            answerSquares: checkingPieces
+                            answerSquares: checkingPieces.union([reply.from])
                         )
                     )
                 }
