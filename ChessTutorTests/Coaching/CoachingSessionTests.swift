@@ -4,19 +4,20 @@ import XCTest
 final class CoachingSessionTests: XCTestCase {
     private let advisor = LocalCoachingAdvisor()
 
-    func testStartingPositionCompressesSafeAndTakeIntoOpeningWake() {
+    func testStartingPositionSkipsEmptyScansAndAsksConcreteOpeningQuestion() {
         var session = CoachingSession(learner: .white)
 
         XCTAssertTrue(session.receive(CoachingTestFixtures.startingPositionAdvice).isEmpty)
 
-        XCTAssertEqual(session.stage, .wakeChoosePiece(opening: true))
+        XCTAssertEqual(session.stage, .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)))
         XCTAssertEqual(session.presentation?.routine, [
             .safeCleared, .takeCleared, .wakeCurrent,
         ])
         XCTAssertEqual(
             session.presentation?.headline,
-            "Nothing is in danger yet. Can you help the center or wake up a piece?"
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
+        XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
     }
 
     func testSafeTranscriptAcceptsAnyUrgentPieceThenItsAttacker() {
@@ -26,10 +27,19 @@ final class CoachingSessionTests: XCTestCase {
         let chosenTarget = CoachingTestFixtures.whiteRook
         XCTAssertTrue(session.handle(.squareTapped(chosenTarget)).isEmpty)
         XCTAssertEqual(session.stage, .safeIdentifyAttacker(target: chosenTarget))
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "You found the rook. What black piece is attacking it?"
+        )
 
         let attacker = CoachingTestFixtures.blackRook
         XCTAssertTrue(session.handle(.squareTapped(attacker)).isEmpty)
         XCTAssertEqual(session.stage, .safeResolve(target: chosenTarget))
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Yes—that rook is attacking your rook. How could you help your rook?"
+        )
+        XCTAssertEqual(session.presentation?.instruction, "Make a move that gets it safe.")
         XCTAssertEqual(session.presentation?.boardTask, .move)
     }
 
@@ -128,12 +138,10 @@ final class CoachingSessionTests: XCTestCase {
         clearSession.receive(CoachingTestFixtures.nontrivialSafeClearAdvice)
         XCTAssertEqual(clearSession.stage, .safeLocate)
         clearSession.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(clearSession.stage, .wakeChoosePiece(opening: false))
+        XCTAssertEqual(clearSession.stage, .fallbackChooseMove)
         XCTAssertEqual(clearSession.presentation?.headline, "Right—there isn’t one.")
-        XCTAssertEqual(clearSession.presentation?.instruction, "Tap that piece.")
-        XCTAssertEqual(clearSession.presentation?.routine, [
-            .safeCleared, .takeCleared, .wakeCurrent,
-        ])
+        XCTAssertEqual(clearSession.presentation?.instruction, "Make a move on the board.")
+        XCTAssertEqual(clearSession.presentation?.routine, [])
 
         var dangerSession = CoachingSession(learner: .white)
         dangerSession.receive(CoachingTestFixtures.multipleDangerAdvice)
@@ -177,7 +185,7 @@ final class CoachingSessionTests: XCTestCase {
         emptySession.receive(CoachingTestFixtures.nontrivialTakeClearAdvice)
         XCTAssertEqual(emptySession.stage, .takeChooseMove)
         emptySession.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(emptySession.stage, .wakeChoosePiece(opening: false))
+        XCTAssertEqual(emptySession.stage, .fallbackChooseMove)
         XCTAssertEqual(emptySession.presentation?.headline, "Right—there isn’t one.")
 
         var takeSession = CoachingSession(learner: .white)
@@ -281,7 +289,10 @@ final class CoachingSessionTests: XCTestCase {
             session.receive(CoachingTestFixtures.startingPositionAdvice)
 
             XCTAssertEqual(session.handle(.squareTapped(source)), [.selectSquare(source)])
-            XCTAssertEqual(session.stage, .wakeChooseMove(piece: source, opening: true))
+            XCTAssertEqual(
+                session.stage,
+                .wakeChooseMove(piece: source, purpose: .openingDevelopment(firstMove: true))
+            )
             XCTAssertEqual(session.presentation?.boardTask, .move)
         }
     }
@@ -318,7 +329,10 @@ final class CoachingSessionTests: XCTestCase {
         ))
         XCTAssertEqual(
             rejected.stage,
-            .wakeChooseMove(piece: CoachingTestFixtures.openingKnight, opening: true)
+            .wakeChooseMove(
+                piece: CoachingTestFixtures.openingKnight,
+                purpose: .openingDevelopment(firstMove: true)
+            )
         )
         XCTAssertEqual(
             rejected.presentation?.headline,
@@ -347,7 +361,10 @@ final class CoachingSessionTests: XCTestCase {
             session.receive(advice)
             XCTAssertEqual(
                 session.stage,
-                .wakeChooseMove(piece: CoachingTestFixtures.openingKnight, opening: true)
+                .wakeChooseMove(
+                    piece: CoachingTestFixtures.openingKnight,
+                    purpose: .openingDevelopment(firstMove: true)
+                )
             )
             XCTAssertEqual(session.hintLevel, 1)
             XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
@@ -445,7 +462,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.hintLevel, 2)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Look at the highlighted choices. Tap that piece, or choose I don’t see one."
+            "Look at the highlighted choices. Tap your piece, or choose I don’t see one."
         )
         XCTAssertEqual(
             session.presentation?.focus.candidateSquares,
@@ -465,7 +482,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.hintLevel, 2)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Look at the highlighted choices. Tap a piece that could get a job."
+            "Look at the highlighted choices. Tap the piece you want to move."
         )
         XCTAssertEqual(
             session.presentation?.focus.candidateSquares,
@@ -561,7 +578,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(
             session.presentation?.headline,
             "Yes. Black could check your king, but your move still works. "
-                + "Your knight joined the game and helps in the center."
+                + "Your knight came into the game. Chess players call that developing a piece."
         )
     }
 
@@ -639,7 +656,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(
             session.presentation?.headline,
             "Black could take your knight. Your move still works. "
-                + "Your knight joined the game and helps in the center."
+                + "Your knight came into the game. Chess players call that developing a piece."
         )
     }
 
@@ -686,7 +703,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "That works. Your knight joined the game and helps in the center."
+            "That works. Your knight came into the game. Chess players call that developing a piece."
         )
         XCTAssertEqual(session.presentation?.actions.map(\.action), [.done, .keepLooking, .stop])
         XCTAssertEqual(
@@ -814,7 +831,7 @@ final class CoachingSessionTests: XCTestCase {
             session.stage,
             .wakeChooseMove(
                 piece: CoachingTestFixtures.alternateKnight,
-                opening: true
+                purpose: .openingDevelopment(firstMove: true)
             )
         )
     }
@@ -953,7 +970,10 @@ final class CoachingSessionTests: XCTestCase {
             (.take, .takeChooseMove),
             (
                 .wake,
-                .wakeChooseMove(piece: CoachingTestFixtures.openingKnight, opening: true)
+                .wakeChooseMove(
+                    piece: CoachingTestFixtures.openingKnight,
+                    purpose: .openingDevelopment(firstMove: true)
+                )
             ),
             (.fallback, .fallbackChooseMove),
         ]

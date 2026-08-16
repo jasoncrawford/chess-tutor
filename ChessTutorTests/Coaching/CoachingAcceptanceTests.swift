@@ -113,7 +113,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCurrent, .takePending, .wakePending])
-        XCTAssertEqual(session.coachingPresentation?.headline, "Does one of your pieces need help?")
+        XCTAssertEqual(session.coachingPresentation?.headline, "Which of your pieces needs help most?")
 
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCurrent, .wakePending])
@@ -126,7 +126,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCleared, .wakeCurrent])
         XCTAssertEqual(session.coachingPresentation?.headline, "Right—there isn’t one.")
-        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap that piece.")
+        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
 
         XCTAssertTrue(session.handleCoachingSquareTap(knight))
         stage(move, in: session)
@@ -154,11 +154,17 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         XCTAssertTrue(session.handleCoachingSquareTap(target))
-        XCTAssertEqual(session.coachingPresentation?.headline, "Yes.")
-        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the attacker.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "You found the bishop. What black piece is attacking it?"
+        )
+        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the black piece.")
         XCTAssertTrue(session.handleCoachingSquareTap(attacker))
-        XCTAssertEqual(session.coachingPresentation?.headline, "Yes.")
-        XCTAssertEqual(session.coachingPresentation?.instruction, "Make a move on the board.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Yes—that bishop is attacking your bishop. How could you help your bishop?"
+        )
+        XCTAssertEqual(session.coachingPresentation?.instruction, "Make a move that gets it safe.")
 
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
@@ -205,7 +211,10 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         let badSession = makeSession(state: state)
         await beginCoaching(in: badSession)
-        XCTAssertEqual(badSession.coachingPresentation?.headline, "Can you find a capture that helps you?")
+        XCTAssertEqual(
+            badSession.coachingPresentation?.headline,
+            "Can one of your pieces make a useful capture?"
+        )
         stage(badCapture, in: badSession)
         await badSession.resolvePendingCoachingAdvice()
         XCTAssertEqual(badSession.coachingPresentation?.headline, "Black could take your bishop.")

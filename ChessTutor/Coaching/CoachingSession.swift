@@ -6,8 +6,8 @@ enum CoachingStage: Equatable, Sendable {
     case safeIdentifyAttacker(target: Square)
     case safeResolve(target: Square)
     case takeChooseMove
-    case wakeChoosePiece(opening: Bool)
-    case wakeChooseMove(piece: Square, opening: Bool)
+    case wakeChoosePiece(purpose: CoachingWakePurpose)
+    case wakeChooseMove(piece: Square, purpose: CoachingWakePurpose)
     case fallbackChooseMove
     case opponentCheck(move: Move, origin: CoachingMoveOrigin)
     case reviseMove(origin: CoachingMoveOrigin)
@@ -33,8 +33,9 @@ struct CoachingSession: Sendable {
     private let explainer: any CoachingExplaining
     private var latestAdvice: CoachingAdvice?
     private var selectedSafeTarget: Square?
+    private var selectedSafeAttacker: Square?
     private var selectedWakePiece: Square?
-    private var selectedWakeOpening = false
+    private var selectedWakePurpose: CoachingWakePurpose?
     private var tentativeMove: Move?
     private var positionRevision: Int?
     private var feedback: CoachingFeedback?
@@ -66,8 +67,9 @@ struct CoachingSession: Sendable {
         case .start:
             tentativeMove = nil
             selectedSafeTarget = nil
+            selectedSafeAttacker = nil
             selectedWakePiece = nil
-            selectedWakeOpening = false
+            selectedWakePurpose = nil
             begin(with: advice)
         case let .tentativeMove(origin):
             receiveMoveAdvice(advice, origin: origin)
@@ -79,8 +81,9 @@ struct CoachingSession: Sendable {
         latestAdvice = nil
         tentativeMove = nil
         selectedSafeTarget = nil
+        selectedSafeAttacker = nil
         selectedWakePiece = nil
-        selectedWakeOpening = false
+        selectedWakePurpose = nil
         transition(to: .fallbackChooseMove)
     }
 
@@ -124,12 +127,15 @@ struct CoachingSession: Sendable {
     }
 
     private mutating func proceedToWake(feedback: CoachingFeedback? = nil) {
-        guard let advice = latestAdvice, advice.confidence != .unsupported else {
+        guard let advice = latestAdvice,
+              advice.confidence != .unsupported,
+              !wakeSources(in: advice).isEmpty
+        else {
             transition(to: .fallbackChooseMove, feedback: feedback)
             return
         }
         transition(
-            to: .wakeChoosePiece(opening: advice.openingDevelopmentIsRelevant),
+            to: .wakeChoosePiece(purpose: initialWakePurpose(in: advice)),
             feedback: feedback
         )
     }
@@ -146,7 +152,8 @@ struct CoachingSession: Sendable {
         case .safeLocate:
             if advice.urgentProblems.contains(where: { $0.target == square }) {
                 selectedSafeTarget = square
-                transition(to: .safeIdentifyAttacker(target: square), feedback: .correct)
+                selectedSafeAttacker = nil
+                transition(to: .safeIdentifyAttacker(target: square))
             } else if let piece = advice.evaluation.request.committedState.board[square],
                       piece.color == learner,
                       advice.evaluation.opponentCaptureEstimates.contains(where: {
@@ -162,19 +169,19 @@ struct CoachingSession: Sendable {
                 return []
             }
             if problem.captures.contains(where: { $0.move.from == square }) {
-                transition(to: .safeResolve(target: target), feedback: .correct)
+                selectedSafeAttacker = square
+                transition(to: .safeResolve(target: target))
             } else {
                 recordMiss(.unrelatedTap)
             }
-        case let .wakeChoosePiece(opening):
+        case .wakeChoosePiece:
             let sources = wakeSources(in: advice)
             if sources.contains(square) {
-                let preferred = advice.wakeOpportunities.first?.moves.first?.from
+                let purpose = wakePurpose(for: square, in: advice)
                 selectedWakePiece = square
-                selectedWakeOpening = opening
+                selectedWakePurpose = purpose
                 transition(
-                    to: .wakeChooseMove(piece: square, opening: opening),
-                    feedback: square == preferred ? .correct : .correctAlternative
+                    to: .wakeChooseMove(piece: square, purpose: purpose)
                 )
                 return [.selectSquare(square)]
             }
@@ -416,8 +423,9 @@ struct CoachingSession: Sendable {
         case .take:
             returnStage = .takeChooseMove
         case .wake:
-            if let piece = selectedWakePiece {
-                returnStage = .wakeChooseMove(piece: piece, opening: selectedWakeOpening)
+            if let piece = selectedWakePiece,
+               let purpose = selectedWakePurpose {
+                returnStage = .wakeChooseMove(piece: piece, purpose: purpose)
             } else {
                 returnStage = .reviseMove(origin: .wake)
             }
@@ -476,6 +484,40 @@ struct CoachingSession: Sendable {
 
     private func wakeSources(in advice: CoachingAdvice) -> Set<Square> {
         Set(advice.wakeOpportunities.flatMap { $0.moves.map(\.from) })
+    }
+
+    private func wakePurpose(
+        for concept: CoachingConcept?,
+        in advice: CoachingAdvice
+    ) -> CoachingWakePurpose {
+        switch concept {
+        case .developsKnightOrBishop, .advancesCenterPawn:
+            return .openingDevelopment(
+                firstMove: advice.evaluation.request.committedState == GameState.startingPosition()
+            )
+        case .addsUsefulDefender:
+            return .addsDefender
+        case .createsSafeImmediateThreat:
+            return .createsThreat
+        case .castlesForKingSafety:
+            return .castle
+        default:
+            return .centralActivity
+        }
+    }
+
+    private func wakePurpose(for source: Square, in advice: CoachingAdvice) -> CoachingWakePurpose {
+        let concept = advice.wakeOpportunities.first {
+            $0.moves.contains { $0.from == source }
+        }?.concept
+        return wakePurpose(for: concept, in: advice)
+    }
+
+    private func initialWakePurpose(in advice: CoachingAdvice) -> CoachingWakePurpose {
+        guard let source = advice.wakeOpportunities.first?.moves.first?.from else {
+            return .centralActivity
+        }
+        return wakePurpose(for: source, in: advice)
     }
 
     private func unresolvedPieceKind(
@@ -562,13 +604,19 @@ struct CoachingSession: Sendable {
         case let .safeIdentifyAttacker(target):
             return .safeIdentifyAttacker(piece: pieceKind(at: target) ?? .pawn)
         case let .safeResolve(target):
-            return .safeResolve(piece: pieceKind(at: target) ?? .pawn)
+            return .safeResolve(
+                target: pieceKind(at: target) ?? .pawn,
+                attacker: selectedSafeAttacker.flatMap { pieceKind(at: $0) } ?? .pawn
+            )
         case .takeChooseMove:
             return .takeChooseMove
-        case let .wakeChoosePiece(opening):
-            return .wakeChoosePiece(opening: opening)
-        case let .wakeChooseMove(piece, _):
-            return .wakeChooseMove(piece: pieceKind(at: piece) ?? .pawn)
+        case let .wakeChoosePiece(purpose):
+            return .wakeChoosePiece(purpose: purpose)
+        case let .wakeChooseMove(piece, purpose):
+            return .wakeChooseMove(
+                piece: pieceKind(at: piece) ?? .pawn,
+                purpose: purpose
+            )
         case .fallbackChooseMove:
             return .fallbackChooseMove
         case .opponentCheck:

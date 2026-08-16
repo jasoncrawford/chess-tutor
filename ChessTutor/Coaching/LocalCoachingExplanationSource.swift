@@ -55,44 +55,32 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .safeLocate:
             return (
-                "Does one of your pieces need help?",
-                "Tap that piece, or choose I don’t see one."
+                "Which of your pieces needs help most?",
+                "Tap your piece, or choose I don’t see one."
             )
         case let .safeIdentifyAttacker(piece):
             return (
-                "What could take your \(piece.rawValue)?",
-                "Tap the attacker."
+                "You found the \(piece.rawValue). What black piece is attacking it?",
+                "Tap the black piece."
             )
-        case let .safeResolve(piece):
+        case let .safeResolve(target, attacker):
             return (
-                "How could you help your \(piece.rawValue)?",
-                "Make a move on the board."
+                "Yes—that \(attacker.rawValue) is attacking your \(target.rawValue). How could you help your \(target.rawValue)?",
+                "Make a move that gets it safe."
             )
         case .takeChooseMove:
             return (
-                "Can you find a capture that helps you?",
+                "Can one of your pieces make a useful capture?",
                 "Make the capture, or choose I don’t see one."
             )
-        case let .wakeChoosePiece(opening):
-            if opening {
-                return (
-                    "Nothing is in danger yet. Can you help the center or wake up a piece?",
-                    "Tap a piece that could get a job."
-                )
-            }
-            return (
-                "Which piece could get a useful job?",
-                "Tap that piece."
-            )
-        case let .wakeChooseMove(piece):
-            return (
-                "Where could your \(piece.rawValue) help from?",
-                "Move it on the board."
-            )
+        case let .wakeChoosePiece(purpose):
+            return wakePieceCopy(for: purpose)
+        case let .wakeChooseMove(piece, purpose):
+            return wakeMoveCopy(for: piece, purpose: purpose)
         case let .opponentReply(opponent):
             return (
-                "Could \(colorName(opponent)) check your king or win something?",
-                "Tap the problem, change your move, or choose Looks safe."
+                "Could \(colorName(opponent)) check your king or win one of your pieces?",
+                "Tap the black checking piece, or tap your piece \(colorName(opponent)) could take. Otherwise choose Looks safe."
             )
         case .fallbackChooseMove:
             return (
@@ -112,6 +100,56 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .complete(_, idea):
             return (completionHeadline(for: idea), nil)
         }
+    }
+
+    private func wakePieceCopy(
+        for purpose: CoachingWakePurpose
+    ) -> (headline: String, instruction: String) {
+        switch purpose {
+        case .openingDevelopment(firstMove: true):
+            return (
+                "A good first step is to move a center pawn or bring out a knight. Which would you like to try?",
+                "Tap the piece you want to move."
+            )
+        case .openingDevelopment(firstMove: false):
+            return (
+                "Could you bring out a knight or bishop, move a center pawn, or castle?",
+                "Tap the piece you want to move."
+            )
+        case .addsDefender:
+            return ("Which piece could help protect another piece?", "Tap the piece you want to move.")
+        case .createsThreat:
+            return ("Which piece could safely attack something?", "Tap the piece you want to move.")
+        case .centralActivity:
+            return ("Which piece could move closer to the center?", "Tap the piece you want to move.")
+        case .castle:
+            return ("Which piece would you move to castle?", "Tap your king.")
+        }
+    }
+
+    private func wakeMoveCopy(
+        for piece: Piece.Kind,
+        purpose: CoachingWakePurpose
+    ) -> (headline: String, instruction: String) {
+        let headline: String
+        switch purpose {
+        case .openingDevelopment:
+            headline = piece == .pawn
+                ? "This pawn can help in the center."
+                : "This \(piece.rawValue) can come into the game."
+        case .addsDefender:
+            headline = "This \(piece.rawValue) can help protect another piece."
+        case .createsThreat:
+            headline = "This \(piece.rawValue) can safely attack something."
+        case .centralActivity:
+            headline = "This \(piece.rawValue) can move closer to the center."
+        case .castle:
+            headline = "Your king can castle."
+        }
+        let instruction = purpose == .castle
+            ? "Move it two squares toward a rook."
+            : "Move it on the board."
+        return (headline, instruction)
     }
 
     private func instruction(
@@ -156,7 +194,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .checkResolve:
             return "Use the movement markers to find a move that makes the check marker disappear."
         case .safeLocate:
-            return "Look for a danger marker. Tap that piece, or choose I don’t see one."
+            return "Look for a danger marker. Tap your piece, or choose I don’t see one."
         case .safeIdentifyAttacker:
             return "Follow the danger marker to the attacker, then tap it."
         case .safeResolve:
@@ -241,7 +279,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .profitableCapture(captured):
             concept = "Your capture wins a \(captured.rawValue)."
         case let .develops(piece):
-            concept = "Your \(piece.rawValue) joined the game and helps in the center."
+            concept = "Your \(piece.rawValue) came into the game. Chess players call that developing a piece."
         case .advancesCenterPawn:
             concept = "Your pawn helps control the center."
         case .castles:

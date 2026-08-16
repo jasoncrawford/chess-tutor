@@ -162,15 +162,23 @@ enum CoachingBoardTask: Equatable, Sendable {
     case move
 }
 
+enum CoachingWakePurpose: Equatable, Sendable {
+    case openingDevelopment(firstMove: Bool)
+    case addsDefender
+    case createsThreat
+    case centralActivity
+    case castle
+}
+
 enum CoachingPrompt: Equatable, Sendable {
     case checkLocate
     case checkResolve
     case safeLocate
     case safeIdentifyAttacker(piece: Piece.Kind)
-    case safeResolve(piece: Piece.Kind)
+    case safeResolve(target: Piece.Kind, attacker: Piece.Kind)
     case takeChooseMove
-    case wakeChoosePiece(opening: Bool)
-    case wakeChooseMove(piece: Piece.Kind)
+    case wakeChoosePiece(purpose: CoachingWakePurpose)
+    case wakeChooseMove(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case opponentReply(opponent: PieceColor)
     case fallbackChooseMove
     case reviseMove

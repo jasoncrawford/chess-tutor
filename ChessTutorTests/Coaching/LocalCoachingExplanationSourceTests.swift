@@ -14,8 +14,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(presentation.headline, "Does one of your pieces need help?")
-        XCTAssertEqual(presentation.instruction, "Tap that piece, or choose I don’t see one.")
+        XCTAssertEqual(presentation.headline, "Which of your pieces needs help most?")
+        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose I don’t see one.")
         XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
         XCTAssertEqual(presentation.actions.map(\.title), ["I don’t see one", "Hint", "Stop"])
     }
@@ -37,7 +37,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(presentation.boardTask, .move)
     }
 
-    func testEveryQuestionPromptUsesCanonicalBaseCopy() {
+    func testEveryQuestionPromptUsesConcreteAnswerInstructions() {
         let cases: [(CoachingPrompt, String, String?)] = [
             (
                 .checkLocate,
@@ -51,48 +51,68 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .safeLocate,
-                "Does one of your pieces need help?",
-                "Tap that piece, or choose I don’t see one."
+                "Which of your pieces needs help most?",
+                "Tap your piece, or choose I don’t see one."
             ),
             (
-                .safeIdentifyAttacker(piece: .queen),
-                "What could take your queen?",
-                "Tap the attacker."
+                .safeIdentifyAttacker(piece: .knight),
+                "You found the knight. What black piece is attacking it?",
+                "Tap the black piece."
             ),
             (
-                .safeResolve(piece: .rook),
-                "How could you help your rook?",
-                "Make a move on the board."
+                .safeResolve(target: .knight, attacker: .pawn),
+                "Yes—that pawn is attacking your knight. How could you help your knight?",
+                "Make a move that gets it safe."
             ),
             (
                 .takeChooseMove,
-                "Can you find a capture that helps you?",
+                "Can one of your pieces make a useful capture?",
                 "Make the capture, or choose I don’t see one."
             ),
             (
-                .wakeChoosePiece(opening: true),
-                "Nothing is in danger yet. Can you help the center or wake up a piece?",
-                "Tap a piece that could get a job."
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                "A good first step is to move a center pawn or bring out a knight. Which would you like to try?",
+                "Tap the piece you want to move."
             ),
             (
-                .wakeChoosePiece(opening: false),
-                "Which piece could get a useful job?",
-                "Tap that piece."
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: false)),
+                "Could you bring out a knight or bishop, move a center pawn, or castle?",
+                "Tap the piece you want to move."
             ),
             (
-                .wakeChooseMove(piece: .knight),
-                "Where could your knight help from?",
+                .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
+                "This knight can come into the game.",
                 "Move it on the board."
             ),
             (
+                .wakeChoosePiece(purpose: .addsDefender),
+                "Which piece could help protect another piece?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .createsThreat),
+                "Which piece could safely attack something?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .centralActivity),
+                "Which piece could move closer to the center?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .castle),
+                "Which piece would you move to castle?",
+                "Tap your king."
+            ),
+            (
                 .opponentReply(opponent: .black),
-                "Could Black check your king or win something?",
-                "Tap the problem, change your move, or choose Looks safe."
+                "Could Black check your king or win one of your pieces?",
+                "Tap the black checking piece, or tap your piece Black could take. Otherwise choose Looks safe."
             ),
             (
                 .opponentReply(opponent: .white),
-                "Could White check your king or win something?",
-                "Tap the problem, change your move, or choose Looks safe."
+                "Could White check your king or win one of your pieces?",
+                "Tap the black checking piece, or tap your piece White could take. Otherwise choose Looks safe."
             ),
             (
                 .fallbackChooseMove,
@@ -177,7 +197,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         XCTAssertEqual(
             presentation.instruction,
-            "Tap that piece, or choose I don’t see one. Want a hint?"
+            "Tap your piece, or choose I don’t see one. Want a hint?"
         )
         XCTAssertEqual(
             presentation.actions.first(where: { $0.action == .hint })?.prominence,
@@ -233,7 +253,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             XCTAssertEqual(presentation.headline, headline, "Unexpected feedback for \(feedback)")
             XCTAssertEqual(
                 presentation.instruction,
-                "Tap the problem, change your move, or choose Looks safe."
+                "Tap the black checking piece, or tap your piece Black could take. Otherwise choose Looks safe."
             )
         }
     }
@@ -260,7 +280,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .develops(piece: .knight),
-                "That works. Your knight joined the game and helps in the center."
+                "That works. Your knight came into the game. Chess players call that developing a piece."
             ),
             (.advancesCenterPawn, "That works. Your pawn helps control the center."),
             (.castles, "That works. Castling helps keep your king safe."),
@@ -305,7 +325,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         let presentation = explainer.presentation(
             for: context(
-                prompt: .wakeChoosePiece(opening: false),
+                prompt: .wakeChoosePiece(purpose: .centralActivity),
                 hintLevel: 4,
                 routine: routine,
                 boardTask: boardTask,
@@ -352,10 +372,10 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
         ]
         let instructionByLevel: [Int: String] = [
-            0: "Tap the attacker.",
+            0: "Tap the black piece.",
             1: "Follow the danger marker to the attacker, then tap it.",
-            2: "Look at the highlighted choices. Tap the attacker.",
-            3: "Look at the highlighted pieces and their connection. Tap the attacker.",
+            2: "Look at the highlighted choices. Tap the black piece.",
+            3: "Look at the highlighted pieces and their connection. Tap the black piece.",
             4: "Follow the highlighted path, then make the move yourself.",
         ]
 
@@ -364,7 +384,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             let presentation = explainer.presentation(
                 for: context(
                     prompt: level == 4
-                        ? .wakeChooseMove(piece: .knight)
+                        ? .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true))
                         : .safeIdentifyAttacker(piece: .queen),
                     hintLevel: level,
                     boardTask: level == 4 ? .move : .identify(allowsMoveRevision: false),
@@ -417,18 +437,18 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         let cases: [(CoachingPrompt, String)] = [
             (
                 .safeLocate,
-                "Look for a danger marker. Tap that piece, or choose I don’t see one."
+                "Look for a danger marker. Tap your piece, or choose I don’t see one."
             ),
             (
                 .safeIdentifyAttacker(piece: .queen),
                 "Follow the danger marker to the attacker, then tap it."
             ),
             (
-                .safeResolve(piece: .queen),
+                .safeResolve(target: .queen, attacker: .rook),
                 "Use the defense and movement markers, then make a move."
             ),
             (
-                .wakeChooseMove(piece: .bishop),
+                .wakeChooseMove(piece: .bishop, purpose: .openingDevelopment(firstMove: false)),
                 "Use the movement markers to find a square where it can help."
             ),
         ]
@@ -448,11 +468,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .checkResolve,
             .safeLocate,
             .safeIdentifyAttacker(piece: .queen),
-            .safeResolve(piece: .queen),
+            .safeResolve(target: .queen, attacker: .rook),
             .takeChooseMove,
-            .wakeChoosePiece(opening: true),
-            .wakeChoosePiece(opening: false),
-            .wakeChooseMove(piece: .knight),
+            .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+            .wakeChoosePiece(purpose: .centralActivity),
+            .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
             .opponentReply(opponent: .black),
             .fallbackChooseMove,
             .reviseMove,
