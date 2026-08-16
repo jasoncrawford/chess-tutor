@@ -810,7 +810,9 @@ struct CoachingSession: Sendable {
         case .checkResolve:
             return candidateMoves(for: stage).isEmpty ? [] : [.candidatePieces, .candidateMoves]
         case .safeLocate:
-            return [.dangerMarker, .candidatePieces]
+            return candidateSourceSquares(for: stage).isEmpty
+                ? [.dangerMarker]
+                : [.dangerMarker, .candidatePieces]
         case .safeIdentifyAttacker:
             return [.attackerRelationship, .candidatePieces]
         case .safeResolve:

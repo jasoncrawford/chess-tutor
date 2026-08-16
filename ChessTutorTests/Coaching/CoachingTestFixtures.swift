@@ -157,6 +157,38 @@ enum CoachingTestFixtures {
         opening: true
     )
 
+    static let mixedPurposeWakeAdvice = advice(
+        opponentHasCapture: false,
+        learnerHasCapture: false,
+        wake: [
+            opportunity(
+                concept: .developsKnightOrBishop,
+                subjects: [openingKnight],
+                moves: [openingKnightMove],
+                evidence: .development(
+                    source: openingKnight,
+                    destination: openingKnightMove.to
+                )
+            ),
+            opportunity(
+                concept: .addsUsefulDefender,
+                subjects: [whiteQueen],
+                moves: [safeMove],
+                evidence: .defender(source: whiteQueen, target: whiteRook)
+            ),
+        ],
+        assessments: [
+            acceptableAssessment(
+                openingKnightMove,
+                concepts: [.developsKnightOrBishop]
+            ),
+            acceptableAssessment(
+                safeMove,
+                concepts: [.addsUsefulDefender]
+            ),
+        ]
+    )
+
     static let multipleDangerAdvice: CoachingAdvice = {
         let queenCapture = capture(
             move: Move(from: blackBishop, to: whiteQueen),

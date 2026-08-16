@@ -779,6 +779,20 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
+    func testSafeLocateWithoutAnUrgentProblemStopsBeforeAnEmptyCandidateHint() {
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.nontrivialSafeClearAdvice)
+
+        XCTAssertEqual(session.stage, .safeLocate)
+        session.handle(.actionChosen(.hint))
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.hintLevel, 1)
+        XCTAssertEqual(session.presentation?.hint, .dangerMarker)
+        XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
+    }
+
     func testWakePieceHintsRevealPurposeFilteredSourcesThenCandidateMoves() {
         var session = CoachingSession(learner: .white)
         session.receive(CoachingTestFixtures.startingPositionAdvice)
@@ -818,6 +832,49 @@ final class CoachingSessionTests: XCTestCase {
             ),
         ])
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
+    }
+
+    func testWakeHintsFilterCurrentPurposeWithoutRejectingOtherVerifiedSources() {
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.mixedPurposeWakeAdvice)
+
+        XCTAssertEqual(
+            session.stage,
+            .wakeChoosePiece(purpose: .openingDevelopment(firstMove: false))
+        )
+
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.presentation?.hint, .candidatePieces)
+        XCTAssertEqual(
+            session.presentation?.focus.candidateSquares,
+            [CoachingTestFixtures.openingKnight]
+        )
+
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.presentation?.hint, .candidateMoves)
+        XCTAssertEqual(
+            session.presentation?.focus.candidateSquares,
+            [CoachingTestFixtures.openingKnightMove.to]
+        )
+        XCTAssertEqual(session.presentation?.focus.paths, [CoachFocusPath(
+            source: CoachingTestFixtures.openingKnight,
+            destination: CoachingTestFixtures.openingKnightMove.to,
+            role: .candidate
+        )])
+
+        XCTAssertEqual(
+            session.handle(.squareTapped(CoachingTestFixtures.whiteQueen)),
+            [.selectSquare(CoachingTestFixtures.whiteQueen)]
+        )
+        XCTAssertEqual(
+            session.stage,
+            .wakeChooseMove(
+                piece: CoachingTestFixtures.whiteQueen,
+                purpose: .addsDefender
+            )
+        )
     }
 
     func testReviseIssueAnswersAcceptAnyAnswerSquareAndNeverSelectIt() {
