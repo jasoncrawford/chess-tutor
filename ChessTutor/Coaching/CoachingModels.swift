@@ -200,16 +200,23 @@ enum CoachingCompletionIdea: Equatable, Sendable {
 }
 
 enum CoachingFeedback: Equatable, Sendable {
-    case correct
-    case correctAlternative
-    case relevantButNonurgent(piece: Piece.Kind)
-    case unrelatedTap
+    case safePiece(piece: Piece.Kind)
+    case lowerPriorityThreat(piece: Piece.Kind, urgentPiece: Piece.Kind)
+    case nonurgentThreat(piece: Piece.Kind)
+    case expectedLearnerPiece
+    case notCheckingPiece(piece: Piece.Kind?)
+    case notAttacker(piece: Piece.Kind, target: Piece.Kind)
+    case expectedAttacker(target: Piece.Kind)
+    case blockedWakePiece(piece: Piece.Kind)
+    case notWakeCandidate(piece: Piece.Kind, purpose: CoachingWakePurpose)
+    case notReplyIssue
     case correctAbsence
     case missedExistingAnswer
     case concreteFlaw(kind: CoachingOpponentIssueKind, affectedPiece: Piece.Kind?)
-    case dangerStillPresent(piece: Piece.Kind)
-    case noRecognizedPurpose
+    case dangerStillPresent(attacker: Piece.Kind?, target: Piece.Kind)
+    case noRecognizedPurpose(purpose: CoachingWakePurpose?)
     case harmlessCheckFound
+    case checkFoundOtherDangerRemains
 }
 
 enum CoachingRoutineState: Equatable, Sendable {

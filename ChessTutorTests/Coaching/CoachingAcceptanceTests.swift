@@ -117,7 +117,10 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCurrent, .wakePending])
-        XCTAssertEqual(session.coachingPresentation?.headline, "Right—there isn’t one.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Right—there isn’t one. Can one of your pieces make a useful capture?"
+        )
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
             "Make the capture, or choose I don’t see one."
@@ -125,7 +128,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCleared, .wakeCurrent])
-        XCTAssertEqual(session.coachingPresentation?.headline, "Right—there isn’t one.")
+        XCTAssertTrue(session.coachingPresentation?.headline.hasPrefix("Right—there isn’t one.") == true)
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
 
         XCTAssertTrue(session.handleCoachingSquareTap(knight))
@@ -247,7 +250,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertEqual(session.coachingPresentation?.headline, "Right—there isn’t one.")
+        XCTAssertTrue(session.coachingPresentation?.headline.hasPrefix("Right—there isn’t one.") == true)
         XCTAssertTrue(session.handleCoachingSquareTap(knight))
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
@@ -334,7 +337,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "Yes. Black could check your king, but your move still works. "
+            "You found it. Black could check your king, but your move still works. "
                 + "Your knight gets a more useful place near the center."
         )
         XCTAssertEqual(session.coachingPresentation?.actions.map(\.action), [.done, .keepLooking, .stop])
@@ -360,7 +363,10 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.handleCoachingSquareTap(unrelated))
         XCTAssertTrue(session.handleCoachingSquareTap(unrelated))
         XCTAssertEqual(session.state.board, unchangedBoard)
-        XCTAssertTrue(session.coachingPresentation?.instruction?.contains("Want a hint?") == true)
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.first { $0.action == .hint }?.prominence,
+            .primary
+        )
 
         _ = session.chooseCoachingAction(.hint)
         XCTAssertEqual(

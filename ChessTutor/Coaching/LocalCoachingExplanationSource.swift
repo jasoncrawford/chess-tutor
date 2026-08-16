@@ -10,7 +10,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             actions: context.actions.map {
                 actionPresentation(
                     for: $0,
-                    emphasizeHint: context.missesAtCurrentLevel >= 2
+                    emphasizeHint: context.missesAtCurrentLevel >= 1
                 )
             },
             boardTask: context.boardTask,
@@ -23,9 +23,13 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         base: String
     ) -> String {
         guard let feedback = context.feedback else { return base }
+        if feedback == .correctAbsence {
+            return "Right—there isn’t one. \(base)"
+        }
         let acknowledgement = feedbackHeadline(
             for: feedback,
-            opponent: opponentColor(for: context)
+            opponent: opponentColor(for: context),
+            prompt: context.prompt
         )
         guard case let .complete(_, idea) = context.prompt else {
             return acknowledgement
@@ -179,12 +183,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             }
         }
 
-        guard context.missesAtCurrentLevel >= 2,
-              context.actions.contains(.hint)
-        else {
-            return hinted
-        }
-        return "\(hinted) Want a hint?"
+        return hinted
     }
 
     private func levelOneInstruction(for prompt: CoachingPrompt, base: String) -> String {
@@ -202,11 +201,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .takeChooseMove:
             return "Use the capture markers to look for a helpful capture."
         case .wakeChoosePiece:
-            return "Look at the movement markers for a piece that could get a job."
+            return "Look at the movement markers for a piece that could help."
         case .wakeChooseMove:
             return "Use the movement markers to find a square where it can help."
         case .opponentReply:
-            return "Look for a check or danger marker, then tap the problem or choose Looks safe."
+            return "Look for a check or danger marker, then tap a checking piece or a piece Black could take."
         case .fallbackChooseMove, .reviseMove, .illegalKingSafety:
             return "Use the movement markers, then make a move on the board."
         case .complete:
@@ -216,33 +215,85 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
 
     private func feedbackHeadline(
         for feedback: CoachingFeedback,
-        opponent: PieceColor
+        opponent: PieceColor,
+        prompt: CoachingPrompt
     ) -> String {
         switch feedback {
-        case .correct:
-            return "Yes."
-        case .correctAlternative:
-            return "Yes, that works too."
-        case let .relevantButNonurgent(piece):
-            return "That \(piece.rawValue) is threatened, but it isn’t in big danger."
-        case .unrelatedTap:
-            return "That piece isn’t part of this problem."
+        case let .safePiece(piece):
+            return "That \(piece.rawValue) is safe right now."
+        case let .lowerPriorityThreat(piece, urgentPiece):
+            return "Yes, that \(piece.rawValue) is threatened. Your \(urgentPiece.rawValue) is worth more, so help the \(urgentPiece.rawValue) first."
+        case let .nonurgentThreat(piece):
+            return "Yes, that \(piece.rawValue) is threatened. We’re looking for a knight, bishop, rook, or queen \(colorName(opponent)) could win."
+        case .expectedLearnerPiece:
+            return "Tap one of your pieces."
+        case let .notCheckingPiece(piece):
+            if let piece {
+                return "That \(piece.rawValue) isn’t giving check."
+            }
+            return "That square isn’t giving check."
+        case let .notAttacker(piece, target):
+            return "That \(piece.rawValue) isn’t attacking your \(target.rawValue)."
+        case let .expectedAttacker(target):
+            return "Tap a \(colorName(opponent).lowercased()) piece attacking your \(target.rawValue)."
+        case let .blockedWakePiece(piece):
+            return "That \(piece.rawValue) can’t come out yet because other pieces are in the way."
+        case let .notWakeCandidate(piece, purpose):
+            return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
+        case .notReplyIssue:
+            return "That piece doesn’t show a check or capture after this move."
         case .correctAbsence:
             return "Right—there isn’t one."
         case .missedExistingAnswer:
-            return "There is one to find."
+            return missedAnswerHeadline(for: prompt)
         case let .concreteFlaw(kind, affectedPiece):
             return concreteFlawHeadline(
                 kind: kind,
                 affectedPiece: affectedPiece,
                 opponent: opponent
             )
-        case let .dangerStillPresent(piece):
-            return "Your \(piece.rawValue) would still need help."
-        case .noRecognizedPurpose:
-            return "That move looks safe, but give the piece a clear job."
+        case let .dangerStillPresent(attacker, target):
+            if let attacker {
+                return "The \(attacker.rawValue) could still take your \(target.rawValue) after that move."
+            }
+            return "Your \(target.rawValue) would still need help after that move."
+        case let .noRecognizedPurpose(purpose):
+            if let purpose {
+                return "That move is safe, but it doesn’t \(wakePurposeVerb(for: purpose))."
+            }
+            return "That move is safe, but it doesn’t help with a clear plan yet."
         case .harmlessCheckFound:
-            return "Yes. \(colorName(opponent)) could check your king, but your move still works."
+            return "You found it. \(colorName(opponent)) could check your king, but your move still works."
+        case .checkFoundOtherDangerRemains:
+            return "You found the check. There is still another danger after this move."
+        }
+    }
+
+    private func missedAnswerHeadline(for prompt: CoachingPrompt) -> String {
+        switch prompt {
+        case .safeLocate:
+            return "One of your pieces does need help."
+        case .takeChooseMove:
+            return "There is a useful capture to find."
+        case let .opponentReply(opponent):
+            return "\(colorName(opponent)) has a reply to notice."
+        default:
+            return "There is something to find."
+        }
+    }
+
+    private func wakePurposeVerb(for purpose: CoachingWakePurpose) -> String {
+        switch purpose {
+        case .openingDevelopment:
+            return "bring a new piece into the game"
+        case .addsDefender:
+            return "help protect another piece"
+        case .createsThreat:
+            return "create a safe threat"
+        case .centralActivity:
+            return "move closer to the center"
+        case .castle:
+            return "help your king castle"
         }
     }
 

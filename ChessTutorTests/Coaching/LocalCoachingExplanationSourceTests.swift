@@ -186,76 +186,81 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ])
     }
 
-    func testTwoMissesOfferAndEmphasizeHint() {
-        let presentation = explainer.presentation(
-            for: context(
-                prompt: .safeLocate,
-                missesAtCurrentLevel: 2,
-                actions: [.noAnswer, .hint, .stop]
-            )
-        )
+    func testFirstMissEmphasizesHintWithoutChangingInstruction() {
+        let presentation = explainer.presentation(for: context(
+            prompt: .safeLocate,
+            missesAtCurrentLevel: 1,
+            actions: [.noAnswer, .hint, .stop]
+        ))
 
-        XCTAssertEqual(
-            presentation.instruction,
-            "Tap your piece, or choose I don’t see one. Want a hint?"
-        )
+        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose I don’t see one.")
         XCTAssertEqual(
             presentation.actions.first(where: { $0.action == .hint })?.prominence,
             .primary
         )
     }
 
-    func testFeedbackReplacesHeadlineAndRetainsCurrentInstruction() {
-        let cases: [(CoachingFeedback, String)] = [
-            (.correct, "Yes."),
-            (.correctAlternative, "Yes, that works too."),
+    func testFeedbackStatesAVisibleChessFact() {
+        let cases: [(CoachingPrompt, CoachingFeedback, String)] = [
+            (.safeLocate, .safePiece(piece: .bishop), "That bishop is safe right now."),
             (
-                .relevantButNonurgent(piece: .bishop),
-                "That bishop is threatened, but it isn’t in big danger."
-            ),
-            (.unrelatedTap, "That piece isn’t part of this problem."),
-            (.correctAbsence, "Right—there isn’t one."),
-            (.missedExistingAnswer, "There is one to find."),
-            (.dangerStillPresent(piece: .queen), "Your queen would still need help."),
-            (
-                .noRecognizedPurpose,
-                "That move looks safe, but give the piece a clear job."
+                .safeLocate,
+                .lowerPriorityThreat(piece: .pawn, urgentPiece: .knight),
+                "Yes, that pawn is threatened. Your knight is worth more, so help the knight first."
             ),
             (
-                .harmlessCheckFound,
-                "Yes. Black could check your king, but your move still works."
+                .safeLocate,
+                .nonurgentThreat(piece: .pawn),
+                "Yes, that pawn is threatened. We’re looking for a knight, bishop, rook, or queen Black could win."
+            ),
+            (.safeLocate, .expectedLearnerPiece, "Tap one of your pieces."),
+            (
+                .safeIdentifyAttacker(piece: .knight),
+                .notAttacker(piece: .bishop, target: .knight),
+                "That bishop isn’t attacking your knight."
             ),
             (
-                .concreteFlaw(kind: .mateInOne, affectedPiece: nil),
-                "Black could checkmate your king."
+                .safeIdentifyAttacker(piece: .knight),
+                .expectedAttacker(target: .knight),
+                "Tap a black piece attacking your knight."
             ),
             (
-                .concreteFlaw(kind: .check, affectedPiece: nil),
-                "Black could check your king."
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                .blockedWakePiece(piece: .rook),
+                "That rook can’t come out yet because other pieces are in the way."
             ),
             (
-                .concreteFlaw(kind: .materialLoss(points: 3), affectedPiece: .rook),
-                "Black could take your rook."
+                .opponentReply(opponent: .black),
+                .notReplyIssue,
+                "That piece doesn’t show a check or capture after this move."
             ),
             (
-                .concreteFlaw(kind: .materialLoss(points: 2), affectedPiece: nil),
-                "Black could win some material."
+                .safeResolve(target: .knight, attacker: .pawn),
+                .dangerStillPresent(attacker: .pawn, target: .knight),
+                "The pawn could still take your knight after that move."
             ),
         ]
 
-        for (feedback, headline) in cases {
-            let presentation = explainer.presentation(
-                for: context(
-                    prompt: .opponentReply(opponent: .black),
-                    feedback: feedback
-                )
-            )
-            XCTAssertEqual(presentation.headline, headline, "Unexpected feedback for \(feedback)")
-            XCTAssertEqual(
-                presentation.instruction,
-                "Tap the black checking piece, or tap your piece Black could take. Otherwise choose Looks safe."
-            )
+        for (prompt, feedback, headline) in cases {
+            let result = explainer.presentation(for: context(prompt: prompt, feedback: feedback))
+            XCTAssertEqual(result.headline, headline)
         }
+    }
+
+    func testCorrectAbsenceAcknowledgesAndAsksTheNextQuestion() {
+        let presentation = explainer.presentation(for: context(
+            prompt: .takeChooseMove,
+            feedback: .correctAbsence
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "Right—there isn’t one. Can one of your pieces make a useful capture?"
+        )
+        XCTAssertEqual(
+            presentation.instruction,
+            "Make the capture, or choose I don’t see one."
+        )
     }
 
     func testConcreteFeedbackNamesWhiteWhenWhiteIsTheOpponent() {
@@ -481,19 +486,26 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ]
         let feedback: [CoachingFeedback?] = [
             nil,
-            .correct,
-            .correctAlternative,
-            .relevantButNonurgent(piece: .bishop),
-            .unrelatedTap,
+            .safePiece(piece: .bishop),
+            .lowerPriorityThreat(piece: .pawn, urgentPiece: .knight),
+            .nonurgentThreat(piece: .pawn),
+            .expectedLearnerPiece,
+            .notCheckingPiece(piece: .bishop),
+            .notAttacker(piece: .bishop, target: .knight),
+            .expectedAttacker(target: .knight),
+            .blockedWakePiece(piece: .rook),
+            .notWakeCandidate(piece: .bishop, purpose: .centralActivity),
+            .notReplyIssue,
             .correctAbsence,
             .missedExistingAnswer,
             .concreteFlaw(kind: .materialLoss(points: 9), affectedPiece: .queen),
-            .dangerStillPresent(piece: .rook),
-            .noRecognizedPurpose,
+            .dangerStillPresent(attacker: .rook, target: .queen),
+            .noRecognizedPurpose(purpose: .centralActivity),
             .harmlessCheckFound,
+            .checkFoundOtherDangerRemains,
         ]
 
-        let copy = prompts.flatMap { prompt in
+        let feedbackCopy = prompts.flatMap { prompt in
             feedback.map { item in
                 let presentation = explainer.presentation(
                     for: context(prompt: prompt, feedback: item)
@@ -501,11 +513,34 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 return ([presentation.headline, presentation.instruction].compactMap { $0 })
                     .joined(separator: " ")
             }
-        }.joined(separator: " ").lowercased()
+        }.joined(separator: " ")
+        let hintCopy = prompts.map { prompt in
+            let presentation = explainer.presentation(
+                for: context(
+                    prompt: prompt,
+                    hintLevel: 1,
+                    actions: [.hint]
+                )
+            )
+            return ([presentation.headline, presentation.instruction].compactMap { $0 })
+                .joined(separator: " ")
+        }.joined(separator: " ")
+        let copy = "\(feedbackCopy) \(hintCopy)".lowercased()
 
         XCTAssertFalse(copy.contains("best"))
         XCTAssertFalse(copy.contains("wrong move"))
         XCTAssertNil(copy.range(of: #"\b[+-]?\d+(?:\.\d+)?\b"#, options: .regularExpression))
+
+        let prohibited = [
+            "job",
+            "part of this problem",
+            "big danger",
+            "tap the problem",
+        ]
+        for phrase in prohibited {
+            XCTAssertFalse(copy.contains(phrase), "Found prohibited copy: \(phrase)")
+        }
+        XCTAssertNotEqual(copy.trimmingCharacters(in: .whitespacesAndNewlines), "Yes.")
     }
 
     private func context(

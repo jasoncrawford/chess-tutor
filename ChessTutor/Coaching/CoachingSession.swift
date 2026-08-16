@@ -144,67 +144,129 @@ struct CoachingSession: Sendable {
         guard let advice = latestAdvice else { return [] }
         switch stage {
         case .checkLocate:
-            if advice.checkingPieces.contains(square) {
-                transition(to: .checkResolve, feedback: .correct)
-            } else {
-                recordMiss(.unrelatedTap)
-            }
+            handleCheckTap(square, advice: advice)
         case .safeLocate:
-            if advice.urgentProblems.contains(where: { $0.target == square }) {
-                selectedSafeTarget = square
-                selectedSafeAttacker = nil
-                transition(to: .safeIdentifyAttacker(target: square))
-            } else if let piece = advice.evaluation.request.committedState.board[square],
-                      piece.color == learner,
-                      advice.evaluation.opponentCaptureEstimates.contains(where: {
-                          $0.capturedSquare == square
-                      }) {
-                recordMiss(.relevantButNonurgent(piece: piece.kind))
-            } else {
-                recordMiss(.unrelatedTap)
-            }
+            handleSafeLocateTap(square, advice: advice)
         case let .safeIdentifyAttacker(target):
-            guard let problem = advice.urgentProblems.first(where: { $0.target == target }) else {
-                recordMiss(.unrelatedTap)
-                return []
-            }
-            if problem.captures.contains(where: { $0.move.from == square }) {
-                selectedSafeAttacker = square
-                transition(to: .safeResolve(target: target))
-            } else {
-                recordMiss(.unrelatedTap)
-            }
-        case .wakeChoosePiece:
-            let sources = wakeSources(in: advice)
-            if sources.contains(square) {
-                let purpose = wakePurpose(for: square, in: advice)
-                selectedWakePiece = square
-                selectedWakePurpose = purpose
-                transition(
-                    to: .wakeChooseMove(piece: square, purpose: purpose)
-                )
-                return [.selectSquare(square)]
-            }
-            recordMiss(.unrelatedTap)
+            handleSafeAttackerTap(square, target: target, advice: advice)
+        case let .wakeChoosePiece(purpose):
+            return handleWakeSourceTap(square, purpose: purpose, advice: advice)
         case let .opponentCheck(move, origin):
-            guard let assessment = advice.moveAssessments[move] else {
-                recordMiss(.unrelatedTap)
-                return []
-            }
-            let matchingIssues = assessment.opponentIssues.filter {
-                $0.answerSquares.contains(square)
-            }
-            guard let issue = matchingIssues.first(where: {
-                $0.severity == .reviseMove
-            }) ?? matchingIssues.first else {
-                recordMiss(.unrelatedTap)
-                return []
-            }
-            handleFoundIssue(issue, assessment: assessment, move: move, origin: origin)
+            handleOpponentReplyTap(square, move: move, origin: origin, advice: advice)
         default:
             break
         }
         return []
+    }
+
+    private mutating func handleCheckTap(_ square: Square, advice: CoachingAdvice) {
+        if advice.checkingPieces.contains(square) {
+            transition(to: .checkResolve)
+        } else {
+            recordMiss(.notCheckingPiece(piece: pieceKind(at: square)))
+        }
+    }
+
+    private mutating func handleSafeLocateTap(_ square: Square, advice: CoachingAdvice) {
+        let board = advice.evaluation.request.committedState.board
+        if advice.urgentProblems.contains(where: { $0.target == square }) {
+            selectedSafeTarget = square
+            selectedSafeAttacker = nil
+            transition(to: .safeIdentifyAttacker(target: square))
+        } else if let piece = board[square], piece.color == learner {
+            let isThreatened = advice.evaluation.opponentCaptureEstimates.contains {
+                $0.capturedSquare == square
+            }
+            if isThreatened {
+                if let urgent = advice.urgentProblems.first {
+                    recordMiss(.lowerPriorityThreat(
+                        piece: piece.kind,
+                        urgentPiece: urgent.piece.kind
+                    ))
+                } else {
+                    recordMiss(.nonurgentThreat(piece: piece.kind))
+                }
+            } else {
+                recordMiss(.safePiece(piece: piece.kind))
+            }
+        } else {
+            recordMiss(.expectedLearnerPiece)
+        }
+    }
+
+    private mutating func handleSafeAttackerTap(
+        _ square: Square,
+        target: Square,
+        advice: CoachingAdvice
+    ) {
+        guard let problem = advice.urgentProblems.first(where: { $0.target == target }) else {
+            recordMiss(.expectedAttacker(target: pieceKind(at: target) ?? .pawn))
+            return
+        }
+        if problem.captures.contains(where: { $0.move.from == square }) {
+            selectedSafeAttacker = square
+            transition(to: .safeResolve(target: target))
+        } else if let piece = advice.evaluation.request.committedState.board[square],
+                  piece.color == learner.opposite {
+            recordMiss(.notAttacker(
+                piece: piece.kind,
+                target: problem.piece.kind
+            ))
+        } else {
+            recordMiss(.expectedAttacker(target: problem.piece.kind))
+        }
+    }
+
+    private mutating func handleWakeSourceTap(
+        _ square: Square,
+        purpose: CoachingWakePurpose,
+        advice: CoachingAdvice
+    ) -> [CoachingDirective] {
+        let board = advice.evaluation.request.committedState.board
+        let sources = wakeSources(in: advice)
+        if sources.contains(square) {
+            let selectedPurpose = wakePurpose(for: square, in: advice)
+            selectedWakePiece = square
+            selectedWakePurpose = selectedPurpose
+            transition(to: .wakeChooseMove(piece: square, purpose: selectedPurpose))
+            return [.selectSquare(square)]
+        }
+        guard let piece = board[square], piece.color == learner else {
+            recordMiss(.expectedLearnerPiece)
+            return []
+        }
+        let allowed = LegalMoveGenerator.allowedMoves(
+            for: square,
+            by: learner,
+            in: advice.evaluation.request.committedState
+        )
+        let feedback: CoachingFeedback = allowed.isEmpty
+            ? .blockedWakePiece(piece: piece.kind)
+            : .notWakeCandidate(piece: piece.kind, purpose: purpose)
+        recordMiss(feedback)
+        return []
+    }
+
+    private mutating func handleOpponentReplyTap(
+        _ square: Square,
+        move: Move,
+        origin: CoachingMoveOrigin,
+        advice: CoachingAdvice
+    ) {
+        guard let assessment = advice.moveAssessments[move] else {
+            recordMiss(.notReplyIssue)
+            return
+        }
+        let matchingIssues = assessment.opponentIssues.filter {
+            $0.answerSquares.contains(square)
+        }
+        guard let issue = matchingIssues.first(where: {
+            $0.severity == .reviseMove
+        }) ?? matchingIssues.first else {
+            recordMiss(.notReplyIssue)
+            return
+        }
+        handleFoundIssue(issue, assessment: assessment, move: move, origin: origin)
     }
 
     private mutating func handleStagedMove(_ move: Move) -> [CoachingDirective] {
@@ -289,10 +351,9 @@ struct CoachingSession: Sendable {
         }
 
         if origin == .safe && !assessment.resolvesRequiredDanger {
-            let piece = unresolvedPieceKind(for: origin, advice: advice)
             returnToOrigin(
                 origin,
-                feedback: .dangerStillPresent(piece: piece),
+                feedback: unresolvedDangerFeedback(for: assessment, advice: advice),
                 preservingQuestionProgress: true
             )
             return
@@ -301,7 +362,7 @@ struct CoachingSession: Sendable {
         if origin == .wake && !hasWakePurpose(assessment.concepts) {
             returnToOrigin(
                 origin,
-                feedback: .noRecognizedPurpose,
+                feedback: .noRecognizedPurpose(purpose: selectedWakePurpose),
                 preservingQuestionProgress: true
             )
             return
@@ -320,7 +381,7 @@ struct CoachingSession: Sendable {
         } else if assessment.isAcceptable {
             complete(move: move, origin: origin, assessment: assessment)
         } else {
-            returnToOrigin(origin, feedback: .noRecognizedPurpose)
+            returnToOrigin(origin, feedback: .noRecognizedPurpose(purpose: selectedWakePurpose))
         }
     }
 
@@ -343,7 +404,7 @@ struct CoachingSession: Sendable {
             if issue.kind == .check,
                assessment.opponentIssues.contains(where: { $0.severity == .reviseMove }) {
                 missesAtCurrentLevel = 0
-                feedback = .correct
+                feedback = .checkFoundOtherDangerRemains
                 promptOverride = nil
                 rebuildPresentation()
                 return
@@ -520,16 +581,19 @@ struct CoachingSession: Sendable {
         return wakePurpose(for: source, in: advice)
     }
 
-    private func unresolvedPieceKind(
-        for origin: CoachingMoveOrigin,
+    private func unresolvedDangerFeedback(
+        for assessment: CoachingMoveAssessment,
         advice: CoachingAdvice
-    ) -> Piece.Kind {
-        if origin == .check { return .king }
-        if let target = selectedSafeTarget,
-           let problem = advice.urgentProblems.first(where: { $0.target == target }) {
-            return problem.piece.kind
-        }
-        return advice.urgentProblems.first?.piece.kind ?? .king
+    ) -> CoachingFeedback {
+        let target = selectedSafeTarget.flatMap(pieceKind(at:))
+            ?? advice.urgentProblems.first?.piece.kind
+            ?? .king
+        let attacker = assessment.opponentIssues.first {
+            if case .materialLoss = $0.kind { return true }
+            return false
+        }.flatMap { advice.evaluation.request.committedState.board[$0.reply.from]?.kind }
+            ?? selectedSafeAttacker.flatMap { pieceKind(at: $0) }
+        return .dangerStillPresent(attacker: attacker, target: target)
     }
 
     private func unprofitableCaptureFeedback(
