@@ -20,6 +20,147 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
     }
 
+    func testOpeningStartsWithoutCandidatesAndFirstHintRevealsSourcePieces() {
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.startingPositionAdvice)
+
+        XCTAssertNil(session.presentation?.hint)
+        XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
+
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.presentation?.hint, .candidatePieces)
+        XCTAssertEqual(
+            session.presentation?.focus.candidateSquares,
+            Set(CoachingTestFixtures.startingPositionAdvice.wakeOpportunities
+                .flatMap(\.moves).map(\.from))
+        )
+    }
+
+    func testSafeContextPersistsWithoutARequestedHint() {
+        var session = CoachingSession(learner: .white)
+        session.receive(CoachingTestFixtures.multipleDangerAdvice)
+        session.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
+
+        XCTAssertEqual(
+            session.presentation?.focus.emphasizedSquares,
+            [CoachingTestFixtures.whiteQueen]
+        )
+
+        session.handle(.squareTapped(CoachingTestFixtures.blackBishop))
+
+        XCTAssertEqual(
+            session.presentation?.focus.emphasizedSquares,
+            [CoachingTestFixtures.whiteQueen, CoachingTestFixtures.blackBishop]
+        )
+        XCTAssertEqual(session.presentation?.focus.paths, [CoachFocusPath(
+            source: CoachingTestFixtures.blackBishop,
+            destination: CoachingTestFixtures.whiteQueen,
+            role: .attacker
+        )])
+    }
+
+    func testSemanticHintsAlwaysRevealTheBoardFocusTheyName() {
+        var check = CoachingSession(learner: .white)
+        check.receive(CoachingTestFixtures.advice(
+            checking: [CoachingTestFixtures.blackBishop],
+            opponentHasCapture: true,
+            learnerHasCapture: false,
+            assessments: [CoachingTestFixtures.acceptableAssessment(
+                CoachingTestFixtures.safeMove,
+                concepts: [.pieceNeedsHelp]
+            )]
+        ))
+        check.handle(.actionChosen(.hint))
+        check.handle(.actionChosen(.hint))
+        let checkLocateHint = check.presentation?.hint
+
+        var safe = CoachingSession(learner: .white)
+        safe.receive(CoachingTestFixtures.multipleDangerAdvice)
+        safe.handle(.actionChosen(.hint))
+        safe.handle(.actionChosen(.hint))
+
+        var attacker = CoachingSession(learner: .white)
+        attacker.receive(CoachingTestFixtures.multipleDangerAdvice)
+        attacker.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
+        attacker.handle(.actionChosen(.hint))
+        attacker.handle(.actionChosen(.hint))
+        let safeAttackerHint = attacker.presentation?.hint
+
+        var take = CoachingSession(learner: .white)
+        take.receive(CoachingTestFixtures.takeAdvice)
+        take.handle(.actionChosen(.hint))
+
+        var wake = CoachingSession(learner: .white)
+        wake.receive(CoachingTestFixtures.startingPositionAdvice)
+        wake.handle(.actionChosen(.hint))
+        let wakeSourceHint = wake.presentation?.hint
+
+        let candidatePiecePresentations: [(String, CoachingPresentation?)] = [
+            ("check locate", check.presentation),
+            ("safe locate", safe.presentation),
+            ("safe attacker", attacker.presentation),
+            ("take move", take.presentation),
+            ("wake source", wake.presentation),
+        ]
+        for (name, presentation) in candidatePiecePresentations {
+            XCTAssertEqual(presentation?.hint, .candidatePieces, name)
+            XCTAssertFalse(presentation?.focus.candidateSquares.isEmpty == true, name)
+        }
+
+        check.handle(.squareTapped(CoachingTestFixtures.blackBishop))
+        check.handle(.actionChosen(.hint))
+        check.handle(.actionChosen(.hint))
+
+        var safeResolve = CoachingSession(learner: .white)
+        safeResolve.receive(CoachingTestFixtures.multipleDangerAdvice)
+        safeResolve.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
+        safeResolve.handle(.squareTapped(CoachingTestFixtures.blackBishop))
+        safeResolve.handle(.actionChosen(.hint))
+        safeResolve.handle(.actionChosen(.hint))
+
+        take.handle(.actionChosen(.hint))
+
+        wake.handle(.actionChosen(.hint))
+
+        var wakeMove = CoachingSession(learner: .white)
+        wakeMove.receive(CoachingTestFixtures.startingPositionAdvice)
+        wakeMove.handle(.squareTapped(CoachingTestFixtures.openingKnight))
+        wakeMove.handle(.actionChosen(.hint))
+        wakeMove.handle(.actionChosen(.hint))
+
+        let candidateMovePresentations: [(String, CoachingPresentation?)] = [
+            ("check resolve", check.presentation),
+            ("safe resolve", safeResolve.presentation),
+            ("take move", take.presentation),
+            ("wake source", wake.presentation),
+            ("wake move", wakeMove.presentation),
+        ]
+        for (name, presentation) in candidateMovePresentations {
+            XCTAssertEqual(presentation?.hint, .candidateMoves, name)
+            XCTAssertFalse(presentation?.focus.paths.isEmpty == true, name)
+        }
+
+        var sourceSelectionHints = CoachingSession(learner: .white)
+        sourceSelectionHints.receive(CoachingTestFixtures.multipleDangerAdvice)
+        sourceSelectionHints.handle(.actionChosen(.hint))
+        sourceSelectionHints.handle(.actionChosen(.hint))
+        let safeLocateHints = [
+            sourceSelectionHints.presentation?.hint,
+        ]
+
+        sourceSelectionHints.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
+        sourceSelectionHints.handle(.actionChosen(.hint))
+        sourceSelectionHints.handle(.actionChosen(.hint))
+        let sourceHints = safeLocateHints + [
+            sourceSelectionHints.presentation?.hint,
+            checkLocateHint,
+            safeAttackerHint,
+            wakeSourceHint,
+        ]
+        XCTAssertFalse(sourceHints.contains(.movementMarkers))
+    }
+
     func testSafeTranscriptAcceptsAnyUrgentPieceThenItsAttacker() {
         var session = CoachingSession(learner: .white)
         session.receive(CoachingTestFixtures.multipleDangerAdvice)
@@ -557,28 +698,23 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(explicit.presentation?.routine, [])
     }
 
-    func testFallbackHintsCapAtMarkerLevelWithoutPromisingMissingFocus() {
+    func testFallbackDoesNotOfferHintsWithoutFactualFocus() {
         var session = CoachingSession(learner: .white)
         session.receiveUnsupportedPosition()
 
         session.handle(.actionChosen(.hint))
         session.handle(.actionChosen(.hint))
 
-        XCTAssertEqual(session.hintLevel, 1)
+        XCTAssertEqual(session.hintLevel, 0)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Use the movement markers, then make a move on the board."
+            "Make a move on the board."
         )
-        XCTAssertEqual(session.presentation?.focus, CoachFocusPresentation(
-            emphasizedSquares: [],
-            candidateSquares: [],
-            paths: [],
-            pulseID: 1
-        ))
+        XCTAssertEqual(session.presentation?.focus, .empty)
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
-    func testReviseHintsCapAtMarkerLevelWithoutPromisingMissingFocus() {
+    func testRevisionDoesNotOfferHintsWithoutFactualFocus() {
         var session = CoachingSession(learner: .white)
         session.receive(CoachingTestFixtures.fallbackAdvice)
         session.handle(.moveStaged(CoachingTestFixtures.fallbackMove))
@@ -588,10 +724,10 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.actionChosen(.hint))
         session.handle(.actionChosen(.hint))
 
-        XCTAssertEqual(session.hintLevel, 1)
+        XCTAssertEqual(session.hintLevel, 0)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Use the movement markers, then make a move on the board."
+            "Move a piece on the board."
         )
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
@@ -613,8 +749,9 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.hintLevel, 2)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Look at the highlighted choices. Tap the piece giving check."
+            "Try one of the highlighted pieces."
         )
+        XCTAssertEqual(session.presentation?.hint, .candidatePieces)
         XCTAssertEqual(session.presentation?.focus.candidateSquares, [checker])
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
         XCTAssertTrue(session.presentation?.focus.paths.isEmpty == true)
@@ -630,8 +767,9 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.hintLevel, 2)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Look at the highlighted choices. Tap your piece, or choose I don’t see one."
+            "Try one of the highlighted pieces."
         )
+        XCTAssertEqual(session.presentation?.hint, .candidatePieces)
         XCTAssertEqual(
             session.presentation?.focus.candidateSquares,
             [CoachingTestFixtures.whiteQueen, CoachingTestFixtures.whiteRook]
@@ -641,23 +779,44 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
-    func testWakePieceHintsCapAtSuppliedCandidateSquares() {
+    func testWakePieceHintsRevealPurposeFilteredSourcesThenCandidateMoves() {
         var session = CoachingSession(learner: .white)
         session.receive(CoachingTestFixtures.startingPositionAdvice)
 
-        for _ in 0..<4 { session.handle(.actionChosen(.hint)) }
+        session.handle(.actionChosen(.hint))
 
-        XCTAssertEqual(session.hintLevel, 2)
-        XCTAssertEqual(
-            session.presentation?.instruction,
-            "Look at the highlighted choices. Tap the piece you want to move."
-        )
+        XCTAssertEqual(session.hintLevel, 1)
+        XCTAssertEqual(session.presentation?.hint, .candidatePieces)
         XCTAssertEqual(
             session.presentation?.focus.candidateSquares,
             [CoachingTestFixtures.openingKnight, CoachingTestFixtures.alternateKnight]
         )
+
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.hintLevel, 2)
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Try one of the highlighted paths, then make the move yourself."
+        )
+        XCTAssertEqual(session.presentation?.hint, .candidateMoves)
+        XCTAssertEqual(
+            session.presentation?.focus.candidateSquares,
+            [CoachingTestFixtures.openingKnightMove.to, CoachingTestFixtures.alternateKnightMove.to]
+        )
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
-        XCTAssertTrue(session.presentation?.focus.paths.isEmpty == true)
+        XCTAssertEqual(session.presentation?.focus.paths, [
+            CoachFocusPath(
+                source: CoachingTestFixtures.openingKnight,
+                destination: CoachingTestFixtures.openingKnightMove.to,
+                role: .candidate
+            ),
+            CoachFocusPath(
+                source: CoachingTestFixtures.alternateKnight,
+                destination: CoachingTestFixtures.alternateKnightMove.to,
+                role: .candidate
+            ),
+        ])
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
@@ -1169,7 +1328,7 @@ final class CoachingSessionTests: XCTestCase {
         }
     }
 
-    func testRepeatedIllegalMovesPreserveHintLevelAndCountMisses() {
+    func testRepeatedIllegalFallbackMovesPreserveZeroHintLevelAndCountMisses() {
         let move = CoachingTestFixtures.fallbackMove
         let illegal = CoachingMoveAssessment(
             move: move,
@@ -1192,7 +1351,7 @@ final class CoachingSessionTests: XCTestCase {
             session.handle(.moveStaged(move))
             session.receive(advice)
             XCTAssertEqual(session.stage, .fallbackChooseMove)
-            XCTAssertEqual(session.hintLevel, 1)
+            XCTAssertEqual(session.hintLevel, 0)
             XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
         }
         XCTAssertFalse(session.presentation?.instruction?.contains("Want a hint?") == true)
@@ -1227,34 +1386,35 @@ final class CoachingSessionTests: XCTestCase {
         }
     }
 
-    func testLevelThreeFocusShowsRelationshipWithoutCandidatePath() {
+    func testSafeAttackerHintsRevealRelationshipThenCandidatesWithoutInventingPersistentPath() {
         var session = CoachingSession(learner: .white)
         session.receive(CoachingTestFixtures.multipleDangerAdvice)
         session.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
 
         session.handle(.actionChosen(.hint))
-        session.handle(.actionChosen(.hint))
-        session.handle(.actionChosen(.hint))
 
-        XCTAssertEqual(session.hintLevel, 3)
+        XCTAssertEqual(session.hintLevel, 1)
+        XCTAssertEqual(session.presentation?.hint, .attackerRelationship)
         XCTAssertEqual(
             session.presentation?.focus.candidateSquares,
             [CoachingTestFixtures.blackBishop]
         )
         XCTAssertEqual(
             session.presentation?.focus.emphasizedSquares,
-            [CoachingTestFixtures.blackBishop, CoachingTestFixtures.whiteQueen]
+            [CoachingTestFixtures.whiteQueen]
         )
-        XCTAssertEqual(session.presentation?.focus.paths, [])
-
-        session.handle(.actionChosen(.hint))
-
-        XCTAssertEqual(session.hintLevel, 4)
         XCTAssertEqual(session.presentation?.focus.paths, [CoachFocusPath(
             source: CoachingTestFixtures.blackBishop,
             destination: CoachingTestFixtures.whiteQueen,
             role: .attacker
         )])
+
+        session.handle(.actionChosen(.hint))
+
+        XCTAssertEqual(session.hintLevel, 2)
+        XCTAssertEqual(session.presentation?.hint, .candidatePieces)
+        XCTAssertEqual(session.presentation?.focus.paths, [])
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
     private func opponentCheckSession(

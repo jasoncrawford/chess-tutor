@@ -66,8 +66,7 @@ struct CoachingSession: Sendable {
         switch advice.evaluation.request.context {
         case .start:
             tentativeMove = nil
-            selectedSafeTarget = nil
-            selectedSafeAttacker = nil
+            clearSafeFocus()
             selectedWakePiece = nil
             selectedWakePurpose = nil
             begin(with: advice)
@@ -80,8 +79,7 @@ struct CoachingSession: Sendable {
     mutating func receiveUnsupportedPosition() {
         latestAdvice = nil
         tentativeMove = nil
-        selectedSafeTarget = nil
-        selectedSafeAttacker = nil
+        clearSafeFocus()
         selectedWakePiece = nil
         selectedWakePurpose = nil
         transition(to: .fallbackChooseMove)
@@ -283,7 +281,7 @@ struct CoachingSession: Sendable {
         switch action {
         case .hint:
             guard presentation != nil,
-                  hintLevel < maximumHintLevel(for: stage)
+                  hintLevel < hintSteps(for: stage).count
             else { return [] }
             hintLevel += 1
             missesAtCurrentLevel = 0
@@ -313,6 +311,7 @@ struct CoachingSession: Sendable {
             handleLooksSafe()
             return []
         case .stop, .keepLooking:
+            clearSafeFocus()
             return [.stop(preservingTentativeMove: true)]
         case .done:
             guard case .complete = stage else { return [] }
@@ -548,6 +547,16 @@ struct CoachingSession: Sendable {
         Set(advice.wakeOpportunities.flatMap { $0.moves.map(\.from) })
     }
 
+    private func wakeSources(
+        for purpose: CoachingWakePurpose,
+        in advice: CoachingAdvice
+    ) -> Set<Square> {
+        Set(advice.wakeOpportunities
+            .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
+            .flatMap(\.moves)
+            .map(\.from))
+    }
+
     private func wakePurpose(
         for concept: CoachingConcept?,
         in advice: CoachingAdvice
@@ -642,6 +651,11 @@ struct CoachingSession: Sendable {
         rebuildPresentation()
     }
 
+    private mutating func clearSafeFocus() {
+        selectedSafeTarget = nil
+        selectedSafeAttacker = nil
+    }
+
     private mutating func transition(
         to newStage: CoachingStage,
         feedback newFeedback: CoachingFeedback? = nil,
@@ -663,16 +677,17 @@ struct CoachingSession: Sendable {
             presentation = nil
             return
         }
+        let hint = currentHint(for: stage)
         presentation = explainer.presentation(for: CoachingPresentationContext(
             prompt: prompt,
             feedback: feedback,
             learner: learner,
-            hintLevel: hintLevel,
+            hint: hint,
             missesAtCurrentLevel: missesAtCurrentLevel,
             routine: routine(for: stage),
             actions: actions(for: stage),
             boardTask: boardTask(for: stage),
-            focus: focus(for: stage)
+            focus: focus(for: stage, hint: hint)
         ))
     }
 
@@ -771,7 +786,7 @@ struct CoachingSession: Sendable {
     }
 
     private func actions(for stage: CoachingStage) -> [CoachingAction] {
-        let hintActions: [CoachingAction] = hintLevel < maximumHintLevel(for: stage)
+        let hintActions: [CoachingAction] = hintLevel < hintSteps(for: stage).count
             ? [.hint]
             : []
         switch stage {
@@ -788,40 +803,126 @@ struct CoachingSession: Sendable {
         }
     }
 
-    private func maximumHintLevel(for stage: CoachingStage) -> Int {
+    private func hintSteps(for stage: CoachingStage) -> [CoachingHint] {
         switch stage {
-        case .awaitingAdvice, .complete:
-            return 0
-        default:
-            if answerSquares(for: stage).isEmpty { return 1 }
-            return focusPaths(for: stage).isEmpty ? 2 : 4
+        case .checkLocate:
+            return [.checkMarker, .candidatePieces]
+        case .checkResolve:
+            return candidateMoves(for: stage).isEmpty ? [] : [.candidatePieces, .candidateMoves]
+        case .safeLocate:
+            return [.dangerMarker, .candidatePieces]
+        case .safeIdentifyAttacker:
+            return [.attackerRelationship, .candidatePieces]
+        case .safeResolve:
+            return candidateMoves(for: stage).isEmpty
+                ? [.safeResponseIdeas]
+                : [.safeResponseIdeas, .candidateMoves]
+        case .takeChooseMove:
+            return candidateMoves(for: stage).isEmpty ? [] : [.candidatePieces, .candidateMoves]
+        case let .wakeChoosePiece(purpose):
+            guard let advice = latestAdvice,
+                  !wakeSources(for: purpose, in: advice).isEmpty
+            else { return [] }
+            return [.candidatePieces, .candidateMoves]
+        case .wakeChooseMove:
+            return candidateMoves(for: stage).isEmpty
+                ? [.movementMarkers]
+                : [.movementMarkers, .candidateMoves]
+        case .opponentCheck:
+            return opponentIssueAnswerSquares(for: stage).isEmpty
+                ? [.replyMarkers]
+                : [.replyMarkers, .attackerRelationship]
+        case .awaitingAdvice, .fallbackChooseMove, .reviseMove, .complete:
+            return []
         }
     }
 
-    private func focus(for stage: CoachingStage) -> CoachFocusPresentation {
-        guard hintLevel >= 2 else {
-            return CoachFocusPresentation(
-                emphasizedSquares: [],
-                candidateSquares: [],
-                paths: [],
-                pulseID: pulseID
-            )
-        }
-        let candidates = answerSquares(for: stage)
-        let relationshipPaths = hintLevel >= 3 ? focusPaths(for: stage) : []
-        let paths = hintLevel >= 4 ? relationshipPaths : []
-        let emphasized = hintLevel >= 3
-            ? candidates.union(relationshipPaths.flatMap { [$0.source, $0.destination] })
-            : []
+    private func currentHint(for stage: CoachingStage) -> CoachingHint? {
+        let steps = hintSteps(for: stage)
+        guard hintLevel > 0, hintLevel <= steps.count else { return nil }
+        return steps[hintLevel - 1]
+    }
+
+    private func focus(
+        for stage: CoachingStage,
+        hint: CoachingHint?
+    ) -> CoachFocusPresentation {
+        let persistent = persistentFocus(for: stage)
+        let hinted = hintFocus(for: stage, hint: hint)
         return CoachFocusPresentation(
-            emphasizedSquares: emphasized,
-            candidateSquares: candidates,
-            paths: Set(paths),
+            emphasizedSquares: persistent.emphasizedSquares.union(hinted.emphasizedSquares),
+            candidateSquares: hinted.candidateSquares,
+            paths: persistent.paths.union(hinted.paths),
             pulseID: pulseID
         )
     }
 
-    private func answerSquares(for stage: CoachingStage) -> Set<Square> {
+    private func hintFocus(
+        for stage: CoachingStage,
+        hint: CoachingHint?
+    ) -> CoachFocusPresentation {
+        guard let hint else { return .empty }
+        switch hint {
+        case .candidatePieces:
+            return CoachFocusPresentation(
+                emphasizedSquares: [],
+                candidateSquares: candidateSourceSquares(for: stage),
+                paths: [],
+                pulseID: pulseID
+            )
+        case .candidateMoves:
+            return CoachFocusPresentation(
+                emphasizedSquares: [],
+                candidateSquares: candidateDestinationSquares(for: stage),
+                paths: candidatePaths(for: stage),
+                pulseID: pulseID
+            )
+        case .attackerRelationship:
+            let attackerSquares = opponentIssueAnswerSquares(for: stage)
+            return CoachFocusPresentation(
+                emphasizedSquares: [],
+                candidateSquares: attackerSquares.isEmpty
+                    ? candidateSourceSquares(for: stage)
+                    : attackerSquares,
+                paths: candidatePaths(for: stage),
+                pulseID: pulseID
+            )
+        case .checkMarker, .dangerMarker, .replyMarkers,
+             .safeResponseIdeas, .movementMarkers:
+            return .empty
+        }
+    }
+
+    private func persistentFocus(for stage: CoachingStage) -> CoachFocusPresentation {
+        switch stage {
+        case let .safeIdentifyAttacker(target):
+            return CoachFocusPresentation(
+                emphasizedSquares: [target],
+                candidateSquares: [],
+                paths: [],
+                pulseID: pulseID
+            )
+        case let .safeResolve(target):
+            guard let attacker = selectedSafeAttacker else {
+                return CoachFocusPresentation(
+                    emphasizedSquares: [target],
+                    candidateSquares: [],
+                    paths: [],
+                    pulseID: pulseID
+                )
+            }
+            return CoachFocusPresentation(
+                emphasizedSquares: [target, attacker],
+                candidateSquares: [],
+                paths: [CoachFocusPath(source: attacker, destination: target, role: .attacker)],
+                pulseID: pulseID
+            )
+        default:
+            return .empty
+        }
+    }
+
+    private func candidateSourceSquares(for stage: CoachingStage) -> Set<Square> {
         guard let advice = latestAdvice else { return [] }
         switch stage {
         case .checkLocate:
@@ -832,42 +933,50 @@ struct CoachingSession: Sendable {
             return Set(advice.urgentProblems
                 .first(where: { $0.target == target })?
                 .captures.map(\.move.from) ?? [])
-        case .wakeChoosePiece:
-            return wakeSources(in: advice)
-        case let .opponentCheck(move, _):
-            return Set(advice.moveAssessments[move]?.opponentIssues
-                .flatMap(\.answerSquares) ?? [])
-        case .checkResolve, .safeResolve, .takeChooseMove, .wakeChooseMove:
-            return Set(candidateMoves(for: stage).map(\.to))
+        case .checkResolve, .takeChooseMove:
+            return Set(candidateMoves(for: stage).map(\.from))
+        case let .wakeChoosePiece(purpose):
+            return wakeSources(for: purpose, in: advice)
         default:
             return []
         }
     }
 
-    private func focusPaths(for stage: CoachingStage) -> [CoachFocusPath] {
+    private func candidateDestinationSquares(for stage: CoachingStage) -> Set<Square> {
+        Set(candidateMoves(for: stage).map(\.to))
+    }
+
+    private func candidatePaths(for stage: CoachingStage) -> Set<CoachFocusPath> {
         guard let advice = latestAdvice else { return [] }
         switch stage {
         case let .safeIdentifyAttacker(target):
-            return advice.urgentProblems
+            return Set(advice.urgentProblems
                 .first(where: { $0.target == target })?
                 .captures.map {
                     CoachFocusPath(source: $0.move.from, destination: target, role: .attacker)
-                } ?? []
+                } ?? [])
         case let .opponentCheck(move, _):
-            return advice.moveAssessments[move]?.opponentIssues.map {
+            return Set(advice.moveAssessments[move]?.opponentIssues.map {
                 CoachFocusPath(
                     source: $0.reply.from,
                     destination: $0.reply.to,
                     role: .attacker
                 )
-            } ?? []
-        case .checkResolve, .safeResolve, .takeChooseMove, .wakeChooseMove:
-            return candidateMoves(for: stage).map {
+            } ?? [])
+        case .checkResolve, .safeResolve, .takeChooseMove,
+             .wakeChoosePiece, .wakeChooseMove:
+            return Set(candidateMoves(for: stage).map {
                 CoachFocusPath(source: $0.from, destination: $0.to, role: .candidate)
-            }
+            })
         default:
             return []
         }
+    }
+
+    private func opponentIssueAnswerSquares(for stage: CoachingStage) -> Set<Square> {
+        guard case let .opponentCheck(move, _) = stage else { return [] }
+        return Set(latestAdvice?.moveAssessments[move]?.opponentIssues
+            .flatMap(\.answerSquares) ?? [])
     }
 
     private func candidateMoves(for stage: CoachingStage) -> [Move] {
@@ -883,8 +992,15 @@ struct CoachingSession: Sendable {
                 .map(\.move)
         case .takeChooseMove:
             return advice.takeOpportunities.flatMap(\.moves)
-        case let .wakeChooseMove(piece, _):
-            return advice.wakeOpportunities.flatMap(\.moves).filter { $0.from == piece }
+        case let .wakeChoosePiece(purpose):
+            return advice.wakeOpportunities
+                .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
+                .flatMap(\.moves)
+        case let .wakeChooseMove(piece, purpose):
+            return advice.wakeOpportunities
+                .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
+                .flatMap(\.moves)
+                .filter { $0.from == piece }
         default:
             return []
         }

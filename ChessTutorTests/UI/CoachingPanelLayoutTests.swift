@@ -130,7 +130,7 @@ final class CoachingPanelLayoutTests: XCTestCase {
             prompt: prompt,
             feedback: nil,
             learner: .white,
-            hintLevel: 0,
+            hint: nil,
             missesAtCurrentLevel: 0,
             routine: [.safeCleared, .takeCleared, .wakeCurrent],
             actions: actions,

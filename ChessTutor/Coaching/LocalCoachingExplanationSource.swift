@@ -6,6 +6,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         return CoachingPresentation(
             headline: headline(for: context, base: base.headline),
             instruction: instruction,
+            hint: context.hint,
             routine: context.routine,
             actions: context.actions.map {
                 actionPresentation(
@@ -161,54 +162,35 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         base: String?
     ) -> String? {
         guard let base else { return nil }
-
-        let hinted: String
-        switch context.hintLevel {
-        case ...0:
-            hinted = base
-        case 1:
-            hinted = levelOneInstruction(for: context.prompt, base: base)
-        case 2:
-            hinted = "Look at the highlighted choices. \(base)"
-        case 3:
-            hinted = "Look at the highlighted pieces and their connection. \(base)"
-        default:
-            switch context.boardTask {
-            case .none:
-                hinted = base
-            case .identify:
-                hinted = "Follow the highlighted path, then tap the piece yourself."
-            case .move:
-                hinted = "Follow the highlighted path, then make the move yourself."
-            }
-        }
-
-        return hinted
+        guard let hint = context.hint else { return base }
+        return hintedInstruction(for: hint, prompt: context.prompt, base: base)
     }
 
-    private func levelOneInstruction(for prompt: CoachingPrompt, base: String) -> String {
-        switch prompt {
-        case .checkLocate:
-            return "Follow the check marker, then tap the checking piece."
-        case .checkResolve:
-            return "Use the movement markers to find a move that makes the check marker disappear."
-        case .safeLocate:
-            return "Look for a danger marker. Tap your piece, or choose I don’t see one."
-        case .safeIdentifyAttacker:
-            return "Follow the danger marker to the attacker, then tap it."
-        case .safeResolve:
-            return "Use the defense and movement markers, then make a move."
-        case .takeChooseMove:
-            return "Use the capture markers to look for a helpful capture."
-        case .wakeChoosePiece:
-            return "Look at the movement markers for a piece that could help."
-        case .wakeChooseMove:
-            return "Use the movement markers to find a square where it can help."
-        case .opponentReply:
-            return "Look for a check or danger marker, then tap a checking piece or a piece Black could take."
-        case .fallbackChooseMove, .reviseMove, .illegalKingSafety:
-            return "Use the movement markers, then make a move on the board."
-        case .complete:
+    private func hintedInstruction(
+        for hint: CoachingHint,
+        prompt: CoachingPrompt,
+        base: String
+    ) -> String {
+        switch (hint, prompt) {
+        case (.dangerMarker, .safeLocate):
+            return "Look for the red danger marker, then tap your piece."
+        case (.candidatePieces, .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true))):
+            return "Try one of the highlighted knights or center pawns."
+        case let (.attackerRelationship, .safeIdentifyAttacker(piece)):
+            return "Follow the highlighted line to the piece attacking your \(piece.rawValue)."
+        case let (.safeResponseIdeas, .safeResolve(target, _)):
+            return "Try moving your \(target.rawValue), protecting it, or taking the attacker."
+        case let (.movementMarkers, .wakeChooseMove(piece, _)):
+            return "Use the movement markers to choose where your \(piece.rawValue) should go."
+        case (.replyMarkers, .opponentReply):
+            return "Look for a red danger marker or a check marker."
+        case (.candidatePieces, _):
+            return "Try one of the highlighted pieces."
+        case (.candidateMoves, _):
+            return "Try one of the highlighted paths, then make the move yourself."
+        case (.checkMarker, .checkLocate):
+            return "Look for the check marker, then tap the checking piece."
+        default:
             return base
         }
     }

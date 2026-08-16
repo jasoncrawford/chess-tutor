@@ -248,6 +248,17 @@ enum CoachingActionProminence: Equatable, Sendable {
     case quiet
 }
 
+enum CoachingHint: Equatable, Sendable {
+    case checkMarker
+    case dangerMarker
+    case replyMarkers
+    case candidatePieces
+    case attackerRelationship
+    case safeResponseIdeas
+    case movementMarkers
+    case candidateMoves
+}
+
 struct CoachingActionPresentation: Equatable, Sendable {
     let action: CoachingAction
     let title: String
@@ -259,7 +270,7 @@ struct CoachingPresentationContext: Equatable, Sendable {
     let prompt: CoachingPrompt
     let feedback: CoachingFeedback?
     let learner: PieceColor
-    let hintLevel: Int
+    let hint: CoachingHint?
     let missesAtCurrentLevel: Int
     let routine: [CoachingRoutineState]
     let actions: [CoachingAction]
@@ -270,6 +281,7 @@ struct CoachingPresentationContext: Equatable, Sendable {
 struct CoachingPresentation: Equatable, Sendable {
     let headline: String
     let instruction: String?
+    let hint: CoachingHint?
     let routine: [CoachingRoutineState]
     let actions: [CoachingActionPresentation]
     let boardTask: CoachingBoardTask

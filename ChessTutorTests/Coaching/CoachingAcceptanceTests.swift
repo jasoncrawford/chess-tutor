@@ -344,7 +344,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.state.moveHistory.isEmpty)
     }
 
-    func testIncorrectTapsAndFourExplicitHintsProgressWithoutMovingAPiece() async {
+    func testIncorrectTapsAndFiniteSemanticHintsProgressWithoutMovingAPiece() async {
         let target = Square(file: .d, rank: 4)
         let attacker = Square(file: .b, rank: 6)
         let unrelated = Square(file: .h, rank: 1)
@@ -370,24 +370,21 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         _ = session.chooseCoachingAction(.hint)
         XCTAssertEqual(
-            session.coachingPresentation?.instruction,
-            "Follow the danger marker to the attacker, then tap it."
+            session.coachingPresentation?.hint,
+            .attackerRelationship
         )
-        _ = session.chooseCoachingAction(.hint)
-        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [attacker])
-        XCTAssertTrue(session.coachingPresentation?.instruction?.contains("highlighted choices") == true)
-        _ = session.chooseCoachingAction(.hint)
-        XCTAssertEqual(session.coachingPresentation?.focus.emphasizedSquares, [target, attacker])
-        XCTAssertTrue(session.coachingPresentation?.instruction?.contains("their connection") == true)
-        _ = session.chooseCoachingAction(.hint)
         XCTAssertEqual(session.coachingPresentation?.focus.paths, [CoachFocusPath(
             source: attacker,
             destination: target,
             role: .attacker
         )])
+        _ = session.chooseCoachingAction(.hint)
+        XCTAssertEqual(session.coachingPresentation?.hint, .candidatePieces)
+        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [attacker])
+        XCTAssertFalse(session.coachingPresentation?.actions.map(\.action).contains(.hint) == true)
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
-            "Follow the highlighted path, then tap the piece yourself."
+            "Try one of the highlighted pieces."
         )
         XCTAssertEqual(session.state.board, unchangedBoard)
         XCTAssertTrue(session.state.moveHistory.isEmpty)

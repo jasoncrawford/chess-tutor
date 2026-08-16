@@ -331,7 +331,6 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         let presentation = explainer.presentation(
             for: context(
                 prompt: .wakeChoosePiece(purpose: .centralActivity),
-                hintLevel: 4,
                 routine: routine,
                 boardTask: boardTask,
                 focus: focus
@@ -343,127 +342,40 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(presentation.focus, focus)
     }
 
-    func testHintLevelsUseOnlyTheSuppliedSemanticFocusAndNeverStageAMove() throws {
-        let attackerPath = CoachFocusPath(
-            source: Square(file: .d, rank: 7),
-            destination: Square(file: .d, rank: 4),
-            role: .attacker
-        )
-        let candidatePath = CoachFocusPath(
-            source: Square(file: .b, rank: 1),
-            destination: Square(file: .c, rank: 3),
-            role: .candidate
-        )
-        let focusByLevel: [Int: CoachFocusPresentation] = [
-            0: .empty,
-            1: .empty,
-            2: CoachFocusPresentation(
-                emphasizedSquares: [],
-                candidateSquares: [Square(file: .d, rank: 4)],
-                paths: [],
-                pulseID: 2
-            ),
-            3: CoachFocusPresentation(
-                emphasizedSquares: [Square(file: .d, rank: 7), Square(file: .d, rank: 4)],
-                candidateSquares: [Square(file: .d, rank: 4)],
-                paths: [attackerPath],
-                pulseID: 3
-            ),
-            4: CoachFocusPresentation(
-                emphasizedSquares: [Square(file: .b, rank: 1), Square(file: .c, rank: 3)],
-                candidateSquares: [Square(file: .c, rank: 3)],
-                paths: [candidatePath],
-                pulseID: 4
-            ),
-        ]
-        let instructionByLevel: [Int: String] = [
-            0: "Tap the black piece.",
-            1: "Follow the danger marker to the attacker, then tap it.",
-            2: "Look at the highlighted choices. Tap the black piece.",
-            3: "Look at the highlighted pieces and their connection. Tap the black piece.",
-            4: "Follow the highlighted path, then make the move yourself.",
-        ]
-
-        for level in 0...4 {
-            let expectedFocus = try XCTUnwrap(focusByLevel[level])
-            let presentation = explainer.presentation(
-                for: context(
-                    prompt: level == 4
-                        ? .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true))
-                        : .safeIdentifyAttacker(piece: .queen),
-                    hintLevel: level,
-                    boardTask: level == 4 ? .move : .identify(allowsMoveRevision: false),
-                    focus: expectedFocus
-                )
-            )
-
-            XCTAssertEqual(presentation.focus, expectedFocus)
-            XCTAssertEqual(
-                presentation.boardTask,
-                level == 4 ? .move : .identify(allowsMoveRevision: false)
-            )
-            XCTAssertEqual(
-                presentation.instruction,
-                try XCTUnwrap(instructionByLevel[level])
-            )
-        }
-    }
-
-    func testLevelFourIdentificationNamesTheSuppliedPathWithoutMovingAPiece() {
-        let focus = CoachFocusPresentation(
-            emphasizedSquares: [Square(file: .d, rank: 7), Square(file: .d, rank: 4)],
-            candidateSquares: [Square(file: .d, rank: 7)],
-            paths: [CoachFocusPath(
-                source: Square(file: .d, rank: 7),
-                destination: Square(file: .d, rank: 4),
-                role: .attacker
-            )],
-            pulseID: 4
-        )
-
-        let presentation = explainer.presentation(
-            for: context(
-                prompt: .safeIdentifyAttacker(piece: .queen),
-                hintLevel: 4,
-                boardTask: .identify(allowsMoveRevision: false),
-                focus: focus
-            )
-        )
-
-        XCTAssertEqual(
-            presentation.instruction,
-            "Follow the highlighted path, then tap the piece yourself."
-        )
-        XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
-        XCTAssertEqual(presentation.focus, focus)
-    }
-
-    func testLevelOneInstructionsReferToExistingBoardGuidance() {
-        let cases: [(CoachingPrompt, String)] = [
+    func testHintLanguageNamesOnlyItsSemanticClue() {
+        let cases: [(CoachingPrompt, CoachingHint, String)] = [
+            (.safeLocate, .dangerMarker, "Look for the red danger marker, then tap your piece."),
             (
-                .safeLocate,
-                "Look for a danger marker. Tap your piece, or choose I don’t see one."
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                .candidatePieces,
+                "Try one of the highlighted knights or center pawns."
             ),
             (
-                .safeIdentifyAttacker(piece: .queen),
-                "Follow the danger marker to the attacker, then tap it."
+                .safeIdentifyAttacker(piece: .knight),
+                .attackerRelationship,
+                "Follow the highlighted line to the piece attacking your knight."
             ),
             (
-                .safeResolve(target: .queen, attacker: .rook),
-                "Use the defense and movement markers, then make a move."
+                .safeResolve(target: .knight, attacker: .pawn),
+                .safeResponseIdeas,
+                "Try moving your knight, protecting it, or taking the attacker."
             ),
             (
-                .wakeChooseMove(piece: .bishop, purpose: .openingDevelopment(firstMove: false)),
-                "Use the movement markers to find a square where it can help."
+                .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
+                .movementMarkers,
+                "Use the movement markers to choose where your knight should go."
+            ),
+            (
+                .opponentReply(opponent: .black),
+                .replyMarkers,
+                "Look for a red danger marker or a check marker."
             ),
         ]
 
-        for (prompt, instruction) in cases {
-            let presentation = explainer.presentation(
-                for: context(prompt: prompt, hintLevel: 1)
-            )
-            XCTAssertEqual(presentation.instruction, instruction)
-            XCTAssertEqual(presentation.focus, .empty)
+        for (prompt, hint, instruction) in cases {
+            let result = explainer.presentation(for: context(prompt: prompt, hint: hint))
+            XCTAssertEqual(result.instruction, instruction)
+            XCTAssertEqual(result.hint, hint)
         }
     }
 
@@ -518,7 +430,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             let presentation = explainer.presentation(
                 for: context(
                     prompt: prompt,
-                    hintLevel: 1,
+                    hint: .candidatePieces,
                     actions: [.hint]
                 )
             )
@@ -547,7 +459,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         prompt: CoachingPrompt,
         feedback: CoachingFeedback? = nil,
         learner: PieceColor = .white,
-        hintLevel: Int = 0,
+        hint: CoachingHint? = nil,
         missesAtCurrentLevel: Int = 0,
         routine: [CoachingRoutineState] = [],
         actions: [CoachingAction] = [],
@@ -558,7 +470,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             prompt: prompt,
             feedback: feedback,
             learner: learner,
-            hintLevel: hintLevel,
+            hint: hint,
             missesAtCurrentLevel: missesAtCurrentLevel,
             routine: routine,
             actions: actions,
