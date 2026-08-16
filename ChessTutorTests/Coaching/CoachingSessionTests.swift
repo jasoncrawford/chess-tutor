@@ -406,6 +406,19 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
         XCTAssertTrue(session.presentation?.focus.paths.isEmpty == true)
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
+
+        session.handle(.positionChanged(revision: 3))
+
+        XCTAssertEqual(session.stage, .safeResolve(target: queen))
+        XCTAssertEqual(session.presentation?.headline, "The rook could still take your rook after that move.")
+        XCTAssertEqual(session.presentation?.hint, .candidateMoves)
+        XCTAssertEqual(session.presentation?.focus.emphasizedSquares, [queen, queenAttacker])
+        XCTAssertFalse(session.presentation?.focus.candidateSquares.isEmpty == true)
+        XCTAssertTrue(session.presentation?.focus.paths.contains(CoachFocusPath(
+            source: queenAttacker,
+            destination: queen,
+            role: .attacker
+        )) == true)
     }
 
     func testCheckAndDoubleCheckAcceptEveryCheckingPieceWithoutSelectingIt() {
@@ -1588,6 +1601,48 @@ final class CoachingSessionTests: XCTestCase {
             XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true, name)
             XCTAssertTrue(session.presentation?.focus.paths.isEmpty == true, name)
         }
+
+        let checkHeadline = check.presentation?.headline
+        check.handle(.positionChanged(revision: 8))
+        XCTAssertEqual(check.stage, .checkResolve)
+        XCTAssertEqual(check.presentation?.headline, checkHeadline)
+        XCTAssertTrue(check.presentation?.actions.map(\.action).contains(.hint) == true)
+        check.handle(.actionChosen(.hint))
+        XCTAssertEqual(check.presentation?.hint, .candidatePieces)
+        XCTAssertEqual(check.presentation?.focus.candidateSquares, [alternative.from])
+
+        let takeHeadline = take.presentation?.headline
+        take.handle(.positionChanged(revision: 8))
+        XCTAssertEqual(take.stage, .takeChooseMove)
+        XCTAssertEqual(take.presentation?.headline, takeHeadline)
+        XCTAssertTrue(take.presentation?.actions.map(\.action).contains(.hint) == true)
+        take.handle(.actionChosen(.hint))
+        XCTAssertEqual(take.presentation?.hint, .candidatePieces)
+        XCTAssertEqual(take.presentation?.focus.candidateSquares, [capture.from])
+
+        let wakeHeadline = wake.presentation?.headline
+        wake.handle(.positionChanged(revision: 8))
+        XCTAssertEqual(
+            wake.stage,
+            .wakeChooseMove(
+                piece: CoachingTestFixtures.openingKnight,
+                purpose: .openingDevelopment(firstMove: true)
+            )
+        )
+        XCTAssertEqual(wake.presentation?.headline, wakeHeadline)
+        XCTAssertTrue(wake.presentation?.actions.map(\.action).contains(.hint) == true)
+        wake.handle(.actionChosen(.hint))
+        wake.handle(.actionChosen(.hint))
+        XCTAssertEqual(wake.presentation?.hint, .candidateMoves)
+        XCTAssertEqual(
+            wake.presentation?.focus.candidateSquares,
+            [CoachingTestFixtures.openingKnightMove.to]
+        )
+        XCTAssertEqual(wake.presentation?.focus.paths, [CoachFocusPath(
+            source: CoachingTestFixtures.openingKnight,
+            destination: CoachingTestFixtures.openingKnightMove.to,
+            role: .candidate
+        )])
     }
 
     func testLegalCheckMoveAdvancesEvenWhenSeparateDangerIsUnresolved() {

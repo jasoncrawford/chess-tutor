@@ -445,20 +445,24 @@ struct CoachingSession: Sendable {
 
     private mutating func invalidateTentativeMoveIfNeeded() {
         guard tentativeMove != nil else { return }
-        let origin: CoachingMoveOrigin?
         switch stage {
         case let .awaitingAdvice(storedOrigin):
-            origin = storedOrigin
+            guard let storedOrigin else { return }
+            tentativeMove = nil
+            latestAdvice = nil
+            transition(to: .reviseMove(origin: storedOrigin))
         case let .opponentCheck(_, storedOrigin),
              let .complete(_, storedOrigin, _):
-            origin = storedOrigin
+            tentativeMove = nil
+            latestAdvice = nil
+            transition(to: .reviseMove(origin: storedOrigin))
+        case .checkResolve, .safeResolve, .takeChooseMove, .wakeChooseMove,
+             .fallbackChooseMove, .reviseMove:
+            tentativeMove = nil
+            rebuildPresentation()
         default:
-            origin = nil
+            break
         }
-        guard let origin else { return }
-        tentativeMove = nil
-        latestAdvice = nil
-        transition(to: .reviseMove(origin: origin))
     }
 
     private mutating func returnToOrigin(
