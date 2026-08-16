@@ -112,7 +112,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .opponentReply(opponent: .white),
                 "Could White check your king or win one of your pieces?",
-                "Tap the black checking piece, or tap your piece White could take. Otherwise choose Looks safe."
+                "Tap the white checking piece, or tap your piece White could take. Otherwise choose Looks safe."
             ),
             (
                 .fallbackChooseMove,
@@ -232,7 +232,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .opponentReply(opponent: .black),
                 .notReplyIssue,
-                "That piece doesn’t show a check or capture after this move."
+                "That square doesn’t show a check or capture after this move."
             ),
             (
                 .safeResolve(target: .knight, attacker: .pawn),
@@ -273,6 +273,19 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.headline, "White could check your king.")
+    }
+
+    func testBlackLearnerSafePromptNamesWhiteAsTheAttacker() {
+        let presentation = explainer.presentation(for: context(
+            prompt: .safeIdentifyAttacker(piece: .knight),
+            learner: .black
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "You found the knight. What white piece is attacking it?"
+        )
+        XCTAssertEqual(presentation.instruction, "Tap the white piece.")
     }
 
     func testCompletionNamesExactlyOneSuppliedVerifiedIdea() {

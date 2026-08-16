@@ -357,6 +357,7 @@ enum CoachingTestFixtures {
         state: GameState = coachingState,
         tentativeMove: Move? = nil,
         context: CoachingRequest.Context = .start,
+        learner: PieceColor = .white,
         checking: Set<Square> = [],
         opponentHasCapture: Bool,
         learnerHasCapture: Bool,
@@ -373,7 +374,7 @@ enum CoachingTestFixtures {
         let request = CoachingRequest(
             committedState: state,
             tentativeMove: tentativeMove,
-            learner: .white,
+            learner: learner,
             positionRevision: 7,
             context: context
         )

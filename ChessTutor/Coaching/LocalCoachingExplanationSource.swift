@@ -1,6 +1,6 @@
 struct LocalCoachingExplanationSource: CoachingExplaining {
     func presentation(for context: CoachingPresentationContext) -> CoachingPresentation {
-        let base = baseCopy(for: context.prompt)
+        let base = baseCopy(for: context.prompt, learner: context.learner)
         let instruction = instruction(for: context, base: base.instruction)
 
         return CoachingPresentation(
@@ -46,7 +46,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         }
     }
 
-    private func baseCopy(for prompt: CoachingPrompt) -> (headline: String, instruction: String?) {
+    private func baseCopy(
+        for prompt: CoachingPrompt,
+        learner: PieceColor
+    ) -> (headline: String, instruction: String?) {
         switch prompt {
         case .checkLocate:
             return (
@@ -64,9 +67,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 "Tap your piece, or choose I don’t see one."
             )
         case let .safeIdentifyAttacker(piece):
+            let opponent = colorName(learner.opposite)
             return (
-                "You found the \(piece.rawValue). What black piece is attacking it?",
-                "Tap the black piece."
+                "You found the \(piece.rawValue). What \(opponent.lowercased()) piece is attacking it?",
+                "Tap the \(opponent.lowercased()) piece."
             )
         case let .safeResolve(target, attacker):
             return (
@@ -83,9 +87,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .wakeChooseMove(piece, purpose):
             return wakeMoveCopy(for: piece, purpose: purpose)
         case let .opponentReply(opponent):
+            let opponentName = colorName(opponent)
             return (
-                "Could \(colorName(opponent)) check your king or win one of your pieces?",
-                "Tap the black checking piece, or tap your piece \(colorName(opponent)) could take. Otherwise choose Looks safe."
+                "Could \(opponentName) check your king or win one of your pieces?",
+                "Tap the \(opponentName.lowercased()) checking piece, or tap your piece \(opponentName) could take. Otherwise choose Looks safe."
             )
         case .fallbackChooseMove:
             return (
@@ -223,7 +228,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .notWakeCandidate(piece, purpose):
             return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
         case .notReplyIssue:
-            return "That piece doesn’t show a check or capture after this move."
+            return "That square doesn’t show a check or capture after this move."
         case .correctAbsence:
             return "Right—there isn’t one."
         case .missedExistingAnswer:
