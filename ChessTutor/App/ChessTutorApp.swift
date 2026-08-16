@@ -6,7 +6,15 @@ struct ChessTutorApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if let composition = CoachingPanelAccessibilityFixture.launchComposition {
+                CoachingPanelAccessibilityFixture(composition: composition)
+            } else {
+                ContentView()
+            }
+            #else
             ContentView()
+            #endif
         }
     }
 }

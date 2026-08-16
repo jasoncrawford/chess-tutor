@@ -64,6 +64,7 @@
 		791A0AB929E424A85CE1F615 /* ChessBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892B39ACE33796097240A052 /* ChessBoardView.swift */; };
 		791A8779A3FE2F5687789FF6 /* GameSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D517824035C75485AD4D712 /* GameSession.swift */; };
 		79857F0E8A9EED070BA2D06A /* CloudKitRemoteGameStatusRecordCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8925F50BCA37F4E5D0DA33 /* CloudKitRemoteGameStatusRecordCodec.swift */; };
+		7B130C58145B8B91B694D853 /* CoachingPanelAccessibilityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC9C9BC80BEB85BA5DE0A21 /* CoachingPanelAccessibilityUITests.swift */; };
 		7EA778291A3739B5BE845E78 /* LegalMoveGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12FEE3A26B4E310B77A0BED /* LegalMoveGeneratorTests.swift */; };
 		83DC3C726FC02EF74E3695E6 /* RemoteMoveLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69D2F8F2FB62E82438E4FB6B /* RemoteMoveLog.swift */; };
 		84088B9140367E82B7156A8D /* PieceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C6FEF378B5D5D6287E4F29 /* PieceIconView.swift */; };
@@ -78,6 +79,7 @@
 		96E2DFD85BE941887B746E34 /* LocalCoachingAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4B97DA69E80B868E005189 /* LocalCoachingAdvisor.swift */; };
 		9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */; };
 		9B75141A2F1B5E68F3DCE46B /* RemoteGameStartPresentationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2AF7050703D5DCF0641C734 /* RemoteGameStartPresentationPolicyTests.swift */; };
+		9C06C7238D46550D07EB7C58 /* CoachingPanelAccessibilityFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C06A24BB39F7F61DACF6D0 /* CoachingPanelAccessibilityFixture.swift */; };
 		9CDAE04C985BAF4F88CC8854 /* CloudKitRemoteGameTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEF32A5B744746870FF30D8 /* CloudKitRemoteGameTransport.swift */; };
 		9E628FE7B55251C40A5ED21D /* LocalCoachingExplanationSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D497B04CDEC53DC27DD635 /* LocalCoachingExplanationSourceTests.swift */; };
 		9F593642083020C52C450B58 /* LocalCoachingExplanationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4562E4536B200EE28BDC4CC8 /* LocalCoachingExplanationSource.swift */; };
@@ -147,6 +149,13 @@
 			remoteGlobalIDString = 6A716FFF3AA67ABE8A7992B0;
 			remoteInfo = ChessTutor;
 		};
+		76FC5C94AA3C629F16EC3880 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 181AD28789152C5E31A3BA34 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6A716FFF3AA67ABE8A7992B0;
+			remoteInfo = ChessTutor;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -164,6 +173,7 @@
 		1F8CD72E41E6DCBD71ED6064 /* CloudKitPendingInviteRecordCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPendingInviteRecordCodec.swift; sourceTree = "<group>"; };
 		1FD039B8AE083CF7D10F392D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeRemoteGameLab.swift; sourceTree = "<group>"; };
+		2397C3982A81FB4FDEB760E8 /* ChessTutorUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ChessTutorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
 		24B35BD8A960DA8C2EA23942 /* CloudKitPendingInviteRecordCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPendingInviteRecordCodecTests.swift; sourceTree = "<group>"; };
 		2BB009AF4B482B6921F6970A /* CoachFocusOverlayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachFocusOverlayTests.swift; sourceTree = "<group>"; };
@@ -202,6 +212,7 @@
 		7A0F3FDB75BB35C0F746BB2C /* RemoteIdentityStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdentityStoreTests.swift; sourceTree = "<group>"; };
 		7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPiecesPanelView.swift; sourceTree = "<group>"; };
 		7B21DFCD21891E4A984445C3 /* CoachingPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelView.swift; sourceTree = "<group>"; };
+		7BC9C9BC80BEB85BA5DE0A21 /* CoachingPanelAccessibilityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelAccessibilityUITests.swift; sourceTree = "<group>"; };
 		7C023C83EDC2217984A48D59 /* PieceAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieceAsset.swift; sourceTree = "<group>"; };
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicy.swift; sourceTree = "<group>"; };
@@ -273,6 +284,7 @@
 		E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTrayLayoutTests.swift; sourceTree = "<group>"; };
 		E79A88E3BD48DC472E496410 /* BoardGuidanceOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGuidanceOverlay.swift; sourceTree = "<group>"; };
 		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
+		E8C06A24BB39F7F61DACF6D0 /* CoachingPanelAccessibilityFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelAccessibilityFixture.swift; sourceTree = "<group>"; };
 		F0C34DD0B8F34D966E92E299 /* RemoteGameSessionControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameSessionControllerTests.swift; sourceTree = "<group>"; };
 		F13E0EE4C35EED64A264EF55 /* GameLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLifecycleTests.swift; sourceTree = "<group>"; };
 		F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutbox.swift; sourceTree = "<group>"; };
@@ -308,6 +320,7 @@
 			children = (
 				9480EA40179DF223C311D73B /* ChessTutor */,
 				338012C1CB044A5CBACB10AD /* ChessTutorTests */,
+				F781FAE5DA8AE6200D78B9BE /* ChessTutorUITests */,
 				641F0956F63041D1840B6373 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -388,6 +401,7 @@
 			isa = PBXGroup;
 			children = (
 				B969EE048CC898E7E693F1DE /* ChessTutorApp.swift */,
+				E8C06A24BB39F7F61DACF6D0 /* CoachingPanelAccessibilityFixture.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -421,6 +435,7 @@
 			children = (
 				CEAF84C004414D1A30475620 /* ChessTutor.app */,
 				FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */,
+				2397C3982A81FB4FDEB760E8 /* ChessTutorUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -663,6 +678,14 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		F781FAE5DA8AE6200D78B9BE /* ChessTutorUITests */ = {
+			isa = PBXGroup;
+			children = (
+				7BC9C9BC80BEB85BA5DE0A21 /* CoachingPanelAccessibilityUITests.swift */,
+			);
+			path = ChessTutorUITests;
+			sourceTree = "<group>";
+		};
 		F96D7911D024B60C79B238C8 /* CloudKit */ = {
 			isa = PBXGroup;
 			children = (
@@ -717,6 +740,24 @@
 			productReference = FE8B6A354FE32A2A1463A46C /* ChessTutorTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B527DF7B2CC7BD0C365952FC /* ChessTutorUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EA200C389C7A1B3678690248 /* Build configuration list for PBXNativeTarget "ChessTutorUITests" */;
+			buildPhases = (
+				B4595FB8A6AD4AAFFB2C7314 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				21C646018BBCCFEA466A3BD4 /* PBXTargetDependency */,
+			);
+			name = ChessTutorUITests;
+			packageProductDependencies = (
+			);
+			productName = ChessTutorUITests;
+			productReference = 2397C3982A81FB4FDEB760E8 /* ChessTutorUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -729,6 +770,9 @@
 					6A716FFF3AA67ABE8A7992B0 = {
 						DevelopmentTeam = T2YLUCCPQ3;
 						ProvisioningStyle = Automatic;
+					};
+					B527DF7B2CC7BD0C365952FC = {
+						TestTargetID = 6A716FFF3AA67ABE8A7992B0;
 					};
 				};
 			};
@@ -748,6 +792,7 @@
 			targets = (
 				6A716FFF3AA67ABE8A7992B0 /* ChessTutor */,
 				A9E509D3714BBC0F2F7BAE66 /* ChessTutorTests */,
+				B527DF7B2CC7BD0C365952FC /* ChessTutorUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -813,6 +858,7 @@
 				C551286CA206D2F6A8E84A67 /* CloudKitRemotePresenceRecordCodec.swift in Sources */,
 				853090D9BA16CCD07E7EAB2C /* CoachFocusOverlay.swift in Sources */,
 				4E94DA99DE03B06340A79728 /* CoachingModels.swift in Sources */,
+				9C06C7238D46550D07EB7C58 /* CoachingPanelAccessibilityFixture.swift in Sources */,
 				EFF38B2F41B0F52B7B90E9CC /* CoachingPanelView.swift in Sources */,
 				65B3FF7D887073A1CE36085B /* CoachingSession.swift in Sources */,
 				D067C5720A19D345CD3388A8 /* Color.swift in Sources */,
@@ -930,9 +976,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B4595FB8A6AD4AAFFB2C7314 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B130C58145B8B91B694D853 /* CoachingPanelAccessibilityUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		21C646018BBCCFEA466A3BD4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6A716FFF3AA67ABE8A7992B0 /* ChessTutor */;
+			targetProxy = 76FC5C94AA3C629F16EC3880 /* PBXContainerItemProxy */;
+		};
 		88DBA25A208ABE4C60E0262A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 6A716FFF3AA67ABE8A7992B0 /* ChessTutor */;
@@ -941,6 +1000,23 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		075500084EEBD414EB823704 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.jasoncrawford.ChessTutorUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ChessTutor;
+			};
+			name = Debug;
+		};
 		4963CC53B930579318FD9DCB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -955,6 +1031,23 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ChessTutor.app/ChessTutor";
+			};
+			name = Release;
+		};
+		52743C8FC1F8D73805C4C1AD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.jasoncrawford.ChessTutorUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ChessTutor;
 			};
 			name = Release;
 		};
@@ -1170,6 +1263,15 @@
 			buildConfigurations = (
 				B58B891EA94AE0310FEB36A0 /* Debug */,
 				B479BF7B3AA8637B54FA2087 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EA200C389C7A1B3678690248 /* Build configuration list for PBXNativeTarget "ChessTutorUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				075500084EEBD414EB823704 /* Debug */,
+				52743C8FC1F8D73805C4C1AD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

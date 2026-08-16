@@ -68,17 +68,6 @@ final class CoachingPanelLayoutTests: XCTestCase {
         )
     }
 
-    func testConversationPrecedesActionsInAccessibilityOrder() {
-        XCTAssertEqual(
-            CoachingPanelAccessibilityOrder.elements,
-            [.headline, .instruction, .routine, .actions]
-        )
-        XCTAssertEqual(CoachingPanelAccessibilityOrder.sortPriority(for: .headline), 4)
-        XCTAssertEqual(CoachingPanelAccessibilityOrder.sortPriority(for: .instruction), 3)
-        XCTAssertEqual(CoachingPanelAccessibilityOrder.sortPriority(for: .routine), 2)
-        XCTAssertEqual(CoachingPanelAccessibilityOrder.sortPriority(for: .actions), 1)
-    }
-
     func testPhysicalAxisSelectsCompactPanelComposition() {
         let tall = CoachingPanelLayout.make(
             sidebar: .make(for: 760, presentation: .verticalColumn)
@@ -93,25 +82,6 @@ final class CoachingPanelLayoutTests: XCTestCase {
         XCTAssertEqual(wide.composition.routineTabletopAxis, .vertical)
         XCTAssertEqual(tall.composition.actionTabletopAxis, .vertical)
         XCTAssertEqual(wide.composition.actionTabletopAxis, .horizontal)
-    }
-
-    func testAccessibilityOrderRemainsSemanticInBothPanelCompositions() {
-        let layouts = [
-            CoachingPanelLayout.make(
-                sidebar: .make(for: 760, presentation: .verticalColumn)
-            ),
-            CoachingPanelLayout.make(
-                sidebar: .make(for: 760, presentation: .horizontalSegments)
-            ),
-        ]
-
-        for layout in layouts {
-            XCTAssertEqual(
-                CoachingPanelAccessibilityOrder.elements,
-                [.headline, .instruction, .routine, .actions],
-                "Unexpected accessibility order for \(layout.composition) composition"
-            )
-        }
     }
 
     func testAuthoredActionOrderAndProminenceReachPanelUnchanged() {
@@ -173,4 +143,5 @@ final class CoachingPanelLayoutTests: XCTestCase {
             focus: .empty
         )
     }
+
 }

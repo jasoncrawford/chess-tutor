@@ -18,20 +18,38 @@ enum CoachingPanelComposition: Equatable {
     }
 }
 
-enum CoachingPanelAccessibleElement: Equatable {
-    case headline
-    case instruction
+private enum CoachingPanelAccessibilitySection: String {
+    case conversation
     case routine
     case actions
+
+    var identifier: String {
+        "coaching-panel-\(rawValue)"
+    }
+
+    var sortPriority: Double {
+        switch self {
+        case .conversation:
+            3
+        case .routine:
+            2
+        case .actions:
+            1
+        }
+    }
 }
 
-enum CoachingPanelAccessibilityOrder {
-    static let elements: [CoachingPanelAccessibleElement] = [
-        .headline, .instruction, .routine, .actions,
-    ]
+private enum CoachingConversationAccessibilityElement {
+    case headline
+    case instruction
 
-    static func sortPriority(for element: CoachingPanelAccessibleElement) -> Double {
-        Double(elements.count - (elements.firstIndex(of: element) ?? elements.count))
+    var sortPriority: Double {
+        switch self {
+        case .headline:
+            2
+        case .instruction:
+            1
+        }
     }
 }
 
@@ -117,6 +135,9 @@ struct CoachingPanelView: View {
             alignment: .topLeading
         )
         .accessibilityElement(children: .contain)
+        .accessibilityRepresentation {
+            accessibilityPanelContent
+        }
     }
 
     @ViewBuilder
@@ -150,6 +171,19 @@ struct CoachingPanelView: View {
         }
     }
 
+    @ViewBuilder
+    private var accessibilityPanelContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            accessibleConversation
+
+            if !presentation.routine.isEmpty {
+                routineHeader(axis: .horizontal)
+            }
+
+            readableActions(axis: .vertical)
+        }
+    }
+
     private var panelDivider: some View {
         Divider()
             .overlay(AppTheme.panelStroke)
@@ -163,6 +197,16 @@ struct CoachingPanelView: View {
         }
         .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
         .rotationEffect(.degrees(readableRotationDegrees))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
+        .accessibilitySortPriority(CoachingPanelAccessibilitySection.conversation.sortPriority)
+    }
+
+    private var accessibleConversation: some View {
+        conversation
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
+            .accessibilitySortPriority(CoachingPanelAccessibilitySection.conversation.sortPriority)
     }
 
     private var conversation: some View {
@@ -172,7 +216,7 @@ struct CoachingPanelView: View {
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilitySortPriority(
-                    CoachingPanelAccessibilityOrder.sortPriority(for: .headline)
+                    CoachingConversationAccessibilityElement.headline.sortPriority
                 )
 
             if let instruction = presentation.instruction {
@@ -181,7 +225,7 @@ struct CoachingPanelView: View {
                     .foregroundStyle(AppTheme.ink.opacity(0.78))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
-                        CoachingPanelAccessibilityOrder.sortPriority(for: .instruction)
+                        CoachingConversationAccessibilityElement.instruction.sortPriority
                     )
             }
         }
@@ -204,9 +248,8 @@ struct CoachingPanelView: View {
         }
         .rotationEffect(.degrees(readableRotationDegrees))
         .accessibilityElement(children: .contain)
-        .accessibilitySortPriority(
-            CoachingPanelAccessibilityOrder.sortPriority(for: .routine)
-        )
+        .accessibilityIdentifier(CoachingPanelAccessibilitySection.routine.identifier)
+        .accessibilitySortPriority(CoachingPanelAccessibilitySection.routine.sortPriority)
     }
 
     @ViewBuilder
@@ -233,9 +276,8 @@ struct CoachingPanelView: View {
         .font(.system(size: 17, weight: .semibold, design: .rounded))
         .rotationEffect(.degrees(readableRotationDegrees))
         .accessibilityElement(children: .contain)
-        .accessibilitySortPriority(
-            CoachingPanelAccessibilityOrder.sortPriority(for: .actions)
-        )
+        .accessibilityIdentifier(CoachingPanelAccessibilitySection.actions.identifier)
+        .accessibilitySortPriority(CoachingPanelAccessibilitySection.actions.sortPriority)
     }
 
     @ViewBuilder
