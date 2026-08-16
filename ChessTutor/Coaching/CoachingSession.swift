@@ -737,36 +737,14 @@ struct CoachingSession: Sendable {
 
     private func routine(for stage: CoachingStage) -> [CoachingRoutineState] {
         switch stage {
-        case .checkLocate, .checkResolve, .safeLocate,
-             .safeIdentifyAttacker, .safeResolve:
+        case .safeLocate, .safeIdentifyAttacker, .safeResolve:
             return [.safeCurrent, .takePending, .wakePending]
         case .takeChooseMove:
             return [.safeCleared, .takeCurrent, .wakePending]
         case .wakeChoosePiece, .wakeChooseMove:
             return [.safeCleared, .takeCleared, .wakeCurrent]
-        case let .opponentCheck(_, origin), let .reviseMove(origin):
-            return routine(for: origin, completed: false)
-        case let .complete(_, origin, _):
-            return routine(for: origin, completed: true)
-        case .awaitingAdvice(origin: let origin?):
-            return routine(for: origin, completed: false)
-        case .awaitingAdvice(origin: nil), .fallbackChooseMove:
-            return []
-        }
-    }
-
-    private func routine(
-        for origin: CoachingMoveOrigin,
-        completed: Bool
-    ) -> [CoachingRoutineState] {
-        switch origin {
-        case .check, .safe:
-            return [completed ? .safeCleared : .safeCurrent, .takePending, .wakePending]
-        case .take:
-            return [.safeCleared, completed ? .takeCleared : .takeCurrent, .wakePending]
-        case .wake:
-            return [.safeCleared, .takeCleared, completed ? .wakeCleared : .wakeCurrent]
-        case .preexisting, .fallback:
+        case .awaitingAdvice, .checkLocate, .checkResolve, .fallbackChooseMove,
+             .opponentCheck, .reviseMove, .complete:
             return []
         }
     }

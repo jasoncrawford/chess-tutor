@@ -5,6 +5,19 @@ enum CoachingPanelAxis: Equatable {
     case horizontal
 }
 
+enum CoachingPanelComposition: Equatable {
+    case tall
+    case wide
+
+    var routineTabletopAxis: CoachingPanelAxis {
+        self == .tall ? .horizontal : .vertical
+    }
+
+    var actionTabletopAxis: CoachingPanelAxis {
+        self == .tall ? .vertical : .horizontal
+    }
+}
+
 enum CoachingPanelAccessibleElement: Equatable {
     case headline
     case instruction
@@ -50,6 +63,12 @@ struct CoachingPanelLayout: Equatable {
     }
 }
 
+extension CoachingPanelLayout {
+    var composition: CoachingPanelComposition {
+        physicalAxis == .vertical ? .tall : .wide
+    }
+}
+
 extension SidebarColumnLayout {
     var coachingRegionSize: CGSize {
         let message = size(for: .messageAndDone)
@@ -91,17 +110,7 @@ struct CoachingPanelView: View {
     let onCommittedMove: (Move) -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            readableConversation
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            Divider()
-                .overlay(AppTheme.panelStroke)
-                .accessibilityHidden(true)
-
-            readableActions
-                .frame(maxWidth: .infinity, alignment: .bottom)
-        }
+        panelContent
         .frame(
             maxWidth: layout.tabletopRegionSize.width,
             maxHeight: layout.tabletopRegionSize.height,
@@ -111,24 +120,55 @@ struct CoachingPanelView: View {
     }
 
     @ViewBuilder
-    private var readableConversation: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                ScrollView(.vertical) {
-                    conversation
+    private var panelContent: some View {
+        switch layout.composition {
+        case .tall:
+            VStack(spacing: 10) {
+                if !presentation.routine.isEmpty {
+                    routineHeader(axis: .horizontal)
                 }
-                .scrollIndicators(.visible)
-            } else {
-                conversation
+
+                scrollableConversation
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                panelDivider
+                readableActions(axis: .vertical)
+            }
+        case .wide:
+            HStack(spacing: 10) {
+                if !presentation.routine.isEmpty {
+                    routineHeader(axis: .vertical)
+                    panelDivider
+                }
+
+                VStack(spacing: 10) {
+                    scrollableConversation
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    panelDivider
+                    readableActions(axis: .horizontal)
+                }
             }
         }
+    }
+
+    private var panelDivider: some View {
+        Divider()
+            .overlay(AppTheme.panelStroke)
+            .accessibilityHidden(true)
+    }
+
+    private var scrollableConversation: some View {
+        ScrollView(.vertical) {
+            conversation
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
         .rotationEffect(.degrees(readableRotationDegrees))
     }
 
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(presentation.headline)
-                .font(AppTheme.panelTitleFont)
+                .font(AppTheme.coachingTitleFont)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilitySortPriority(
@@ -144,29 +184,29 @@ struct CoachingPanelView: View {
                         CoachingPanelAccessibilityOrder.sortPriority(for: .instruction)
                     )
             }
-
-            if !presentation.routine.isEmpty {
-                routineView
-                    .padding(.top, 2)
-                    .accessibilitySortPriority(
-                        CoachingPanelAccessibilityOrder.sortPriority(for: .routine)
-                    )
-            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private var routineView: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                routineTokens
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                routineTokens
+    @ViewBuilder
+    private func routineHeader(axis: CoachingPanelAxis) -> some View {
+        Group {
+            switch axis {
+            case .horizontal:
+                HStack(spacing: 4) {
+                    routineTokens
+                }
+            case .vertical:
+                VStack(spacing: 4) {
+                    routineTokens
+                }
             }
         }
+        .rotationEffect(.degrees(readableRotationDegrees))
         .accessibilityElement(children: .contain)
+        .accessibilitySortPriority(
+            CoachingPanelAccessibilityOrder.sortPriority(for: .routine)
+        )
     }
 
     @ViewBuilder
@@ -176,18 +216,18 @@ struct CoachingPanelView: View {
         }
     }
 
-    private var readableActions: some View {
-        VStack(spacing: 7) {
-            ForEach(presentation.actions, id: \.action) { action in
-                Button {
-                    choose(action.action)
-                } label: {
-                    Text(action.title)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 44)
+    @ViewBuilder
+    private func readableActions(axis: CoachingPanelAxis) -> some View {
+        Group {
+            switch axis {
+            case .vertical:
+                VStack(spacing: 7) {
+                    actionButtons
                 }
-                .buttonStyle(CoachingActionButtonStyle(prominence: action.prominence))
-                .accessibilityLabel(action.accessibilityLabel)
+            case .horizontal:
+                HStack(spacing: 7) {
+                    actionButtons
+                }
             }
         }
         .font(.system(size: 17, weight: .semibold, design: .rounded))
@@ -196,6 +236,22 @@ struct CoachingPanelView: View {
         .accessibilitySortPriority(
             CoachingPanelAccessibilityOrder.sortPriority(for: .actions)
         )
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        ForEach(presentation.actions, id: \.action) { action in
+            Button {
+                choose(action.action)
+            } label: {
+                Text(action.title)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minWidth: 44, maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(CoachingActionButtonStyle(prominence: action.prominence))
+            .accessibilityLabel(action.accessibilityLabel)
+        }
     }
 
     private func choose(_ action: CoachingAction) {
@@ -221,10 +277,10 @@ private struct CoachingRoutineToken: View {
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .font(.system(size: 14, weight: weight, design: .rounded))
+            .font(.system(size: 13, weight: weight, design: .rounded))
             .foregroundStyle(foregroundStyle)
-            .padding(.horizontal, 8)
-            .frame(minHeight: 30)
+            .padding(.horizontal, 6)
+            .frame(minHeight: 28)
             .background(
                 Capsule(style: .continuous)
                     .fill(backgroundStyle)

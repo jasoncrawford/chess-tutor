@@ -42,6 +42,7 @@ enum AppTheme {
     static let blackPiece = Color(red: 0.17, green: 0.19, blue: 0.18)
 
     static let panelTitleFont = Font.system(size: 30, weight: .semibold, design: .serif)
+    static let coachingTitleFont = Font.system(size: 24, weight: .semibold, design: .serif)
     static let panelBodyFont = Font.system(size: 18, weight: .regular, design: .rounded)
     static let pieceTitleFont = Font.system(size: 23, weight: .semibold, design: .serif)
     static let pieceBodyFont = Font.system(size: 17, weight: .regular, design: .rounded)

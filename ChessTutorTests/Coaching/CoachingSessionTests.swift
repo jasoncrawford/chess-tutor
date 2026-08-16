@@ -20,6 +20,59 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
     }
 
+    func testRoutineIsHiddenOutsideSafeTakeWakeDecisionStages() {
+        var session = CoachingSession(learner: .white)
+        let wakeMove = Move(
+            from: CoachingTestFixtures.openingKnight,
+            to: Square(file: .c, rank: 3)
+        )
+        session.receive(CoachingTestFixtures.startingPositionAdvice)
+        XCTAssertEqual(session.presentation?.routine, [
+            .safeCleared, .takeCleared, .wakeCurrent,
+        ])
+
+        session.handle(.squareTapped(CoachingTestFixtures.openingKnight))
+        session.handle(.moveStaged(wakeMove))
+        session.receive(CoachingTestFixtures.adviceForTentativeMove(
+            wakeMove,
+            origin: .wake,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                wakeMove,
+                concepts: [.developsKnightOrBishop]
+            )
+        ))
+
+        XCTAssertEqual(session.presentation?.routine, [])
+        session.handle(.actionChosen(.looksSafe))
+        XCTAssertEqual(session.presentation?.routine, [])
+    }
+
+    func testRoutineIsHiddenDuringCheckFallbackAndRevisionStages() {
+        var check = CoachingSession(learner: .white)
+        check.receive(CoachingTestFixtures.advice(
+            checking: [CoachingTestFixtures.blackBishop],
+            opponentHasCapture: true,
+            learnerHasCapture: false
+        ))
+        XCTAssertEqual(check.presentation?.routine, [])
+
+        var fallback = CoachingSession(learner: .white)
+        fallback.receive(CoachingTestFixtures.fallbackAdvice)
+        XCTAssertEqual(fallback.presentation?.routine, [])
+
+        let move = CoachingTestFixtures.fallbackMove
+        var revise = opponentCheckSession(
+            move: move,
+            origin: .preexisting,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                isAcceptable: false
+            )
+        )
+        revise.handle(.actionChosen(.looksSafe))
+        XCTAssertEqual(revise.presentation?.routine, [])
+    }
+
     func testOpeningStartsWithoutCandidatesAndFirstHintRevealsSourcePieces() {
         var session = CoachingSession(learner: .white)
         session.receive(CoachingTestFixtures.startingPositionAdvice)
@@ -357,12 +410,10 @@ final class CoachingSessionTests: XCTestCase {
             session.receive(advice)
 
             XCTAssertEqual(session.stage, .checkLocate)
-            XCTAssertEqual(
-                session.presentation?.routine,
-                [.safeCurrent, .takePending, .wakePending]
-            )
+            XCTAssertEqual(session.presentation?.routine, [])
             XCTAssertTrue(session.handle(.squareTapped(checkingPiece)).isEmpty)
             XCTAssertEqual(session.stage, .checkResolve)
+            XCTAssertEqual(session.presentation?.routine, [])
             XCTAssertEqual(session.presentation?.boardTask, .move)
         }
     }
