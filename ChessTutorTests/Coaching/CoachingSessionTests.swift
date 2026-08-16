@@ -113,6 +113,98 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
+    func testHigherValueNonurgentThreatDoesNotClaimAnUrgentPieceIsWorthMore() {
+        let queenCapture = CoachingTestFixtures.capture(
+            move: Move(from: CoachingTestFixtures.blackBishop, to: CoachingTestFixtures.whiteQueen),
+            captured: Piece(kind: .queen, color: .white),
+            capturedSquare: CoachingTestFixtures.whiteQueen,
+            net: 1
+        )
+        let knightCapture = CoachingTestFixtures.capture(
+            move: Move(from: CoachingTestFixtures.blackRook, to: CoachingTestFixtures.openingKnight),
+            captured: Piece(kind: .knight, color: .white),
+            capturedSquare: CoachingTestFixtures.openingKnight,
+            net: 2
+        )
+        let advice = CoachingTestFixtures.advice(
+            opponentHasCapture: true,
+            learnerHasCapture: false,
+            opponentCaptures: [queenCapture, knightCapture],
+            urgent: [CoachingUrgentProblem(
+                target: CoachingTestFixtures.openingKnight,
+                piece: Piece(kind: .knight, color: .white),
+                captures: [knightCapture],
+                worstEstimatedLoss: 2
+            )]
+        )
+        var session = CoachingSession(learner: .white)
+
+        session.receive(advice)
+        session.handle(.squareTapped(CoachingTestFixtures.whiteQueen))
+
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Yes, that queen is threatened. We’re looking for a knight, bishop, rook, or queen Black could win."
+        )
+    }
+
+    func testUnresolvedRealDangerNamesTheOtherAffectedPieceRatherThanTheSelectedTarget() async throws {
+        let queen = Square(file: .d, rank: 4)
+        let queenEscape = Move(from: queen, to: Square(file: .d, rank: 2))
+        let rook = Square(file: .f, rank: 3)
+        let bishop = Square(file: .b, rank: 6)
+        let blackRook = Square(file: .f, rank: 7)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
+                queen: Piece(kind: .queen, color: .white),
+                rook: Piece(kind: .rook, color: .white),
+                bishop: Piece(kind: .bishop, color: .black),
+                blackRook: Piece(kind: .rook, color: .black),
+                Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+        let startAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 1,
+            context: .start
+        ))
+        let queenProblem = try XCTUnwrap(startAdvice.urgentProblems.first { $0.target == queen })
+        let queenAttacker = try XCTUnwrap(queenProblem.captures.first?.move.from)
+        XCTAssertTrue(startAdvice.urgentProblems.contains { $0.target == rook })
+
+        var session = CoachingSession(learner: .white)
+        session.receive(startAdvice)
+        session.handle(.squareTapped(queen))
+        session.handle(.squareTapped(queenAttacker))
+        XCTAssertEqual(session.stage, .safeResolve(target: queen))
+        XCTAssertEqual(
+            session.handle(.moveStaged(queenEscape)),
+            [.requestAdvice(context: .tentativeMove(origin: .safe))]
+        )
+
+        let moveAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: queenEscape,
+            learner: .white,
+            positionRevision: 2,
+            context: .tentativeMove(origin: .safe)
+        ))
+        let assessment = try XCTUnwrap(moveAdvice.moveAssessments[queenEscape])
+        XCTAssertFalse(assessment.resolvesRequiredDanger)
+        XCTAssertTrue(assessment.opponentIssues.contains { issue in
+            issue.reply.from == blackRook && issue.answerSquares.contains(rook)
+        })
+
+        session.receive(moveAdvice)
+
+        XCTAssertEqual(session.stage, .safeResolve(target: queen))
+        XCTAssertEqual(session.presentation?.headline, "The rook could still take your rook after that move.")
+    }
+
     func testCheckAndDoubleCheckAcceptEveryCheckingPieceWithoutSelectingIt() {
         for checkingPiece in [CoachingTestFixtures.blackBishop, CoachingTestFixtures.blackRook] {
             var session = CoachingSession(learner: .white)

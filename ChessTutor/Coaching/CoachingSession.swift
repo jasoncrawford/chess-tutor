@@ -178,7 +178,8 @@ struct CoachingSession: Sendable {
                 $0.capturedSquare == square
             }
             if isThreatened {
-                if let urgent = advice.urgentProblems.first {
+                if let urgent = advice.urgentProblems.first,
+                   isMoreValuable(urgent.piece.kind, than: piece.kind) {
                     recordMiss(.lowerPriorityThreat(
                         piece: piece.kind,
                         urgentPiece: urgent.piece.kind
@@ -585,15 +586,35 @@ struct CoachingSession: Sendable {
         for assessment: CoachingMoveAssessment,
         advice: CoachingAdvice
     ) -> CoachingFeedback {
+        let committedState = advice.evaluation.request.committedState
+        let stateAfterMove = committedState.applyingUnchecked(assessment.move)
+        if let issue = assessment.opponentIssues.first(where: {
+            if case .materialLoss = $0.kind { return true }
+            return false
+        }),
+           let capturedSquare = LegalMoveGenerator.capture(
+               for: issue.reply,
+               in: stateAfterMove
+           )?.square,
+           let attacker = stateAfterMove.board[issue.reply.from]?.kind,
+           let target = stateAfterMove.board[capturedSquare]?.kind {
+            return .dangerStillPresent(attacker: attacker, target: target)
+        }
         let target = selectedSafeTarget.flatMap(pieceKind(at:))
             ?? advice.urgentProblems.first?.piece.kind
             ?? .king
-        let attacker = assessment.opponentIssues.first {
-            if case .materialLoss = $0.kind { return true }
-            return false
-        }.flatMap { advice.evaluation.request.committedState.board[$0.reply.from]?.kind }
-            ?? selectedSafeAttacker.flatMap { pieceKind(at: $0) }
+        let attacker = selectedSafeAttacker.flatMap { pieceKind(at: $0) }
         return .dangerStillPresent(attacker: attacker, target: target)
+    }
+
+    private func isMoreValuable(_ lhs: Piece.Kind, than rhs: Piece.Kind) -> Bool {
+        let evaluator = MaterialTacticalEvaluator()
+        guard let lhsValue = evaluator.pieceValue(lhs),
+              let rhsValue = evaluator.pieceValue(rhs)
+        else {
+            return false
+        }
+        return lhsValue > rhsValue
     }
 
     private func unprofitableCaptureFeedback(
