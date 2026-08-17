@@ -387,7 +387,7 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.actionChosen(.hint))
         session.handle(.actionChosen(.hint))
         XCTAssertEqual(
-            stage(queenEscape, in: &session, revision: 2),
+            stage(queenEscape, in: &session, revision: 1),
             [.requestAdvice(context: .tentativeMove(origin: .safe))]
         )
 
@@ -395,7 +395,7 @@ final class CoachingSessionTests: XCTestCase {
             committedState: state,
             tentativeMove: queenEscape,
             learner: .white,
-            positionRevision: 2,
+            positionRevision: 1,
             context: .tentativeMove(origin: .safe)
         ))
         let assessment = try XCTUnwrap(moveAdvice.moveAssessments[queenEscape])
@@ -503,14 +503,14 @@ final class CoachingSessionTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            stage(evasion, in: &session),
+            stage(evasion, in: &session, revision: 1),
             [.requestAdvice(context: .tentativeMove(origin: .check))]
         )
         let moveAdvice = try await advisor.advice(for: CoachingRequest(
             committedState: state,
             tentativeMove: evasion,
             learner: .white,
-            positionRevision: 2,
+            positionRevision: 1,
             context: .tentativeMove(origin: .check)
         ))
         session.receive(moveAdvice)
@@ -2235,6 +2235,40 @@ final class CoachingSessionTests: XCTestCase {
         ).isEmpty)
 
         XCTAssertEqual(session.stage, .awaitingAdvice(origin: nil))
+        XCTAssertNil(session.presentation)
+    }
+
+    func testTentativeAdviceCannotUseRetainedPositionAdviceFromDifferentRevision() {
+        let move = CoachingTestFixtures.openingKnightMove
+        let interaction = snapshot(
+            selected: move.to,
+            tentativeMove: move,
+            revision: 8
+        )
+        let request = CoachingRequest(
+            committedState: .startingPosition(),
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 8,
+            context: .tentativeMove(origin: .wake)
+        )
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .wake,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                concepts: [.developsKnightOrBishop]
+            )
+        ).replacingRequest(with: request)
+        var session = openingSession()
+
+        XCTAssertEqual(
+            session.handle(.interactionChanged(interaction)),
+            [.requestAdvice(context: .tentativeMove(origin: .wake))]
+        )
+        XCTAssertTrue(session.receive(advice, interaction: interaction).isEmpty)
+
+        XCTAssertEqual(session.stage, .awaitingAdvice(origin: .wake))
         XCTAssertNil(session.presentation)
     }
 

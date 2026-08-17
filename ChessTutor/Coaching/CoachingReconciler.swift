@@ -56,7 +56,9 @@ struct CoachingReconciler: Sendable {
               request.positionRevision == episode.interaction.positionRevision,
               request.learner == learner,
               episode.knowledge.positionAdvice.map({
-                  $0.evaluation.request.committedState == request.committedState
+                  let positionRequest = $0.evaluation.request
+                  return positionRequest.committedState == request.committedState
+                      && positionRequest.positionRevision == request.positionRevision
               }) ?? true,
               advice.evaluation.moveAssessments[move]?.move == move,
               let assessment = advice.moveAssessments[move],
@@ -81,7 +83,8 @@ struct CoachingReconciler: Sendable {
         guard positionRequest.context == .start,
               positionRequest.tentativeMove == nil,
               positionRequest.learner == learner,
-              positionRequest.committedState == tentativeRequest.committedState
+              positionRequest.committedState == tentativeRequest.committedState,
+              positionRequest.positionRevision == tentativeRequest.positionRevision
         else {
             return nil
         }

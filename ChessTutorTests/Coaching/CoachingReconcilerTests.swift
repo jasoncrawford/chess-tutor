@@ -236,6 +236,42 @@ final class CoachingReconcilerTests: XCTestCase {
         XCTAssertEqual(result.requestedAdvice, .tentativeMove(origin: .wake))
     }
 
+    func testTentativeAdviceRequiresRetainedPositionAdviceAtExactRevision() {
+        let move = CoachingTestFixtures.openingKnightMove
+        let request = CoachingRequest(
+            committedState: .startingPosition(),
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 8,
+            context: .tentativeMove(origin: .wake)
+        )
+        var episode = episode(
+            advice: CoachingTestFixtures.startingPositionAdvice,
+            selectedSquare: move.to,
+            tentativeMove: move
+        )
+        episode.interaction = CoachingInteractionSnapshot(
+            selectedSquare: move.to,
+            tentativeMove: move,
+            positionRevision: 8
+        )
+        episode.evidence.tentativeOrigin = .wake
+        episode.knowledge.tentativeAdvice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .wake,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                concepts: [.developsKnightOrBishop]
+            )
+        ).replacingRequest(with: request)
+
+        let result = CoachingReconciler().derive(learner: .white, episode: episode)
+
+        XCTAssertEqual(result.stage, .awaitingAdvice(origin: .wake))
+        XCTAssertNil(result.questionID)
+        XCTAssertEqual(result.requestedAdvice, .tentativeMove(origin: .wake))
+    }
+
     func testIllegalTentativeMoveReturnsToItsDerivedWakeQuestion() {
         let move = CoachingTestFixtures.openingKnightMove
         let illegal = CoachingMoveAssessment(

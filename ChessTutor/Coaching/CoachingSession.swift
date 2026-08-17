@@ -437,8 +437,9 @@ struct CoachingSession: Sendable {
               let positionAdvice = episode.knowledge.positionAdvice else {
             return true
         }
-        return request.committedState
-            == positionAdvice.evaluation.request.committedState
+        let positionRequest = positionAdvice.evaluation.request
+        return request.committedState == positionRequest.committedState
+            && request.positionRevision == positionRequest.positionRevision
     }
 
     private func contextMatchesCurrentInteraction(
