@@ -1,6 +1,7 @@
 struct CoachingSession: Sendable {
     private let learner: PieceColor
     private let explainer: any CoachingExplaining
+    private let projector = CoachingPresentationProjector()
     private var latestAdvice: CoachingAdvice?
     private var selectedSafeTarget: Square?
     private var selectedSafeAttacker: Square?
@@ -250,8 +251,7 @@ struct CoachingSession: Sendable {
     private mutating func handleAction(_ action: CoachingAction) -> [CoachingDirective] {
         switch action {
         case .hint:
-            guard presentation != nil,
-                  hintLevel < hintSteps(for: stage).count
+            guard projectionContext()?.actions.contains(.hint) == true
             else { return [] }
             hintLevel += 1
             missesAtCurrentLevel = 0
@@ -647,382 +647,126 @@ struct CoachingSession: Sendable {
     }
 
     private mutating func rebuildPresentation() {
-        guard let prompt = promptOverride ?? prompt(for: stage) else {
+        guard let context = projectionContext() else {
             presentation = nil
             return
         }
-        let hint = currentHint(for: stage)
-        presentation = explainer.presentation(for: CoachingPresentationContext(
-            prompt: prompt,
-            feedback: feedback,
-            learner: learner,
-            hint: hint,
-            missesAtCurrentLevel: missesAtCurrentLevel,
-            routine: routine(for: stage),
-            actions: actions(for: stage),
-            boardTask: boardTask(for: stage),
-            focus: focus(for: stage, hint: hint)
-        ))
+        presentation = explainer.presentation(for: context)
     }
 
-    private func prompt(for stage: CoachingStage) -> CoachingPrompt? {
+    private func projectionContext() -> CoachingPresentationContext? {
+        let episode = projectorEpisode
+        let derived = CoachingDerivedState(
+            stage: stage,
+            questionID: episode.progress.questionID,
+            promptOverride: promptOverride,
+            derivedFeedback: nil,
+            requestedAdvice: nil
+        )
+        return projector.context(learner: learner, derived: derived, episode: episode)
+    }
+
+    private var projectorEpisode: CoachingEpisodeState {
+        let positionAdvice: CoachingAdvice?
+        let tentativeAdvice: CoachingAdvice?
+        switch latestAdvice?.evaluation.request.context {
+        case .start:
+            positionAdvice = latestAdvice
+            tentativeAdvice = nil
+        case .tentativeMove:
+            positionAdvice = tentativeMove == nil ? latestAdvice : nil
+            tentativeAdvice = tentativeMove == nil ? nil : latestAdvice
+        case nil:
+            positionAdvice = nil
+            tentativeAdvice = nil
+        }
+
+        return CoachingEpisodeState(
+            knowledge: CoachingKnowledge(
+                positionAdvice: positionAdvice,
+                tentativeAdvice: tentativeAdvice,
+                unsupportedContext: nil,
+                pendingContext: nil
+            ),
+            evidence: CoachingPedagogicalEvidence(
+                checkingPiece: checkingPieceForProjection,
+                safeTarget: selectedSafeTarget,
+                safeAttacker: selectedSafeAttacker,
+                confirmedSafeAbsence: false,
+                confirmedTakeAbsence: false,
+                tentativeOrigin: tentativeOriginForProjection,
+                replyAnswer: nil
+            ),
+            progress: CoachingQuestionProgress(
+                questionID: projectorQuestionID,
+                hintLevel: hintLevel,
+                missesAtCurrentLevel: missesAtCurrentLevel,
+                feedback: feedback,
+                feedbackAnchor: nil,
+                pulseID: pulseID
+            ),
+            interaction: CoachingInteractionSnapshot(
+                selectedSquare: selectedWakePiece,
+                tentativeMove: tentativeMove,
+                positionRevision: positionRevision
+                    ?? latestAdvice?.evaluation.request.positionRevision
+                    ?? 0
+            )
+        )
+    }
+
+    private var projectorQuestionID: CoachingQuestionID? {
         switch stage {
         case .awaitingAdvice:
             return nil
         case .checkLocate:
             return .checkLocate
         case .checkResolve:
-            return .checkResolve
+            guard let checker = checkingPieceForProjection else { return nil }
+            return .checkResolve(checker: checker)
         case .safeLocate:
             return .safeLocate
         case let .safeIdentifyAttacker(target):
-            return .safeIdentifyAttacker(piece: pieceKind(at: target) ?? .pawn)
+            return .safeAttacker(target: target)
         case let .safeResolve(target):
-            return .safeResolve(
-                target: pieceKind(at: target) ?? .pawn,
-                attacker: selectedSafeAttacker.flatMap { pieceKind(at: $0) } ?? .pawn
-            )
+            guard let attacker = selectedSafeAttacker else { return nil }
+            return .safeResolve(target: target, attacker: attacker)
         case .takeChooseMove:
-            return .takeChooseMove
+            return .take
         case let .wakeChoosePiece(purpose):
-            return .wakeChoosePiece(purpose: purpose)
+            return .wakeSource(purpose: purpose)
         case let .wakeChooseMove(piece, purpose):
-            return .wakeChooseMove(
-                piece: pieceKind(at: piece) ?? .pawn,
-                purpose: purpose
-            )
+            return .wakeMove(source: piece, purpose: purpose)
         case .fallbackChooseMove:
-            return .fallbackChooseMove
-        case .opponentCheck:
-            return .opponentReply(opponent: learner.opposite)
-        case .reviseMove:
-            return .reviseMove
-        case let .complete(move, origin, concepts):
-            return .complete(
-                origin: origin,
-                idea: completionIdea(for: move, concepts: concepts)
-            )
+            return .fallback
+        case let .opponentCheck(move, origin):
+            return .opponentReply(move: move, origin: origin)
+        case let .reviseMove(origin):
+            return .revise(move: tentativeMove, origin: origin)
+        case let .complete(move, origin, _):
+            return .complete(move: move, origin: origin)
+        }
+    }
+
+    private var checkingPieceForProjection: Square? {
+        guard case .checkResolve = stage else { return nil }
+        return latestAdvice?.checkingPieces.first
+    }
+
+    private var tentativeOriginForProjection: CoachingMoveOrigin? {
+        switch stage {
+        case let .awaitingAdvice(origin):
+            return origin
+        case let .opponentCheck(_, origin),
+             let .reviseMove(origin),
+             let .complete(_, origin, _):
+            return origin
+        default:
+            return moveOrigin(for: stage)
         }
     }
 
     private func pieceKind(at square: Square) -> Piece.Kind? {
         latestAdvice?.evaluation.request.committedState.board[square]?.kind
-    }
-
-    private func routine(for stage: CoachingStage) -> [CoachingRoutineState] {
-        switch stage {
-        case .safeLocate, .safeIdentifyAttacker, .safeResolve:
-            return [.safeCurrent, .takePending, .wakePending]
-        case .takeChooseMove:
-            return [.safeCleared, .takeCurrent, .wakePending]
-        case .wakeChoosePiece, .wakeChooseMove:
-            return [.safeCleared, .takeCleared, .wakeCurrent]
-        case .awaitingAdvice, .checkLocate, .checkResolve, .fallbackChooseMove,
-             .opponentCheck, .reviseMove, .complete:
-            return []
-        }
-    }
-
-    private func boardTask(for stage: CoachingStage) -> CoachingBoardTask {
-        switch stage {
-        case .checkLocate, .safeLocate, .safeIdentifyAttacker, .wakeChoosePiece:
-            return .identify(allowsMoveRevision: false)
-        case .opponentCheck:
-            return .identify(allowsMoveRevision: true)
-        case .checkResolve, .safeResolve, .takeChooseMove, .wakeChooseMove,
-             .fallbackChooseMove, .reviseMove:
-            return .move
-        case .awaitingAdvice, .complete:
-            return .none
-        }
-    }
-
-    private func actions(for stage: CoachingStage) -> [CoachingAction] {
-        let hintActions: [CoachingAction] = hintLevel < hintSteps(for: stage).count
-            ? [.hint]
-            : []
-        switch stage {
-        case .safeLocate, .takeChooseMove:
-            return [.noAnswer] + hintActions + [.stop]
-        case .opponentCheck:
-            return [.looksSafe] + hintActions + [.stop]
-        case .complete:
-            return [.done, .keepLooking, .stop]
-        case .awaitingAdvice:
-            return [.stop]
-        default:
-            return hintActions + [.stop]
-        }
-    }
-
-    private func hintSteps(for stage: CoachingStage) -> [CoachingHint] {
-        switch stage {
-        case .checkLocate:
-            return [.checkMarker, .candidatePieces]
-        case .checkResolve:
-            guard tentativeMove == nil else { return [] }
-            return candidateMoves(for: stage).isEmpty ? [] : [.candidatePieces, .candidateMoves]
-        case .safeLocate:
-            return candidateSourceSquares(for: stage).isEmpty
-                ? []
-                : [.dangerMarker, .candidatePieces]
-        case .safeIdentifyAttacker:
-            return [.attackerRelationship, .candidatePieces]
-        case .safeResolve:
-            guard tentativeMove == nil else { return [] }
-            return candidateMoves(for: stage).isEmpty
-                ? [.safeResponseIdeas]
-                : [.safeResponseIdeas, .candidateMoves]
-        case .takeChooseMove:
-            guard tentativeMove == nil else { return [] }
-            return candidateMoves(for: stage).isEmpty ? [] : [.candidatePieces, .candidateMoves]
-        case let .wakeChoosePiece(purpose):
-            guard let advice = latestAdvice,
-                  !wakeSources(for: purpose, in: advice).isEmpty
-            else { return [] }
-            return [.candidatePieces, .candidateMoves]
-        case .wakeChooseMove:
-            guard tentativeMove == nil else { return [] }
-            return candidateMoves(for: stage).isEmpty
-                ? [.movementMarkers]
-                : [.movementMarkers, .candidateMoves]
-        case .opponentCheck:
-            return opponentIssueAnswerSquares(for: stage).isEmpty
-                ? []
-                : [.replyMarkers, .attackerRelationship]
-        case .awaitingAdvice, .fallbackChooseMove, .reviseMove, .complete:
-            return []
-        }
-    }
-
-    private func currentHint(for stage: CoachingStage) -> CoachingHint? {
-        let steps = hintSteps(for: stage)
-        guard hintLevel > 0, hintLevel <= steps.count else { return nil }
-        return steps[hintLevel - 1]
-    }
-
-    private func focus(
-        for stage: CoachingStage,
-        hint: CoachingHint?
-    ) -> CoachFocusPresentation {
-        let persistent = persistentFocus(for: stage)
-        let hinted = hintFocus(for: stage, hint: hint)
-        return CoachFocusPresentation(
-            emphasizedSquares: persistent.emphasizedSquares.union(hinted.emphasizedSquares),
-            candidateSquares: hinted.candidateSquares,
-            paths: persistent.paths.union(hinted.paths),
-            pulseID: pulseID
-        )
-    }
-
-    private func hintFocus(
-        for stage: CoachingStage,
-        hint: CoachingHint?
-    ) -> CoachFocusPresentation {
-        guard let hint else { return .empty }
-        switch hint {
-        case .candidatePieces:
-            return CoachFocusPresentation(
-                emphasizedSquares: [],
-                candidateSquares: candidateSourceSquares(for: stage),
-                paths: [],
-                pulseID: pulseID
-            )
-        case .candidateMoves:
-            return CoachFocusPresentation(
-                emphasizedSquares: [],
-                candidateSquares: candidateDestinationSquares(for: stage),
-                paths: candidatePaths(for: stage),
-                pulseID: pulseID
-            )
-        case .attackerRelationship:
-            let attackerSquares = opponentIssueAnswerSquares(for: stage)
-            return CoachFocusPresentation(
-                emphasizedSquares: [],
-                candidateSquares: attackerSquares.isEmpty
-                    ? candidateSourceSquares(for: stage)
-                    : attackerSquares,
-                paths: candidatePaths(for: stage),
-                pulseID: pulseID
-            )
-        case .checkMarker, .dangerMarker, .replyMarkers,
-             .safeResponseIdeas, .movementMarkers:
-            return .empty
-        }
-    }
-
-    private func persistentFocus(for stage: CoachingStage) -> CoachFocusPresentation {
-        guard tentativeMove == nil else { return .empty }
-        switch stage {
-        case let .safeIdentifyAttacker(target):
-            return CoachFocusPresentation(
-                emphasizedSquares: [target],
-                candidateSquares: [],
-                paths: [],
-                pulseID: pulseID
-            )
-        case let .safeResolve(target):
-            guard let attacker = selectedSafeAttacker else {
-                return CoachFocusPresentation(
-                    emphasizedSquares: [target],
-                    candidateSquares: [],
-                    paths: [],
-                    pulseID: pulseID
-                )
-            }
-            return CoachFocusPresentation(
-                emphasizedSquares: [target, attacker],
-                candidateSquares: [],
-                paths: [CoachFocusPath(source: attacker, destination: target, role: .attacker)],
-                pulseID: pulseID
-            )
-        default:
-            return .empty
-        }
-    }
-
-    private func candidateSourceSquares(for stage: CoachingStage) -> Set<Square> {
-        guard let advice = latestAdvice else { return [] }
-        switch stage {
-        case .checkLocate:
-            return advice.checkingPieces
-        case .safeLocate:
-            return Set(advice.urgentProblems.map(\.target))
-        case let .safeIdentifyAttacker(target):
-            return Set(advice.urgentProblems
-                .first(where: { $0.target == target })?
-                .captures.map(\.move.from) ?? [])
-        case .checkResolve, .takeChooseMove:
-            return Set(candidateMoves(for: stage).map(\.from))
-        case let .wakeChoosePiece(purpose):
-            return wakeSources(for: purpose, in: advice)
-        default:
-            return []
-        }
-    }
-
-    private func candidateDestinationSquares(for stage: CoachingStage) -> Set<Square> {
-        Set(candidateMoves(for: stage).map(\.to))
-    }
-
-    private func candidatePaths(for stage: CoachingStage) -> Set<CoachFocusPath> {
-        guard let advice = latestAdvice else { return [] }
-        switch stage {
-        case let .safeIdentifyAttacker(target):
-            return Set(advice.urgentProblems
-                .first(where: { $0.target == target })?
-                .captures.map {
-                    CoachFocusPath(source: $0.move.from, destination: target, role: .attacker)
-                } ?? [])
-        case let .opponentCheck(move, _):
-            return Set(advice.moveAssessments[move]?.opponentIssues.flatMap(
-                opponentIssuePaths
-            ) ?? [])
-        case .checkResolve, .safeResolve, .takeChooseMove,
-             .wakeChoosePiece, .wakeChooseMove:
-            return Set(candidateMoves(for: stage).map {
-                CoachFocusPath(source: $0.from, destination: $0.to, role: .candidate)
-            })
-        default:
-            return []
-        }
-    }
-
-    private func opponentIssueAnswerSquares(for stage: CoachingStage) -> Set<Square> {
-        guard case let .opponentCheck(move, _) = stage else { return [] }
-        return Set(latestAdvice?.moveAssessments[move]?.opponentIssues
-            .flatMap(\.answerSquares) ?? [])
-    }
-
-    private func opponentIssuePaths(_ issue: CoachingOpponentIssue) -> [CoachFocusPath] {
-        switch issue.kind {
-        case .materialLoss:
-            return issue.answerSquares.map {
-                CoachFocusPath(
-                    source: issue.reply.from,
-                    destination: $0,
-                    role: .attacker
-                )
-            }
-        case .check, .mateInOne:
-            guard issue.answerSquares.contains(issue.reply.from) else { return [] }
-            return [CoachFocusPath(
-                source: issue.reply.from,
-                destination: issue.reply.to,
-                role: .attacker
-            )]
-        }
-    }
-
-    private func candidateMoves(for stage: CoachingStage) -> [Move] {
-        guard let advice = latestAdvice else { return [] }
-        switch stage {
-        case .checkResolve:
-            return advice.moveAssessments.values
-                .filter(\.isLegal)
-                .map(\.move)
-        case .safeResolve:
-            return advice.moveAssessments.values
-                .filter { $0.isLegal && $0.resolvesRequiredDanger }
-                .map(\.move)
-        case .takeChooseMove:
-            return advice.takeOpportunities.flatMap(\.moves)
-        case let .wakeChoosePiece(purpose):
-            return advice.wakeOpportunities
-                .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
-                .flatMap(\.moves)
-        case let .wakeChooseMove(piece, purpose):
-            return advice.wakeOpportunities
-                .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
-                .flatMap(\.moves)
-                .filter { $0.from == piece }
-        default:
-            return []
-        }
-    }
-
-    private func completionIdea(
-        for move: Move,
-        concepts: [CoachingConcept]
-    ) -> CoachingCompletionIdea {
-        for concept in concepts {
-            switch concept {
-            case .kingInCheck, .pieceNeedsHelp:
-                return .resolvesDanger(piece: unresolvedPieceKindForCompletion())
-            case .mateInOne:
-                return .mate
-            case .profitableCapture, .captureResolvesDanger:
-                return .profitableCapture(captured: capturedKind(for: move) ?? .pawn)
-            case .developsKnightOrBishop:
-                return .develops(piece: pieceKind(at: move.from) ?? .knight)
-            case .advancesCenterPawn:
-                return .advancesCenterPawn
-            case .castlesForKingSafety:
-                return .castles
-            case .addsUsefulDefender:
-                return .addsDefender(piece: pieceKind(at: move.from) ?? .pawn)
-            case .createsSafeImmediateThreat:
-                return .createsThreat(piece: pieceKind(at: move.from) ?? .pawn)
-            case .improvesCentralActivity:
-                return .centralizes(piece: pieceKind(at: move.from) ?? .pawn)
-            case .allowsCheck, .allowsMateInOne, .allowsMaterialLoss,
-                 .checkingPiece, .profitableAttacker, .safeAfterReplyCheck:
-                continue
-            }
-        }
-        return .verifiedSafe
-    }
-
-    private func unresolvedPieceKindForCompletion() -> Piece.Kind {
-        if let target = selectedSafeTarget {
-            return pieceKind(at: target) ?? .king
-        }
-        return .king
-    }
-
-    private func capturedKind(for move: Move) -> Piece.Kind? {
-        latestAdvice?.evaluation.learnerCaptureEstimates
-            .first(where: { $0.move == move })?.capturedPiece.kind
-            ?? latestAdvice?.evaluation.request.committedState.board[move.to]?.kind
     }
 }

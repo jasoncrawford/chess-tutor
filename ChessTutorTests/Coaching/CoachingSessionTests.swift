@@ -17,6 +17,7 @@ final class CoachingSessionTests: XCTestCase {
             session.presentation?.headline,
             "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
+        XCTAssertEqual(session.presentation?.boardTask, .move)
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
     }
 
