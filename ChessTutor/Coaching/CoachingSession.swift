@@ -60,7 +60,8 @@ struct CoachingSession: Sendable {
         reduceInteraction(to: interaction)
 
         let request = advice.evaluation.request
-        guard adviceMatchesCurrentInteraction(advice) else {
+        guard adviceMatchesCurrentInteraction(advice),
+              adviceMatchesCurrentKnowledgeRequirement(advice) else {
             return reconcile()
         }
 
@@ -422,6 +423,22 @@ struct CoachingSession: Sendable {
             return false
         }
         return contextMatchesCurrentInteraction(request.context)
+    }
+
+    private func adviceMatchesCurrentKnowledgeRequirement(
+        _ advice: CoachingAdvice
+    ) -> Bool {
+        let request = advice.evaluation.request
+        if let pendingContext = episode.knowledge.pendingContext,
+           request.context != pendingContext {
+            return false
+        }
+        guard case .tentativeMove = request.context,
+              let positionAdvice = episode.knowledge.positionAdvice else {
+            return true
+        }
+        return request.committedState
+            == positionAdvice.evaluation.request.committedState
     }
 
     private func contextMatchesCurrentInteraction(

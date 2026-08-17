@@ -41,6 +41,7 @@ final class GameSession {
     private var coachingSession: CoachingSession?
     private var pendingCoachingRequest: PendingCoachingRequest?
     private var nextCoachingRequestID = 0
+    private var coachingPositionRevision = 0
     var selectedSquare: Square?
     private(set) var analysisRevision = 0
     private(set) var isAwaitingPromotionChoice = false
@@ -102,7 +103,7 @@ final class GameSession {
         CoachingInteractionSnapshot(
             selectedSquare: selectedSquare,
             tentativeMove: tentativeMove,
-            positionRevision: analysisRevision
+            positionRevision: coachingPositionRevision
         )
     }
 
@@ -437,6 +438,7 @@ final class GameSession {
         }
         let committedMove = tentativeMove
         committedState.apply(committedMove)
+        coachingPositionRevision += 1
         self.tentativeMove = nil
         isAwaitingPromotionChoice = false
         selectedSquare = nil
@@ -472,6 +474,7 @@ final class GameSession {
             )
         }
         committedState.apply(move)
+        coachingPositionRevision += 1
         tentativeMove = nil
         isAwaitingPromotionChoice = false
         selectedSquare = nil
@@ -486,6 +489,7 @@ final class GameSession {
     func newGame() {
         stopCoaching()
         committedState = .startingPosition()
+        coachingPositionRevision += 1
         tentativeMove = nil
         committedCapturedPieces = []
         selectedSquare = nil
@@ -531,6 +535,7 @@ final class GameSession {
             )
         }
         committedState.apply(move)
+        coachingPositionRevision += 1
         tentativeMove = nil
         selectedSquare = nil
         actionableMovesForSelection = []
@@ -549,6 +554,7 @@ final class GameSession {
         stopCoaching()
         tentativeMove = nil
         committedState.board[square] = nil
+        coachingPositionRevision += 1
         committedCapturedPieces.append(
             CapturedPiece(
                 id: capturedID(for: piece, at: square),
@@ -573,6 +579,7 @@ final class GameSession {
         stopCoaching()
         tentativeMove = nil
         committedState.board[square] = Piece(kind: kind, color: piece.color)
+        coachingPositionRevision += 1
         selectedSquare = nil
         actionableMovesForSelection = []
         message = nil
@@ -654,9 +661,12 @@ final class GameSession {
 
         do {
             let advice = try await coachingAdvisor.advice(for: pending.request)
-            guard pendingCoachingRequest?.id == pending.id,
-                  analysisRevision == pending.request.positionRevision,
-                  coachingSession != nil else { return }
+            guard pendingCoachingRequestIsApplicable(pending) else { return }
+            guard advice.evaluation.request == pending.request else {
+                pendingCoachingRequest = nil
+                queueCoachingRequest(context: pending.request.context)
+                return
+            }
             pendingCoachingRequest = nil
             let directives = coachingSession?.receive(
                 advice,
@@ -666,9 +676,7 @@ final class GameSession {
         } catch is CancellationError {
             return
         } catch {
-            guard pendingCoachingRequest?.id == pending.id,
-                  analysisRevision == pending.request.positionRevision,
-                  coachingSession != nil else { return }
+            guard pendingCoachingRequestIsApplicable(pending) else { return }
             pendingCoachingRequest = nil
             let directives = coachingSession?.receiveUnsupportedPosition(
                 for: pending.request.context,
@@ -743,10 +751,20 @@ final class GameSession {
                 committedState: committedState,
                 tentativeMove: requestedTentativeMove,
                 learner: committedState.sideToMove,
-                positionRevision: analysisRevision,
+                positionRevision: coachingPositionRevision,
                 context: context
             )
         )
+    }
+
+    private func pendingCoachingRequestIsApplicable(
+        _ pending: PendingCoachingRequest
+    ) -> Bool {
+        pendingCoachingRequest?.id == pending.id
+            && pending.request.committedState == committedState
+            && pending.request.tentativeMove == tentativeMove
+            && pending.request.positionRevision == coachingPositionRevision
+            && coachingSession != nil
     }
 
     @discardableResult

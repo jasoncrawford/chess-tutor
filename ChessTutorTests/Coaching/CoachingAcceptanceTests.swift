@@ -475,6 +475,82 @@ final class CoachingAcceptanceTests: XCTestCase {
         ])
     }
 
+    func testOpeningSelectionProjectionIsIndependentOfSelectionHistory() async {
+        let blockedRook = Square(file: .a, rank: 1)
+        let direct = await openingPresentation(afterSelecting: [blockedRook])
+        let switched = await openingPresentation(afterSelecting: [
+            CoachingTestFixtures.openingKnight,
+            CoachingTestFixtures.alternateKnight,
+            blockedRook,
+        ])
+
+        XCTAssertEqual(switched, direct)
+        XCTAssertEqual(
+            switched.headline,
+            "That rook can’t come out yet because other pieces are in the way."
+        )
+        XCTAssertEqual(switched.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(switched.boardTask, .move)
+    }
+
+    func testOpeningTapAndDragProjectionAreEquivalent() async {
+        let tapped = await openingSession()
+        let dragged = await openingSession()
+        let source = CoachingTestFixtures.openingKnight
+
+        XCTAssertFalse(tapped.handleCoachingSquareTap(source))
+        tapped.select(source)
+        XCTAssertFalse(dragged.handleCoachingSquareDragStart(source))
+        XCTAssertEqual(dragged.prepareDrag(from: source), source)
+
+        XCTAssertEqual(dragged.selectedSquare, tapped.selectedSquare)
+        XCTAssertEqual(dragged.state.board, tapped.state.board)
+        XCTAssertEqual(dragged.coachingPresentation, tapped.coachingPresentation)
+        XCTAssertEqual(dragged.pendingCoachingRequestID, tapped.pendingCoachingRequestID)
+    }
+
+    func testSafeTargetProjectionIsIndependentOfIdentificationHistory() async {
+        let direct = await dangerSession()
+        let switched = await dangerSession()
+
+        XCTAssertTrue(direct.handleCoachingSquareTap(CoachingTestFixtures.whiteRook))
+        XCTAssertTrue(switched.handleCoachingSquareTap(CoachingTestFixtures.whiteQueen))
+        XCTAssertTrue(switched.handleCoachingSquareTap(CoachingTestFixtures.whiteRook))
+
+        XCTAssertEqual(switched.coachingPresentation, direct.coachingPresentation)
+        XCTAssertEqual(
+            switched.coachingPresentation?.focus.emphasizedSquares,
+            [CoachingTestFixtures.whiteRook]
+        )
+        XCTAssertEqual(switched.coachingPresentation?.focus.paths, [])
+        XCTAssertEqual(switched.coachingPresentation?.boardTask, .identify(allowsMoveRevision: false))
+    }
+
+    func testSafeResolutionProjectionRetainsTargetAndAttackerAcrossSourceHistory() async {
+        let direct = await safeResolutionSession()
+        let switched = await safeResolutionSession()
+        let finalSource = CoachingTestFixtures.alternateKnight
+
+        direct.select(finalSource)
+        switched.select(CoachingTestFixtures.openingKnight)
+        switched.select(finalSource)
+
+        XCTAssertEqual(switched.selectedSquare, direct.selectedSquare)
+        XCTAssertEqual(switched.state.board, direct.state.board)
+        XCTAssertEqual(switched.coachingPresentation, direct.coachingPresentation)
+        XCTAssertEqual(
+            switched.coachingPresentation?.focus.emphasizedSquares,
+            [CoachingTestFixtures.whiteQueen, CoachingTestFixtures.blackBishop]
+        )
+        XCTAssertEqual(switched.coachingPresentation?.focus.paths, [CoachFocusPath(
+            source: CoachingTestFixtures.blackBishop,
+            destination: CoachingTestFixtures.whiteQueen,
+            role: .attacker
+        )])
+        XCTAssertEqual(switched.coachingPresentation?.boardTask, .move)
+        XCTAssertNil(switched.pendingCoachingRequestID)
+    }
+
     private func makeSession(state: GameState = .startingPosition()) -> GameSession {
         GameSession(state: state, coachingAdvisor: LocalCoachingAdvisor())
     }
@@ -482,6 +558,44 @@ final class CoachingAcceptanceTests: XCTestCase {
     private func beginCoaching(in session: GameSession) async {
         session.startCoaching()
         await session.resolvePendingCoachingAdvice()
+    }
+
+    private func openingSession() async -> GameSession {
+        let session = GameSession(
+            coachingAdvisor: ImmediateCoachingAdvisor(
+                advice: CoachingTestFixtures.startingPositionAdvice
+            )
+        )
+        await beginCoaching(in: session)
+        return session
+    }
+
+    private func openingPresentation(
+        afterSelecting squares: [Square]
+    ) async -> CoachingPresentation {
+        let session = await openingSession()
+        for square in squares {
+            session.select(square)
+        }
+        return session.coachingPresentation!
+    }
+
+    private func dangerSession() async -> GameSession {
+        let session = GameSession(
+            state: CoachingTestFixtures.coachingState,
+            coachingAdvisor: ImmediateCoachingAdvisor(
+                advice: CoachingTestFixtures.multipleDangerAdvice
+            )
+        )
+        await beginCoaching(in: session)
+        return session
+    }
+
+    private func safeResolutionSession() async -> GameSession {
+        let session = await dangerSession()
+        XCTAssertTrue(session.handleCoachingSquareTap(CoachingTestFixtures.whiteQueen))
+        XCTAssertTrue(session.handleCoachingSquareTap(CoachingTestFixtures.blackBishop))
+        return session
     }
 
     private func stage(

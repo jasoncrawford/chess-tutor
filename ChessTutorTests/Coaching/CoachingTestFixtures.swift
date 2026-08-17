@@ -1,30 +1,65 @@
 @testable import ChessTutor
 
 actor ControllableCoachingAdvisor: CoachingAdvising {
-    private var continuations: [Int: [CheckedContinuation<CoachingAdvice, any Error>]] = [:]
+    private var continuations: [(
+        request: CoachingRequest,
+        continuation: CheckedContinuation<CoachingAdvice, any Error>
+    )] = []
+    private var receivedRequests: [CoachingRequest] = []
 
     func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
         try await withCheckedThrowingContinuation { continuation in
-            continuations[request.positionRevision, default: []].append(continuation)
+            receivedRequests.append(request)
+            continuations.append((request: request, continuation: continuation))
         }
     }
 
+    func resolve(request: CoachingRequest, with advice: CoachingAdvice) {
+        guard let index = continuations.firstIndex(where: { $0.request == request }) else {
+            return
+        }
+        continuations.remove(at: index).continuation.resume(returning: advice)
+    }
+
     func resolve(revision: Int, with advice: CoachingAdvice) {
-        guard var queued = continuations[revision], !queued.isEmpty else { return }
-        let continuation = queued.removeFirst()
-        continuations[revision] = queued.isEmpty ? nil : queued
-        continuation.resume(returning: advice)
+        guard let index = continuations.firstIndex(where: {
+            $0.request.positionRevision == revision
+        }) else {
+            return
+        }
+        continuations.remove(at: index).continuation.resume(returning: advice)
+    }
+
+    func fail(request: CoachingRequest, with error: any Error = Failure()) {
+        guard let index = continuations.firstIndex(where: { $0.request == request }) else {
+            return
+        }
+        continuations.remove(at: index).continuation.resume(throwing: error)
     }
 
     func fail(revision: Int, with error: any Error = Failure()) {
-        guard var queued = continuations[revision], !queued.isEmpty else { return }
-        let continuation = queued.removeFirst()
-        continuations[revision] = queued.isEmpty ? nil : queued
-        continuation.resume(throwing: error)
+        guard let index = continuations.firstIndex(where: {
+            $0.request.positionRevision == revision
+        }) else {
+            return
+        }
+        continuations.remove(at: index).continuation.resume(throwing: error)
+    }
+
+    func hasPending(request: CoachingRequest) -> Bool {
+        continuations.contains(where: { $0.request == request })
     }
 
     func hasPending(revision: Int) -> Bool {
-        !(continuations[revision] ?? []).isEmpty
+        continuations.contains(where: { $0.request.positionRevision == revision })
+    }
+
+    func pendingRequests() -> [CoachingRequest] {
+        continuations.map(\.request)
+    }
+
+    func requestsReceived() -> [CoachingRequest] {
+        receivedRequests
     }
 
     struct Failure: Error, Sendable {}
@@ -314,12 +349,14 @@ enum CoachingTestFixtures {
     static func adviceForTentativeMove(
         _ move: Move,
         origin: CoachingMoveOrigin,
+        state: GameState? = nil,
         assessment: CoachingMoveAssessment,
         learnerCaptures: [CoachingCaptureEstimate] = [],
         urgent: [CoachingUrgentProblem] = [],
         confidence: CoachingConfidence = .high
     ) -> CoachingAdvice {
         advice(
+            state: state ?? (origin == .wake ? .startingPosition() : coachingState),
             tentativeMove: move,
             context: .tentativeMove(origin: origin),
             opponentHasCapture: false,

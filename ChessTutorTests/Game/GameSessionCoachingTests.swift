@@ -640,60 +640,316 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(cancelling.pendingCoachingRequestID, pendingID)
     }
 
-    func testSupersedingTentativeRequestDiscardsOlderSuccess() async {
-        let advisor = ControllableCoachingAdvisor()
-        let firstMove = Move(from: Square(file: .b, rank: 1), to: Square(file: .c, rank: 3))
-        let replacement = Move(from: Square(file: .g, rank: 1), to: Square(file: .f, rank: 3))
-        let session = GameSession(coachingAdvisor: advisor)
-        stage(firstMove, in: session)
-        let oldRevision = session.analysisRevision
-        session.startCoaching()
-        let oldTask = Task { await session.resolvePendingCoachingAdvice() }
-        await waitForPending(advisor, revision: oldRevision)
+    func testLateSuccessAndFailureForReplacedMoveLeaveExactCurrentRequestUnchanged() async throws {
+        for oldRequestFails in [false, true] {
+            let advisor = ControllableCoachingAdvisor()
+            let session = GameSession(coachingAdvisor: advisor)
+            await resolveOpeningAdvice(in: session, using: advisor)
 
-        session.select(replacement.from)
-        _ = session.moveSelectedPiece(to: replacement.to)
-        let newRevision = session.analysisRevision
-        let newID = session.pendingCoachingRequestID
-        XCTAssertNotEqual(oldRevision, newRevision)
-        let newTask = Task { await session.resolvePendingCoachingAdvice() }
-        await waitForPending(advisor, revision: newRevision)
+            let firstMove = CoachingTestFixtures.openingKnightMove
+            stage(firstMove, in: session)
+            let firstID = try XCTUnwrap(session.pendingCoachingRequestID)
+            let firstTask = Task { await session.resolvePendingCoachingAdvice() }
+            let firstRequest = await waitForOnlyPendingRequest(advisor)
+            XCTAssertEqual(firstRequest.tentativeMove, firstMove)
+            XCTAssertEqual(firstRequest.context, .tentativeMove(origin: .wake))
 
-        await advisor.resolve(
-            revision: oldRevision,
-            with: tentativeAdvice(for: firstMove, isLegal: true)
-        )
-        await oldTask.value
-        XCTAssertEqual(session.pendingCoachingRequestID, newID)
-        XCTAssertNil(session.coachingPresentation)
-
-        await advisor.resolve(
-            revision: newRevision,
-            with: tentativeAdvice(
-                for: replacement,
-                isLegal: true,
-                positionRevision: newRevision
+            let replacement = Move(
+                from: firstMove.from,
+                to: Square(file: .a, rank: 3)
             )
+            XCTAssertEqual(session.tapEmptySquare(at: replacement.to), .moved)
+            let replacementID = try XCTUnwrap(session.pendingCoachingRequestID)
+            XCTAssertGreaterThan(replacementID, firstID)
+            let replacementTask = Task { await session.resolvePendingCoachingAdvice() }
+            let pendingRequests = await waitForPendingRequestCount(advisor, count: 2)
+            let replacementRequest = try XCTUnwrap(
+                pendingRequests.first(where: { $0.tentativeMove == replacement })
+            )
+
+            XCTAssertEqual(firstRequest.positionRevision, replacementRequest.positionRevision)
+            XCTAssertEqual(replacementRequest.context, .tentativeMove(origin: .wake))
+            XCTAssertEqual(session.selectedSquare, replacement.to)
+            XCTAssertEqual(
+                session.state.board[replacement.to],
+                Piece(kind: .knight, color: .white)
+            )
+            XCTAssertNil(session.coachingPresentation?.headline)
+            XCTAssertNil(session.coachingPresentation?.actions)
+            XCTAssertNil(session.coachingPresentation?.focus)
+
+            if oldRequestFails {
+                await advisor.fail(request: firstRequest)
+            } else {
+                await advisor.resolve(
+                    request: firstRequest,
+                    with: tentativeAdvice(
+                        for: firstMove,
+                        isLegal: true,
+                        origin: .wake
+                    ).replacingRequest(with: firstRequest)
+                )
+            }
+            await firstTask.value
+
+            let requestsAfterLateResponse = await advisor.pendingRequests()
+            XCTAssertEqual(session.pendingCoachingRequestID, replacementID)
+            XCTAssertEqual(requestsAfterLateResponse, [replacementRequest])
+            XCTAssertEqual(session.selectedSquare, replacement.to)
+            XCTAssertEqual(
+                session.state.board[replacement.to],
+                Piece(kind: .knight, color: .white)
+            )
+            XCTAssertNil(session.coachingPresentation?.headline)
+            XCTAssertNil(session.coachingPresentation?.actions)
+            XCTAssertNil(session.coachingPresentation?.focus)
+
+            await advisor.resolve(
+                request: replacementRequest,
+                with: tentativeAdvice(
+                    for: replacement,
+                    isLegal: true,
+                    origin: .wake
+                ).replacingRequest(with: replacementRequest)
+            )
+            await replacementTask.value
+            XCTAssertNil(session.pendingCoachingRequestID)
+            XCTAssertEqual(
+                session.coachingPresentation?.boardTask,
+                .identify(allowsMoveRevision: true)
+            )
+        }
+    }
+
+    func testRemovingCompletedCoachedMoveImmediatelyRederivesRetainedOpeningAdvice() async {
+        let session = GameSession(coachingAdvisor: LocalCoachingAdvisor())
+        await beginOpeningCoaching(in: session)
+        stage(CoachingTestFixtures.openingKnightMove, in: session)
+        await session.resolvePendingCoachingAdvice()
+        _ = session.chooseCoachingAction(.looksSafe)
+
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.done, .keepLooking, .stop]
         )
-        await newTask.value
+
+        session.select(CoachingTestFixtures.alternateKnight)
+
+        let expected = await makeOpeningSession()
+        expected.select(CoachingTestFixtures.alternateKnight)
         XCTAssertNil(session.pendingCoachingRequestID)
-        XCTAssertEqual(session.coachingPresentation?.boardTask, .identify(allowsMoveRevision: true))
+        XCTAssertEqual(session.selectedSquare, CoachingTestFixtures.alternateKnight)
+        XCTAssertNil(session.state.board[CoachingTestFixtures.openingKnightMove.to])
+        XCTAssertEqual(
+            session.state.board[CoachingTestFixtures.openingKnightMove.from],
+            Piece(kind: .knight, color: .white)
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            expected.coachingPresentation?.headline
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            expected.coachingPresentation?.instruction
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.actions,
+            expected.coachingPresentation?.actions
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.focus,
+            expected.coachingPresentation?.focus
+        )
+        XCTAssertFalse(
+            session.coachingPresentation?.actions.map(\.action).contains(.done) == true
+        )
+    }
+
+    func testRemovingPreexistingMoveQueuesOneExactStartRequest() async throws {
+        let advisor = ControllableCoachingAdvisor()
+        let move = CoachingTestFixtures.openingKnightMove
+        let session = GameSession(coachingAdvisor: advisor)
+        stage(move, in: session)
+        session.startCoaching()
+        let moveTask = Task { await session.resolvePendingCoachingAdvice() }
+        let moveRequest = await waitForOnlyPendingRequest(advisor)
+        XCTAssertEqual(moveRequest.tentativeMove, move)
+        XCTAssertEqual(moveRequest.context, .tentativeMove(origin: .preexisting))
+        await advisor.resolve(
+            request: moveRequest,
+            with: tentativeAdvice(for: move, isLegal: true)
+                .replacingRequest(with: moveRequest)
+        )
+        await moveTask.value
+
+        let completedPresentation = session.coachingPresentation
+        session.select(CoachingTestFixtures.alternateKnight)
+        let startID = try XCTUnwrap(session.pendingCoachingRequestID)
+        let startTask = Task { await session.resolvePendingCoachingAdvice() }
+        let startRequest = await waitForOnlyPendingRequest(advisor)
+
+        XCTAssertEqual(startRequest.committedState, .startingPosition())
+        XCTAssertNil(startRequest.tentativeMove)
+        XCTAssertEqual(startRequest.context, .start)
+        XCTAssertEqual(startRequest.positionRevision, moveRequest.positionRevision)
+        XCTAssertEqual(session.selectedSquare, CoachingTestFixtures.alternateKnight)
+        XCTAssertNil(session.state.board[move.to])
+        XCTAssertNil(session.coachingPresentation)
+        XCTAssertNotEqual(session.coachingPresentation, completedPresentation)
+
+        session.select(CoachingTestFixtures.alternateKnight)
+        session.select(CoachingTestFixtures.alternateKnight)
+        let pendingAfterRepeatedSnapshots = await advisor.pendingRequests()
+        let receivedAfterRepeatedSnapshots = await advisor.requestsReceived()
+        XCTAssertEqual(session.pendingCoachingRequestID, startID)
+        XCTAssertEqual(pendingAfterRepeatedSnapshots, [startRequest])
+        XCTAssertEqual(receivedAfterRepeatedSnapshots, [moveRequest, startRequest])
+
+        await advisor.resolve(
+            request: startRequest,
+            with: CoachingTestFixtures.startingPositionAdvice
+                .replacingRequest(with: startRequest)
+        )
+        await startTask.value
+    }
+
+    func testMoveAdviceWithDifferentOriginIsIgnoredAndExactRequestIsRequeued() async throws {
+        let advisor = ControllableCoachingAdvisor()
+        let move = CoachingTestFixtures.openingKnightMove
+        let session = GameSession(coachingAdvisor: advisor)
+        stage(move, in: session)
+        session.startCoaching()
+        let originalID = try XCTUnwrap(session.pendingCoachingRequestID)
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await waitForOnlyPendingRequest(advisor)
+        let wrongRequest = CoachingRequest(
+            committedState: request.committedState,
+            tentativeMove: move,
+            learner: request.learner,
+            positionRevision: request.positionRevision,
+            context: .tentativeMove(origin: .wake)
+        )
+
+        await advisor.resolve(
+            request: request,
+            with: tentativeAdvice(for: move, isLegal: true, origin: .wake)
+                .replacingRequest(with: wrongRequest)
+        )
+        await task.value
+
+        let retryID = try XCTUnwrap(session.pendingCoachingRequestID)
+        XCTAssertGreaterThan(retryID, originalID)
+        XCTAssertEqual(session.selectedSquare, move.to)
+        XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
+        XCTAssertNil(session.coachingPresentation?.headline)
+        XCTAssertNil(session.coachingPresentation?.actions)
+        XCTAssertNil(session.coachingPresentation?.focus)
+
+        let retryTask = Task { await session.resolvePendingCoachingAdvice() }
+        let retryRequest = await waitForOnlyPendingRequest(advisor)
+        let receivedRequests = await advisor.requestsReceived()
+        XCTAssertEqual(retryRequest, request)
+        XCTAssertEqual(receivedRequests, [request, request])
+        await advisor.resolve(
+            request: retryRequest,
+            with: tentativeAdvice(for: move, isLegal: true)
+                .replacingRequest(with: retryRequest)
+        )
+        await retryTask.value
+    }
+
+    func testAdviceForDifferentCommittedStateIsIgnoredAndExactRequestIsRequeued() async throws {
+        let advisor = ControllableCoachingAdvisor()
+        let session = GameSession(coachingAdvisor: advisor)
+        session.startCoaching()
+        let originalID = try XCTUnwrap(session.pendingCoachingRequestID)
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await waitForOnlyPendingRequest(advisor)
+        let wrongRequest = CoachingRequest(
+            committedState: CoachingTestFixtures.coachingState,
+            tentativeMove: nil,
+            learner: request.learner,
+            positionRevision: request.positionRevision,
+            context: .start
+        )
+
+        await advisor.resolve(
+            request: request,
+            with: CoachingTestFixtures.startingPositionAdvice
+                .replacingRequest(with: wrongRequest)
+        )
+        await task.value
+
+        let retryID = try XCTUnwrap(session.pendingCoachingRequestID)
+        XCTAssertGreaterThan(retryID, originalID)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertEqual(session.state, .startingPosition())
+        XCTAssertNil(session.coachingPresentation?.headline)
+        XCTAssertNil(session.coachingPresentation?.actions)
+        XCTAssertNil(session.coachingPresentation?.focus)
+
+        let retryTask = Task { await session.resolvePendingCoachingAdvice() }
+        let retryRequest = await waitForOnlyPendingRequest(advisor)
+        let receivedRequests = await advisor.requestsReceived()
+        XCTAssertEqual(retryRequest, request)
+        XCTAssertEqual(receivedRequests, [request, request])
+        await advisor.resolve(
+            request: retryRequest,
+            with: CoachingTestFixtures.startingPositionAdvice
+                .replacingRequest(with: retryRequest)
+        )
+        await retryTask.value
+    }
+
+    func testIdenticalSnapshotsWhileMoveAdviceIsPendingDoNotDuplicateExactRequest() async throws {
+        let advisor = ControllableCoachingAdvisor()
+        let session = GameSession(coachingAdvisor: advisor)
+        await resolveOpeningAdvice(in: session, using: advisor)
+        let move = CoachingTestFixtures.openingKnightMove
+        stage(move, in: session)
+        let pendingID = try XCTUnwrap(session.pendingCoachingRequestID)
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await waitForOnlyPendingRequest(advisor)
+
+        session.select(move.to)
+        session.select(move.to)
+
+        let pendingRequests = await advisor.pendingRequests()
+        let exactRequestCount = await advisor.requestsReceived().filter { $0 == request }.count
+        XCTAssertEqual(session.pendingCoachingRequestID, pendingID)
+        XCTAssertEqual(session.selectedSquare, move.to)
+        XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
+        XCTAssertEqual(pendingRequests, [request])
+        XCTAssertEqual(exactRequestCount, 1)
+        XCTAssertNil(session.coachingPresentation?.headline)
+        XCTAssertNil(session.coachingPresentation?.actions)
+        XCTAssertNil(session.coachingPresentation?.focus)
+
+        await advisor.resolve(
+            request: request,
+            with: tentativeAdvice(for: move, isLegal: true, origin: .wake)
+                .replacingRequest(with: request)
+        )
+        await task.value
     }
 
     func testExplicitStopDiscardsStaleSuccessAndFailure() async {
         for shouldFail in [false, true] {
             let advisor = ControllableCoachingAdvisor()
             let session = GameSession(coachingAdvisor: advisor)
-            let revision = session.analysisRevision
             session.startCoaching()
             let task = Task { await session.resolvePendingCoachingAdvice() }
-            await waitForPending(advisor, revision: revision)
+            let request = await waitForOnlyPendingRequest(advisor)
 
             session.stopCoaching()
             if shouldFail {
-                await advisor.fail(revision: revision)
+                await advisor.fail(request: request)
             } else {
-                await advisor.resolve(revision: revision, with: CoachingTestFixtures.startingPositionAdvice)
+                await advisor.resolve(
+                    request: request,
+                    with: CoachingTestFixtures.startingPositionAdvice
+                        .replacingRequest(with: request)
+                )
             }
             await task.value
 
@@ -715,10 +971,9 @@ final class GameSessionCoachingTests: XCTestCase {
             if mutation == .localCommit || mutation == .remoteCommit {
                 stage(move, in: session)
             }
-            let revision = session.analysisRevision
             session.startCoaching()
             let task = Task { await session.resolvePendingCoachingAdvice() }
-            await waitForPending(advisor, revision: revision)
+            let request = await waitForOnlyPendingRequest(advisor)
 
             switch mutation {
             case .localCommit:
@@ -736,7 +991,11 @@ final class GameSessionCoachingTests: XCTestCase {
                 session.captureForTesting(at: Square(file: .a, rank: 2))
             }
 
-            await advisor.resolve(revision: revision, with: CoachingTestFixtures.startingPositionAdvice)
+            await advisor.resolve(
+                request: request,
+                with: CoachingTestFixtures.startingPositionAdvice
+                    .replacingRequest(with: request)
+            )
             await task.value
             XCTAssertFalse(session.isCoachingActive, "mutation: \(mutation)")
             XCTAssertNil(session.pendingCoachingRequestID, "mutation: \(mutation)")
@@ -758,10 +1017,12 @@ final class GameSessionCoachingTests: XCTestCase {
         let advisor = ControllableCoachingAdvisor()
         let session = GameSession(state: promotionState(), coachingAdvisor: advisor)
         session.startCoaching()
-        let startRevision = session.analysisRevision
         let startTask = Task { await session.resolvePendingCoachingAdvice() }
-        await waitForPending(advisor, revision: startRevision)
-        await advisor.resolve(revision: startRevision, with: CoachingTestFixtures.fallbackAdvice)
+        let startRequest = await waitForOnlyPendingRequest(advisor)
+        await advisor.resolve(
+            request: startRequest,
+            with: CoachingTestFixtures.fallbackAdvice.replacingRequest(with: startRequest)
+        )
         await startTask.value
 
         let from = Square(file: .e, rank: 7)
@@ -795,37 +1056,58 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertFalse(session.isAwaitingPromotionChoice)
     }
 
-    func testRemovingPreexistingTentativeMoveRequestsCurrentPositionAdviceWithoutChangingBoardInputRules() async {
-        let move = CoachingTestFixtures.openingKnightMove
-        let session = GameSession(
-            coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true)
-            )
-        )
-        stage(move, in: session)
-        session.startCoaching()
-        await session.resolvePendingCoachingAdvice()
-
-        session.select(Square(file: .g, rank: 1))
-
-        XCTAssertNil(session.state.board[move.to])
-        XCTAssertEqual(session.state.board[move.from], Piece(kind: .knight, color: .white))
-        XCTAssertEqual(session.selectedSquare, Square(file: .g, rank: 1))
-        XCTAssertNil(session.coachingPresentation)
-        XCTAssertNotNil(session.pendingCoachingRequestID)
-    }
-
-    private func waitForPending(
+    private func waitForOnlyPendingRequest(
         _ advisor: ControllableCoachingAdvisor,
-        revision: Int,
         file: StaticString = #filePath,
         line: UInt = #line
-    ) async {
+    ) async -> CoachingRequest {
+        let requests = await waitForPendingRequestCount(
+            advisor,
+            count: 1,
+            file: file,
+            line: line
+        )
+        guard let request = requests.first else {
+            fatalError("Missing pending request after recorded XCTest failure")
+        }
+        return request
+    }
+
+    private func waitForPendingRequestCount(
+        _ advisor: ControllableCoachingAdvisor,
+        count: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async -> [CoachingRequest] {
         for _ in 0..<1_000 {
-            if await advisor.hasPending(revision: revision) { return }
+            let requests = await advisor.pendingRequests()
+            if requests.count == count { return requests }
             await Task.yield()
         }
-        XCTFail("Advisor never received revision \(revision)", file: file, line: line)
+        XCTFail("Advisor never received \(count) pending requests", file: file, line: line)
+        return await advisor.pendingRequests()
+    }
+
+    private func resolveOpeningAdvice(
+        in session: GameSession,
+        using advisor: ControllableCoachingAdvisor
+    ) async {
+        session.startCoaching()
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await waitForOnlyPendingRequest(advisor)
+        XCTAssertEqual(request.context, .start)
+        XCTAssertNil(request.tentativeMove)
+        await advisor.resolve(
+            request: request,
+            with: CoachingTestFixtures.startingPositionAdvice
+                .replacingRequest(with: request)
+        )
+        await task.value
+    }
+
+    private func beginOpeningCoaching(in session: GameSession) async {
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
     }
 
     private func makeOpeningSession() async -> GameSession {
@@ -848,7 +1130,8 @@ final class GameSessionCoachingTests: XCTestCase {
         for move: Move,
         isLegal: Bool,
         issues: [CoachingOpponentIssue] = [],
-        positionRevision: Int? = nil
+        positionRevision: Int? = nil,
+        origin: CoachingMoveOrigin = .preexisting
     ) -> CoachingAdvice {
         let assessment = CoachingMoveAssessment(
             move: move,
@@ -860,7 +1143,7 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let advice = CoachingTestFixtures.adviceForTentativeMove(
             move,
-            origin: .preexisting,
+            origin: origin,
             assessment: assessment
         )
         guard let positionRevision else { return advice }
@@ -869,7 +1152,7 @@ final class GameSessionCoachingTests: XCTestCase {
             tentativeMove: move,
             learner: .white,
             positionRevision: positionRevision,
-            context: .tentativeMove(origin: .preexisting)
+            context: .tentativeMove(origin: origin)
         ))
     }
 

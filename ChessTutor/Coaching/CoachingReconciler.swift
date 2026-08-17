@@ -55,6 +55,9 @@ struct CoachingReconciler: Sendable {
               request.tentativeMove == move,
               request.positionRevision == episode.interaction.positionRevision,
               request.learner == learner,
+              episode.knowledge.positionAdvice.map({
+                  $0.evaluation.request.committedState == request.committedState
+              }) ?? true,
               advice.evaluation.moveAssessments[move]?.move == move,
               let assessment = advice.moveAssessments[move],
               assessment.move == move
@@ -224,7 +227,7 @@ struct CoachingReconciler: Sendable {
             episode: episode
         )
         if !assessment.isLegal {
-            return returnToOrigin(
+            return originDerivation(
                 origin,
                 move: move,
                 episode: episode,
@@ -233,7 +236,7 @@ struct CoachingReconciler: Sendable {
             )
         }
         if origin == .take && !hasTakePurpose(assessment.concepts) {
-            return returnToOrigin(
+            return originDerivation(
                 origin,
                 move: move,
                 episode: episode,
@@ -246,7 +249,7 @@ struct CoachingReconciler: Sendable {
             )
         }
         if origin == .safe && !assessment.resolvesRequiredDanger {
-            return returnToOrigin(
+            return originDerivation(
                 origin,
                 move: move,
                 episode: episode,
@@ -266,7 +269,7 @@ struct CoachingReconciler: Sendable {
                 assessment: assessment,
                 tentativeAdvice: advice
             )
-            return returnToOrigin(
+            return originDerivation(
                 origin,
                 move: move,
                 episode: episode,
@@ -326,7 +329,7 @@ struct CoachingReconciler: Sendable {
                     tentativeAdvice: advice
                 )
                 : nil
-            return returnToOrigin(
+            return originDerivation(
                 origin,
                 move: move,
                 episode: episode,
@@ -403,7 +406,7 @@ struct CoachingReconciler: Sendable {
         }
     }
 
-    private func returnToOrigin(
+    private func originDerivation(
         _ origin: CoachingMoveOrigin,
         move: Move,
         episode: CoachingEpisodeState,
