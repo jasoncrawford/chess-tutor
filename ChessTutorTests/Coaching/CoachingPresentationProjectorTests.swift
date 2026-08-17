@@ -142,6 +142,22 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         )
     }
 
+    func testActionFeedbackIsDiscardedAtTheNextInteractionReconciliation() {
+        var progress = CoachingQuestionProgress(
+            questionID: .take,
+            hintLevel: 0,
+            missesAtCurrentLevel: 1,
+            feedback: .correctAbsence,
+            feedbackAnchor: .action(.noAnswer),
+            pulseID: 0
+        )
+
+        progress.discardFeedbackInvalidated(by: interaction(selectedSquare: nil))
+
+        XCTAssertNil(progress.feedback)
+        XCTAssertNil(progress.feedbackAnchor)
+    }
+
     func testRevealNextHintCapsAtAvailableLadderAndClearsAttemptFeedback() {
         var progress = CoachingQuestionProgress(
             questionID: .safeLocate,
@@ -578,6 +594,182 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         )])
     }
 
+    func testPositionAdviceMustMatchLearnerRevisionAndStartRequestContext() throws {
+        let source = CoachingTestFixtures.multipleDangerAdvice
+        let request = source.evaluation.request
+        let target = CoachingTestFixtures.whiteQueen
+        let attacker = CoachingTestFixtures.blackBishop
+        let question = CoachingQuestionID.safeResolve(
+            target: target,
+            attacker: attacker
+        )
+        let invalidCases: [(String, CoachingAdvice)] = [
+            (
+                "learner",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: nil,
+                    learner: .black,
+                    positionRevision: request.positionRevision,
+                    context: .start
+                ))
+            ),
+            (
+                "revision",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: nil,
+                    learner: request.learner,
+                    positionRevision: request.positionRevision + 1,
+                    context: .start
+                ))
+            ),
+            (
+                "request context",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: CoachingTestFixtures.safeMove,
+                    learner: request.learner,
+                    positionRevision: request.positionRevision,
+                    context: .tentativeMove(origin: .safe)
+                ))
+            ),
+        ]
+
+        for (name, advice) in invalidCases {
+            let context = try XCTUnwrap(CoachingPresentationProjector().context(
+                learner: .white,
+                derived: derived(
+                    .safeResolve(target: target),
+                    questionID: question
+                ),
+                episode: episode(
+                    advice: advice,
+                    evidence: evidence(safeTarget: target, safeAttacker: attacker),
+                    progress: progress(questionID: question, pulseID: 21),
+                    positionRevision: request.positionRevision
+                )
+            ), name)
+
+            XCTAssertEqual(
+                context.prompt,
+                .safeResolve(target: .pawn, attacker: .pawn),
+                name
+            )
+            XCTAssertTrue(context.focus.emphasizedSquares.isEmpty, name)
+            XCTAssertTrue(context.focus.paths.isEmpty, name)
+        }
+    }
+
+    func testTentativeAdviceMustMatchExactRequestAndMoveAssessment() throws {
+        let move = CoachingTestFixtures.profitableCapture
+        let alternateMove = CoachingTestFixtures.openingKnightMove
+        let assessment = CoachingTestFixtures.acceptableAssessment(
+            move,
+            concepts: [.profitableCapture]
+        )
+        let estimate = CoachingTestFixtures.capture(
+            move: move,
+            captured: Piece(kind: .rook, color: .black),
+            capturedSquare: CoachingTestFixtures.blackRook,
+            net: 5
+        )
+        let source = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .take,
+            assessment: assessment,
+            learnerCaptures: [estimate]
+        )
+        let request = source.evaluation.request
+        let wrongAssessment = CoachingTestFixtures.acceptableAssessment(
+            alternateMove,
+            concepts: [.developsKnightOrBishop]
+        )
+        let invalidCases: [(String, CoachingAdvice)] = [
+            (
+                "learner",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: move,
+                    learner: .black,
+                    positionRevision: request.positionRevision,
+                    context: .tentativeMove(origin: .take)
+                ))
+            ),
+            (
+                "revision",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: move,
+                    learner: request.learner,
+                    positionRevision: request.positionRevision + 1,
+                    context: .tentativeMove(origin: .take)
+                ))
+            ),
+            (
+                "move",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: alternateMove,
+                    learner: request.learner,
+                    positionRevision: request.positionRevision,
+                    context: .tentativeMove(origin: .take)
+                ))
+            ),
+            (
+                "origin",
+                replacing(source, request: CoachingRequest(
+                    committedState: request.committedState,
+                    tentativeMove: move,
+                    learner: request.learner,
+                    positionRevision: request.positionRevision,
+                    context: .tentativeMove(origin: .wake)
+                ))
+            ),
+            (
+                "evaluation assessment",
+                replacing(source, evaluationMoveAssessments: [move: wrongAssessment])
+            ),
+            (
+                "advice assessment",
+                replacing(source, moveAssessments: [move: wrongAssessment])
+            ),
+        ]
+        let question = CoachingQuestionID.complete(move: move, origin: .take)
+
+        for (name, advice) in invalidCases {
+            let context = try XCTUnwrap(CoachingPresentationProjector().context(
+                learner: .white,
+                derived: derived(
+                    .complete(
+                        move: move,
+                        origin: .take,
+                        concepts: [.profitableCapture]
+                    ),
+                    questionID: question
+                ),
+                episode: episode(
+                    advice: CoachingTestFixtures.takeAdvice,
+                    tentativeAdvice: advice,
+                    evidence: evidence(tentativeOrigin: .take),
+                    progress: progress(questionID: question),
+                    selectedSquare: move.to,
+                    tentativeMove: move,
+                    positionRevision: request.positionRevision
+                )
+            ), name)
+
+            XCTAssertEqual(
+                context.prompt,
+                .complete(
+                    origin: .take,
+                    idea: .profitableCapture(captured: .pawn)
+                ),
+                name
+            )
+        }
+    }
+
     private struct ProjectionCase {
         let name: String
         let derived: CoachingDerivedState
@@ -609,9 +801,11 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         evidence: CoachingPedagogicalEvidence = .empty,
         progress: CoachingQuestionProgress,
         selectedSquare: Square? = nil,
-        tentativeMove: Move? = nil
+        tentativeMove: Move? = nil,
+        positionRevision: Int? = nil
     ) -> CoachingEpisodeState {
-        let revision = advice?.evaluation.request.positionRevision
+        let revision = positionRevision
+            ?? advice?.evaluation.request.positionRevision
             ?? tentativeAdvice?.evaluation.request.positionRevision
             ?? 0
         return CoachingEpisodeState(
@@ -628,6 +822,36 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                 tentativeMove: tentativeMove,
                 positionRevision: revision
             )
+        )
+    }
+
+    private func replacing(
+        _ advice: CoachingAdvice,
+        request: CoachingRequest? = nil,
+        evaluationMoveAssessments: [Move: CoachingMoveAssessment]? = nil,
+        moveAssessments: [Move: CoachingMoveAssessment]? = nil
+    ) -> CoachingAdvice {
+        let source = advice.evaluation
+        let evaluation = CoachingEvaluation(
+            request: request ?? source.request,
+            checkingPieces: source.checkingPieces,
+            opponentHasAnyLegalCapture: source.opponentHasAnyLegalCapture,
+            learnerHasAnyLegalCapture: source.learnerHasAnyLegalCapture,
+            opponentCaptureEstimates: source.opponentCaptureEstimates,
+            urgentProblems: source.urgentProblems,
+            learnerCaptureEstimates: source.learnerCaptureEstimates,
+            mateInOneMoves: source.mateInOneMoves,
+            moveAssessments: evaluationMoveAssessments ?? source.moveAssessments
+        )
+        return CoachingAdvice(
+            evaluation: evaluation,
+            insights: advice.insights,
+            urgentProblems: advice.urgentProblems,
+            takeOpportunities: advice.takeOpportunities,
+            wakeOpportunities: advice.wakeOpportunities,
+            moveAssessments: moveAssessments ?? advice.moveAssessments,
+            openingDevelopmentIsRelevant: advice.openingDevelopmentIsRelevant,
+            confidence: advice.confidence
         )
     }
 

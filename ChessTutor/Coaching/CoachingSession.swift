@@ -667,19 +667,8 @@ struct CoachingSession: Sendable {
     }
 
     private var projectorEpisode: CoachingEpisodeState {
-        let positionAdvice: CoachingAdvice?
-        let tentativeAdvice: CoachingAdvice?
-        switch latestAdvice?.evaluation.request.context {
-        case .start:
-            positionAdvice = latestAdvice
-            tentativeAdvice = nil
-        case .tentativeMove:
-            positionAdvice = tentativeMove == nil ? latestAdvice : nil
-            tentativeAdvice = tentativeMove == nil ? nil : latestAdvice
-        case nil:
-            positionAdvice = nil
-            tentativeAdvice = nil
-        }
+        let positionAdvice = tentativeMove == nil ? positionAdviceForProjection : nil
+        let tentativeAdvice = tentativeMove == nil ? nil : latestAdvice
 
         return CoachingEpisodeState(
             knowledge: CoachingKnowledge(
@@ -712,6 +701,42 @@ struct CoachingSession: Sendable {
                     ?? latestAdvice?.evaluation.request.positionRevision
                     ?? 0
             )
+        )
+    }
+
+    // Task 3 replaces this legacy single-advice adapter with split position and move knowledge.
+    private var positionAdviceForProjection: CoachingAdvice? {
+        guard let advice = latestAdvice else { return nil }
+        let source = advice.evaluation
+        let request = CoachingRequest(
+            committedState: source.request.committedState,
+            tentativeMove: nil,
+            learner: source.request.learner,
+            positionRevision: positionRevision ?? source.request.positionRevision,
+            context: .start
+        )
+        guard request != source.request else { return advice }
+
+        let evaluation = CoachingEvaluation(
+            request: request,
+            checkingPieces: source.checkingPieces,
+            opponentHasAnyLegalCapture: source.opponentHasAnyLegalCapture,
+            learnerHasAnyLegalCapture: source.learnerHasAnyLegalCapture,
+            opponentCaptureEstimates: source.opponentCaptureEstimates,
+            urgentProblems: source.urgentProblems,
+            learnerCaptureEstimates: source.learnerCaptureEstimates,
+            mateInOneMoves: source.mateInOneMoves,
+            moveAssessments: source.moveAssessments
+        )
+        return CoachingAdvice(
+            evaluation: evaluation,
+            insights: advice.insights,
+            urgentProblems: advice.urgentProblems,
+            takeOpportunities: advice.takeOpportunities,
+            wakeOpportunities: advice.wakeOpportunities,
+            moveAssessments: advice.moveAssessments,
+            openingDevelopmentIsRelevant: advice.openingDevelopmentIsRelevant,
+            confidence: advice.confidence
         )
     }
 

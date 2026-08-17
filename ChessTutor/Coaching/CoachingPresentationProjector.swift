@@ -4,7 +4,7 @@ struct CoachingPresentationProjector: Sendable {
         derived: CoachingDerivedState,
         episode: CoachingEpisodeState
     ) -> CoachingPresentationContext? {
-        let advice = applicableAdvice(in: episode)
+        let advice = applicableAdvice(learner: learner, in: episode)
         guard let prompt = derived.promptOverride
             ?? prompt(for: derived.stage, learner: learner, episode: episode, advice: advice)
         else {
@@ -42,16 +42,34 @@ struct CoachingPresentationProjector: Sendable {
     }
 
     private func applicableAdvice(
+        learner: PieceColor,
         in episode: CoachingEpisodeState
     ) -> CoachingAdvice? {
-        if let move = episode.interaction.tentativeMove,
-           let origin = episode.evidence.tentativeOrigin,
-           let advice = episode.knowledge.tentativeAdvice,
-           advice.evaluation.request.tentativeMove == move,
-           advice.evaluation.request.context == .tentativeMove(origin: origin) {
+        if let move = episode.interaction.tentativeMove {
+            guard let origin = episode.evidence.tentativeOrigin,
+                  let advice = episode.knowledge.tentativeAdvice,
+                  advice.evaluation.request.learner == learner,
+                  advice.evaluation.request.positionRevision
+                    == episode.interaction.positionRevision,
+                  advice.evaluation.request.tentativeMove == move,
+                  advice.evaluation.request.context == .tentativeMove(origin: origin),
+                  advice.evaluation.moveAssessments[move]?.move == move,
+                  advice.moveAssessments[move]?.move == move
+            else {
+                return nil
+            }
             return advice
         }
-        return episode.knowledge.positionAdvice
+
+        guard let advice = episode.knowledge.positionAdvice,
+              advice.evaluation.request.learner == learner,
+              advice.evaluation.request.positionRevision == episode.interaction.positionRevision,
+              advice.evaluation.request.tentativeMove == nil,
+              advice.evaluation.request.context == .start
+        else {
+            return nil
+        }
+        return advice
     }
 
     private func prompt(
@@ -552,8 +570,10 @@ extension CoachingQuestionProgress {
             remainsValid = interaction.selectedSquare == square
         case let .tentativeMove(move):
             remainsValid = interaction.tentativeMove == move
-        case .identification, .action, nil:
+        case .identification, nil:
             remainsValid = true
+        case .action:
+            remainsValid = false
         }
 
         if !remainsValid {
