@@ -50,6 +50,17 @@
                ReferencedContainer = "container:ChessTutor.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B527DF7B2CC7BD0C365952FC"
+               BuildableName = "ChessTutorUITests.xctest"
+               BlueprintName = "ChessTutorUITests"
+               ReferencedContainer = "container:ChessTutor.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

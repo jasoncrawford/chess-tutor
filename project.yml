@@ -90,6 +90,16 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
+  ChessTutorUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - ChessTutorUITests
+    dependencies:
+      - target: ChessTutor
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
 
 schemes:
   ChessTutor:
@@ -104,3 +114,4 @@ schemes:
       config: Debug
       targets:
         - ChessTutorTests
+        - ChessTutorUITests

@@ -1,0 +1,494 @@
+import XCTest
+@testable import ChessTutor
+
+final class LocalCoachingExplanationSourceTests: XCTestCase {
+    private let explainer = LocalCoachingExplanationSource()
+
+    func testSafeLocatePresentationAsksForBoardTap() {
+        let presentation = explainer.presentation(
+            for: context(
+                prompt: .safeLocate,
+                routine: [.safeCurrent, .takePending, .wakePending],
+                actions: [.noAnswer, .hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false)
+            )
+        )
+
+        XCTAssertEqual(presentation.headline, "Which of your pieces needs help most?")
+        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose I don’t see one.")
+        XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
+        XCTAssertEqual(presentation.actions.map(\.title), ["I don’t see one", "Hint", "Stop"])
+    }
+
+    func testFallbackDoesNotInventPurpose() {
+        let presentation = explainer.presentation(
+            for: context(
+                prompt: .fallbackChooseMove,
+                actions: [.hint, .stop],
+                boardTask: .move
+            )
+        )
+
+        XCTAssertEqual(
+            presentation.headline,
+            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+        )
+        XCTAssertEqual(presentation.instruction, "Make a move on the board.")
+        XCTAssertEqual(presentation.boardTask, .move)
+    }
+
+    func testEveryQuestionPromptUsesConcreteAnswerInstructions() {
+        let cases: [(CoachingPrompt, String, String?)] = [
+            (
+                .checkLocate,
+                "Your king is in check. What is giving check?",
+                "Tap the piece giving check."
+            ),
+            (
+                .checkResolve,
+                "Make a move that gets your king safe.",
+                "Move a piece on the board."
+            ),
+            (
+                .safeLocate,
+                "Which of your pieces needs help most?",
+                "Tap your piece, or choose I don’t see one."
+            ),
+            (
+                .safeIdentifyAttacker(piece: .knight),
+                "You found the knight. What black piece is attacking it?",
+                "Tap the black piece."
+            ),
+            (
+                .safeResolve(target: .knight, attacker: .pawn),
+                "Yes—that pawn is attacking your knight. How could you help your knight?",
+                "Make a move that gets it safe."
+            ),
+            (
+                .takeChooseMove,
+                "Can one of your pieces make a useful capture?",
+                "Make the capture, or choose I don’t see one."
+            ),
+            (
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                "A good first step is to move a center pawn or bring out a knight. Which would you like to try?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: false)),
+                "Could you bring out a knight or bishop, move a center pawn, or castle?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
+                "This knight can come into the game.",
+                "Move it on the board."
+            ),
+            (
+                .wakeChoosePiece(purpose: .addsDefender),
+                "Which piece could help protect another piece?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .createsThreat),
+                "Which piece could safely attack something?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .centralActivity),
+                "Which piece could move closer to the center?",
+                "Tap the piece you want to move."
+            ),
+            (
+                .wakeChoosePiece(purpose: .castle),
+                "Which piece would you move to castle?",
+                "Tap your king."
+            ),
+            (
+                .opponentReply(opponent: .black),
+                "Could Black check your king or win one of your pieces?",
+                "Tap the black checking piece, or tap your piece Black could take. Otherwise choose Looks safe."
+            ),
+            (
+                .opponentReply(opponent: .white),
+                "Could White check your king or win one of your pieces?",
+                "Tap the white checking piece, or tap your piece White could take. Otherwise choose Looks safe."
+            ),
+            (
+                .fallbackChooseMove,
+                "Nothing urgent stands out. Try a move you like, and we’ll check it together.",
+                "Make a move on the board."
+            ),
+            (
+                .reviseMove,
+                "Try another move.",
+                "Move a piece on the board."
+            ),
+            (
+                .illegalKingSafety,
+                "This move leaves your king in check. Try another move.",
+                "Move a piece on the board."
+            ),
+        ]
+
+        for (prompt, headline, instruction) in cases {
+            let presentation = explainer.presentation(for: context(prompt: prompt))
+            XCTAssertEqual(presentation.headline, headline, "Unexpected headline for \(prompt)")
+            XCTAssertEqual(presentation.instruction, instruction, "Unexpected instruction for \(prompt)")
+        }
+    }
+
+    func testEveryActionHasAnUnambiguousLabelAndProminence() {
+        let presentation = explainer.presentation(
+            for: context(
+                prompt: .safeLocate,
+                actions: [.noAnswer, .looksSafe, .hint, .stop, .done, .keepLooking]
+            )
+        )
+
+        XCTAssertEqual(presentation.actions, [
+            CoachingActionPresentation(
+                action: .noAnswer,
+                title: "I don’t see one",
+                accessibilityLabel: "I don’t see one",
+                prominence: .primary
+            ),
+            CoachingActionPresentation(
+                action: .looksSafe,
+                title: "Looks safe",
+                accessibilityLabel: "Looks safe",
+                prominence: .primary
+            ),
+            CoachingActionPresentation(
+                action: .hint,
+                title: "Hint",
+                accessibilityLabel: "Show a hint",
+                prominence: .secondary
+            ),
+            CoachingActionPresentation(
+                action: .stop,
+                title: "Stop",
+                accessibilityLabel: "Stop coaching",
+                prominence: .quiet
+            ),
+            CoachingActionPresentation(
+                action: .done,
+                title: "Done",
+                accessibilityLabel: "Done with this move",
+                prominence: .primary
+            ),
+            CoachingActionPresentation(
+                action: .keepLooking,
+                title: "Keep looking",
+                accessibilityLabel: "Keep looking for another move",
+                prominence: .secondary
+            ),
+        ])
+    }
+
+    func testFirstMissEmphasizesHintWithoutChangingInstruction() {
+        let presentation = explainer.presentation(for: context(
+            prompt: .safeLocate,
+            missesAtCurrentLevel: 1,
+            actions: [.noAnswer, .hint, .stop]
+        ))
+
+        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose I don’t see one.")
+        XCTAssertEqual(
+            presentation.actions.first(where: { $0.action == .hint })?.prominence,
+            .primary
+        )
+    }
+
+    func testFeedbackStatesAVisibleChessFact() {
+        let cases: [(CoachingPrompt, CoachingFeedback, String)] = [
+            (.safeLocate, .safePiece(piece: .bishop), "That bishop is safe right now."),
+            (
+                .safeLocate,
+                .lowerPriorityThreat(piece: .pawn, urgentPiece: .knight),
+                "Yes, that pawn is threatened. Your knight is worth more, so help the knight first."
+            ),
+            (
+                .safeLocate,
+                .nonurgentThreat(piece: .pawn),
+                "Yes, that pawn is threatened. We’re looking for a knight, bishop, rook, or queen Black could win."
+            ),
+            (.safeLocate, .expectedLearnerPiece, "Tap one of your pieces."),
+            (
+                .safeIdentifyAttacker(piece: .knight),
+                .notAttacker(piece: .bishop, target: .knight),
+                "That bishop isn’t attacking your knight."
+            ),
+            (
+                .safeIdentifyAttacker(piece: .knight),
+                .expectedAttacker(target: .knight),
+                "Tap a black piece attacking your knight."
+            ),
+            (
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                .blockedWakePiece(piece: .rook),
+                "That rook can’t come out yet because other pieces are in the way."
+            ),
+            (
+                .opponentReply(opponent: .black),
+                .notReplyIssue,
+                "That square doesn’t show a check or capture after this move."
+            ),
+            (
+                .safeResolve(target: .knight, attacker: .pawn),
+                .dangerStillPresent(attacker: .pawn, target: .knight),
+                "The pawn could still take your knight after that move."
+            ),
+        ]
+
+        for (prompt, feedback, headline) in cases {
+            let result = explainer.presentation(for: context(prompt: prompt, feedback: feedback))
+            XCTAssertEqual(result.headline, headline)
+        }
+    }
+
+    func testCorrectAbsenceAcknowledgesAndAsksTheNextQuestion() {
+        let presentation = explainer.presentation(for: context(
+            prompt: .takeChooseMove,
+            feedback: .correctAbsence
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "Right—there isn’t one. Can one of your pieces make a useful capture?"
+        )
+        XCTAssertEqual(
+            presentation.instruction,
+            "Make the capture, or choose I don’t see one."
+        )
+    }
+
+    func testConcreteFeedbackNamesWhiteWhenWhiteIsTheOpponent() {
+        let presentation = explainer.presentation(
+            for: context(
+                prompt: .opponentReply(opponent: .white),
+                feedback: .concreteFlaw(kind: .check, affectedPiece: nil),
+                learner: .black
+            )
+        )
+
+        XCTAssertEqual(presentation.headline, "White could check your king.")
+    }
+
+    func testBlackLearnerSafePromptNamesWhiteAsTheAttacker() {
+        let presentation = explainer.presentation(for: context(
+            prompt: .safeIdentifyAttacker(piece: .knight),
+            learner: .black
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "You found the knight. What white piece is attacking it?"
+        )
+        XCTAssertEqual(presentation.instruction, "Tap the white piece.")
+    }
+
+    func testCompletionNamesExactlyOneSuppliedVerifiedIdea() {
+        let cases: [(CoachingCompletionIdea, String)] = [
+            (.resolvesDanger(piece: .queen), "That works. Your queen is safe now."),
+            (.mate, "That works. You found checkmate."),
+            (
+                .profitableCapture(captured: .rook),
+                "That works. Your capture wins a rook."
+            ),
+            (
+                .develops(piece: .knight),
+                "That works. Your knight came into the game. Chess players call that developing a piece."
+            ),
+            (.advancesCenterPawn, "That works. Your pawn helps control the center."),
+            (.castles, "That works. Castling helps keep your king safe."),
+            (
+                .addsDefender(piece: .bishop),
+                "That works. Your bishop adds a defender."
+            ),
+            (
+                .createsThreat(piece: .rook),
+                "That works. Your rook creates a threat."
+            ),
+            (
+                .centralizes(piece: .queen),
+                "That works. Your queen gets a more useful place near the center."
+            ),
+            (.verifiedSafe, "That works. Your move stays safe after the reply."),
+        ]
+
+        for (idea, headline) in cases {
+            let presentation = explainer.presentation(
+                for: context(prompt: .complete(origin: .wake, idea: idea))
+            )
+            XCTAssertEqual(presentation.headline, headline, "Unexpected completion for \(idea)")
+            XCTAssertNil(presentation.instruction)
+        }
+    }
+
+    func testPresentationPassesThroughRoutineBoardTaskAndSemanticFocus() {
+        let path = CoachFocusPath(
+            source: Square(file: .c, rank: 3),
+            destination: Square(file: .d, rank: 5),
+            role: .candidate
+        )
+        let focus = CoachFocusPresentation(
+            emphasizedSquares: [Square(file: .c, rank: 3)],
+            candidateSquares: [Square(file: .d, rank: 5)],
+            paths: [path],
+            pulseID: 7
+        )
+        let routine: [CoachingRoutineState] = [.safeCleared, .takeCleared, .wakeCurrent]
+        let boardTask = CoachingBoardTask.identify(allowsMoveRevision: true)
+
+        let presentation = explainer.presentation(
+            for: context(
+                prompt: .wakeChoosePiece(purpose: .centralActivity),
+                routine: routine,
+                boardTask: boardTask,
+                focus: focus
+            )
+        )
+
+        XCTAssertEqual(presentation.routine, routine)
+        XCTAssertEqual(presentation.boardTask, boardTask)
+        XCTAssertEqual(presentation.focus, focus)
+    }
+
+    func testHintLanguageNamesOnlyItsSemanticClue() {
+        let cases: [(CoachingPrompt, CoachingHint, String)] = [
+            (.safeLocate, .dangerMarker, "Look for the red danger marker, then tap your piece."),
+            (
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                .candidatePieces,
+                "Try one of the highlighted knights or center pawns."
+            ),
+            (
+                .safeIdentifyAttacker(piece: .knight),
+                .attackerRelationship,
+                "Follow the highlighted line to the piece attacking your knight."
+            ),
+            (
+                .safeResolve(target: .knight, attacker: .pawn),
+                .safeResponseIdeas,
+                "Try moving your knight, protecting it, or taking the attacker."
+            ),
+            (
+                .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
+                .movementMarkers,
+                "Use the movement markers to choose where your knight should go."
+            ),
+            (
+                .opponentReply(opponent: .black),
+                .replyMarkers,
+                "Look for a red danger marker or a check marker."
+            ),
+        ]
+
+        for (prompt, hint, instruction) in cases {
+            let result = explainer.presentation(for: context(prompt: prompt, hint: hint))
+            XCTAssertEqual(result.instruction, instruction)
+            XCTAssertEqual(result.hint, hint)
+        }
+    }
+
+    func testCanonicalOutputAvoidsJudgmentalAndEngineVocabulary() {
+        let prompts: [CoachingPrompt] = [
+            .checkLocate,
+            .checkResolve,
+            .safeLocate,
+            .safeIdentifyAttacker(piece: .queen),
+            .safeResolve(target: .queen, attacker: .rook),
+            .takeChooseMove,
+            .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+            .wakeChoosePiece(purpose: .centralActivity),
+            .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
+            .opponentReply(opponent: .black),
+            .fallbackChooseMove,
+            .reviseMove,
+            .illegalKingSafety,
+            .complete(origin: .safe, idea: .verifiedSafe),
+        ]
+        let feedback: [CoachingFeedback?] = [
+            nil,
+            .safePiece(piece: .bishop),
+            .lowerPriorityThreat(piece: .pawn, urgentPiece: .knight),
+            .nonurgentThreat(piece: .pawn),
+            .expectedLearnerPiece,
+            .notCheckingPiece(piece: .bishop),
+            .notAttacker(piece: .bishop, target: .knight),
+            .expectedAttacker(target: .knight),
+            .blockedWakePiece(piece: .rook),
+            .notWakeCandidate(piece: .bishop, purpose: .centralActivity),
+            .notReplyIssue,
+            .correctAbsence,
+            .missedExistingAnswer,
+            .concreteFlaw(kind: .materialLoss(points: 9), affectedPiece: .queen),
+            .dangerStillPresent(attacker: .rook, target: .queen),
+            .noRecognizedPurpose(purpose: .centralActivity),
+            .harmlessCheckFound,
+            .checkFoundOtherDangerRemains,
+        ]
+
+        let feedbackCopy = prompts.flatMap { prompt in
+            feedback.map { item in
+                let presentation = explainer.presentation(
+                    for: context(prompt: prompt, feedback: item)
+                )
+                return ([presentation.headline, presentation.instruction].compactMap { $0 })
+                    .joined(separator: " ")
+            }
+        }.joined(separator: " ")
+        let hintCopy = prompts.map { prompt in
+            let presentation = explainer.presentation(
+                for: context(
+                    prompt: prompt,
+                    hint: .candidatePieces,
+                    actions: [.hint]
+                )
+            )
+            return ([presentation.headline, presentation.instruction].compactMap { $0 })
+                .joined(separator: " ")
+        }.joined(separator: " ")
+        let copy = "\(feedbackCopy) \(hintCopy)".lowercased()
+
+        XCTAssertFalse(copy.contains("best"))
+        XCTAssertFalse(copy.contains("wrong move"))
+        XCTAssertNil(copy.range(of: #"\b[+-]?\d+(?:\.\d+)?\b"#, options: .regularExpression))
+
+        let prohibited = [
+            "job",
+            "part of this problem",
+            "big danger",
+            "tap the problem",
+        ]
+        for phrase in prohibited {
+            XCTAssertFalse(copy.contains(phrase), "Found prohibited copy: \(phrase)")
+        }
+        XCTAssertNotEqual(copy.trimmingCharacters(in: .whitespacesAndNewlines), "Yes.")
+    }
+
+    private func context(
+        prompt: CoachingPrompt,
+        feedback: CoachingFeedback? = nil,
+        learner: PieceColor = .white,
+        hint: CoachingHint? = nil,
+        missesAtCurrentLevel: Int = 0,
+        routine: [CoachingRoutineState] = [],
+        actions: [CoachingAction] = [],
+        boardTask: CoachingBoardTask = .none,
+        focus: CoachFocusPresentation = .empty
+    ) -> CoachingPresentationContext {
+        CoachingPresentationContext(
+            prompt: prompt,
+            feedback: feedback,
+            learner: learner,
+            hint: hint,
+            missesAtCurrentLevel: missesAtCurrentLevel,
+            routine: routine,
+            actions: actions,
+            boardTask: boardTask,
+            focus: focus
+        )
+    }
+}
