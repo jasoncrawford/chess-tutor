@@ -27,7 +27,7 @@ struct CoachingReconciler: Sendable {
         )
     }
 
-    private func applicablePositionAdvice(
+    func applicablePositionAdvice(
         in episode: CoachingEpisodeState,
         learner: PieceColor
     ) -> CoachingAdvice? {
@@ -43,7 +43,7 @@ struct CoachingReconciler: Sendable {
         return advice
     }
 
-    private func applicableTentativeAdvice(
+    func applicableTentativeAdvice(
         for move: Move,
         origin: CoachingMoveOrigin,
         learner: PieceColor,
@@ -61,6 +61,27 @@ struct CoachingReconciler: Sendable {
             return nil
         }
         return (advice, assessment)
+    }
+
+    private func applicablePositionAdvice(
+        for tentativeAdvice: CoachingAdvice,
+        learner: PieceColor,
+        episode: CoachingEpisodeState
+    ) -> CoachingAdvice? {
+        if let advice = applicablePositionAdvice(in: episode, learner: learner) {
+            return advice
+        }
+        guard let advice = episode.knowledge.positionAdvice else { return nil }
+        let positionRequest = advice.evaluation.request
+        let tentativeRequest = tentativeAdvice.evaluation.request
+        guard positionRequest.context == .start,
+              positionRequest.tentativeMove == nil,
+              positionRequest.learner == learner,
+              positionRequest.committedState == tentativeRequest.committedState
+        else {
+            return nil
+        }
+        return advice
     }
 
     private func deriveCheck(
@@ -180,6 +201,9 @@ struct CoachingReconciler: Sendable {
     ) -> CoachingDerivedState {
         let origin = episode.evidence.tentativeOrigin ?? .preexisting
         let context = CoachingRequest.Context.tentativeMove(origin: origin)
+        if episode.knowledge.unsupportedContext == context {
+            return fallbackDerivation()
+        }
         guard let (advice, assessment) = applicableTentativeAdvice(
             for: move,
             origin: origin,
@@ -193,7 +217,11 @@ struct CoachingReconciler: Sendable {
             )
         }
 
-        let positionAdvice = applicablePositionAdvice(in: episode, learner: learner)
+        let positionAdvice = applicablePositionAdvice(
+            for: advice,
+            learner: learner,
+            episode: episode
+        )
         if !assessment.isLegal {
             return returnToOrigin(
                 origin,

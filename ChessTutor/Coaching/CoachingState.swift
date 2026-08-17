@@ -15,9 +15,13 @@ enum CoachingStage: Equatable, Sendable {
 }
 
 enum CoachingEvent: Equatable, Sendable {
+    case identificationTapped(Square)
+    case interactionChanged(CoachingInteractionSnapshot)
+    case actionChosen(CoachingAction)
+
+    // Transitional callers are removed when GameSession adopts authoritative snapshots.
     case squareTapped(Square)
     case moveStaged(Move)
-    case actionChosen(CoachingAction)
     case positionChanged(revision: Int)
 }
 
