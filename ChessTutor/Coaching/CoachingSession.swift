@@ -1,33 +1,3 @@
-enum CoachingStage: Equatable, Sendable {
-    case awaitingAdvice(origin: CoachingMoveOrigin?)
-    case checkLocate
-    case checkResolve
-    case safeLocate
-    case safeIdentifyAttacker(target: Square)
-    case safeResolve(target: Square)
-    case takeChooseMove
-    case wakeChoosePiece(purpose: CoachingWakePurpose)
-    case wakeChooseMove(piece: Square, purpose: CoachingWakePurpose)
-    case fallbackChooseMove
-    case opponentCheck(move: Move, origin: CoachingMoveOrigin)
-    case reviseMove(origin: CoachingMoveOrigin)
-    case complete(move: Move, origin: CoachingMoveOrigin, concepts: [CoachingConcept])
-}
-
-enum CoachingEvent: Equatable, Sendable {
-    case squareTapped(Square)
-    case moveStaged(Move)
-    case actionChosen(CoachingAction)
-    case positionChanged(revision: Int)
-}
-
-enum CoachingDirective: Equatable, Sendable {
-    case requestAdvice(context: CoachingRequest.Context)
-    case selectSquare(Square)
-    case stop(preservingTentativeMove: Bool)
-    case commitWithExistingDonePath
-}
-
 struct CoachingSession: Sendable {
     private let learner: PieceColor
     private let explainer: any CoachingExplaining
