@@ -85,6 +85,22 @@ extension CoachingPanelLayout {
     var composition: CoachingPanelComposition {
         physicalAxis == .vertical ? .tall : .wide
     }
+
+    var tabletopContentSize: CGSize {
+        contentSize(for: tabletopRegionSize)
+    }
+
+    var physicalContentSize: CGSize {
+        contentSize(for: physicalRegionSize)
+    }
+
+    private func contentSize(for regionSize: CGSize) -> CGSize {
+        let totalInset = SidebarPanelMetrics.contentPadding * 2
+        return CGSize(
+            width: max(1, regionSize.width - totalInset),
+            height: max(1, regionSize.height - totalInset)
+        )
+    }
 }
 
 extension SidebarColumnLayout {
@@ -129,15 +145,20 @@ struct CoachingPanelView: View {
 
     var body: some View {
         panelContent
-        .frame(
-            maxWidth: layout.tabletopRegionSize.width,
-            maxHeight: layout.tabletopRegionSize.height,
-            alignment: .topLeading
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityRepresentation {
-            accessibilityPanelContent
-        }
+            .frame(
+                width: layout.physicalContentSize.width,
+                height: layout.physicalContentSize.height,
+                alignment: .topLeading
+            )
+            .rotationEffect(.degrees(readableRotationDegrees))
+            .frame(
+                width: layout.tabletopContentSize.width,
+                height: layout.tabletopContentSize.height
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityRepresentation {
+                accessibilityPanelContent
+            }
     }
 
     @ViewBuilder
@@ -155,17 +176,17 @@ struct CoachingPanelView: View {
                 readableActions(axis: .vertical)
             }
         case .wide:
-            HStack(spacing: 10) {
+            VStack(spacing: 10) {
                 if !presentation.routine.isEmpty {
-                    routineHeader(axis: .vertical)
+                    routineHeader(axis: .horizontal)
                     panelDivider
                 }
 
-                VStack(spacing: 10) {
+                HStack(spacing: 10) {
                     scrollableConversation
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     panelDivider
-                    readableActions(axis: .horizontal)
+                    readableActions(axis: .vertical)
                 }
             }
         }
@@ -196,7 +217,6 @@ struct CoachingPanelView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
-        .rotationEffect(.degrees(readableRotationDegrees))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
         .accessibilitySortPriority(CoachingPanelAccessibilitySection.conversation.sortPriority)
@@ -246,7 +266,6 @@ struct CoachingPanelView: View {
                 }
             }
         }
-        .rotationEffect(.degrees(readableRotationDegrees))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.routine.identifier)
         .accessibilitySortPriority(CoachingPanelAccessibilitySection.routine.sortPriority)
@@ -274,7 +293,6 @@ struct CoachingPanelView: View {
             }
         }
         .font(.system(size: 17, weight: .semibold, design: .rounded))
-        .rotationEffect(.degrees(readableRotationDegrees))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.actions.identifier)
         .accessibilitySortPriority(CoachingPanelAccessibilitySection.actions.sortPriority)

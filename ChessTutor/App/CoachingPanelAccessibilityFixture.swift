@@ -1,12 +1,37 @@
 #if DEBUG
 import SwiftUI
 
+enum CoachingPanelAccessibilityFixtureConfiguration {
+    case tall
+    case clockwiseQuarterTurn
+    case counterclockwiseQuarterTurn
+
+    var composition: CoachingPanelComposition {
+        self == .tall ? .tall : .wide
+    }
+
+    var tableRotationDegrees: Double {
+        switch self {
+        case .tall:
+            return 0
+        case .clockwiseQuarterTurn:
+            return 90
+        case .counterclockwiseQuarterTurn:
+            return -90
+        }
+    }
+
+    var readableRotationDegrees: Double {
+        -tableRotationDegrees
+    }
+}
+
 struct CoachingPanelAccessibilityFixture: View {
-    let composition: CoachingPanelComposition
+    let configuration: CoachingPanelAccessibilityFixtureConfiguration
 
     @State private var session = GameSession()
 
-    static var launchComposition: CoachingPanelComposition? {
+    static var launchConfiguration: CoachingPanelAccessibilityFixtureConfiguration? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let flagIndex = arguments.firstIndex(of: "-ui-test-coaching-panel"),
               arguments.indices.contains(flagIndex + 1) else {
@@ -16,37 +41,50 @@ struct CoachingPanelAccessibilityFixture: View {
         switch arguments[flagIndex + 1] {
         case "tall":
             return .tall
-        case "wide":
-            return .wide
+        case "clockwise-quarter-turn":
+            return .clockwiseQuarterTurn
+        case "counterclockwise-quarter-turn":
+            return .counterclockwiseQuarterTurn
         default:
             return nil
         }
     }
 
     var body: some View {
-        CoachingPanelView(
-            session: session,
-            presentation: presentation,
-            layout: layout,
-            readableRotationDegrees: 0,
-            onCommittedMove: { _ in }
-        )
-        .frame(width: layout.tabletopRegionSize.width, height: layout.tabletopRegionSize.height)
-        .background(AppTheme.table)
+        ZStack {
+            AppTheme.table.ignoresSafeArea()
+
+            SidebarPanelView(panelSize: layout.tabletopRegionSize) {
+                CoachingPanelView(
+                    session: session,
+                    presentation: presentation,
+                    layout: layout,
+                    readableRotationDegrees: configuration.readableRotationDegrees,
+                    onCommittedMove: { _ in }
+                )
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("coaching-panel-frame")
+            .rotationEffect(.degrees(configuration.tableRotationDegrees))
+            .frame(
+                width: layout.physicalRegionSize.width,
+                height: layout.physicalRegionSize.height
+            )
+        }
     }
 
     private var layout: CoachingPanelLayout {
-        switch composition {
+        switch configuration.composition {
         case .tall:
             CoachingPanelLayout(
-                tabletopRegionSize: CGSize(width: 360, height: 720),
-                physicalRegionSize: CGSize(width: 360, height: 720),
+                tabletopRegionSize: CGSize(width: 260, height: 446),
+                physicalRegionSize: CGSize(width: 260, height: 446),
                 physicalAxis: .vertical
             )
         case .wide:
             CoachingPanelLayout(
-                tabletopRegionSize: CGSize(width: 720, height: 360),
-                physicalRegionSize: CGSize(width: 720, height: 360),
+                tabletopRegionSize: CGSize(width: 246.67, height: 503.34),
+                physicalRegionSize: CGSize(width: 503.34, height: 246.67),
                 physicalAxis: .horizontal
             )
         }
@@ -54,16 +92,30 @@ struct CoachingPanelAccessibilityFixture: View {
 
     private var presentation: CoachingPresentation {
         CoachingPresentation(
-            headline: "What do you notice?",
-            instruction: "Find a safe square.",
+            headline: "Yes—that pawn is attacking your queen. How could you help your queen?",
+            instruction: "Try moving your queen, protecting it, or taking the attacker.",
             hint: nil,
             routine: [.safeCurrent, .takePending, .wakePending],
-            actions: [CoachingActionPresentation(
-                action: .hint,
-                title: "I need help",
-                accessibilityLabel: "I need help",
-                prominence: .secondary
-            )],
+            actions: [
+                CoachingActionPresentation(
+                    action: .done,
+                    title: "Done",
+                    accessibilityLabel: "Done with this move",
+                    prominence: .primary
+                ),
+                CoachingActionPresentation(
+                    action: .keepLooking,
+                    title: "Keep looking",
+                    accessibilityLabel: "Keep looking for another move",
+                    prominence: .secondary
+                ),
+                CoachingActionPresentation(
+                    action: .stop,
+                    title: "Stop",
+                    accessibilityLabel: "Stop coaching",
+                    prominence: .quiet
+                ),
+            ],
             boardTask: .none,
             focus: .empty
         )

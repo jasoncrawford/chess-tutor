@@ -34,6 +34,20 @@ final class CoachingPanelLayoutTests: XCTestCase {
             accuracy: 0.01
         )
         XCTAssertEqual(layout.physicalRegionSize.height, segment.height, accuracy: 0.01)
+        XCTAssertEqual(
+            layout.tabletopContentSize,
+            CGSize(
+                width: layout.tabletopRegionSize.width - 32,
+                height: layout.tabletopRegionSize.height - 32
+            )
+        )
+        XCTAssertEqual(
+            layout.physicalContentSize,
+            CGSize(
+                width: layout.physicalRegionSize.width - 32,
+                height: layout.physicalRegionSize.height - 32
+            )
+        )
         XCTAssertEqual(layout.physicalAxis, .horizontal)
         XCTAssertTrue(sidebar.showsCapturedPanelUtilityFooter)
     }
