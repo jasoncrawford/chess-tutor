@@ -599,11 +599,23 @@ struct CoachingReconciler: Sendable {
 
         let board = positionAdvice?.evaluation.request.committedState.board
             ?? tentativeAdvice.evaluation.request.committedState.board
-        let target = evidence.safeTarget.flatMap { board[$0]?.kind }
-            ?? positionAdvice?.urgentProblems.first?.piece.kind
-            ?? tentativeAdvice.urgentProblems.first?.piece.kind
+        let currentProblems = positionAdvice?.urgentProblems
+            ?? tentativeAdvice.urgentProblems
+        let validProblem = evidence.safeTarget.flatMap { target in
+            currentProblems.first(where: { $0.target == target })
+        }
+        let target = validProblem?.piece.kind
+            ?? currentProblems.first?.piece.kind
             ?? .king
-        let attacker = evidence.safeAttacker.flatMap { board[$0]?.kind }
+        let validAttacker = evidence.safeAttacker.flatMap { attacker -> Square? in
+            guard let validProblem,
+                  validProblem.captures.contains(where: { $0.move.from == attacker })
+            else {
+                return nil
+            }
+            return attacker
+        }
+        let attacker = validAttacker.flatMap { board[$0]?.kind }
         return .dangerStillPresent(attacker: attacker, target: target)
     }
 

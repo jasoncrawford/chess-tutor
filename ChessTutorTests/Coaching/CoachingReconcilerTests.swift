@@ -272,6 +272,51 @@ final class CoachingReconcilerTests: XCTestCase {
         )
     }
 
+    func testUnresolvedSafeFeedbackUsesOnlyEvidenceValidForRederivedQuestion() {
+        let move = CoachingTestFixtures.safeMove
+        var episode = episode(
+            advice: CoachingTestFixtures.multipleDangerAdvice,
+            selectedSquare: move.to,
+            tentativeMove: move
+        )
+        episode.evidence.safeTarget = CoachingTestFixtures.whiteRook
+        episode.evidence.safeAttacker = CoachingTestFixtures.blackBishop
+        episode.evidence.tentativeOrigin = .safe
+        episode.knowledge.tentativeAdvice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .safe,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                resolvesRequiredDanger: false,
+                isAcceptable: false
+            ),
+            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+        )
+
+        let result = CoachingReconciler().derive(learner: .white, episode: episode)
+        XCTAssertEqual(
+            result.stage,
+            .safeIdentifyAttacker(target: CoachingTestFixtures.whiteRook)
+        )
+        XCTAssertEqual(
+            result.questionID,
+            .safeAttacker(target: CoachingTestFixtures.whiteRook)
+        )
+        XCTAssertEqual(
+            result.derivedFeedback,
+            .dangerStillPresent(attacker: nil, target: .rook)
+        )
+
+        episode.evidence.safeTarget = CoachingTestFixtures.openingKnight
+        let invalidTarget = CoachingReconciler().derive(learner: .white, episode: episode)
+        XCTAssertEqual(invalidTarget.stage, .safeLocate)
+        XCTAssertEqual(invalidTarget.questionID, .safeLocate)
+        XCTAssertEqual(
+            invalidTarget.derivedFeedback,
+            .dangerStillPresent(attacker: nil, target: .queen)
+        )
+    }
+
     func testUnpurposefulWakeMoveReturnsToPurposeForTentativeSource() {
         let move = CoachingTestFixtures.alternateKnightMove
         var episode = episode(
