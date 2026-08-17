@@ -522,7 +522,7 @@ struct CoachingSession: Sendable {
             return .safe
         case .takeChooseMove:
             return .take
-        case .wakeChooseMove:
+        case .wakeChoosePiece, .wakeChooseMove:
             return .wake
         case .fallbackChooseMove:
             return .fallback
@@ -532,7 +532,7 @@ struct CoachingSession: Sendable {
              let .reviseMove(origin),
              let .complete(_, origin, _):
             return origin
-        case .checkLocate, .safeLocate, .safeIdentifyAttacker, .wakeChoosePiece:
+        case .checkLocate, .safeLocate, .safeIdentifyAttacker:
             return nil
         }
     }

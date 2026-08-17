@@ -55,6 +55,7 @@ struct CoachingReconciler: Sendable {
               request.tentativeMove == move,
               request.positionRevision == episode.interaction.positionRevision,
               request.learner == learner,
+              advice.evaluation.moveAssessments[move]?.move == move,
               let assessment = advice.moveAssessments[move],
               assessment.move == move
         else {

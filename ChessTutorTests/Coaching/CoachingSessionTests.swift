@@ -2096,6 +2096,40 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .awaitingAdvice(origin: .wake))
     }
 
+    func testStagingMovableNoncandidateWhileChoosingWakeSourceUsesWakeOrigin() {
+        let pawn = Square(file: .e, rank: 2)
+        let move = Move(from: pawn, to: Square(file: .e, rank: 3))
+        var session = openingSession()
+        session.handle(.interactionChanged(snapshot(selected: pawn)))
+        XCTAssertEqual(
+            session.stage,
+            .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true))
+        )
+
+        XCTAssertEqual(
+            stage(move, in: &session),
+            [.requestAdvice(context: .tentativeMove(origin: .wake))]
+        )
+        session.receive(
+            CoachingTestFixtures.adviceForTentativeMove(
+                move,
+                origin: .wake,
+                assessment: CoachingTestFixtures.acceptableAssessment(
+                    move,
+                    concepts: [],
+                    isAcceptable: false
+                )
+            ),
+            interaction: snapshot(selected: move.to, tentativeMove: move)
+        )
+
+        XCTAssertEqual(
+            session.stage,
+            .wakeChooseMove(piece: pawn, purpose: .centralActivity)
+        )
+        XCTAssertEqual(session.missesAtCurrentLevel, 1)
+    }
+
     func testRemovingCompletedMoveDropsMoveEvidenceAndRederivesPositionQuestion() {
         let move = CoachingTestFixtures.openingKnightMove
         var session = openingSession()

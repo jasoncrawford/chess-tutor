@@ -203,6 +203,39 @@ final class CoachingReconcilerTests: XCTestCase {
         XCTAssertNil(result.requestedAdvice)
     }
 
+    func testTentativeAdviceRequiresExactEvaluatorAssessment() {
+        let move = CoachingTestFixtures.openingKnightMove
+        let alternateMove = CoachingTestFixtures.alternateKnightMove
+        let source = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .wake,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                concepts: [.developsKnightOrBishop]
+            )
+        )
+        let invalid = replacingEvaluationAssessments(
+            in: source,
+            with: [move: CoachingTestFixtures.acceptableAssessment(
+                alternateMove,
+                concepts: [.developsKnightOrBishop]
+            )]
+        )
+        var episode = episode(
+            advice: CoachingTestFixtures.startingPositionAdvice,
+            selectedSquare: move.to,
+            tentativeMove: move
+        )
+        episode.evidence.tentativeOrigin = .wake
+        episode.knowledge.tentativeAdvice = invalid
+
+        let result = CoachingReconciler().derive(learner: .white, episode: episode)
+
+        XCTAssertEqual(result.stage, .awaitingAdvice(origin: .wake))
+        XCTAssertNil(result.questionID)
+        XCTAssertEqual(result.requestedAdvice, .tentativeMove(origin: .wake))
+    }
+
     func testIllegalTentativeMoveReturnsToItsDerivedWakeQuestion() {
         let move = CoachingTestFixtures.openingKnightMove
         let illegal = CoachingMoveAssessment(
@@ -435,6 +468,34 @@ final class CoachingReconcilerTests: XCTestCase {
                 tentativeMove: tentativeMove,
                 positionRevision: advice.evaluation.request.positionRevision
             )
+        )
+    }
+
+    private func replacingEvaluationAssessments(
+        in advice: CoachingAdvice,
+        with moveAssessments: [Move: CoachingMoveAssessment]
+    ) -> CoachingAdvice {
+        let source = advice.evaluation
+        let evaluation = CoachingEvaluation(
+            request: source.request,
+            checkingPieces: source.checkingPieces,
+            opponentHasAnyLegalCapture: source.opponentHasAnyLegalCapture,
+            learnerHasAnyLegalCapture: source.learnerHasAnyLegalCapture,
+            opponentCaptureEstimates: source.opponentCaptureEstimates,
+            urgentProblems: source.urgentProblems,
+            learnerCaptureEstimates: source.learnerCaptureEstimates,
+            mateInOneMoves: source.mateInOneMoves,
+            moveAssessments: moveAssessments
+        )
+        return CoachingAdvice(
+            evaluation: evaluation,
+            insights: advice.insights,
+            urgentProblems: advice.urgentProblems,
+            takeOpportunities: advice.takeOpportunities,
+            wakeOpportunities: advice.wakeOpportunities,
+            moveAssessments: advice.moveAssessments,
+            openingDevelopmentIsRelevant: advice.openingDevelopmentIsRelevant,
+            confidence: advice.confidence
         )
     }
 }
