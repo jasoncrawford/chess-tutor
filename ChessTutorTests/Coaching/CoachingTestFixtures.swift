@@ -34,7 +34,47 @@ struct ImmediateCoachingAdvisor: CoachingAdvising {
     let advice: CoachingAdvice
 
     func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
-        advice
+        advice.replacingRequest(with: request)
+    }
+}
+
+extension CoachingAdvice {
+    func replacingRequest(with request: CoachingRequest) -> CoachingAdvice {
+        CoachingAdvice(
+            evaluation: CoachingEvaluation(
+                request: request,
+                checkingPieces: evaluation.checkingPieces,
+                opponentHasAnyLegalCapture: evaluation.opponentHasAnyLegalCapture,
+                learnerHasAnyLegalCapture: evaluation.learnerHasAnyLegalCapture,
+                opponentCaptureEstimates: evaluation.opponentCaptureEstimates,
+                urgentProblems: evaluation.urgentProblems,
+                learnerCaptureEstimates: evaluation.learnerCaptureEstimates,
+                mateInOneMoves: evaluation.mateInOneMoves,
+                moveAssessments: evaluation.moveAssessments
+            ),
+            insights: insights,
+            urgentProblems: urgentProblems,
+            takeOpportunities: takeOpportunities,
+            wakeOpportunities: wakeOpportunities,
+            moveAssessments: moveAssessments,
+            openingDevelopmentIsRelevant: openingDevelopmentIsRelevant,
+            confidence: confidence
+        )
+    }
+}
+
+extension CoachingSession {
+    @discardableResult
+    mutating func receive(_ advice: CoachingAdvice) -> [CoachingDirective] {
+        let request = advice.evaluation.request
+        return receive(
+            advice,
+            interaction: CoachingInteractionSnapshot(
+                selectedSquare: request.tentativeMove?.to,
+                tentativeMove: request.tentativeMove,
+                positionRevision: request.positionRevision
+            )
+        )
     }
 }
 

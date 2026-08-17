@@ -18,16 +18,10 @@ enum CoachingEvent: Equatable, Sendable {
     case identificationTapped(Square)
     case interactionChanged(CoachingInteractionSnapshot)
     case actionChosen(CoachingAction)
-
-    // Transitional callers are removed when GameSession adopts authoritative snapshots.
-    case squareTapped(Square)
-    case moveStaged(Move)
-    case positionChanged(revision: Int)
 }
 
 enum CoachingDirective: Equatable, Sendable {
     case requestAdvice(context: CoachingRequest.Context)
-    case selectSquare(Square)
     case stop(preservingTentativeMove: Bool)
     case commitWithExistingDonePath
 }

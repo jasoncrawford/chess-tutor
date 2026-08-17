@@ -109,8 +109,21 @@ final class CoachingPanelLayoutTests: XCTestCase {
     }
 
     func testActiveCoachingPresentationAlwaysRetainsAuthoredStopAction() {
-        var session = CoachingSession(learner: .white)
-        session.receive(CoachingTestFixtures.startingPositionAdvice)
+        let interaction = CoachingInteractionSnapshot(
+            selectedSquare: nil,
+            tentativeMove: nil,
+            positionRevision: CoachingTestFixtures.startingPositionAdvice
+                .evaluation.request.positionRevision
+        )
+        var session = CoachingSession(
+            learner: .white,
+            interaction: interaction,
+            initialContext: .start
+        )
+        session.receive(
+            CoachingTestFixtures.startingPositionAdvice,
+            interaction: interaction
+        )
 
         XCTAssertTrue(session.presentation?.actions.contains { $0.action == .stop } == true)
     }

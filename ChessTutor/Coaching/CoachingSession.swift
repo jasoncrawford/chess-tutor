@@ -52,23 +52,6 @@ struct CoachingSession: Sendable {
         _ = reconcile()
     }
 
-    // Task 4 migrates GameSession to the authoritative initializer above.
-    init(
-        learner: PieceColor,
-        explainer: any CoachingExplaining = LocalCoachingExplanationSource()
-    ) {
-        self.init(
-            learner: learner,
-            interaction: CoachingInteractionSnapshot(
-                selectedSquare: nil,
-                tentativeMove: nil,
-                positionRevision: 0
-            ),
-            initialContext: .start,
-            explainer: explainer
-        )
-    }
-
     @discardableResult
     mutating func receive(
         _ advice: CoachingAdvice,
@@ -144,57 +127,7 @@ struct CoachingSession: Sendable {
             return handleInteractionChange(interaction)
         case let .actionChosen(action):
             return handleAction(action)
-
-        // Task 4 removes these adapters after GameSession sends snapshots.
-        case let .squareTapped(square):
-            if currentProjectionContext()?.boardTask == .move {
-                return handleInteractionChange(CoachingInteractionSnapshot(
-                    selectedSquare: square,
-                    tentativeMove: episode.interaction.tentativeMove,
-                    positionRevision: episode.interaction.positionRevision
-                ))
-            }
-            return handleIdentificationTap(square)
-        case let .moveStaged(move):
-            return handleInteractionChange(CoachingInteractionSnapshot(
-                selectedSquare: move.to,
-                tentativeMove: move,
-                positionRevision: episode.interaction.positionRevision
-            ))
-        case let .positionChanged(revision):
-            return handleInteractionChange(CoachingInteractionSnapshot(
-                selectedSquare: nil,
-                tentativeMove: nil,
-                positionRevision: revision
-            ))
         }
-    }
-
-    // Task 4 removes these adapters with the old GameSession call sites.
-    @discardableResult
-    mutating func receive(_ advice: CoachingAdvice) -> [CoachingDirective] {
-        let request = advice.evaluation.request
-        return receive(
-            advice,
-            interaction: CoachingInteractionSnapshot(
-                selectedSquare: request.tentativeMove?.to
-                    ?? episode.interaction.selectedSquare,
-                tentativeMove: request.tentativeMove,
-                positionRevision: request.positionRevision
-            )
-        )
-    }
-
-    mutating func receiveUnsupportedPosition() {
-        let context = episode.knowledge.pendingContext
-            ?? episode.evidence.tentativeOrigin.map {
-                .tentativeMove(origin: $0)
-            }
-            ?? .start
-        _ = receiveUnsupportedPosition(
-            for: context,
-            interaction: episode.interaction
-        )
     }
 
     private mutating func handleIdentificationTap(
@@ -449,15 +382,6 @@ struct CoachingSession: Sendable {
         }
         episode.knowledge.pendingContext = requestedContext
         return [.requestAdvice(context: requestedContext)]
-    }
-
-    private func currentProjectionContext() -> CoachingPresentationContext? {
-        let derived = reconciler.derive(learner: learner, episode: episode)
-        return projector.context(
-            learner: learner,
-            derived: derived,
-            episode: episode
-        )
     }
 
     private mutating func recordAttempt(

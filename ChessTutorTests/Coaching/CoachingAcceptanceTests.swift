@@ -15,13 +15,14 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.boardTask,
-            .identify(allowsMoveRevision: false)
+            .move
         )
         XCTAssertEqual(
             session.coachingPresentation?.routine,
             [.safeCleared, .takeCleared, .wakeCurrent]
         )
-        XCTAssertTrue(session.handleCoachingSquareTap(move.from))
+        XCTAssertFalse(session.handleCoachingSquareTap(move.from))
+        session.select(move.from)
         XCTAssertEqual(session.state, GameState.startingPosition())
         XCTAssertEqual(session.selectedSquare, move.from)
 
@@ -52,7 +53,9 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
 
         await beginCoaching(in: session)
-        XCTAssertTrue(session.handleCoachingSquareTap(move.from))
+        XCTAssertFalse(session.handleCoachingSquareTap(move.from))
+        session.select(move.from)
+        XCTAssertEqual(session.selectedSquare, move.from)
         XCTAssertEqual(session.moveSelectedPiece(to: move.to), .moved)
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
@@ -131,7 +134,9 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.coachingPresentation?.headline.hasPrefix("Right—there isn’t one.") == true)
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
 
-        XCTAssertTrue(session.handleCoachingSquareTap(knight))
+        XCTAssertFalse(session.handleCoachingSquareTap(knight))
+        session.select(knight)
+        XCTAssertEqual(session.selectedSquare, knight)
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
@@ -251,7 +256,9 @@ final class CoachingAcceptanceTests: XCTestCase {
         await beginCoaching(in: session)
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertTrue(session.coachingPresentation?.headline.hasPrefix("Right—there isn’t one.") == true)
-        XCTAssertTrue(session.handleCoachingSquareTap(knight))
+        XCTAssertFalse(session.handleCoachingSquareTap(knight))
+        session.select(knight)
+        XCTAssertEqual(session.selectedSquare, knight)
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
@@ -347,11 +354,13 @@ final class CoachingAcceptanceTests: XCTestCase {
     func testIncorrectTapsAndFiniteSemanticHintsProgressWithoutMovingAPiece() async {
         let target = Square(file: .d, rank: 4)
         let attacker = Square(file: .b, rank: 6)
-        let unrelated = Square(file: .h, rank: 1)
+        let whiteKing = Square(file: .h, rank: 1)
+        let wrongAttacker = Square(file: .h, rank: 7)
         let state = makeState(pieces: [
-            unrelated: white(.king),
+            whiteKing: white(.king),
             target: white(.bishop),
             attacker: black(.bishop),
+            wrongAttacker: black(.pawn),
             Square(file: .a, rank: 8): black(.king),
         ])
         let session = makeSession(state: state)
@@ -360,8 +369,8 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.handleCoachingSquareTap(target))
         let unchangedBoard = session.state.board
 
-        XCTAssertTrue(session.handleCoachingSquareTap(unrelated))
-        XCTAssertTrue(session.handleCoachingSquareTap(unrelated))
+        XCTAssertTrue(session.handleCoachingSquareTap(wrongAttacker))
+        XCTAssertTrue(session.handleCoachingSquareTap(wrongAttacker))
         XCTAssertEqual(session.state.board, unchangedBoard)
         XCTAssertEqual(
             session.coachingPresentation?.actions.first { $0.action == .hint }?.prominence,
@@ -398,7 +407,9 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
 
         await beginCoaching(in: session)
-        XCTAssertTrue(session.handleCoachingSquareTap(move.from))
+        XCTAssertFalse(session.handleCoachingSquareTap(move.from))
+        session.select(move.from)
+        XCTAssertEqual(session.selectedSquare, move.from)
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
 
@@ -440,7 +451,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(first.sideToMove, .black)
         XCTAssertEqual(first.publicEffects, [
             .squareTap(
-                consumed: true,
+                consumed: false,
                 selectedSquare: Square(file: .g, rank: 1),
                 moveHistory: []
             ),
@@ -490,7 +501,9 @@ final class CoachingAcceptanceTests: XCTestCase {
 
     private func completeStartingMove(_ move: Move, in session: GameSession) async {
         await beginCoaching(in: session)
-        XCTAssertTrue(session.handleCoachingSquareTap(move.from))
+        XCTAssertFalse(session.handleCoachingSquareTap(move.from))
+        session.select(move.from)
+        XCTAssertEqual(session.selectedSquare, move.from)
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
@@ -509,6 +522,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         await beginCoaching(in: session)
         presentations.append(session.coachingPresentation!)
         let tapWasConsumed = session.handleCoachingSquareTap(move.from)
+        session.select(move.from)
         publicEffects.append(.squareTap(
             consumed: tapWasConsumed,
             selectedSquare: session.selectedSquare,

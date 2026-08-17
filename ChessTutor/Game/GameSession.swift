@@ -98,6 +98,14 @@ final class GameSession {
         pendingCoachingRequest?.id
     }
 
+    private var coachingInteractionSnapshot: CoachingInteractionSnapshot {
+        CoachingInteractionSnapshot(
+            selectedSquare: selectedSquare,
+            tentativeMove: tentativeMove,
+            positionRevision: analysisRevision
+        )
+    }
+
     var canRequestCoaching: Bool {
         committedState.result == .ongoing
             && localCanActForCurrentTurn
@@ -252,6 +260,11 @@ final class GameSession {
     }
 
     func select(_ square: Square) {
+        selectWithoutSynchronizing(square)
+        _ = synchronizeCoachingInteraction()
+    }
+
+    private func selectWithoutSynchronizing(_ square: Square) {
         guard committedState.result == .ongoing else {
             selectedSquare = state.board[square] == nil ? nil : square
             actionableMovesForSelection = []
@@ -262,7 +275,6 @@ final class GameSession {
         if let tentativeMove, square != tentativeMove.to {
             self.tentativeMove = nil
             refreshDisplayedAnalysis()
-            notifyCoachingPositionChanged()
         }
 
         guard let piece = state.board[square] else {
@@ -288,18 +300,24 @@ final class GameSession {
             guard let replacementMove = allowedMoves(forSelectionAt: tentativeMove.from)
                 .first(where: { $0.to == square }) else {
                 restoreCommittedPosition()
+                _ = synchronizeCoachingInteraction()
                 return nil
             }
 
-            return stage(replacementMove)
+            let result = stage(replacementMove)
+            _ = synchronizeCoachingInteraction()
+            return result
         }
 
         guard actionableMovesForSelection.contains(where: { $0.to == square }) else {
             clearSelection()
+            _ = synchronizeCoachingInteraction()
             return nil
         }
 
-        return moveSelectedPiece(to: square)
+        let result = moveSelectedPieceWithoutSynchronizing(to: square)
+        _ = synchronizeCoachingInteraction()
+        return result
     }
 
     func toggleCoverage() {
@@ -320,15 +338,25 @@ final class GameSession {
         if let tentativeMove, square == tentativeMove.to {
             let originalSquare = tentativeMove.from
             restoreCommittedPosition()
-            select(originalSquare)
+            selectWithoutSynchronizing(originalSquare)
+            _ = synchronizeCoachingInteraction()
             return selectedSquare
         }
 
-        select(square)
+        selectWithoutSynchronizing(square)
+        _ = synchronizeCoachingInteraction()
         return selectedSquare
     }
 
     func moveSelectedPiece(to destination: Square) -> MoveAttemptResult {
+        let result = moveSelectedPieceWithoutSynchronizing(to: destination)
+        _ = synchronizeCoachingInteraction()
+        return result
+    }
+
+    private func moveSelectedPieceWithoutSynchronizing(
+        to destination: Square
+    ) -> MoveAttemptResult {
         guard committedState.result == .ongoing else {
             actionableMovesForSelection = []
             message = statusText
@@ -379,7 +407,7 @@ final class GameSession {
         message = nil
         isAwaitingPromotionChoice = false
         refreshDisplayedAnalysis()
-        notifyCoachingMoveStaged(move)
+        _ = synchronizeCoachingInteraction()
     }
 
     func cancelPromotionChoice() {
@@ -585,7 +613,6 @@ final class GameSession {
         tentativeMove = nil
         clearSelection()
         refreshDisplayedAnalysis()
-        notifyCoachingPositionChanged()
     }
 
     private func stage(_ move: Move) -> MoveAttemptResult {
@@ -600,20 +627,23 @@ final class GameSession {
         actionableMovesForSelection = []
         message = nil
         refreshDisplayedAnalysis()
-        notifyCoachingMoveStaged(move)
         return .moved
     }
 
     func startCoaching() {
         guard canRequestCoaching else { return }
 
-        coachingSession = CoachingSession(learner: committedState.sideToMove)
         let context: CoachingRequest.Context
         if tentativeMove != nil {
             context = .tentativeMove(origin: .preexisting)
         } else {
             context = .start
         }
+        coachingSession = CoachingSession(
+            learner: committedState.sideToMove,
+            interaction: coachingInteractionSnapshot,
+            initialContext: context
+        )
         queueCoachingRequest(context: context)
     }
 
@@ -628,7 +658,10 @@ final class GameSession {
                   analysisRevision == pending.request.positionRevision,
                   coachingSession != nil else { return }
             pendingCoachingRequest = nil
-            let directives = coachingSession?.receive(advice) ?? []
+            let directives = coachingSession?.receive(
+                advice,
+                interaction: coachingInteractionSnapshot
+            ) ?? []
             _ = applyCoachingDirectives(directives)
         } catch is CancellationError {
             return
@@ -637,7 +670,11 @@ final class GameSession {
                   analysisRevision == pending.request.positionRevision,
                   coachingSession != nil else { return }
             pendingCoachingRequest = nil
-            coachingSession?.receiveUnsupportedPosition()
+            let directives = coachingSession?.receiveUnsupportedPosition(
+                for: pending.request.context,
+                interaction: coachingInteractionSnapshot
+            ) ?? []
+            _ = applyCoachingDirectives(directives)
         }
     }
 
@@ -674,7 +711,7 @@ final class GameSession {
             }
         }
 
-        let directives = coachingSession?.handle(.squareTapped(square)) ?? []
+        let directives = coachingSession?.handle(.identificationTapped(square)) ?? []
         _ = applyCoachingDirectives(directives)
         return true
     }
@@ -719,8 +756,6 @@ final class GameSession {
             switch directive {
             case let .requestAdvice(context):
                 queueCoachingRequest(context: context)
-            case let .selectSquare(square):
-                select(square)
             case .stop:
                 stopCoaching()
             case .commitWithExistingDonePath:
@@ -730,23 +765,19 @@ final class GameSession {
         return committedMove
     }
 
-    private func notifyCoachingMoveStaged(_ move: Move) {
-        guard coachingSession != nil else { return }
-        let directives = coachingSession?.handle(.moveStaged(move)) ?? []
-        _ = applyCoachingDirectives(directives)
-    }
-
-    private func notifyCoachingPositionChanged() {
-        guard coachingSession != nil else { return }
-        pendingCoachingRequest = nil
-        let directives = coachingSession?.handle(.positionChanged(revision: analysisRevision)) ?? []
-        _ = applyCoachingDirectives(directives)
+    @discardableResult
+    private func synchronizeCoachingInteraction() -> Move? {
+        guard coachingSession != nil else { return nil }
+        let directives = coachingSession?.handle(
+            .interactionChanged(coachingInteractionSnapshot)
+        ) ?? []
+        return applyCoachingDirectives(directives)
     }
 
     private func isAcceptedCoachingAnswer(_ square: Square) -> Bool {
         guard var probe = coachingSession else { return false }
         let currentStage = probe.stage
-        _ = probe.handle(.squareTapped(square))
+        _ = probe.handle(.identificationTapped(square))
         return probe.stage != currentStage
     }
 
