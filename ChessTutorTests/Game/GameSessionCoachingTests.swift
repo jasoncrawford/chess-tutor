@@ -383,10 +383,59 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
-        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Tap one of your two center pawns or one of your knights."
+        )
         XCTAssertNil(session.pendingCoachingRequestID)
+    }
+
+    func testBlockedRookHintClearsResponseAndRestoresCurrentAskWithoutChangingSelection() async {
+        let session = GameSession(coachingAdvisor: LocalCoachingAdvisor())
+        await beginOpeningCoaching(in: session)
+        let blockedRook = Square(file: .a, rank: 1)
+        session.select(blockedRook)
+        let boardBeforeHint = session.state.board
+        let destinationsBeforeHint = session.legalDestinations
+
+        XCTAssertNotNil(session.coachingPresentation?.response)
+
+        _ = session.chooseCoachingAction(.hint)
+
+        XCTAssertNil(session.coachingPresentation?.response)
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Here are the four pieces you can try."
+        )
+        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap a highlighted piece.")
+        XCTAssertEqual(
+            session.coachingPresentation?.focus.candidateSquares,
+            [
+                Square(file: .b, rank: 1),
+                Square(file: .d, rank: 2),
+                Square(file: .e, rank: 2),
+                Square(file: .g, rank: 1),
+            ]
+        )
+        XCTAssertEqual(session.selectedSquare, blockedRook)
+        XCTAssertEqual(session.legalDestinations, destinationsBeforeHint)
+        XCTAssertEqual(session.state.board, boardBeforeHint)
+    }
+
+    func testOpeningHintClearsPriorMissButStillShowsANewMiss() async {
+        let session = GameSession(coachingAdvisor: LocalCoachingAdvisor())
+        await beginOpeningCoaching(in: session)
+        session.select(Square(file: .a, rank: 1))
+        XCTAssertNotNil(session.coachingPresentation?.response)
+
+        _ = session.chooseCoachingAction(.hint)
+        XCTAssertNil(session.coachingPresentation?.response)
+
+        session.select(Square(file: .a, rank: 7))
+
+        XCTAssertEqual(session.coachingPresentation?.response, "Tap one of your pieces.")
     }
 
     func testOpeningBlockedRookPresentationDoesNotDependOnPriorKnightSelection() async {
@@ -434,7 +483,7 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
 
         session.select(Square(file: .a, rank: 1))
@@ -448,7 +497,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNil(session.coachingPresentation?.response)
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
 
         session.select(Square(file: .a, rank: 7))
@@ -456,9 +505,12 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.coachingPresentation?.response, "Tap one of your pieces.")
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
-        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Tap one of your two center pawns or one of your knights."
+        )
         XCTAssertNil(session.pendingCoachingRequestID)
     }
 
@@ -570,7 +622,7 @@ final class GameSessionCoachingTests: XCTestCase {
         await replacementSession.resolvePendingCoachingAdvice()
         XCTAssertEqual(
             replacementSession.coachingPresentation?.instruction,
-            "Tap the piece you want to move."
+            "Tap one of your two center pawns or one of your knights."
         )
 
         let promotionFrom = Square(file: .e, rank: 7)

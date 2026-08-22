@@ -15,7 +15,7 @@ final class CoachingSessionTests: XCTestCase {
         ])
         XCTAssertEqual(
             session.presentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
         XCTAssertEqual(session.presentation?.boardTask, .move)
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
@@ -303,7 +303,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             blockedWakeSession.presentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
 
         let move = CoachingTestFixtures.openingKnightMove
@@ -535,7 +535,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
-    func testNontrivialSafeRequiresCorrectAbsenceAndRejectsIncorrectAbsence() {
+    func testNontrivialSafeOffersOnlyValidAbsenceClaim() {
         var clearSession = session()
         clearSession.receive(CoachingTestFixtures.nontrivialSafeClearAdvice)
         XCTAssertEqual(clearSession.stage, .safeLocate)
@@ -543,7 +543,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(clearSession.stage, .fallbackChooseMove)
         XCTAssertEqual(
             clearSession.presentation?.response,
-            "Right—there isn’t one."
+            "Right—no piece needs help right now."
         )
         XCTAssertEqual(
             clearSession.presentation?.headline,
@@ -554,14 +554,16 @@ final class CoachingSessionTests: XCTestCase {
 
         var dangerSession = session()
         dangerSession.receive(CoachingTestFixtures.multipleDangerAdvice)
-        dangerSession.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(dangerSession.stage, .safeLocate)
-        XCTAssertEqual(dangerSession.presentation?.response, "One of your pieces does need help.")
-        XCTAssertEqual(
-            dangerSession.presentation?.headline,
-            "Which of your pieces needs help most?"
+        let presentation = dangerSession.presentation
+        XCTAssertFalse(
+            dangerSession.presentation?.actions.map(\.action).contains(.noAnswer) == true
         )
-        XCTAssertEqual(dangerSession.missesAtCurrentLevel, 1)
+
+        dangerSession.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(dangerSession.stage, .safeLocate)
+        XCTAssertEqual(dangerSession.presentation, presentation)
+        XCTAssertEqual(dangerSession.missesAtCurrentLevel, 0)
     }
 
     func testSafeRejectsUnrelatedTapAndResolutionThatLeavesDanger() {
@@ -608,7 +610,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(emptySession.stage, .fallbackChooseMove)
         XCTAssertEqual(
             emptySession.presentation?.response,
-            "Right—there isn’t one."
+            "Right—there is no safe capture here."
         )
         XCTAssertEqual(
             emptySession.presentation?.headline,
@@ -626,6 +628,18 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(
             stage(CoachingTestFixtures.profitableCapture, in: &takeSession),
             [.requestAdvice(context: .tentativeMove(origin: .take))]
+        )
+    }
+
+    func testTakeAbsenceUsesCaptureSpecificResponse() {
+        var session = session()
+        session.receive(CoachingTestFixtures.nontrivialTakeClearAdvice)
+
+        session.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(
+            session.presentation?.response,
+            "Right—there is no safe capture here."
         )
     }
 
@@ -1737,7 +1751,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             wake.presentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
         XCTAssertTrue(wake.presentation?.actions.map(\.action).contains(.hint) == true)
         wake.handle(.actionChosen(.hint))
@@ -2043,7 +2057,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             switched.presentation?.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
     }
 

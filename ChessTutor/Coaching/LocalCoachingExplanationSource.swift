@@ -3,7 +3,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         let base = baseCopy(for: context.prompt, learner: context.learner)
         return CoachingPresentation(
             response: responseCopy(for: context),
-            headline: base.headline,
+            headline: headline(for: context, base: base.headline),
             instruction: instruction(for: context, base: base.instruction),
             hint: context.hint,
             routine: context.routine,
@@ -40,7 +40,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .safeLocate:
             return (
                 "Which of your pieces needs help most?",
-                "Tap your piece, or choose I don’t see one."
+                "Tap your piece, or choose No piece needs help."
             )
         case let .safeIdentifyAttacker(piece):
             let opponent = colorName(learner.opposite)
@@ -56,7 +56,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .takeChooseMove:
             return (
                 "Can one of your pieces make a useful capture?",
-                "Make the capture, or choose I don’t see one."
+                "Make the capture, or choose No safe capture."
             )
         case let .wakeChoosePiece(purpose):
             return wakePieceCopy(for: purpose)
@@ -94,8 +94,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch purpose {
         case .openingDevelopment(firstMove: true):
             return (
-                "A good first step is to move a center pawn or bring out a knight. Which would you like to try?",
-                "Tap the piece you want to move."
+                "A center pawn or knight is a simple way to start. Which would you like to move?",
+                "Tap one of your two center pawns or one of your knights."
             )
         case .openingDevelopment(firstMove: false):
             return (
@@ -111,6 +111,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .castle:
             return ("Which piece would you move to castle?", "Tap your king.")
         }
+    }
+
+    private func headline(for context: CoachingPresentationContext, base: String) -> String {
+        if context.hint == .candidatePieces,
+           context.prompt == .wakeChoosePiece(
+               purpose: .openingDevelopment(firstMove: true)
+           ) {
+            return "Here are the four pieces you can try."
+        }
+        return base
     }
 
     private func wakeMoveCopy(
@@ -156,7 +166,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case (.dangerMarker, .safeLocate):
             return "Look for the red danger marker, then tap your piece."
         case (.candidatePieces, .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true))):
-            return "Try one of the highlighted knights or center pawns."
+            return "Tap a highlighted piece."
         case let (.attackerRelationship, .safeIdentifyAttacker(piece)):
             return "Follow the highlighted line to the piece attacking your \(piece.rawValue)."
         case let (.safeResponseIdeas, .safeResolve(target, _)):
@@ -205,9 +215,21 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
         case .notReplyIssue:
             return "That square doesn’t show a check or capture after this move."
-        case .correctAbsence:
-            return "Right—there isn’t one."
-        case .missedExistingAnswer:
+        case let .correctAbsence(kind):
+            switch kind {
+            case .noPieceNeedsHelp:
+                return "Right—no piece needs help right now."
+            case .noSafeCapture:
+                return "Right—there is no safe capture here."
+            }
+        case let .missedExistingAnswer(kind):
+            switch kind {
+            case .noPieceNeedsHelp:
+                return "One of your pieces does need help."
+            case .noSafeCapture:
+                return "There is a useful capture to find."
+            }
+        case .missedOpponentReply:
             return missedAnswerHeadline(for: prompt)
         case let .concreteFlaw(kind, affectedPiece):
             return concreteFlawHeadline(
@@ -316,10 +338,13 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     ) -> CoachingActionPresentation {
         switch action {
         case .noAnswer:
+            let title = context.prompt == .safeLocate
+                ? "No piece needs help"
+                : "No safe capture"
             return CoachingActionPresentation(
                 action: action,
-                title: "I don’t see one",
-                accessibilityLabel: "I don’t see one",
+                title: title,
+                accessibilityLabel: title,
                 prominence: .primary
             )
         case .looksSafe:
@@ -339,22 +364,22 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .stop:
             return CoachingActionPresentation(
                 action: action,
-                title: "Stop",
-                accessibilityLabel: "Stop coaching",
+                title: "Close help",
+                accessibilityLabel: "Close coaching help",
                 prominence: .quiet
             )
         case .done:
             return CoachingActionPresentation(
                 action: action,
-                title: "Done",
-                accessibilityLabel: "Done with this move",
+                title: "Play this move",
+                accessibilityLabel: "Play this move",
                 prominence: .primary
             )
         case .keepLooking:
             return CoachingActionPresentation(
                 action: action,
-                title: "Keep looking",
-                accessibilityLabel: "Keep looking for another move",
+                title: "Try another move",
+                accessibilityLabel: "Try another move",
                 prominence: .secondary
             )
         }

@@ -101,32 +101,32 @@ struct CoachingPanelAccessibilityFixture: View {
     private var presentation: CoachingPresentation {
         let omitsResponse = configuration == .tallNoResponse
         return CoachingPresentation(
-            response: omitsResponse ? nil : "Right—there isn’t one.",
+            response: omitsResponse ? nil : "Right—there is no safe capture here.",
             headline: omitsResponse
                 ? "Yes—that pawn is attacking your queen. How could you help your queen?"
                 : "Can one of your pieces make a useful capture?",
             instruction: omitsResponse
                 ? "Try moving your queen, protecting it, or taking the attacker."
-                : "Make the capture, or choose I don’t see one.",
+                : "Make the capture, or choose No safe capture.",
             hint: nil,
             routine: [.safeCurrent, .takePending, .wakePending],
             actions: [
                 CoachingActionPresentation(
                     action: .done,
-                    title: "Done",
-                    accessibilityLabel: "Done with this move",
+                    title: "Play this move",
+                    accessibilityLabel: "Play this move",
                     prominence: .primary
                 ),
                 CoachingActionPresentation(
                     action: .keepLooking,
-                    title: "Keep looking",
-                    accessibilityLabel: "Keep looking for another move",
+                    title: "Try another move",
+                    accessibilityLabel: "Try another move",
                     prominence: .secondary
                 ),
                 CoachingActionPresentation(
                     action: .stop,
-                    title: "Stop",
-                    accessibilityLabel: "Stop coaching",
+                    title: "Close help",
+                    accessibilityLabel: "Close coaching help",
                     prominence: .quiet
                 ),
             ],

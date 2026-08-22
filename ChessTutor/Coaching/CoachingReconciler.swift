@@ -314,7 +314,7 @@ struct CoachingReconciler: Sendable {
                 return derived(
                     stage: opponentReply.stage,
                     questionID: opponentReply.questionID,
-                    feedback: .missedExistingAnswer
+                    feedback: .missedOpponentReply
                 )
             }
             if assessment.isAcceptable {

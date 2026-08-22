@@ -5,21 +5,21 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
     func testTallCompositionKeepsConversationBeforeRoutineAndActions() {
         assertPanelLayout(
             for: "tall",
-            expectedResponse: "Right—there isn’t one."
+            expectedResponse: "Right—there is no safe capture here."
         )
     }
 
     func testClockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
         assertPanelLayout(
             for: "clockwise-quarter-turn",
-            expectedResponse: "Right—there isn’t one."
+            expectedResponse: "Right—there is no safe capture here."
         )
     }
 
     func testCounterclockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
         assertPanelLayout(
             for: "counterclockwise-quarter-turn",
-            expectedResponse: "Right—there isn’t one."
+            expectedResponse: "Right—there is no safe capture here."
         )
     }
 
@@ -64,15 +64,15 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
             : "Can one of your pieces make a useful capture?"
         let expectedInstruction = expectedResponse == nil
             ? "Try moving your queen, protecting it, or taking the attacker."
-            : "Make the capture, or choose I don’t see one."
+            : "Make the capture, or choose No safe capture."
         let expectedLabels = ([
             expectedResponse,
             expectedHeadline,
             expectedInstruction,
             "Safe, current step",
-            "Done with this move",
-            "Keep looking for another move",
-            "Stop coaching",
+            "Play this move",
+            "Try another move",
+            "Close coaching help",
         ] as [String?]).compactMap { $0 }
         XCTAssertEqual(
             semanticElements.map(\.label).filter(expectedLabels.contains),

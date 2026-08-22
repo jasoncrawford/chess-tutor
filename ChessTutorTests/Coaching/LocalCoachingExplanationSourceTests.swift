@@ -15,9 +15,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.headline, "Which of your pieces needs help most?")
-        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose I don’t see one.")
+        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose No piece needs help.")
         XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
-        XCTAssertEqual(presentation.actions.map(\.title), ["I don’t see one", "Hint", "Stop"])
+        XCTAssertEqual(
+            presentation.actions.map(\.title),
+            ["No piece needs help", "Hint", "Close help"]
+        )
     }
 
     func testFallbackDoesNotInventPurpose() {
@@ -52,7 +55,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .safeLocate,
                 "Which of your pieces needs help most?",
-                "Tap your piece, or choose I don’t see one."
+                "Tap your piece, or choose No piece needs help."
             ),
             (
                 .safeIdentifyAttacker(piece: .knight),
@@ -67,12 +70,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .takeChooseMove,
                 "Can one of your pieces make a useful capture?",
-                "Make the capture, or choose I don’t see one."
+                "Make the capture, or choose No safe capture."
             ),
             (
                 .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
-                "A good first step is to move a center pawn or bring out a knight. Which would you like to try?",
-                "Tap the piece you want to move."
+                "A center pawn or knight is a simple way to start. Which would you like to move?",
+                "Tap one of your two center pawns or one of your knights."
             ),
             (
                 .wakeChoosePiece(purpose: .openingDevelopment(firstMove: false)),
@@ -149,8 +152,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(presentation.actions, [
             CoachingActionPresentation(
                 action: .noAnswer,
-                title: "I don’t see one",
-                accessibilityLabel: "I don’t see one",
+                title: "No piece needs help",
+                accessibilityLabel: "No piece needs help",
                 prominence: .primary
             ),
             CoachingActionPresentation(
@@ -167,23 +170,74 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             CoachingActionPresentation(
                 action: .stop,
-                title: "Stop",
-                accessibilityLabel: "Stop coaching",
+                title: "Close help",
+                accessibilityLabel: "Close coaching help",
                 prominence: .quiet
             ),
             CoachingActionPresentation(
                 action: .done,
-                title: "Done",
-                accessibilityLabel: "Done with this move",
+                title: "Play this move",
+                accessibilityLabel: "Play this move",
                 prominence: .primary
             ),
             CoachingActionPresentation(
                 action: .keepLooking,
-                title: "Keep looking",
-                accessibilityLabel: "Keep looking for another move",
+                title: "Try another move",
+                accessibilityLabel: "Try another move",
                 prominence: .secondary
             ),
         ])
+    }
+
+    func testCompletionActionsDescribeTheirConsequences() {
+        let presentation = source.presentation(for: context(
+            prompt: .complete(origin: .wake, idea: .develops(piece: .knight)),
+            actions: [.done, .keepLooking, .stop]
+        ))
+
+        XCTAssertEqual(
+            presentation.actions.map(\.title),
+            ["Play this move", "Try another move", "Close help"]
+        )
+        XCTAssertEqual(
+            presentation.actions.map(\.accessibilityLabel),
+            ["Play this move", "Try another move", "Close coaching help"]
+        )
+    }
+
+    func testAbsenceActionsNameTheClaimForTheCurrentQuestion() {
+        let safe = source.presentation(for: context(
+            prompt: .safeLocate,
+            actions: [.noAnswer]
+        ))
+        let take = source.presentation(for: context(
+            prompt: .takeChooseMove,
+            actions: [.noAnswer]
+        ))
+
+        XCTAssertEqual(safe.actions.map(\.title), ["No piece needs help"])
+        XCTAssertEqual(safe.actions.map(\.accessibilityLabel), ["No piece needs help"])
+        XCTAssertEqual(take.actions.map(\.title), ["No safe capture"])
+        XCTAssertEqual(take.actions.map(\.accessibilityLabel), ["No safe capture"])
+    }
+
+    func testOpeningPromptAndHintUseApprovedTranscript() {
+        let prompt = CoachingPrompt.wakeChoosePiece(
+            purpose: .openingDevelopment(firstMove: true)
+        )
+        let base = source.presentation(for: context(prompt: prompt))
+        let hint = source.presentation(for: context(prompt: prompt, hint: .candidatePieces))
+
+        XCTAssertEqual(
+            base.headline,
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
+        )
+        XCTAssertEqual(
+            base.instruction,
+            "Tap one of your two center pawns or one of your knights."
+        )
+        XCTAssertEqual(hint.headline, "Here are the four pieces you can try.")
+        XCTAssertEqual(hint.instruction, "Tap a highlighted piece.")
     }
 
     func testFirstMissEmphasizesHintWithoutChangingInstruction() {
@@ -193,7 +247,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             actions: [.noAnswer, .hint, .stop]
         ))
 
-        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose I don’t see one.")
+        XCTAssertEqual(presentation.instruction, "Tap your piece, or choose No piece needs help.")
         XCTAssertEqual(
             presentation.actions.first(where: { $0.action == .hint })?.prominence,
             .primary
@@ -206,16 +260,16 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             feedback: .blockedWakePiece(piece: .rook)
         ))
         XCTAssertEqual(presentation.response, "That rook can’t come out yet because other pieces are in the way.")
-        XCTAssertEqual(presentation.headline, "A good first step is to move a center pawn or bring out a knight. Which would you like to try?")
-        XCTAssertEqual(presentation.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(presentation.headline, "A center pawn or knight is a simple way to start. Which would you like to move?")
+        XCTAssertEqual(presentation.instruction, "Tap one of your two center pawns or one of your knights.")
     }
 
     func testCorrectAbsenceIsSeparateFromNextAsk() {
         let presentation = source.presentation(for: context(
             prompt: .takeChooseMove,
-            feedback: .correctAbsence
+            feedback: .correctAbsence(.noSafeCapture)
         ))
-        XCTAssertEqual(presentation.response, "Right—there isn’t one.")
+        XCTAssertEqual(presentation.response, "Right—there is no safe capture here.")
         XCTAssertEqual(presentation.headline, "Can one of your pieces make a useful capture?")
     }
 
@@ -226,7 +280,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             hint: .candidatePieces
         ))
         XCTAssertNil(presentation.response)
-        XCTAssertEqual(presentation.instruction, "Try one of the highlighted knights or center pawns.")
+        XCTAssertEqual(presentation.headline, "Here are the four pieces you can try.")
+        XCTAssertEqual(presentation.instruction, "Tap a highlighted piece.")
     }
 
     func testFeedbackStatesAVisibleChessFact() {
@@ -279,12 +334,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     func testCorrectAbsenceAcknowledgesAndAsksTheNextQuestion() {
         let presentation = source.presentation(for: context(
             prompt: .takeChooseMove,
-            feedback: .correctAbsence
+            feedback: .correctAbsence(.noSafeCapture)
         ))
 
         XCTAssertEqual(
             presentation.response,
-            "Right—there isn’t one."
+            "Right—there is no safe capture here."
         )
         XCTAssertEqual(
             presentation.headline,
@@ -292,7 +347,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
         XCTAssertEqual(
             presentation.instruction,
-            "Make the capture, or choose I don’t see one."
+            "Make the capture, or choose No safe capture."
         )
     }
 
@@ -398,7 +453,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
                 .candidatePieces,
-                "Try one of the highlighted knights or center pawns."
+                "Tap a highlighted piece."
             ),
             (
                 .safeIdentifyAttacker(piece: .knight),
@@ -458,8 +513,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .blockedWakePiece(piece: .rook),
             .notWakeCandidate(piece: .bishop, purpose: .centralActivity),
             .notReplyIssue,
-            .correctAbsence,
-            .missedExistingAnswer,
+            .correctAbsence(.noPieceNeedsHelp),
+            .correctAbsence(.noSafeCapture),
+            .missedExistingAnswer(.noPieceNeedsHelp),
+            .missedExistingAnswer(.noSafeCapture),
+            .missedOpponentReply,
             .concreteFlaw(kind: .materialLoss(points: 9), affectedPiece: .queen),
             .dangerStillPresent(attacker: .rook, target: .queen),
             .noRecognizedPurpose(purpose: .centralActivity),

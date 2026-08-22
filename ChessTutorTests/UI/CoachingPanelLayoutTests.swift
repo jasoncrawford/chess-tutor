@@ -130,9 +130,12 @@ final class CoachingPanelLayoutTests: XCTestCase {
         )
         XCTAssertEqual(
             presentation.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
-        XCTAssertEqual(presentation.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(
+            presentation.instruction,
+            "Tap one of your two center pawns or one of your knights."
+        )
     }
 
     func testCompletionKeepsDoneKeepLookingAndStopActions() {

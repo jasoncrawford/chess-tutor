@@ -2,6 +2,20 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingPresentationProjectorTests: XCTestCase {
+    func testKnownDangerDoesNotOfferAbsenceAction() {
+        let projector = CoachingPresentationProjector()
+        let context = projector.context(
+            learner: .white,
+            derived: derived(.safeLocate, questionID: .safeLocate),
+            episode: episode(
+                advice: CoachingTestFixtures.multipleDangerAdvice,
+                progress: progress(questionID: .safeLocate)
+            )
+        )
+
+        XCTAssertEqual(context?.actions, [.hint, .stop])
+    }
+
     func testQuestionChangeResetsHintMissAndFeedbackTogether() {
         var progress = CoachingQuestionProgress(
             questionID: .wakeSource(purpose: .openingDevelopment(firstMove: true)),
@@ -147,7 +161,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             questionID: .take,
             hintLevel: 0,
             missesAtCurrentLevel: 1,
-            feedback: .correctAbsence,
+            feedback: .correctAbsence(.noSafeCapture),
             feedbackAnchor: .action(.noAnswer),
             pulseID: 0
         )
@@ -163,7 +177,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             questionID: .safeLocate,
             hintLevel: 0,
             missesAtCurrentLevel: 2,
-            feedback: .missedExistingAnswer,
+            feedback: .missedExistingAnswer(.noPieceNeedsHelp),
             feedbackAnchor: .action(.noAnswer),
             pulseID: 7
         )

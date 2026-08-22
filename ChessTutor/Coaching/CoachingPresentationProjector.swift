@@ -16,8 +16,10 @@ struct CoachingPresentationProjector: Sendable {
         let misses = progressMatchesQuestion ? episode.progress.missesAtCurrentLevel : 0
         let hints = hintSteps(for: derived.stage, episode: episode, advice: advice)
         let hint = hints.indices.contains(hintLevel - 1) ? hints[hintLevel - 1] : nil
-        let feedback = derived.derivedFeedback
-            ?? (progressMatchesQuestion ? episode.progress.feedback : nil)
+        let recordedFeedback = progressMatchesQuestion ? episode.progress.feedback : nil
+        let feedback = hint != nil && recordedFeedback == nil
+            ? nil
+            : derived.derivedFeedback ?? recordedFeedback
 
         return CoachingPresentationContext(
             prompt: prompt,
@@ -29,7 +31,9 @@ struct CoachingPresentationProjector: Sendable {
             actions: actions(
                 for: derived.stage,
                 hintLevel: hintLevel,
-                availableHints: hints
+                availableHints: hints,
+                advice: advice,
+                feedback: feedback
             ),
             boardTask: boardTask(for: derived.stage),
             focus: focus(
@@ -157,11 +161,17 @@ struct CoachingPresentationProjector: Sendable {
     private func actions(
         for stage: CoachingStage,
         hintLevel: Int,
-        availableHints: [CoachingHint]
+        availableHints: [CoachingHint],
+        advice: CoachingAdvice?,
+        feedback: CoachingFeedback?
     ) -> [CoachingAction] {
         let hintActions: [CoachingAction] = hintLevel < availableHints.count ? [.hint] : []
         switch stage {
-        case .safeLocate, .takeChooseMove:
+        case .safeLocate:
+            let absenceIsValid = advice?.urgentProblems.isEmpty == true
+                && feedback != .missedExistingAnswer(.noPieceNeedsHelp)
+            return (absenceIsValid ? [.noAnswer] : []) + hintActions + [.stop]
+        case .takeChooseMove:
             return [.noAnswer] + hintActions + [.stop]
         case .opponentCheck:
             return [.looksSafe] + hintActions + [.stop]

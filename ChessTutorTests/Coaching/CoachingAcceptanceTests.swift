@@ -122,7 +122,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCurrent, .wakePending])
         XCTAssertEqual(
             session.coachingPresentation?.response,
-            "Right—there isn’t one."
+            "Right—no piece needs help right now."
         )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
@@ -130,12 +130,15 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
-            "Make the capture, or choose I don’t see one."
+            "Make the capture, or choose No safe capture."
         )
 
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCleared, .wakeCurrent])
-        XCTAssertEqual(session.coachingPresentation?.response, "Right—there isn’t one.")
+        XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "Right—there is no safe capture here."
+        )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
             "Which piece could help protect another piece?"
@@ -267,7 +270,10 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertEqual(session.coachingPresentation?.response, "Right—there isn’t one.")
+        XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "Right—no piece needs help right now."
+        )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
             "Which piece could help protect another piece?"
@@ -511,9 +517,12 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertEqual(
             switched.headline,
-            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
-        XCTAssertEqual(switched.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(
+            switched.instruction,
+            "Tap one of your two center pawns or one of your knights."
+        )
         XCTAssertEqual(switched.boardTask, .move)
     }
 

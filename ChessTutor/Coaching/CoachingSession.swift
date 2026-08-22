@@ -275,7 +275,10 @@ struct CoachingSession: Sendable {
                 if advice.urgentProblems.isEmpty {
                     episode.evidence.confirmedSafeAbsence = true
                     let directives = reconcile()
-                    recordFeedback(.correctAbsence, anchor: .action(.noAnswer))
+                    recordFeedback(
+                        .correctAbsence(.noPieceNeedsHelp),
+                        anchor: .action(.noAnswer)
+                    )
                     return directives
                 }
             case .takeChooseMove:
@@ -283,14 +286,19 @@ struct CoachingSession: Sendable {
                     && advice.evaluation.mateInOneMoves.isEmpty {
                     episode.evidence.confirmedTakeAbsence = true
                     let directives = reconcile()
-                    recordFeedback(.correctAbsence, anchor: .action(.noAnswer))
+                    recordFeedback(
+                        .correctAbsence(.noSafeCapture),
+                        anchor: .action(.noAnswer)
+                    )
                     return directives
                 }
             default:
                 return []
             }
             recordAttempt(
-                feedback: .missedExistingAnswer,
+                feedback: .missedExistingAnswer(
+                    current.stage == .safeLocate ? .noPieceNeedsHelp : .noSafeCapture
+                ),
                 anchor: .action(.noAnswer)
             )
             return []

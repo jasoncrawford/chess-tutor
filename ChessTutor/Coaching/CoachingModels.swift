@@ -156,6 +156,11 @@ enum CoachingAction: Equatable, Hashable, Sendable {
     case keepLooking
 }
 
+enum CoachingAbsenceKind: Equatable, Sendable {
+    case noPieceNeedsHelp
+    case noSafeCapture
+}
+
 enum CoachingBoardTask: Equatable, Sendable {
     case none
     case identify(allowsMoveRevision: Bool)
@@ -210,8 +215,9 @@ enum CoachingFeedback: Equatable, Sendable {
     case blockedWakePiece(piece: Piece.Kind)
     case notWakeCandidate(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case notReplyIssue
-    case correctAbsence
-    case missedExistingAnswer
+    case correctAbsence(CoachingAbsenceKind)
+    case missedExistingAnswer(CoachingAbsenceKind)
+    case missedOpponentReply
     case concreteFlaw(kind: CoachingOpponentIssueKind, affectedPiece: Piece.Kind?)
     case dangerStillPresent(attacker: Piece.Kind?, target: Piece.Kind)
     case noRecognizedPurpose(purpose: CoachingWakePurpose?)
