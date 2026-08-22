@@ -279,6 +279,7 @@ struct CoachingPresentationContext: Equatable, Sendable {
 }
 
 struct CoachingPresentation: Equatable, Sendable {
+    let response: String?
     let headline: String
     let instruction: String?
     let hint: CoachingHint?
@@ -286,6 +287,29 @@ struct CoachingPresentation: Equatable, Sendable {
     let actions: [CoachingActionPresentation]
     let boardTask: CoachingBoardTask
     let focus: CoachFocusPresentation
+}
+
+extension CoachingPresentation {
+    init(
+        headline: String,
+        instruction: String?,
+        hint: CoachingHint?,
+        routine: [CoachingRoutineState],
+        actions: [CoachingActionPresentation],
+        boardTask: CoachingBoardTask,
+        focus: CoachFocusPresentation
+    ) {
+        self.init(
+            response: nil,
+            headline: headline,
+            instruction: instruction,
+            hint: hint,
+            routine: routine,
+            actions: actions,
+            boardTask: boardTask,
+            focus: focus
+        )
+    }
 }
 
 protocol CoachingExplaining: Sendable {

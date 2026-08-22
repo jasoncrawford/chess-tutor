@@ -40,11 +40,14 @@ private enum CoachingPanelAccessibilitySection: String {
 }
 
 private enum CoachingConversationAccessibilityElement {
+    case response
     case headline
     case instruction
 
     var sortPriority: Double {
         switch self {
+        case .response:
+            3
         case .headline:
             2
         case .instruction:
@@ -231,6 +234,16 @@ struct CoachingPanelView: View {
 
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let response = presentation.response {
+                Text(response)
+                    .font(AppTheme.panelBodyFont)
+                    .foregroundStyle(AppTheme.ink.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilitySortPriority(
+                        CoachingConversationAccessibilityElement.response.sortPriority
+                    )
+            }
+
             Text(presentation.headline)
                 .font(AppTheme.coachingTitleFont)
                 .foregroundStyle(AppTheme.ink)

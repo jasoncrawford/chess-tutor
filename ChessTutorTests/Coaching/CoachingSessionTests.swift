@@ -261,20 +261,24 @@ final class CoachingSessionTests: XCTestCase {
         var safePieceSession = session()
         safePieceSession.receive(CoachingTestFixtures.multipleDangerAdvice)
         safePieceSession.handle(.identificationTapped(Square(file: .a, rank: 2)))
-        XCTAssertEqual(safePieceSession.presentation?.headline, "That pawn is safe right now.")
+        XCTAssertEqual(safePieceSession.presentation?.response, "That pawn is safe right now.")
+        XCTAssertEqual(
+            safePieceSession.presentation?.headline,
+            "Which of your pieces needs help most?"
+        )
 
         var lowerPrioritySession = session()
         lowerPrioritySession.receive(advice)
         lowerPrioritySession.handle(.identificationTapped(pawn))
         XCTAssertEqual(
-            lowerPrioritySession.presentation?.headline,
+            lowerPrioritySession.presentation?.response,
             "Yes, that pawn is threatened. Your \(urgentPiece.rawValue) is worth more, so help the \(urgentPiece.rawValue) first."
         )
 
         var wrongColorSession = session()
         wrongColorSession.receive(CoachingTestFixtures.multipleDangerAdvice)
         wrongColorSession.handle(.identificationTapped(CoachingTestFixtures.blackBishop))
-        XCTAssertEqual(wrongColorSession.presentation?.headline, "Tap one of your pieces.")
+        XCTAssertEqual(wrongColorSession.presentation?.response, "Tap one of your pieces.")
         XCTAssertEqual(wrongColorSession.hintLevel, 0)
         XCTAssertEqual(wrongColorSession.missesAtCurrentLevel, 1)
         XCTAssertEqual(
@@ -286,7 +290,7 @@ final class CoachingSessionTests: XCTestCase {
         attackerSession.receive(CoachingTestFixtures.multipleDangerAdvice)
         attackerSession.handle(.identificationTapped(CoachingTestFixtures.whiteQueen))
         attackerSession.handle(.identificationTapped(CoachingTestFixtures.blackRook))
-        XCTAssertEqual(attackerSession.presentation?.headline, "That rook isn’t attacking your queen.")
+        XCTAssertEqual(attackerSession.presentation?.response, "That rook isn’t attacking your queen.")
 
         var blockedWakeSession = session()
         blockedWakeSession.receive(CoachingTestFixtures.startingPositionAdvice)
@@ -294,8 +298,12 @@ final class CoachingSessionTests: XCTestCase {
             selected: Square(file: .a, rank: 1)
         )))
         XCTAssertEqual(
-            blockedWakeSession.presentation?.headline,
+            blockedWakeSession.presentation?.response,
             "That rook can’t come out yet because other pieces are in the way."
+        )
+        XCTAssertEqual(
+            blockedWakeSession.presentation?.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
 
         let move = CoachingTestFixtures.openingKnightMove
@@ -311,7 +319,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertNil(CoachingTestFixtures.coachingState.board[emptySquare])
         replySession.handle(.identificationTapped(emptySquare))
         XCTAssertEqual(
-            replySession.presentation?.headline,
+            replySession.presentation?.response,
             "That square doesn’t show a check or capture after this move."
         )
     }
@@ -346,7 +354,7 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.identificationTapped(CoachingTestFixtures.whiteQueen))
 
         XCTAssertEqual(
-            session.presentation?.headline,
+            session.presentation?.response,
             "Yes, that queen is threatened. We’re looking for a knight, bishop, rook, or queen Black could win."
         )
     }
@@ -408,8 +416,12 @@ final class CoachingSessionTests: XCTestCase {
 
         XCTAssertEqual(session.stage, .safeResolve(target: queen))
         XCTAssertEqual(
-            session.presentation?.headline,
+            session.presentation?.response,
             "The rook could still take your rook after that move."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Yes—that bishop is attacking your queen. How could you help your queen?"
         )
         XCTAssertNil(session.presentation?.hint)
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
@@ -519,7 +531,8 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertFalse(session.presentation?.headline.contains("king would still need help") == true)
         XCTAssertTrue(session.handle(.identificationTapped(looseBishop)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .check))
-        XCTAssertEqual(session.presentation?.headline, "Black could take your bishop.")
+        XCTAssertEqual(session.presentation?.response, "Black could take your bishop.")
+        XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
     func testNontrivialSafeRequiresCorrectAbsenceAndRejectsIncorrectAbsence() {
@@ -529,8 +542,12 @@ final class CoachingSessionTests: XCTestCase {
         clearSession.handle(.actionChosen(.noAnswer))
         XCTAssertEqual(clearSession.stage, .fallbackChooseMove)
         XCTAssertEqual(
+            clearSession.presentation?.response,
+            "Right—there isn’t one."
+        )
+        XCTAssertEqual(
             clearSession.presentation?.headline,
-            "Right—there isn’t one. Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
         )
         XCTAssertEqual(clearSession.presentation?.instruction, "Make a move on the board.")
         XCTAssertEqual(clearSession.presentation?.routine, [])
@@ -539,7 +556,11 @@ final class CoachingSessionTests: XCTestCase {
         dangerSession.receive(CoachingTestFixtures.multipleDangerAdvice)
         dangerSession.handle(.actionChosen(.noAnswer))
         XCTAssertEqual(dangerSession.stage, .safeLocate)
-        XCTAssertEqual(dangerSession.presentation?.headline, "One of your pieces does need help.")
+        XCTAssertEqual(dangerSession.presentation?.response, "One of your pieces does need help.")
+        XCTAssertEqual(
+            dangerSession.presentation?.headline,
+            "Which of your pieces needs help most?"
+        )
         XCTAssertEqual(dangerSession.missesAtCurrentLevel, 1)
     }
 
@@ -569,7 +590,14 @@ final class CoachingSessionTests: XCTestCase {
         ))
 
         XCTAssertEqual(session.stage, .safeResolve(target: CoachingTestFixtures.whiteQueen))
-        XCTAssertEqual(session.presentation?.headline, "The bishop could still take your queen after that move.")
+        XCTAssertEqual(
+            session.presentation?.response,
+            "The bishop could still take your queen after that move."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Yes—that bishop is attacking your queen. How could you help your queen?"
+        )
     }
 
     func testTakeRequiresCorrectAbsenceAndStagesCapturesForAdvice() {
@@ -579,14 +607,22 @@ final class CoachingSessionTests: XCTestCase {
         emptySession.handle(.actionChosen(.noAnswer))
         XCTAssertEqual(emptySession.stage, .fallbackChooseMove)
         XCTAssertEqual(
+            emptySession.presentation?.response,
+            "Right—there isn’t one."
+        )
+        XCTAssertEqual(
             emptySession.presentation?.headline,
-            "Right—there isn’t one. Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
         )
 
         var takeSession = session()
         takeSession.receive(CoachingTestFixtures.takeAdvice)
         takeSession.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(takeSession.presentation?.headline, "There is a useful capture to find.")
+        XCTAssertEqual(takeSession.presentation?.response, "There is a useful capture to find.")
+        XCTAssertEqual(
+            takeSession.presentation?.headline,
+            "Can one of your pieces make a useful capture?"
+        )
         XCTAssertEqual(
             stage(CoachingTestFixtures.profitableCapture, in: &takeSession),
             [.requestAdvice(context: .tentativeMove(origin: .take))]
@@ -641,7 +677,11 @@ final class CoachingSessionTests: XCTestCase {
         ))
 
         XCTAssertEqual(session.stage, .takeChooseMove)
-        XCTAssertEqual(session.presentation?.headline, "Black could take your queen.")
+        XCTAssertEqual(session.presentation?.response, "Black could take your queen.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Can one of your pieces make a useful capture?"
+        )
     }
 
     func testRepeatedUnprofitableCapturesPreserveHintLevelAtAvailableFocusCap() {
@@ -735,9 +775,10 @@ final class CoachingSessionTests: XCTestCase {
             )
         )
         XCTAssertEqual(
-            rejected.presentation?.headline,
+            rejected.presentation?.response,
             "That move is safe, but it doesn’t bring a new piece into the game."
         )
+        XCTAssertEqual(rejected.presentation?.headline, "This knight can come into the game.")
     }
 
     func testRepeatedPurposelessWakeMovesPreserveHintLevelAtAvailableFocusCap() {
@@ -1238,7 +1279,8 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.handle(.identificationTapped(move.to)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .fallback))
         XCTAssertEqual(session.presentation?.boardTask, .move)
-        XCTAssertEqual(session.presentation?.headline, "Black could take your pawn.")
+        XCTAssertEqual(session.presentation?.response, "Black could take your pawn.")
+        XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
     func testReviseIssueWinsWhenTappedSquareAlsoMatchesNoticeIssue() {
@@ -1270,7 +1312,8 @@ final class CoachingSessionTests: XCTestCase {
 
         XCTAssertTrue(session.handle(.identificationTapped(sharedAnswer)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .wake))
-        XCTAssertEqual(session.presentation?.headline, "Black could take your knight.")
+        XCTAssertEqual(session.presentation?.response, "Black could take your knight.")
+        XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
     func testHarmlessCheckCanBeFoundAndCompletesAnAcceptableMove() {
@@ -1298,9 +1341,12 @@ final class CoachingSessionTests: XCTestCase {
             .complete(move: move, origin: .wake, concepts: [.developsKnightOrBishop])
         )
         XCTAssertEqual(
+            session.presentation?.response,
+            "You found it. Black could check your king, but your move still works."
+        )
+        XCTAssertEqual(
             session.presentation?.headline,
-            "You found it. Black could check your king, but your move still works. "
-                + "Your knight came into the game. Chess players call that developing a piece."
+            "That works. Your knight came into the game. Chess players call that developing a piece."
         )
     }
 
@@ -1344,14 +1390,19 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.handle(.identificationTapped(harmlessChecker)).isEmpty)
         XCTAssertEqual(session.stage, .opponentCheck(move: move, origin: .preexisting))
         XCTAssertEqual(
-            session.presentation?.headline,
+            session.presentation?.response,
             "You found the check. There is still another danger after this move."
         )
-        XCTAssertFalse(session.presentation?.headline.contains("move still works") == true)
+        XCTAssertFalse(session.presentation?.response?.contains("move still works") == true)
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Could Black check your king or win one of your pieces?"
+        )
 
         XCTAssertTrue(session.handle(.identificationTapped(looseQueen)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .preexisting))
-        XCTAssertEqual(session.presentation?.headline, "Black could take your queen.")
+        XCTAssertEqual(session.presentation?.response, "Black could take your queen.")
+        XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
     func testNoticeLevelBestCaseMaterialLossCanBeFoundAndAccepted() {
@@ -1379,9 +1430,12 @@ final class CoachingSessionTests: XCTestCase {
             .complete(move: move, origin: .wake, concepts: [.developsKnightOrBishop])
         )
         XCTAssertEqual(
+            session.presentation?.response,
+            "Black could take your knight."
+        )
+        XCTAssertEqual(
             session.presentation?.headline,
-            "Black could take your knight. Your move still works. "
-                + "Your knight came into the game. Chess players call that developing a piece."
+            "That works. Your knight came into the game. Chess players call that developing a piece."
         )
     }
 
@@ -1406,7 +1460,11 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.actionChosen(.looksSafe))
 
         XCTAssertEqual(session.stage, .opponentCheck(move: move, origin: .fallback))
-        XCTAssertEqual(session.presentation?.headline, "Black has a reply to notice.")
+        XCTAssertEqual(session.presentation?.response, "Black has a reply to notice.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Could Black check your king or win one of your pieces?"
+        )
         XCTAssertEqual(session.missesAtCurrentLevel, 1)
     }
 
@@ -1451,8 +1509,12 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.handle(.actionChosen(.looksSafe)).isEmpty)
         XCTAssertEqual(session.stage, .fallbackChooseMove)
         XCTAssertEqual(
-            session.presentation?.headline,
+            session.presentation?.response,
             "That move is safe, but it doesn’t help with a clear plan yet."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
         )
     }
 
@@ -1526,7 +1588,14 @@ final class CoachingSessionTests: XCTestCase {
             session.stage,
             .safeResolve(target: CoachingTestFixtures.whiteRook)
         )
-        XCTAssertEqual(session.presentation?.headline, "The rook could still take your rook after that move.")
+        XCTAssertEqual(
+            session.presentation?.response,
+            "The rook could still take your rook after that move."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Yes—that rook is attacking your rook. How could you help your rook?"
+        )
     }
 
     func testWakeSubjectSurvivesMoveRevisionAndReplacementAdvice() {
@@ -1761,9 +1830,10 @@ final class CoachingSessionTests: XCTestCase {
 
         XCTAssertEqual(session.stage, .reviseMove(origin: .preexisting))
         XCTAssertEqual(
-            session.presentation?.headline,
+            session.presentation?.response,
             "That move is safe, but it doesn’t help with a clear plan yet."
         )
+        XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
     func testStopAndKeepLookingPreserveTentativeMove() {
@@ -1968,8 +2038,12 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(switched.stage, direct.stage)
         XCTAssertEqual(switched.presentation, direct.presentation)
         XCTAssertEqual(
-            switched.presentation?.headline,
+            switched.presentation?.response,
             "That rook can’t come out yet because other pieces are in the way."
+        )
+        XCTAssertEqual(
+            switched.presentation?.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
     }
 

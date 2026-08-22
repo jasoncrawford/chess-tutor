@@ -3,16 +3,22 @@ import SwiftUI
 
 enum CoachingPanelAccessibilityFixtureConfiguration {
     case tall
+    case tallNoResponse
     case clockwiseQuarterTurn
     case counterclockwiseQuarterTurn
 
     var composition: CoachingPanelComposition {
-        self == .tall ? .tall : .wide
+        switch self {
+        case .tall, .tallNoResponse:
+            return .tall
+        case .clockwiseQuarterTurn, .counterclockwiseQuarterTurn:
+            return .wide
+        }
     }
 
     var tableRotationDegrees: Double {
         switch self {
-        case .tall:
+        case .tall, .tallNoResponse:
             return 0
         case .clockwiseQuarterTurn:
             return 90
@@ -41,6 +47,8 @@ struct CoachingPanelAccessibilityFixture: View {
         switch arguments[flagIndex + 1] {
         case "tall":
             return .tall
+        case "tall-no-response":
+            return .tallNoResponse
         case "clockwise-quarter-turn":
             return .clockwiseQuarterTurn
         case "counterclockwise-quarter-turn":
@@ -91,9 +99,15 @@ struct CoachingPanelAccessibilityFixture: View {
     }
 
     private var presentation: CoachingPresentation {
-        CoachingPresentation(
-            headline: "Yes—that pawn is attacking your queen. How could you help your queen?",
-            instruction: "Try moving your queen, protecting it, or taking the attacker.",
+        let omitsResponse = configuration == .tallNoResponse
+        return CoachingPresentation(
+            response: omitsResponse ? nil : "Right—there isn’t one.",
+            headline: omitsResponse
+                ? "Yes—that pawn is attacking your queen. How could you help your queen?"
+                : "Can one of your pieces make a useful capture?",
+            instruction: omitsResponse
+                ? "Try moving your queen, protecting it, or taking the attacker."
+                : "Make the capture, or choose I don’t see one.",
             hint: nil,
             routine: [.safeCurrent, .takePending, .wakePending],
             actions: [

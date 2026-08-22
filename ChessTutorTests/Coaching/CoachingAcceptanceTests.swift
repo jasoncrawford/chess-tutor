@@ -121,8 +121,12 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCurrent, .wakePending])
         XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "Right—there isn’t one."
+        )
+        XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "Right—there isn’t one. Can one of your pieces make a useful capture?"
+            "Can one of your pieces make a useful capture?"
         )
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
@@ -131,7 +135,11 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCleared, .wakeCurrent])
-        XCTAssertTrue(session.coachingPresentation?.headline.hasPrefix("Right—there isn’t one.") == true)
+        XCTAssertEqual(session.coachingPresentation?.response, "Right—there isn’t one.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Which piece could help protect another piece?"
+        )
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
 
         XCTAssertFalse(session.handleCoachingSquareTap(knight))
@@ -225,7 +233,11 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         stage(badCapture, in: badSession)
         await badSession.resolvePendingCoachingAdvice()
-        XCTAssertEqual(badSession.coachingPresentation?.headline, "Black could take your bishop.")
+        XCTAssertEqual(badSession.coachingPresentation?.response, "Black could take your bishop.")
+        XCTAssertEqual(
+            badSession.coachingPresentation?.headline,
+            "Can one of your pieces make a useful capture?"
+        )
         XCTAssertEqual(badSession.coachingPresentation?.boardTask, .move)
 
         let winningSession = makeSession(state: state)
@@ -255,7 +267,11 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertTrue(session.coachingPresentation?.headline.hasPrefix("Right—there isn’t one.") == true)
+        XCTAssertEqual(session.coachingPresentation?.response, "Right—there isn’t one.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Which piece could help protect another piece?"
+        )
         XCTAssertFalse(session.handleCoachingSquareTap(knight))
         session.select(knight)
         XCTAssertEqual(session.selectedSquare, knight)
@@ -317,7 +333,8 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertTrue(session.handleCoachingSquareTap(move.to))
 
-        XCTAssertEqual(session.coachingPresentation?.headline, "Black could take your bishop.")
+        XCTAssertEqual(session.coachingPresentation?.response, "Black could take your bishop.")
+        XCTAssertEqual(session.coachingPresentation?.headline, "Try another move.")
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
         XCTAssertEqual(session.state.board[move.to], white(.bishop))
         XCTAssertTrue(session.state.moveHistory.isEmpty)
@@ -343,9 +360,12 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.handleCoachingSquareTap(checkingRook))
 
         XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "You found it. Black could check your king, but your move still works."
+        )
+        XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "You found it. Black could check your king, but your move still works. "
-                + "Your knight gets a more useful place near the center."
+            "That works. Your knight gets a more useful place near the center."
         )
         XCTAssertEqual(session.coachingPresentation?.actions.map(\.action), [.done, .keepLooking, .stop])
         XCTAssertTrue(session.state.moveHistory.isEmpty)
@@ -486,8 +506,12 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(switched, direct)
         XCTAssertEqual(
-            switched.headline,
+            switched.response,
             "That rook can’t come out yet because other pieces are in the way."
+        )
+        XCTAssertEqual(
+            switched.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
         XCTAssertEqual(switched.instruction, "Tap the piece you want to move.")
         XCTAssertEqual(switched.boardTask, .move)

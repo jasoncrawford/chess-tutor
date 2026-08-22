@@ -1,49 +1,25 @@
 struct LocalCoachingExplanationSource: CoachingExplaining {
     func presentation(for context: CoachingPresentationContext) -> CoachingPresentation {
         let base = baseCopy(for: context.prompt, learner: context.learner)
-        let instruction = instruction(for: context, base: base.instruction)
-
         return CoachingPresentation(
-            headline: headline(for: context, base: base.headline),
-            instruction: instruction,
+            response: responseCopy(for: context),
+            headline: base.headline,
+            instruction: instruction(for: context, base: base.instruction),
             hint: context.hint,
             routine: context.routine,
-            actions: context.actions.map {
-                actionPresentation(
-                    for: $0,
-                    emphasizeHint: context.missesAtCurrentLevel >= 1
-                )
-            },
+            actions: context.actions.map { actionPresentation(for: $0, context: context) },
             boardTask: context.boardTask,
             focus: context.focus
         )
     }
 
-    private func headline(
-        for context: CoachingPresentationContext,
-        base: String
-    ) -> String {
-        guard let feedback = context.feedback else { return base }
-        if feedback == .correctAbsence {
-            return "Right—there isn’t one. \(base)"
-        }
-        let acknowledgement = feedbackHeadline(
+    private func responseCopy(for context: CoachingPresentationContext) -> String? {
+        guard let feedback = context.feedback else { return nil }
+        return feedbackHeadline(
             for: feedback,
             opponent: opponentColor(for: context),
             prompt: context.prompt
         )
-        guard case let .complete(_, idea) = context.prompt else {
-            return acknowledgement
-        }
-
-        switch feedback {
-        case .harmlessCheckFound:
-            return "\(acknowledgement) \(completionPurpose(for: idea))"
-        case .concreteFlaw:
-            return "\(acknowledgement) Your move still works. \(completionPurpose(for: idea))"
-        default:
-            return acknowledgement
-        }
     }
 
     private func baseCopy(
@@ -336,7 +312,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
 
     private func actionPresentation(
         for action: CoachingAction,
-        emphasizeHint: Bool
+        context: CoachingPresentationContext
     ) -> CoachingActionPresentation {
         switch action {
         case .noAnswer:
@@ -358,7 +334,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 action: action,
                 title: "Hint",
                 accessibilityLabel: "Show a hint",
-                prominence: emphasizeHint ? .primary : .secondary
+                prominence: context.missesAtCurrentLevel >= 1 ? .primary : .secondary
             )
         case .stop:
             return CoachingActionPresentation(

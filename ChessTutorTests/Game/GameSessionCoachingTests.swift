@@ -378,8 +378,12 @@ final class GameSessionCoachingTests: XCTestCase {
 
         XCTAssertEqual(session.selectedSquare, blockedRook)
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.response,
             "That rook can’t come out yet because other pieces are in the way."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
         XCTAssertNil(session.pendingCoachingRequestID)
@@ -425,18 +429,23 @@ final class GameSessionCoachingTests: XCTestCase {
 
         session.select(Square(file: .e, rank: 2))
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.response,
             "That pawn can move, but it doesn’t bring a new piece into the game."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
         )
 
         session.select(Square(file: .a, rank: 1))
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.response,
             "That rook can’t come out yet because other pieces are in the way."
         )
 
         session.select(Square(file: .e, rank: 4))
         XCTAssertNil(session.selectedSquare)
+        XCTAssertNil(session.coachingPresentation?.response)
         XCTAssertEqual(
             session.coachingPresentation?.headline,
             "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
@@ -444,7 +453,11 @@ final class GameSessionCoachingTests: XCTestCase {
 
         session.select(Square(file: .a, rank: 7))
         XCTAssertEqual(session.selectedSquare, Square(file: .a, rank: 7))
-        XCTAssertEqual(session.coachingPresentation?.headline, "Tap one of your pieces.")
+        XCTAssertEqual(session.coachingPresentation?.response, "Tap one of your pieces.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+        )
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
         XCTAssertNil(session.pendingCoachingRequestID)
     }

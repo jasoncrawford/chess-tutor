@@ -2,10 +2,10 @@ import XCTest
 @testable import ChessTutor
 
 final class LocalCoachingExplanationSourceTests: XCTestCase {
-    private let explainer = LocalCoachingExplanationSource()
+    private let source = LocalCoachingExplanationSource()
 
     func testSafeLocatePresentationAsksForBoardTap() {
-        let presentation = explainer.presentation(
+        let presentation = source.presentation(
             for: context(
                 prompt: .safeLocate,
                 routine: [.safeCurrent, .takePending, .wakePending],
@@ -21,7 +21,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     }
 
     func testFallbackDoesNotInventPurpose() {
-        let presentation = explainer.presentation(
+        let presentation = source.presentation(
             for: context(
                 prompt: .fallbackChooseMove,
                 actions: [.hint, .stop],
@@ -132,14 +132,14 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ]
 
         for (prompt, headline, instruction) in cases {
-            let presentation = explainer.presentation(for: context(prompt: prompt))
+            let presentation = source.presentation(for: context(prompt: prompt))
             XCTAssertEqual(presentation.headline, headline, "Unexpected headline for \(prompt)")
             XCTAssertEqual(presentation.instruction, instruction, "Unexpected instruction for \(prompt)")
         }
     }
 
     func testEveryActionHasAnUnambiguousLabelAndProminence() {
-        let presentation = explainer.presentation(
+        let presentation = source.presentation(
             for: context(
                 prompt: .safeLocate,
                 actions: [.noAnswer, .looksSafe, .hint, .stop, .done, .keepLooking]
@@ -187,7 +187,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     }
 
     func testFirstMissEmphasizesHintWithoutChangingInstruction() {
-        let presentation = explainer.presentation(for: context(
+        let presentation = source.presentation(for: context(
             prompt: .safeLocate,
             missesAtCurrentLevel: 1,
             actions: [.noAnswer, .hint, .stop]
@@ -198,6 +198,35 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             presentation.actions.first(where: { $0.action == .hint })?.prominence,
             .primary
         )
+    }
+
+    func testMissResponseDoesNotReplaceOpeningAsk() {
+        let presentation = source.presentation(for: context(
+            prompt: .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+            feedback: .blockedWakePiece(piece: .rook)
+        ))
+        XCTAssertEqual(presentation.response, "That rook can’t come out yet because other pieces are in the way.")
+        XCTAssertEqual(presentation.headline, "A good first step is to move a center pawn or bring out a knight. Which would you like to try?")
+        XCTAssertEqual(presentation.instruction, "Tap the piece you want to move.")
+    }
+
+    func testCorrectAbsenceIsSeparateFromNextAsk() {
+        let presentation = source.presentation(for: context(
+            prompt: .takeChooseMove,
+            feedback: .correctAbsence
+        ))
+        XCTAssertEqual(presentation.response, "Right—there isn’t one.")
+        XCTAssertEqual(presentation.headline, "Can one of your pieces make a useful capture?")
+    }
+
+    func testHintHasNoStaleMissResponse() {
+        let presentation = source.presentation(for: context(
+            prompt: .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+            feedback: nil,
+            hint: .candidatePieces
+        ))
+        XCTAssertNil(presentation.response)
+        XCTAssertEqual(presentation.instruction, "Try one of the highlighted knights or center pawns.")
     }
 
     func testFeedbackStatesAVisibleChessFact() {
@@ -241,21 +270,25 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
         ]
 
-        for (prompt, feedback, headline) in cases {
-            let result = explainer.presentation(for: context(prompt: prompt, feedback: feedback))
-            XCTAssertEqual(result.headline, headline)
+        for (prompt, feedback, response) in cases {
+            let result = source.presentation(for: context(prompt: prompt, feedback: feedback))
+            XCTAssertEqual(result.response, response)
         }
     }
 
     func testCorrectAbsenceAcknowledgesAndAsksTheNextQuestion() {
-        let presentation = explainer.presentation(for: context(
+        let presentation = source.presentation(for: context(
             prompt: .takeChooseMove,
             feedback: .correctAbsence
         ))
 
         XCTAssertEqual(
+            presentation.response,
+            "Right—there isn’t one."
+        )
+        XCTAssertEqual(
             presentation.headline,
-            "Right—there isn’t one. Can one of your pieces make a useful capture?"
+            "Can one of your pieces make a useful capture?"
         )
         XCTAssertEqual(
             presentation.instruction,
@@ -264,7 +297,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     }
 
     func testConcreteFeedbackNamesWhiteWhenWhiteIsTheOpponent() {
-        let presentation = explainer.presentation(
+        let presentation = source.presentation(
             for: context(
                 prompt: .opponentReply(opponent: .white),
                 feedback: .concreteFlaw(kind: .check, affectedPiece: nil),
@@ -272,11 +305,15 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(presentation.headline, "White could check your king.")
+        XCTAssertEqual(presentation.response, "White could check your king.")
+        XCTAssertEqual(
+            presentation.headline,
+            "Could White check your king or win one of your pieces?"
+        )
     }
 
     func testBlackLearnerSafePromptNamesWhiteAsTheAttacker() {
-        let presentation = explainer.presentation(for: context(
+        let presentation = source.presentation(for: context(
             prompt: .safeIdentifyAttacker(piece: .knight),
             learner: .black
         ))
@@ -318,7 +355,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ]
 
         for (idea, headline) in cases {
-            let presentation = explainer.presentation(
+            let presentation = source.presentation(
                 for: context(prompt: .complete(origin: .wake, idea: idea))
             )
             XCTAssertEqual(presentation.headline, headline, "Unexpected completion for \(idea)")
@@ -341,7 +378,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         let routine: [CoachingRoutineState] = [.safeCleared, .takeCleared, .wakeCurrent]
         let boardTask = CoachingBoardTask.identify(allowsMoveRevision: true)
 
-        let presentation = explainer.presentation(
+        let presentation = source.presentation(
             for: context(
                 prompt: .wakeChoosePiece(purpose: .centralActivity),
                 routine: routine,
@@ -386,7 +423,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ]
 
         for (prompt, hint, instruction) in cases {
-            let result = explainer.presentation(for: context(prompt: prompt, hint: hint))
+            let result = source.presentation(for: context(prompt: prompt, hint: hint))
             XCTAssertEqual(result.instruction, instruction)
             XCTAssertEqual(result.hint, hint)
         }
@@ -432,22 +469,30 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         let feedbackCopy = prompts.flatMap { prompt in
             feedback.map { item in
-                let presentation = explainer.presentation(
+                let presentation = source.presentation(
                     for: context(prompt: prompt, feedback: item)
                 )
-                return ([presentation.headline, presentation.instruction].compactMap { $0 })
+                return ([
+                    presentation.response,
+                    presentation.headline,
+                    presentation.instruction,
+                ].compactMap { $0 })
                     .joined(separator: " ")
             }
         }.joined(separator: " ")
         let hintCopy = prompts.map { prompt in
-            let presentation = explainer.presentation(
+            let presentation = source.presentation(
                 for: context(
                     prompt: prompt,
                     hint: .candidatePieces,
                     actions: [.hint]
                 )
             )
-            return ([presentation.headline, presentation.instruction].compactMap { $0 })
+            return ([
+                presentation.response,
+                presentation.headline,
+                presentation.instruction,
+            ].compactMap { $0 })
                 .joined(separator: " ")
         }.joined(separator: " ")
         let copy = "\(feedbackCopy) \(hintCopy)".lowercased()

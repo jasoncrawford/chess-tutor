@@ -110,6 +110,31 @@ final class CoachingPanelLayoutTests: XCTestCase {
         XCTAssertEqual(presentation.actions.map(\.prominence), [.primary, .secondary, .quiet])
     }
 
+    func testFeedbackResponseKeepsCurrentAskAvailableToBothPanelCompositions() {
+        let presentation = LocalCoachingExplanationSource().presentation(
+            for: coachingContext(
+                prompt: .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                feedback: .blockedWakePiece(piece: .rook),
+                actions: [.hint, .stop]
+            )
+        )
+        let compositions = [
+            CoachingPanelLayout.make(sidebar: .make(for: 760, presentation: .verticalColumn)),
+            CoachingPanelLayout.make(sidebar: .make(for: 760, presentation: .horizontalSegments)),
+        ].map(\.composition)
+
+        XCTAssertEqual(compositions, [.tall, .wide])
+        XCTAssertEqual(
+            presentation.response,
+            "That rook can’t come out yet because other pieces are in the way."
+        )
+        XCTAssertEqual(
+            presentation.headline,
+            "A good first step is to move a center pawn or bring out a knight. Which would you like to try?"
+        )
+        XCTAssertEqual(presentation.instruction, "Tap the piece you want to move.")
+    }
+
     func testCompletionKeepsDoneKeepLookingAndStopActions() {
         let presentation = LocalCoachingExplanationSource().presentation(
             for: coachingContext(
@@ -156,11 +181,12 @@ final class CoachingPanelLayoutTests: XCTestCase {
 
     private func coachingContext(
         prompt: CoachingPrompt,
+        feedback: CoachingFeedback? = nil,
         actions: [CoachingAction]
     ) -> CoachingPresentationContext {
         CoachingPresentationContext(
             prompt: prompt,
-            feedback: nil,
+            feedback: feedback,
             learner: .white,
             hint: nil,
             missesAtCurrentLevel: 0,

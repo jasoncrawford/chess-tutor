@@ -3,19 +3,33 @@ import XCTest
 @MainActor
 final class CoachingPanelAccessibilityUITests: XCTestCase {
     func testTallCompositionKeepsConversationBeforeRoutineAndActions() {
-        assertPanelLayout(for: "tall")
+        assertPanelLayout(
+            for: "tall",
+            expectedResponse: "Right—there isn’t one."
+        )
     }
 
     func testClockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
-        assertPanelLayout(for: "clockwise-quarter-turn")
+        assertPanelLayout(
+            for: "clockwise-quarter-turn",
+            expectedResponse: "Right—there isn’t one."
+        )
     }
 
     func testCounterclockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
-        assertPanelLayout(for: "counterclockwise-quarter-turn")
+        assertPanelLayout(
+            for: "counterclockwise-quarter-turn",
+            expectedResponse: "Right—there isn’t one."
+        )
+    }
+
+    func testConversationOmitsResponseCleanlyWhenNil() {
+        assertPanelLayout(for: "tall-no-response", expectedResponse: nil)
     }
 
     private func assertPanelLayout(
         for configuration: String,
+        expectedResponse: String?,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -45,14 +59,21 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
             line: line
         )
 
-        let expectedLabels = [
-            "Yes—that pawn is attacking your queen. How could you help your queen?",
-            "Try moving your queen, protecting it, or taking the attacker.",
+        let expectedHeadline = expectedResponse == nil
+            ? "Yes—that pawn is attacking your queen. How could you help your queen?"
+            : "Can one of your pieces make a useful capture?"
+        let expectedInstruction = expectedResponse == nil
+            ? "Try moving your queen, protecting it, or taking the attacker."
+            : "Make the capture, or choose I don’t see one."
+        let expectedLabels = ([
+            expectedResponse,
+            expectedHeadline,
+            expectedInstruction,
             "Safe, current step",
             "Done with this move",
             "Keep looking for another move",
             "Stop coaching",
-        ]
+        ] as [String?]).compactMap { $0 }
         XCTAssertEqual(
             semanticElements.map(\.label).filter(expectedLabels.contains),
             expectedLabels,
