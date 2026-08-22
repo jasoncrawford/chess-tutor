@@ -4,7 +4,7 @@ protocol CoachingInsightSourcing: Sendable {
 
 struct CoachingInsightSet: Equatable, Sendable {
     let ordered: [CoachingInsight]
-    let urgentProblems: [CoachingUrgentProblem]
+    let dangerProblems: [CoachingDangerProblem]
     let takeOpportunities: [CoachingOpportunity]
     let wakeOpportunities: [CoachingOpportunity]
     let openingDevelopmentIsRelevant: Bool
@@ -65,7 +65,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
             }
         }
 
-        for (index, problem) in evaluation.urgentProblems.enumerated() {
+        for (index, problem) in evaluation.dangerProblems.enumerated() {
             insights.append(
                 CoachingInsight(
                     concept: .pieceNeedsHelp,
@@ -124,7 +124,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
             }
         }
 
-        if !evaluation.urgentProblems.isEmpty {
+        if !evaluation.dangerProblems.isEmpty {
             for capture in evaluation.learnerCaptureEstimates.sorted(by: stableCaptureOrder) {
                 guard let assessment = evaluation.moveAssessments[capture.move],
                       assessment.isLegal,
@@ -295,7 +295,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         wakeOpportunities.sort(by: opportunityOrder)
         insights.append(contentsOf: wakeOpportunities.map(insight(from:)))
         let confidence: CoachingConfidence = evaluation.checkingPieces.isEmpty
-            && evaluation.urgentProblems.isEmpty
+            && evaluation.dangerProblems.isEmpty
             && takeOpportunities.isEmpty
             && wakeOpportunities.isEmpty
             ? .unsupported
@@ -303,7 +303,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
 
         return CoachingInsightSet(
             ordered: insights,
-            urgentProblems: evaluation.urgentProblems,
+            dangerProblems: evaluation.dangerProblems,
             takeOpportunities: takeOpportunities,
             wakeOpportunities: wakeOpportunities,
             openingDevelopmentIsRelevant: openingDevelopmentIsRelevant,

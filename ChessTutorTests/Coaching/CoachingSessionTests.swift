@@ -219,27 +219,70 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertFalse(sourceHints.contains(.movementMarkers))
     }
 
-    func testSafeTranscriptAcceptsAnyUrgentPieceThenItsAttacker() {
+    func testSafeTranscriptAcceptsPrimaryDangerThenItsAttacker() {
         var session = session()
         session.receive(CoachingTestFixtures.multipleDangerAdvice)
 
-        let chosenTarget = CoachingTestFixtures.whiteRook
+        let chosenTarget = CoachingTestFixtures.whiteQueen
         XCTAssertTrue(session.handle(.identificationTapped(chosenTarget)).isEmpty)
         XCTAssertEqual(session.stage, .safeIdentifyAttacker(target: chosenTarget))
         XCTAssertEqual(
             session.presentation?.headline,
-            "You found the rook. What black piece is attacking it?"
+            "You found the queen. What black piece is attacking it?"
         )
 
-        let attacker = CoachingTestFixtures.blackRook
+        let attacker = CoachingTestFixtures.blackBishop
         XCTAssertTrue(session.handle(.identificationTapped(attacker)).isEmpty)
         XCTAssertEqual(session.stage, .safeResolve(target: chosenTarget))
         XCTAssertEqual(
             session.presentation?.headline,
-            "Yes—that rook is attacking your rook. How could you help your rook?"
+            "Yes—that bishop is attacking your queen. How could you help your queen?"
         )
         XCTAssertEqual(session.presentation?.instruction, "Make a move that gets it safe.")
         XCTAssertEqual(session.presentation?.boardTask, .move)
+    }
+
+    func testLowerPriorityDangerReturnsToSafeLocateWithConcreteLossComparison() async throws {
+        let state = CoachingGoldenPosition.twoDangerPriorities.state
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 7,
+            context: .start
+        ))
+        var session = session()
+        session.receive(advice)
+
+        session.handle(.identificationTapped(sq("a3")))
+
+        XCTAssertEqual(session.stage, .safeLocate)
+        XCTAssertEqual(
+            session.presentation?.response,
+            "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more."
+        )
+        XCTAssertEqual(session.presentation?.headline, "Which piece should you help first?")
+    }
+
+    func testProtectedAttackAdvancesWithConcreteRecaptureFact() async throws {
+        let state = CoachingGoldenPosition.protectedPawn.state
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 7,
+            context: .start
+        ))
+        var session = session()
+        session.receive(advice)
+
+        session.handle(.identificationTapped(sq("g4")))
+
+        XCTAssertNotEqual(session.stage, .safeLocate)
+        XCTAssertEqual(
+            session.presentation?.response,
+            "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now."
+        )
     }
 
     func testTapFeedbackClassifiesBoardFactsWithoutChangingCandidateSelection() {
@@ -254,9 +297,17 @@ final class CoachingSessionTests: XCTestCase {
             opponentHasCapture: true,
             learnerHasCapture: false,
             opponentCaptures: [pawnCapture],
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems + [
+                CoachingDangerProblem(
+                    target: pawn,
+                    piece: Piece(kind: .pawn, color: .white),
+                    pieceValue: 1,
+                    captures: [pawnCapture],
+                    worstEstimatedLoss: 1
+                ),
+            ]
         )
-        let urgentPiece = advice.urgentProblems.first!.piece.kind
+        let primaryPiece = advice.dangerProblems.first!.piece.kind
 
         var safePieceSession = session()
         safePieceSession.receive(CoachingTestFixtures.multipleDangerAdvice)
@@ -264,7 +315,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(safePieceSession.presentation?.response, "That pawn is safe right now.")
         XCTAssertEqual(
             safePieceSession.presentation?.headline,
-            "Which of your pieces needs help most?"
+            "One of your pieces is in danger. Which one?"
         )
 
         var lowerPrioritySession = session()
@@ -272,7 +323,7 @@ final class CoachingSessionTests: XCTestCase {
         lowerPrioritySession.handle(.identificationTapped(pawn))
         XCTAssertEqual(
             lowerPrioritySession.presentation?.response,
-            "Yes, that pawn is threatened. Your \(urgentPiece.rawValue) is worth more, so help the \(urgentPiece.rawValue) first."
+            "You found a threatened pawn. Losing the \(primaryPiece.rawValue) would cost more."
         )
 
         var wrongColorSession = session()
@@ -324,7 +375,7 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
-    func testHigherValueNonurgentThreatDoesNotClaimAnUrgentPieceIsWorthMore() {
+    func testHigherValueLowerLossDangerUsesActualLossForPriority() {
         let queenCapture = CoachingTestFixtures.capture(
             move: Move(from: CoachingTestFixtures.blackBishop, to: CoachingTestFixtures.whiteQueen),
             captured: Piece(kind: .queen, color: .white),
@@ -341,12 +392,22 @@ final class CoachingSessionTests: XCTestCase {
             opponentHasCapture: true,
             learnerHasCapture: false,
             opponentCaptures: [queenCapture, knightCapture],
-            urgent: [CoachingUrgentProblem(
-                target: CoachingTestFixtures.openingKnight,
-                piece: Piece(kind: .knight, color: .white),
-                captures: [knightCapture],
-                worstEstimatedLoss: 2
-            )]
+            danger: [
+                CoachingDangerProblem(
+                    target: CoachingTestFixtures.openingKnight,
+                    piece: Piece(kind: .knight, color: .white),
+                    pieceValue: 3,
+                    captures: [knightCapture],
+                    worstEstimatedLoss: 2
+                ),
+                CoachingDangerProblem(
+                    target: CoachingTestFixtures.whiteQueen,
+                    piece: Piece(kind: .queen, color: .white),
+                    pieceValue: 9,
+                    captures: [queenCapture],
+                    worstEstimatedLoss: 1
+                ),
+            ]
         )
         var session = session()
 
@@ -355,7 +416,7 @@ final class CoachingSessionTests: XCTestCase {
 
         XCTAssertEqual(
             session.presentation?.response,
-            "Yes, that queen is threatened. We’re looking for a knight, bishop, rook, or queen Black could win."
+            "You found a threatened queen. Losing the knight would cost more."
         )
     }
 
@@ -383,9 +444,9 @@ final class CoachingSessionTests: XCTestCase {
             positionRevision: 1,
             context: .start
         ))
-        let queenProblem = try XCTUnwrap(startAdvice.urgentProblems.first { $0.target == queen })
+        let queenProblem = try XCTUnwrap(startAdvice.dangerProblems.first { $0.target == queen })
         let queenAttacker = try XCTUnwrap(queenProblem.captures.first?.move.from)
-        XCTAssertTrue(startAdvice.urgentProblems.contains { $0.target == rook })
+        XCTAssertTrue(startAdvice.dangerProblems.contains { $0.target == rook })
 
         var session = session()
         session.receive(startAdvice)
@@ -588,7 +649,7 @@ final class CoachingSessionTests: XCTestCase {
             CoachingTestFixtures.safeMove,
             origin: .safe,
             assessment: rejected,
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         ))
 
         XCTAssertEqual(session.stage, .safeResolve(target: CoachingTestFixtures.whiteQueen))
@@ -931,14 +992,14 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.hint, .candidatePieces)
         XCTAssertEqual(
             session.presentation?.focus.candidateSquares,
-            [CoachingTestFixtures.whiteQueen, CoachingTestFixtures.whiteRook]
+            [CoachingTestFixtures.whiteQueen]
         )
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
         XCTAssertTrue(session.presentation?.focus.paths.isEmpty == true)
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
-    func testSafeLocateWithoutAnUrgentProblemOffersNoHint() {
+    func testSafeLocateWithoutADangerProblemOffersNoHint() {
         var session = session()
         session.receive(CoachingTestFixtures.nontrivialSafeClearAdvice)
 
@@ -988,9 +1049,10 @@ final class CoachingSessionTests: XCTestCase {
             capturedSquare: blackKnight,
             net: 3
         )
-        let urgent = CoachingUrgentProblem(
+        let danger = CoachingDangerProblem(
             target: blackKnight,
             piece: Piece(kind: .knight, color: .black),
+            pieceValue: 3,
             captures: [capture],
             worstEstimatedLoss: 3
         )
@@ -1001,7 +1063,7 @@ final class CoachingSessionTests: XCTestCase {
             opponentHasCapture: true,
             learnerHasCapture: false,
             opponentCaptures: [capture],
-            urgent: [urgent]
+            danger: [danger]
         ))
 
         safeSession.handle(.identificationTapped(blackKnight))
@@ -1571,8 +1633,8 @@ final class CoachingSessionTests: XCTestCase {
         let move = CoachingTestFixtures.safeMove
         var session = session()
         session.receive(CoachingTestFixtures.multipleDangerAdvice)
-        session.handle(.identificationTapped(CoachingTestFixtures.whiteRook))
-        session.handle(.identificationTapped(CoachingTestFixtures.blackRook))
+        session.handle(.identificationTapped(CoachingTestFixtures.whiteQueen))
+        session.handle(.identificationTapped(CoachingTestFixtures.blackBishop))
         stage(move, in: &session)
         session.receive(CoachingTestFixtures.adviceForTentativeMove(
             move,
@@ -1581,7 +1643,7 @@ final class CoachingSessionTests: XCTestCase {
                 move,
                 concepts: [.pieceNeedsHelp]
             ),
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         ))
         session.handle(.interactionChanged(snapshot()))
         session.handle(.interactionChanged(snapshot(selected: move.from)))
@@ -1595,20 +1657,20 @@ final class CoachingSessionTests: XCTestCase {
                 resolvesRequiredDanger: false,
                 isAcceptable: false
             ),
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         ))
 
         XCTAssertEqual(
             session.stage,
-            .safeResolve(target: CoachingTestFixtures.whiteRook)
+            .safeResolve(target: CoachingTestFixtures.whiteQueen)
         )
         XCTAssertEqual(
             session.presentation?.response,
-            "The rook could still take your rook after that move."
+            "The bishop could still take your queen after that move."
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "Yes—that rook is attacking your rook. How could you help your rook?"
+            "Yes—that bishop is attacking your queen. How could you help your queen?"
         )
     }
 
@@ -1805,7 +1867,7 @@ final class CoachingSessionTests: XCTestCase {
                 resolvesRequiredDanger: false,
                 isAcceptable: false
             ),
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         )
         var session = preparedSession(for: .safe)
         session.handle(.actionChosen(.hint))
@@ -2110,7 +2172,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(cleared.presentation, direct.presentation)
     }
 
-    func testSafeTargetReplacementMatchesDirectTargetAndDropsOldAttackerContext() {
+    func testLowerPriorityTargetAfterPrimaryMatchesDirectLowerPriorityTap() {
         var direct = dangerSession()
         direct.handle(.identificationTapped(CoachingTestFixtures.whiteRook))
 
@@ -2122,7 +2184,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(switched.presentation, direct.presentation)
         XCTAssertEqual(
             switched.presentation?.focus.emphasizedSquares,
-            [CoachingTestFixtures.whiteRook]
+            []
         )
         XCTAssertFalse(
             switched.presentation?.focus.emphasizedSquares.contains(

@@ -34,7 +34,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
     func testUnsupportedQuietPositionUsesFallbackConfidence() async throws {
         let advice = try await advisor.advice(for: CoachingTestFixtures.noRecognizedPurposeRequest)
 
-        XCTAssertTrue(advice.urgentProblems.isEmpty)
+        XCTAssertTrue(advice.dangerProblems.isEmpty)
         XCTAssertTrue(advice.takeOpportunities.isEmpty)
         XCTAssertTrue(advice.wakeOpportunities.isEmpty)
         XCTAssertEqual(advice.confidence, .unsupported)
@@ -469,24 +469,46 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertEqual(advice.checkingPieces, [checkingRook])
     }
 
-    func testAnyUrgentPieceRemainsAValidSafeAnswer() async throws {
-        let earlierBishop = Square(file: .b, rank: 3)
-        let laterRook = Square(file: .f, rank: 4)
+    func testEqualLossUsesPieceValueToChoosePrimaryDanger() async throws {
+        let bishop = Square(file: .b, rank: 2)
+        let rook = Square(file: .g, rank: 5)
         let state = CoachingTestFixtures.state(
             sideToMove: .white,
             pieces: [
-                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
-                earlierBishop: Piece(kind: .bishop, color: .white),
-                laterRook: Piece(kind: .rook, color: .white),
-                Square(file: .a, rank: 4): Piece(kind: .pawn, color: .black),
-                Square(file: .f, rank: 8): Piece(kind: .rook, color: .black),
-                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                Square(file: .a, rank: 1): Piece(kind: .king, color: .white),
+                Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                bishop: Piece(kind: .bishop, color: .white),
+                rook: Piece(kind: .rook, color: .white),
+                Square(file: .h, rank: 4): Piece(kind: .pawn, color: .white),
+                Square(file: .a, rank: 3): Piece(kind: .pawn, color: .black),
+                Square(file: .h, rank: 6): Piece(kind: .bishop, color: .black),
             ]
         )
 
         let advice = try await advisor.advice(for: request(for: state))
 
-        XCTAssertEqual(Set(advice.urgentProblems.map(\.target)), [earlierBishop, laterRook])
+        XCTAssertEqual(advice.dangerProblems.map(\.worstEstimatedLoss), [2, 2])
+        XCTAssertEqual(advice.primaryDangerProblems.map(\.target), [rook])
+    }
+
+    func testEqualLossAndPieceValueKeepBothDangersPrimary() async throws {
+        let earlierBishop = Square(file: .b, rank: 2)
+        let laterBishop = Square(file: .g, rank: 5)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+                earlierBishop: Piece(kind: .bishop, color: .white),
+                laterBishop: Piece(kind: .bishop, color: .white),
+                Square(file: .a, rank: 3): Piece(kind: .pawn, color: .black),
+                Square(file: .h, rank: 6): Piece(kind: .pawn, color: .black),
+            ]
+        )
+
+        let advice = try await advisor.advice(for: request(for: state))
+
+        XCTAssertEqual(advice.primaryDangerProblems.map(\.target), [earlierBishop, laterBishop])
     }
 
     func testSafeInsightsOrderCheckFactsBeforeMaterialDangerFacts() async throws {

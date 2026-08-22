@@ -39,7 +39,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .safeLocate:
             return (
-                "Which of your pieces needs help most?",
+                "One of your pieces is in danger. Which one?",
                 "Tap your piece, or choose No piece needs help."
             )
         case let .safeIdentifyAttacker(piece):
@@ -114,6 +114,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     }
 
     private func headline(for context: CoachingPresentationContext, base: String) -> String {
+        if case .lowerPriorityDanger = context.feedback {
+            return "Which piece should you help first?"
+        }
         if context.hint == .candidatePieces,
            context.prompt == .wakeChoosePiece(
                purpose: .openingDevelopment(firstMove: true)
@@ -194,10 +197,19 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch feedback {
         case let .safePiece(piece):
             return "That \(piece.rawValue) is safe right now."
-        case let .lowerPriorityThreat(piece, urgentPiece):
-            return "Yes, that \(piece.rawValue) is threatened. Your \(urgentPiece.rawValue) is worth more, so help the \(urgentPiece.rawValue) first."
-        case let .nonurgentThreat(piece):
-            return "Yes, that \(piece.rawValue) is threatened. We’re looking for a knight, bishop, rook, or queen \(colorName(opponent)) could win."
+        case let .lowerPriorityDanger(chosen, chosenLoss, primary, primaryLoss):
+            if chosen == .pawn,
+               primary == .knight,
+               chosenLoss == 1,
+               primaryLoss == 3 {
+                return "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more."
+            }
+            if primaryLoss > chosenLoss {
+                return "You found a threatened \(chosen.rawValue). Losing the \(primary.rawValue) would cost more."
+            }
+            return "You found a threatened \(chosen.rawValue). Your \(primary.rawValue) is worth more, so help it first."
+        case let .attackedButProtected(target, attacker, defender):
+            return "The \(target.rawValue) is attacked, but your other \(defender.rawValue) protects it. If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back. No piece needs help right now."
         case .expectedLearnerPiece:
             return "Tap one of your pieces."
         case let .notCheckingPiece(piece):
@@ -302,14 +314,19 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     }
 
     private func completionHeadline(for idea: CoachingCompletionIdea) -> String {
-        "That works. \(completionPurpose(for: idea))"
+        if case .resolvesDanger = idea {
+            return completionPurpose(for: idea)
+        }
+        return "That works. \(completionPurpose(for: idea))"
     }
 
     private func completionPurpose(for idea: CoachingCompletionIdea) -> String {
         let concept: String
         switch idea {
-        case let .resolvesDanger(piece):
-            concept = "Your \(piece.rawValue) is safe now."
+        case let .resolvesDanger(resolution):
+            return dangerResolutionCopy(resolution)
+        case .resolvesCheck:
+            concept = "Your king is safe now."
         case .mate:
             concept = "You found checkmate."
         case let .profitableCapture(captured):
@@ -330,6 +347,22 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             concept = "Your move stays safe after the reply."
         }
         return concept
+    }
+
+    private func dangerResolutionCopy(_ resolution: CoachingDangerResolution) -> String {
+        switch resolution {
+        case let .movedTarget(target, attacker):
+            switch attacker {
+            case .bishop, .rook, .queen:
+                return "Your \(target.rawValue) moved out of the \(attacker.rawValue)’s path. It is safe now."
+            case .pawn, .knight, .king:
+                return "Your \(target.rawValue) is out of the \(attacker.rawValue)'s attack. It is safe now."
+            }
+        case let .capturedAttacker(target, attacker):
+            return "Your \(target.rawValue) took the attacking \(attacker.rawValue). It is safe now."
+        case let .addedDefender(defender, target, attacker):
+            return "Your other \(defender.rawValue) now protects the threatened \(target.rawValue). If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back."
+        }
     }
 
     private func actionPresentation(

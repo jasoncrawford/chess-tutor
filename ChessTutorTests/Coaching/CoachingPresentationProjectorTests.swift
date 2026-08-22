@@ -144,12 +144,12 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         )
 
         progress.recordMiss(
-            .nonurgentThreat(piece: .rook),
+            .safePiece(piece: .rook),
             anchor: .identification(square: CoachingTestFixtures.whiteRook)
         )
 
         XCTAssertEqual(progress.missesAtCurrentLevel, 2)
-        XCTAssertEqual(progress.feedback, .nonurgentThreat(piece: .rook))
+        XCTAssertEqual(progress.feedback, .safePiece(piece: .rook))
         XCTAssertEqual(
             progress.feedbackAnchor,
             .identification(square: CoachingTestFixtures.whiteRook)
@@ -574,9 +574,10 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             staleMove,
             origin: .wake,
             assessment: CoachingTestFixtures.acceptableAssessment(staleMove),
-            urgent: [CoachingUrgentProblem(
+            danger: [CoachingDangerProblem(
                 target: target,
                 piece: Piece(kind: .queen, color: .white),
+                pieceValue: 9,
                 captures: [staleCapture],
                 worstEstimatedLoss: 9
             )]
@@ -852,7 +853,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             opponentHasAnyLegalCapture: source.opponentHasAnyLegalCapture,
             learnerHasAnyLegalCapture: source.learnerHasAnyLegalCapture,
             opponentCaptureEstimates: source.opponentCaptureEstimates,
-            urgentProblems: source.urgentProblems,
+            dangerProblems: source.dangerProblems,
             learnerCaptureEstimates: source.learnerCaptureEstimates,
             mateInOneMoves: source.mateInOneMoves,
             moveAssessments: evaluationMoveAssessments ?? source.moveAssessments
@@ -860,7 +861,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         return CoachingAdvice(
             evaluation: evaluation,
             insights: advice.insights,
-            urgentProblems: advice.urgentProblems,
+            dangerProblems: advice.dangerProblems,
             takeOpportunities: advice.takeOpportunities,
             wakeOpportunities: advice.wakeOpportunities,
             moveAssessments: moveAssessments ?? advice.moveAssessments,

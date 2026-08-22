@@ -4,18 +4,44 @@ import XCTest
 final class MaterialTacticalEvaluatorTests: XCTestCase {
     private let evaluator = MaterialTacticalEvaluator()
 
-    func testMarksNetLossTwoAsUrgentButNotLonePawnLoss() {
-        let bishop = Square(file: .d, rank: 4)
-        let pawn = Square(file: .h, rank: 2)
-        let state = CoachingTestFixtures.state(
-            sideToMove: .white,
-            pieces: [
-                bishop: Piece(kind: .bishop, color: .white),
-                pawn: Piece(kind: .pawn, color: .white),
-                Square(file: .c, rank: 5): Piece(kind: .pawn, color: .black),
-                Square(file: .h, rank: 7): Piece(kind: .rook, color: .black),
-            ]
+    func testOnePawnLossIsADangerProblem() {
+        let evaluation = evaluator.evaluate(request(for: CoachingGoldenPosition.endangeredPawn.state))
+
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [sq("e3")])
+        XCTAssertEqual(evaluation.dangerProblems.first?.worstEstimatedLoss, 1)
+    }
+
+    func testProtectedAttackIsNotPositiveLoss() throws {
+        let evaluation = evaluator.evaluate(request(for: CoachingGoldenPosition.protectedPawn.state))
+
+        XCTAssertTrue(evaluation.dangerProblems.isEmpty)
+        let attack = try XCTUnwrap(
+            evaluation.opponentCaptureEstimates.first { $0.capturedSquare == sq("g4") }
         )
+        XCTAssertEqual(attack.immediateRecapture, Move(from: sq("h3"), to: sq("g4")))
+        XCTAssertLessThanOrEqual(attack.netGainForMover, 0)
+    }
+
+    func testUnrelatedMoveDoesNotResolveOnePointDanger() throws {
+        let move = Move(from: sq("h1"), to: sq("g1"))
+
+        let evaluation = evaluator.evaluate(request(for: CoachingGoldenPosition.endangeredPawn.state))
+        let assessment = try XCTUnwrap(evaluation.moveAssessments[move])
+
+        XCTAssertFalse(assessment.resolvesRequiredDanger)
+    }
+
+    func testAddingDefenderResolvesOnePointDanger() throws {
+        let evaluation = evaluator.evaluate(request(for: CoachingGoldenPosition.protectPawn.state))
+        let assessment = try XCTUnwrap(
+            evaluation.moveAssessments[CoachingGoldenMoves.addsPawnDefender]
+        )
+
+        XCTAssertTrue(assessment.resolvesRequiredDanger)
+    }
+
+    func testIncludesEveryPositiveLossAsDanger() {
+        let state = CoachingGoldenPosition.twoDangerPriorities.state
 
         let evaluation = evaluator.evaluate(
             CoachingRequest(
@@ -27,11 +53,11 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [bishop])
-        XCTAssertFalse(evaluation.urgentProblems.map(\.target).contains(pawn))
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [sq("f3"), sq("a3")])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.worstEstimatedLoss), [3, 1])
     }
 
-    func testCheckIsUrgentWithoutAssigningMaterialValueToKing() {
+    func testCheckIsDangerWithoutAssigningMaterialValueToKing() {
         let whiteKing = Square(file: .e, rank: 1)
         let checkingRook = Square(file: .e, rank: 8)
         let state = CoachingTestFixtures.state(
@@ -46,10 +72,10 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         let evaluation = evaluator.evaluate(request(for: state))
 
         XCTAssertEqual(evaluation.checkingPieces, [checkingRook])
-        XCTAssertTrue(evaluation.urgentProblems.isEmpty)
+        XCTAssertTrue(evaluation.dangerProblems.isEmpty)
     }
 
-    func testOrdersUrgentProblemsByGreatestEstimatedLoss() {
+    func testOrdersDangerProblemsByGreatestEstimatedLoss() {
         let queen = Square(file: .d, rank: 4)
         let rook = Square(file: .h, rank: 2)
         let state = CoachingTestFixtures.state(
@@ -66,11 +92,11 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
 
         let evaluation = evaluator.evaluate(request(for: state))
 
-        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [queen, rook])
-        XCTAssertEqual(evaluation.urgentProblems.map(\.worstEstimatedLoss), [9, 5])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [queen, rook])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.worstEstimatedLoss), [9, 5])
     }
 
-    func testOrdersEqualUrgentProblemsByStableSquareOrder() {
+    func testOrdersEqualDangerProblemsByStableSquareOrder() {
         let earlierBishop = Square(file: .b, rank: 2)
         let laterBishop = Square(file: .g, rank: 5)
         let state = CoachingTestFixtures.state(
@@ -87,8 +113,8 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
 
         let evaluation = evaluator.evaluate(request(for: state))
 
-        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [earlierBishop, laterBishop])
-        XCTAssertEqual(evaluation.urgentProblems.map(\.worstEstimatedLoss), [3, 3])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [earlierBishop, laterBishop])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.worstEstimatedLoss), [3, 3])
     }
 
     func testOrdersEqualLossByThreatenedPieceValueBeforeSquareOrder() {
@@ -109,8 +135,8 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
 
         let evaluation = evaluator.evaluate(request(for: state))
 
-        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [rook, bishop])
-        XCTAssertEqual(evaluation.urgentProblems.map(\.worstEstimatedLoss), [2, 2])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [rook, bishop])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.worstEstimatedLoss), [2, 2])
     }
 
     func testOpponentPromotionCapturesRetainStableLegalMoveIdentities() {
@@ -146,7 +172,7 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         XCTAssertEqual(evaluation.opponentCaptureEstimates.map(\.move), expectedCaptures)
     }
 
-    func testOpponentPromotionCaptureCreatesSingleUrgentSafeTarget() throws {
+    func testOpponentPromotionCaptureCreatesSingleDangerSafeTarget() throws {
         let attacker = Square(file: .b, rank: 2)
         let target = Square(file: .c, rank: 1)
         let expectedCaptures = [
@@ -166,9 +192,9 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         )
 
         let evaluation = evaluator.evaluate(request(for: state))
-        let problem = try XCTUnwrap(evaluation.urgentProblems.first)
+        let problem = try XCTUnwrap(evaluation.dangerProblems.first)
 
-        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [target])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [target])
         XCTAssertEqual(problem.captures.map(\.move), expectedCaptures)
         XCTAssertEqual(problem.worstEstimatedLoss, 9)
     }
@@ -221,7 +247,7 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         )
     }
 
-    func testCaptureThatResolvesUrgentDangerIsIncludedForSafePolicy() throws {
+    func testCaptureThatResolvesDangerIsIncludedForSafePolicy() throws {
         let bishop = Square(file: .d, rank: 4)
         let attacker = Square(file: .c, rank: 5)
         let resolvingCapture = Move(from: bishop, to: attacker)
@@ -236,7 +262,7 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         let evaluation = evaluator.evaluate(request(for: state))
         let assessment = try XCTUnwrap(evaluation.moveAssessments[resolvingCapture])
 
-        XCTAssertEqual(evaluation.urgentProblems.map(\.target), [bishop])
+        XCTAssertEqual(evaluation.dangerProblems.map(\.target), [bishop])
         XCTAssertTrue(assessment.isLegal)
         XCTAssertTrue(assessment.resolvesRequiredDanger)
     }

@@ -112,7 +112,7 @@ struct CoachingReconciler: Sendable {
     ) -> Bool {
         guard advice.evaluation.opponentHasAnyLegalCapture else { return false }
         let confirmedAbsenceIsValid = evidence.confirmedSafeAbsence
-            && advice.urgentProblems.isEmpty
+            && advice.dangerProblems.isEmpty
         return !confirmedAbsenceIsValid
     }
 
@@ -121,7 +121,7 @@ struct CoachingReconciler: Sendable {
         evidence: CoachingPedagogicalEvidence
     ) -> CoachingDerivedState {
         guard let target = evidence.safeTarget,
-              let problem = advice.urgentProblems.first(where: { $0.target == target })
+              let problem = advice.primaryDangerProblems.first(where: { $0.target == target })
         else {
             return derived(stage: .safeLocate, questionID: .safeLocate)
         }
@@ -634,8 +634,8 @@ struct CoachingReconciler: Sendable {
 
         let board = positionAdvice?.evaluation.request.committedState.board
             ?? tentativeAdvice.evaluation.request.committedState.board
-        let currentProblems = positionAdvice?.urgentProblems
-            ?? tentativeAdvice.urgentProblems
+        let currentProblems = positionAdvice?.primaryDangerProblems
+            ?? tentativeAdvice.primaryDangerProblems
         let validProblem = evidence.safeTarget.flatMap { target in
             currentProblems.first(where: { $0.target == target })
         }

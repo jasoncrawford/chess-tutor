@@ -168,7 +168,7 @@ struct CoachingPresentationProjector: Sendable {
         let hintActions: [CoachingAction] = hintLevel < availableHints.count ? [.hint] : []
         switch stage {
         case .safeLocate:
-            let absenceIsValid = advice?.urgentProblems.isEmpty == true
+            let absenceIsValid = advice?.dangerProblems.isEmpty == true
                 && feedback != .missedExistingAnswer(.noPieceNeedsHelp)
             return (absenceIsValid ? [.noAnswer] : []) + hintActions + [.stop]
         case .takeChooseMove:
@@ -302,7 +302,7 @@ struct CoachingPresentationProjector: Sendable {
         switch stage {
         case let .safeIdentifyAttacker(target):
             guard episode.evidence.safeTarget == target,
-                  advice?.urgentProblems.contains(where: { $0.target == target }) == true
+                  advice?.primaryDangerProblems.contains(where: { $0.target == target }) == true
             else {
                 return .empty
             }
@@ -342,7 +342,7 @@ struct CoachingPresentationProjector: Sendable {
     ) -> Square? {
         guard episode.evidence.safeTarget == target,
               let attacker = episode.evidence.safeAttacker,
-              let problem = advice?.urgentProblems.first(where: { $0.target == target }),
+              let problem = advice?.primaryDangerProblems.first(where: { $0.target == target }),
               problem.captures.contains(where: { $0.move.from == attacker })
         else {
             return nil
@@ -359,9 +359,9 @@ struct CoachingPresentationProjector: Sendable {
         case .checkLocate:
             return advice.checkingPieces
         case .safeLocate:
-            return Set(advice.urgentProblems.map(\.target))
+            return Set(advice.primaryDangerProblems.map(\.target))
         case let .safeIdentifyAttacker(target):
-            return Set(advice.urgentProblems
+            return Set(advice.primaryDangerProblems
                 .first(where: { $0.target == target })?
                 .captures.map(\.move.from) ?? [])
         case .checkResolve, .takeChooseMove:
@@ -387,7 +387,7 @@ struct CoachingPresentationProjector: Sendable {
         guard let advice else { return [] }
         switch stage {
         case let .safeIdentifyAttacker(target):
-            return Set(advice.urgentProblems
+            return Set(advice.primaryDangerProblems
                 .first(where: { $0.target == target })?
                 .captures.map {
                     CoachFocusPath(source: $0.move.from, destination: target, role: .attacker)
@@ -503,11 +503,17 @@ struct CoachingPresentationProjector: Sendable {
     ) -> CoachingCompletionIdea {
         for concept in concepts {
             switch concept {
-            case .kingInCheck, .pieceNeedsHelp:
-                let target = episode.evidence.safeTarget
-                return .resolvesDanger(
-                    piece: target.flatMap { pieceKind(at: $0, advice: advice) } ?? .king
-                )
+            case .kingInCheck:
+                return .resolvesCheck
+            case .pieceNeedsHelp:
+                if let resolution = dangerResolution(
+                    for: move,
+                    episode: episode,
+                    advice: advice
+                ) {
+                    return .resolvesDanger(resolution)
+                }
+                continue
             case .mateInOne:
                 return .mate
             case .profitableCapture, .captureResolvesDanger:
@@ -530,6 +536,53 @@ struct CoachingPresentationProjector: Sendable {
             }
         }
         return .verifiedSafe
+    }
+
+    private func dangerResolution(
+        for move: Move,
+        episode: CoachingEpisodeState,
+        advice: CoachingAdvice?
+    ) -> CoachingDangerResolution? {
+        guard let advice,
+              let targetSquare = episode.evidence.safeTarget,
+              let attackerSquare = episode.evidence.safeAttacker else {
+            return nil
+        }
+        let state = advice.evaluation.request.committedState
+        guard let target = state.board[targetSquare],
+              let attacker = state.board[attackerSquare] else {
+            return nil
+        }
+
+        if LegalMoveGenerator.capture(for: move, in: state)?.square == attackerSquare {
+            return .capturedAttacker(target: target.kind, attacker: attacker.kind)
+        }
+        if move.from == targetSquare {
+            return .movedTarget(target: target.kind, attacker: attacker.kind)
+        }
+
+        let stateAfterMove = state.applyingUnchecked(move)
+        guard let attackMove = LegalMoveGenerator.legalMoves(
+            for: attackerSquare,
+            in: stateAfterMove
+        ).first(where: {
+            LegalMoveGenerator.capture(for: $0, in: stateAfterMove)?.square == targetSquare
+        }),
+        let estimate = MaterialTacticalEvaluator().captureEstimate(
+            for: attackMove,
+            in: stateAfterMove
+        ),
+        estimate.netGainForMover <= 0,
+        let recapture = estimate.immediateRecapture,
+        recapture.from == move.to,
+        let defender = stateAfterMove.board[recapture.from] else {
+            return nil
+        }
+        return .addedDefender(
+            defender: defender.kind,
+            target: target.kind,
+            attacker: attacker.kind
+        )
     }
 
     private func capturedKind(for move: Move, advice: CoachingAdvice?) -> Piece.Kind? {

@@ -5,7 +5,7 @@ struct MaterialTacticalEvaluator: Sendable {
             against: request.learner,
             in: state
         )
-        let urgentProblems = urgentProblems(
+        let dangerProblems = dangerProblems(
             from: opponentCaptureEstimates,
             learner: request.learner,
             in: state
@@ -26,7 +26,7 @@ struct MaterialTacticalEvaluator: Sendable {
             (move, largestOpponentMaterialLoss(after: move, in: state))
         })
         let smallestWorstLoss = largestReplyLossByMove.values.min()
-        let dangerIsUnavoidable = smallestWorstLoss.map { $0 >= 2 } ?? false
+        let dangerIsUnavoidable = smallestWorstLoss.map { $0 >= 1 } ?? false
         let moveAssessments = Dictionary(uniqueKeysWithValues: allowedMoves.map { move in
             let isLegal = legalMoves.contains(move)
             let largestReplyLoss = largestReplyLossByMove[move] ?? 0
@@ -48,10 +48,10 @@ struct MaterialTacticalEvaluator: Sendable {
             let resolvesRequiredDanger: Bool
             if !isLegal {
                 resolvesRequiredDanger = false
-            } else if urgentProblems.isEmpty {
+            } else if dangerProblems.isEmpty {
                 resolvesRequiredDanger = true
             } else {
-                resolvesRequiredDanger = largestReplyLoss < 2 || isBestUnavoidableDefense
+                resolvesRequiredDanger = largestReplyLoss < 1 || isBestUnavoidableDefense
             }
             return (
                 move,
@@ -75,7 +75,7 @@ struct MaterialTacticalEvaluator: Sendable {
             opponentHasAnyLegalCapture: !opponentCaptureEstimates.isEmpty,
             learnerHasAnyLegalCapture: !learnerCaptureEstimates.isEmpty,
             opponentCaptureEstimates: opponentCaptureEstimates,
-            urgentProblems: urgentProblems,
+            dangerProblems: dangerProblems,
             learnerCaptureEstimates: learnerCaptureEstimates,
             mateInOneMoves: mateInOneMoves,
             moveAssessments: moveAssessments
@@ -237,20 +237,22 @@ struct MaterialTacticalEvaluator: Sendable {
             .max() ?? 0
     }
 
-    private func urgentProblems(
+    private func dangerProblems(
         from estimates: [CoachingCaptureEstimate],
         learner: PieceColor,
         in state: GameState
-    ) -> [CoachingUrgentProblem] {
+    ) -> [CoachingDangerProblem] {
         Dictionary(grouping: estimates, by: \.capturedSquare).compactMap { target, captures in
             guard let piece = state.board[target], piece.color == learner else {
                 return nil
             }
             let worstEstimatedLoss = captures.map(\.netGainForMover).max() ?? 0
-            guard worstEstimatedLoss >= 2 else { return nil }
-            return CoachingUrgentProblem(
+            guard worstEstimatedLoss >= 1,
+                  let pieceValue = pieceValue(piece.kind) else { return nil }
+            return CoachingDangerProblem(
                 target: target,
                 piece: piece,
+                pieceValue: pieceValue,
                 captures: captures,
                 worstEstimatedLoss: worstEstimatedLoss
             )
@@ -258,9 +260,9 @@ struct MaterialTacticalEvaluator: Sendable {
             if lhs.worstEstimatedLoss != rhs.worstEstimatedLoss {
                 return lhs.worstEstimatedLoss > rhs.worstEstimatedLoss
             }
-            let lhsValue = pieceValue(lhs.piece.kind) ?? 0
-            let rhsValue = pieceValue(rhs.piece.kind) ?? 0
-            if lhsValue != rhsValue { return lhsValue > rhsValue }
+            if lhs.pieceValue != rhs.pieceValue {
+                return lhs.pieceValue > rhs.pieceValue
+            }
             return stableSquareKey(lhs.target) < stableSquareKey(rhs.target)
         }
     }

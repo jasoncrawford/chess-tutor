@@ -84,14 +84,8 @@ final class CoachingReconcilerTests: XCTestCase {
 
         episode.evidence.safeTarget = CoachingTestFixtures.whiteRook
         let changedTarget = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(
-            changedTarget.stage,
-            .safeIdentifyAttacker(target: CoachingTestFixtures.whiteRook)
-        )
-        XCTAssertEqual(
-            changedTarget.questionID,
-            .safeAttacker(target: CoachingTestFixtures.whiteRook)
-        )
+        XCTAssertEqual(changedTarget.stage, .safeLocate)
+        XCTAssertEqual(changedTarget.questionID, .safeLocate)
     }
 
     func testCheckingPieceEvidenceMustMatchCurrentAdvice() {
@@ -320,7 +314,7 @@ final class CoachingReconcilerTests: XCTestCase {
                 resolvesRequiredDanger: false,
                 isAcceptable: false
             ),
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         )
 
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
@@ -359,21 +353,15 @@ final class CoachingReconcilerTests: XCTestCase {
                 resolvesRequiredDanger: false,
                 isAcceptable: false
             ),
-            urgent: CoachingTestFixtures.multipleDangerAdvice.urgentProblems
+            danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         )
 
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(
-            result.stage,
-            .safeIdentifyAttacker(target: CoachingTestFixtures.whiteRook)
-        )
-        XCTAssertEqual(
-            result.questionID,
-            .safeAttacker(target: CoachingTestFixtures.whiteRook)
-        )
+        XCTAssertEqual(result.stage, .safeLocate)
+        XCTAssertEqual(result.questionID, .safeLocate)
         XCTAssertEqual(
             result.derivedFeedback,
-            .dangerStillPresent(attacker: nil, target: .rook)
+            .dangerStillPresent(attacker: nil, target: .queen)
         )
 
         episode.evidence.safeTarget = CoachingTestFixtures.openingKnight
@@ -518,7 +506,7 @@ final class CoachingReconcilerTests: XCTestCase {
             opponentHasAnyLegalCapture: source.opponentHasAnyLegalCapture,
             learnerHasAnyLegalCapture: source.learnerHasAnyLegalCapture,
             opponentCaptureEstimates: source.opponentCaptureEstimates,
-            urgentProblems: source.urgentProblems,
+            dangerProblems: source.dangerProblems,
             learnerCaptureEstimates: source.learnerCaptureEstimates,
             mateInOneMoves: source.mateInOneMoves,
             moveAssessments: moveAssessments
@@ -526,7 +514,7 @@ final class CoachingReconcilerTests: XCTestCase {
         return CoachingAdvice(
             evaluation: evaluation,
             insights: advice.insights,
-            urgentProblems: advice.urgentProblems,
+            dangerProblems: advice.dangerProblems,
             takeOpportunities: advice.takeOpportunities,
             wakeOpportunities: advice.wakeOpportunities,
             moveAssessments: advice.moveAssessments,

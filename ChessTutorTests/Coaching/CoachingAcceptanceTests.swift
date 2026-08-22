@@ -100,7 +100,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(session.state.moveHistory, [move])
     }
 
-    func testCompleteNoncompressedSafeTakeWakeScanEndsWithGeneralWakeMove() async {
+    func testSafeDangerCanBeResolvedByAddingADefender() async {
         let target = Square(file: .e, rank: 4)
         let knight = Square(file: .b, rank: 1)
         let move = Move(from: knight, to: Square(file: .c, rank: 3))
@@ -116,34 +116,9 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCurrent, .takePending, .wakePending])
-        XCTAssertEqual(session.coachingPresentation?.headline, "Which of your pieces needs help most?")
-
-        _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCurrent, .wakePending])
-        XCTAssertEqual(
-            session.coachingPresentation?.response,
-            "Right—no piece needs help right now."
-        )
-        XCTAssertEqual(
-            session.coachingPresentation?.headline,
-            "Can one of your pieces make a useful capture?"
-        )
-        XCTAssertEqual(
-            session.coachingPresentation?.instruction,
-            "Make the capture, or choose No safe capture."
-        )
-
-        _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertEqual(session.coachingPresentation?.routine, [.safeCleared, .takeCleared, .wakeCurrent])
-        XCTAssertEqual(
-            session.coachingPresentation?.response,
-            "Right—there is no safe capture here."
-        )
-        XCTAssertEqual(
-            session.coachingPresentation?.headline,
-            "Which piece could help protect another piece?"
-        )
-        XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the piece you want to move.")
+        XCTAssertEqual(session.coachingPresentation?.headline, "One of your pieces is in danger. Which one?")
+        XCTAssertTrue(session.handleCoachingSquareTap(target))
+        XCTAssertTrue(session.handleCoachingSquareTap(Square(file: .d, rank: 5)))
 
         XCTAssertFalse(session.handleCoachingSquareTap(knight))
         session.select(knight)
@@ -154,12 +129,12 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "That works. Your knight adds a defender."
+            "Your other knight now protects the threatened pawn. If the pawn takes it, your knight can take the pawn back."
         )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
     }
 
-    func testUrgentThreatTranscriptIdentifiesTargetAttackerAndResolvesDanger() async {
+    func testDangerTranscriptIdentifiesTargetAttackerAndResolvesDanger() async {
         let target = Square(file: .d, rank: 4)
         let attacker = Square(file: .b, rank: 6)
         let move = Move(from: target, to: attacker)
@@ -189,7 +164,10 @@ final class CoachingAcceptanceTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
 
-        XCTAssertEqual(session.coachingPresentation?.headline, "That works. Your bishop is safe now.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Your bishop took the attacking bishop. It is safe now."
+        )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
     }
 
@@ -255,7 +233,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(winningSession.state.moveHistory.isEmpty)
     }
 
-    func testGeneralWakeCanTeachAddingADefender() async {
+    func testSafeCanTeachAddingADefenderAgainstSlidingAttack() async {
         let knight = Square(file: .b, rank: 1)
         let target = Square(file: .e, rank: 4)
         let move = Move(from: knight, to: Square(file: .c, rank: 3))
@@ -269,15 +247,8 @@ final class CoachingAcceptanceTests: XCTestCase {
         let session = makeSession(state: state)
 
         await beginCoaching(in: session)
-        _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertEqual(
-            session.coachingPresentation?.response,
-            "Right—no piece needs help right now."
-        )
-        XCTAssertEqual(
-            session.coachingPresentation?.headline,
-            "Which piece could help protect another piece?"
-        )
+        XCTAssertTrue(session.handleCoachingSquareTap(target))
+        XCTAssertTrue(session.handleCoachingSquareTap(Square(file: .b, rank: 7)))
         XCTAssertFalse(session.handleCoachingSquareTap(knight))
         session.select(knight)
         XCTAssertEqual(session.selectedSquare, knight)
@@ -285,7 +256,10 @@ final class CoachingAcceptanceTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
 
-        XCTAssertEqual(session.coachingPresentation?.headline, "That works. Your knight adds a defender.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Your other knight now protects the threatened pawn. If the bishop takes it, your knight can take the bishop back."
+        )
     }
 
     func testUnsupportedPositionFallsBackWithoutInventingAPurpose() async {
@@ -553,7 +527,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(switched.coachingPresentation, direct.coachingPresentation)
         XCTAssertEqual(
             switched.coachingPresentation?.focus.emphasizedSquares,
-            [CoachingTestFixtures.whiteRook]
+            []
         )
         XCTAssertEqual(switched.coachingPresentation?.focus.paths, [])
         XCTAssertEqual(switched.coachingPresentation?.boardTask, .identify(allowsMoveRevision: false))

@@ -49,7 +49,7 @@ struct LocalCoachingAdvisor: CoachingAdvising {
         return CoachingAdvice(
             evaluation: evaluation,
             insights: insightSet.ordered,
-            urgentProblems: insightSet.urgentProblems,
+            dangerProblems: insightSet.dangerProblems,
             takeOpportunities: insightSet.takeOpportunities,
             wakeOpportunities: insightSet.wakeOpportunities,
             moveAssessments: assessments,

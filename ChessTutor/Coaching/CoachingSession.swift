@@ -160,13 +160,34 @@ struct CoachingSession: Sendable {
             }
             let board = advice.evaluation.request.committedState.board
             if let piece = board[square], piece.color == learner {
-                if episode.evidence.safeTarget != square {
-                    episode.evidence.safeTarget = square
+                if advice.primaryDangerProblems.contains(where: { $0.target == square }) {
+                    if episode.evidence.safeTarget != square {
+                        episode.evidence.safeTarget = square
+                        episode.evidence.safeAttacker = nil
+                    }
+                } else {
+                    episode.evidence.safeTarget = nil
                     episode.evidence.safeAttacker = nil
+                    let feedback = safeTargetFeedback(
+                        for: square,
+                        piece: piece,
+                        advice: advice
+                    )
+                    if case .attackedButProtected = feedback {
+                        if advice.dangerProblems.isEmpty {
+                            episode.evidence.confirmedSafeAbsence = true
+                        }
+                        let directives = reconcile()
+                        recordFeedback(
+                            feedback,
+                            anchor: .identification(square: square)
+                        )
+                        return directives
+                    }
+                    miss = feedback
                 }
-                miss = safeTargetFeedback(for: square, piece: piece, advice: advice)
             } else if case let .safeIdentifyAttacker(target) = derived.stage,
-                      let problem = advice.urgentProblems.first(where: {
+                      let problem = advice.primaryDangerProblems.first(where: {
                           $0.target == target
                       }),
                       let piece = board[square], piece.color == learner.opposite {
@@ -176,7 +197,7 @@ struct CoachingSession: Sendable {
                     miss = .notAttacker(piece: piece.kind, target: problem.piece.kind)
                 }
             } else if case let .safeIdentifyAttacker(target) = derived.stage {
-                let targetKind = advice.urgentProblems.first(where: {
+                let targetKind = advice.primaryDangerProblems.first(where: {
                     $0.target == target
                 })?.piece.kind ?? .pawn
                 miss = .expectedAttacker(target: targetKind)
@@ -272,7 +293,7 @@ struct CoachingSession: Sendable {
             }
             switch current.stage {
             case .safeLocate:
-                if advice.urgentProblems.isEmpty {
+                if advice.dangerProblems.isEmpty {
                     episode.evidence.confirmedSafeAbsence = true
                     let directives = reconcile()
                     recordFeedback(
@@ -491,31 +512,34 @@ struct CoachingSession: Sendable {
         for square: Square,
         piece: Piece,
         advice: CoachingAdvice
-    ) -> CoachingFeedback? {
-        if advice.urgentProblems.contains(where: { $0.target == square }) {
-            return nil
-        }
-        let isThreatened = advice.evaluation.opponentCaptureEstimates.contains {
-            $0.capturedSquare == square
-        }
-        guard isThreatened else { return .safePiece(piece: piece.kind) }
-        if let urgent = advice.urgentProblems.first,
-           isMoreValuable(urgent.piece.kind, than: piece.kind) {
-            return .lowerPriorityThreat(
-                piece: piece.kind,
-                urgentPiece: urgent.piece.kind
+    ) -> CoachingFeedback {
+        if let chosen = advice.dangerProblems.first(where: { $0.target == square }),
+           let primary = advice.dangerProblems.first {
+            return .lowerPriorityDanger(
+                chosen: chosen.piece.kind,
+                chosenLoss: chosen.worstEstimatedLoss,
+                primary: primary.piece.kind,
+                primaryLoss: primary.worstEstimatedLoss
             )
         }
-        return .nonurgentThreat(piece: piece.kind)
-    }
 
-    private func isMoreValuable(_ lhs: Piece.Kind, than rhs: Piece.Kind) -> Bool {
-        let evaluator = MaterialTacticalEvaluator()
-        guard let lhsValue = evaluator.pieceValue(lhs),
-              let rhsValue = evaluator.pieceValue(rhs) else {
-            return false
+        let board = advice.evaluation.request.committedState.board
+        if let attack = advice.evaluation.opponentCaptureEstimates.first(where: {
+            $0.capturedSquare == square
+                && $0.netGainForMover <= 0
+                && $0.immediateRecapture != nil
+        }),
+           let recapture = attack.immediateRecapture,
+           let attacker = board[attack.move.from],
+           let defender = board[recapture.from] {
+            return .attackedButProtected(
+                target: piece.kind,
+                attacker: attacker.kind,
+                defender: defender.kind
+            )
         }
-        return lhsValue > rhsValue
+
+        return .safePiece(piece: piece.kind)
     }
 
     private func pieceKind(

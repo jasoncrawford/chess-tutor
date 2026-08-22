@@ -82,13 +82,13 @@ extension CoachingAdvice {
                 opponentHasAnyLegalCapture: evaluation.opponentHasAnyLegalCapture,
                 learnerHasAnyLegalCapture: evaluation.learnerHasAnyLegalCapture,
                 opponentCaptureEstimates: evaluation.opponentCaptureEstimates,
-                urgentProblems: evaluation.urgentProblems,
+                dangerProblems: evaluation.dangerProblems,
                 learnerCaptureEstimates: evaluation.learnerCaptureEstimates,
                 mateInOneMoves: evaluation.mateInOneMoves,
                 moveAssessments: evaluation.moveAssessments
             ),
             insights: insights,
-            urgentProblems: urgentProblems,
+            dangerProblems: dangerProblems,
             takeOpportunities: takeOpportunities,
             wakeOpportunities: wakeOpportunities,
             moveAssessments: moveAssessments,
@@ -281,16 +281,18 @@ enum CoachingTestFixtures {
             opponentHasCapture: true,
             learnerHasCapture: false,
             opponentCaptures: [queenCapture, rookCapture],
-            urgent: [
-                CoachingUrgentProblem(
+            danger: [
+                CoachingDangerProblem(
                     target: whiteQueen,
                     piece: Piece(kind: .queen, color: .white),
+                    pieceValue: 9,
                     captures: [queenCapture],
                     worstEstimatedLoss: 9
                 ),
-                CoachingUrgentProblem(
+                CoachingDangerProblem(
                     target: whiteRook,
                     piece: Piece(kind: .rook, color: .white),
+                    pieceValue: 5,
                     captures: [rookCapture],
                     worstEstimatedLoss: 5
                 ),
@@ -352,7 +354,7 @@ enum CoachingTestFixtures {
         state: GameState? = nil,
         assessment: CoachingMoveAssessment,
         learnerCaptures: [CoachingCaptureEstimate] = [],
-        urgent: [CoachingUrgentProblem] = [],
+        danger: [CoachingDangerProblem] = [],
         confidence: CoachingConfidence = .high
     ) -> CoachingAdvice {
         advice(
@@ -362,7 +364,7 @@ enum CoachingTestFixtures {
             opponentHasCapture: false,
             learnerHasCapture: !learnerCaptures.isEmpty,
             learnerCaptures: learnerCaptures,
-            urgent: urgent,
+            danger: danger,
             assessments: [assessment],
             confidence: confidence
         )
@@ -441,7 +443,7 @@ enum CoachingTestFixtures {
         opponentCaptures: [CoachingCaptureEstimate] = [],
         learnerCaptures: [CoachingCaptureEstimate] = [],
         mateInOne: Set<Move> = [],
-        urgent: [CoachingUrgentProblem] = [],
+        danger: [CoachingDangerProblem] = [],
         take: [CoachingOpportunity] = [],
         wake: [CoachingOpportunity] = [],
         assessments: [CoachingMoveAssessment] = [],
@@ -464,7 +466,7 @@ enum CoachingTestFixtures {
             opponentHasAnyLegalCapture: opponentHasCapture,
             learnerHasAnyLegalCapture: learnerHasCapture,
             opponentCaptureEstimates: opponentCaptures,
-            urgentProblems: urgent,
+            dangerProblems: danger,
             learnerCaptureEstimates: learnerCaptures,
             mateInOneMoves: mateInOne,
             moveAssessments: assessmentMap
@@ -472,7 +474,7 @@ enum CoachingTestFixtures {
         return CoachingAdvice(
             evaluation: evaluation,
             insights: [],
-            urgentProblems: urgent,
+            dangerProblems: danger,
             takeOpportunities: take,
             wakeOpportunities: wake,
             moveAssessments: assessmentMap,

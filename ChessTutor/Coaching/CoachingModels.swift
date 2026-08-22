@@ -37,9 +37,10 @@ struct CoachingCaptureEstimate: Equatable, Sendable {
     let netGainForMover: Int
 }
 
-struct CoachingUrgentProblem: Equatable, Sendable {
+struct CoachingDangerProblem: Equatable, Sendable {
     let target: Square
     let piece: Piece
+    let pieceValue: Int
     let captures: [CoachingCaptureEstimate]
     let worstEstimatedLoss: Int
 }
@@ -128,7 +129,7 @@ struct CoachingEvaluation: Equatable, Sendable {
     let opponentHasAnyLegalCapture: Bool
     let learnerHasAnyLegalCapture: Bool
     let opponentCaptureEstimates: [CoachingCaptureEstimate]
-    let urgentProblems: [CoachingUrgentProblem]
+    let dangerProblems: [CoachingDangerProblem]
     let learnerCaptureEstimates: [CoachingCaptureEstimate]
     let mateInOneMoves: Set<Move>
     let moveAssessments: [Move: CoachingMoveAssessment]
@@ -137,7 +138,7 @@ struct CoachingEvaluation: Equatable, Sendable {
 struct CoachingAdvice: Equatable, Sendable {
     let evaluation: CoachingEvaluation
     let insights: [CoachingInsight]
-    let urgentProblems: [CoachingUrgentProblem]
+    let dangerProblems: [CoachingDangerProblem]
     let takeOpportunities: [CoachingOpportunity]
     let wakeOpportunities: [CoachingOpportunity]
     let moveAssessments: [Move: CoachingMoveAssessment]
@@ -145,6 +146,14 @@ struct CoachingAdvice: Equatable, Sendable {
     let confidence: CoachingConfidence
 
     var checkingPieces: Set<Square> { evaluation.checkingPieces }
+
+    var primaryDangerProblems: [CoachingDangerProblem] {
+        guard let first = dangerProblems.first else { return [] }
+        return dangerProblems.filter {
+            $0.worstEstimatedLoss == first.worstEstimatedLoss
+                && $0.pieceValue == first.pieceValue
+        }
+    }
 }
 
 enum CoachingAction: Equatable, Hashable, Sendable {
@@ -192,7 +201,8 @@ enum CoachingPrompt: Equatable, Sendable {
 }
 
 enum CoachingCompletionIdea: Equatable, Sendable {
-    case resolvesDanger(piece: Piece.Kind)
+    case resolvesDanger(CoachingDangerResolution)
+    case resolvesCheck
     case mate
     case profitableCapture(captured: Piece.Kind)
     case develops(piece: Piece.Kind)
@@ -204,10 +214,25 @@ enum CoachingCompletionIdea: Equatable, Sendable {
     case verifiedSafe
 }
 
+enum CoachingDangerResolution: Equatable, Sendable {
+    case movedTarget(target: Piece.Kind, attacker: Piece.Kind)
+    case capturedAttacker(target: Piece.Kind, attacker: Piece.Kind)
+    case addedDefender(defender: Piece.Kind, target: Piece.Kind, attacker: Piece.Kind)
+}
+
 enum CoachingFeedback: Equatable, Sendable {
     case safePiece(piece: Piece.Kind)
-    case lowerPriorityThreat(piece: Piece.Kind, urgentPiece: Piece.Kind)
-    case nonurgentThreat(piece: Piece.Kind)
+    case lowerPriorityDanger(
+        chosen: Piece.Kind,
+        chosenLoss: Int,
+        primary: Piece.Kind,
+        primaryLoss: Int
+    )
+    case attackedButProtected(
+        target: Piece.Kind,
+        attacker: Piece.Kind,
+        defender: Piece.Kind
+    )
     case expectedLearnerPiece
     case notCheckingPiece(piece: Piece.Kind?)
     case notAttacker(piece: Piece.Kind, target: Piece.Kind)

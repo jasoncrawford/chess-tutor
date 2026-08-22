@@ -14,7 +14,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(presentation.headline, "Which of your pieces needs help most?")
+        XCTAssertEqual(presentation.headline, "One of your pieces is in danger. Which one?")
         XCTAssertEqual(presentation.instruction, "Tap your piece, or choose No piece needs help.")
         XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
         XCTAssertEqual(
@@ -54,7 +54,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .safeLocate,
-                "Which of your pieces needs help most?",
+                "One of your pieces is in danger. Which one?",
                 "Tap your piece, or choose No piece needs help."
             ),
             (
@@ -289,13 +289,18 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (.safeLocate, .safePiece(piece: .bishop), "That bishop is safe right now."),
             (
                 .safeLocate,
-                .lowerPriorityThreat(piece: .pawn, urgentPiece: .knight),
-                "Yes, that pawn is threatened. Your knight is worth more, so help the knight first."
+                .lowerPriorityDanger(
+                    chosen: .pawn,
+                    chosenLoss: 1,
+                    primary: .knight,
+                    primaryLoss: 3
+                ),
+                "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more."
             ),
             (
                 .safeLocate,
-                .nonurgentThreat(piece: .pawn),
-                "Yes, that pawn is threatened. We’re looking for a knight, bishop, rook, or queen Black could win."
+                .attackedButProtected(target: .pawn, attacker: .knight, defender: .pawn),
+                "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now."
             ),
             (.safeLocate, .expectedLearnerPiece, "Tap one of your pieces."),
             (
@@ -382,7 +387,10 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
     func testCompletionNamesExactlyOneSuppliedVerifiedIdea() {
         let cases: [(CoachingCompletionIdea, String)] = [
-            (.resolvesDanger(piece: .queen), "That works. Your queen is safe now."),
+            (
+                .resolvesDanger(.movedTarget(target: .queen, attacker: .rook)),
+                "Your queen moved out of the rook’s path. It is safe now."
+            ),
             (.mate, "That works. You found checkmate."),
             (
                 .profitableCapture(captured: .rook),
@@ -504,8 +512,13 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         let feedback: [CoachingFeedback?] = [
             nil,
             .safePiece(piece: .bishop),
-            .lowerPriorityThreat(piece: .pawn, urgentPiece: .knight),
-            .nonurgentThreat(piece: .pawn),
+            .lowerPriorityDanger(
+                chosen: .pawn,
+                chosenLoss: 1,
+                primary: .knight,
+                primaryLoss: 3
+            ),
+            .attackedButProtected(target: .pawn, attacker: .knight, defender: .pawn),
             .expectedLearnerPiece,
             .notCheckingPiece(piece: .bishop),
             .notAttacker(piece: .bishop, target: .knight),
