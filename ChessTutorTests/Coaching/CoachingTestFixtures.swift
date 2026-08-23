@@ -176,6 +176,22 @@ enum CoachingTestFixtures {
         from: whiteQueen,
         to: blackRook
     )
+    static let favorableDefendedCapture = Move(
+        from: Square(file: .c, rank: 3),
+        to: Square(file: .d, rank: 5)
+    )
+    static let favorableDefendedRecapture = Move(
+        from: Square(file: .e, rank: 6),
+        to: favorableDefendedCapture.to
+    )
+    static let favorableDefendedCaptureState = state(
+        sideToMove: .white,
+        pieces: [
+            favorableDefendedCapture.from: Piece(kind: .knight, color: .white),
+            favorableDefendedCapture.to: Piece(kind: .rook, color: .black),
+            favorableDefendedRecapture.from: Piece(kind: .pawn, color: .black),
+        ]
+    )
     static let fallbackMove = Move(
         from: Square(file: .a, rank: 2),
         to: Square(file: .a, rank: 3)

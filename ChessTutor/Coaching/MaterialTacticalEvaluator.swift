@@ -34,6 +34,27 @@ struct MaterialTacticalEvaluator: Sendable {
                 && dangerIsUnavoidable
                 && largestReplyLoss == smallestWorstLoss
             var opponentIssues = isLegal ? opponentIssues(after: move, in: state) : []
+            if let exchange = learnerCaptureEstimates.first(where: {
+                $0.move == move
+                    && $0.netGainForMover >= 1
+                    && $0.immediateRecapture != nil
+            }),
+               let expectedRecapture = exchange.immediateRecapture {
+                opponentIssues = opponentIssues.map { issue in
+                    guard issue.reply == expectedRecapture,
+                          issue.severity == .reviseMove,
+                          case .materialLoss = issue.kind else {
+                        return issue
+                    }
+                    return CoachingOpponentIssue(
+                        reply: issue.reply,
+                        kind: issue.kind,
+                        severity: .notice,
+                        affectedSquare: issue.affectedSquare,
+                        checkingSquares: issue.checkingSquares
+                    )
+                }
+            }
             if isBestUnavoidableDefense {
                 opponentIssues = opponentIssues.map { issue in
                     guard case .materialLoss = issue.kind else { return issue }

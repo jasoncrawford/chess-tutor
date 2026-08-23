@@ -852,6 +852,23 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertTrue(assessment.isAcceptable)
     }
 
+    func testFavorableDefendedCaptureIsAValidTakeAnswer() async throws {
+        let move = CoachingTestFixtures.favorableDefendedCapture
+        let advice = try await advisor.advice(for: request(
+            for: CoachingTestFixtures.favorableDefendedCaptureState
+        ))
+        let assessment = try XCTUnwrap(advice.moveAssessments[move])
+
+        XCTAssertTrue(advice.takeOpportunities.contains {
+            $0.moves == [move] && $0.concept == .profitableCapture
+        })
+        XCTAssertTrue(assessment.concepts.contains(.profitableCapture))
+        XCTAssertTrue(assessment.isAcceptable)
+        XCTAssertFalse(assessment.opponentIssues.contains {
+            $0.severity == .reviseMove
+        })
+    }
+
     func testNonCaptureMateIsAcceptedButNotOfferedAsASafeCapture() async throws {
         let matingMove = Move(
             from: Square(file: .g, rank: 6),

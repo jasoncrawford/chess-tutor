@@ -989,6 +989,58 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
+    func testFavorableDefendedCaptureCompletesThroughExpectedRecaptureNotice() async throws {
+        let state = CoachingTestFixtures.favorableDefendedCaptureState
+        let move = CoachingTestFixtures.favorableDefendedCapture
+        let recapture = CoachingTestFixtures.favorableDefendedRecapture
+        let advisor = LocalCoachingAdvisor()
+        let initial = CoachingInteractionSnapshot(
+            selectedSquare: nil,
+            tentativeMove: nil,
+            positionRevision: 1
+        )
+        var session = CoachingSession(
+            learner: .white,
+            interaction: initial,
+            initialContext: .start
+        )
+        session.receive(try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 1,
+            context: .start
+        )), interaction: initial)
+        XCTAssertEqual(session.stage, .takeChooseMove)
+
+        let tentative = CoachingInteractionSnapshot(
+            selectedSquare: move.to,
+            tentativeMove: move,
+            positionRevision: 1
+        )
+        session.handle(.interactionChanged(tentative))
+        session.receive(try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 1,
+            context: .tentativeMove(origin: .take)
+        )), interaction: tentative)
+
+        XCTAssertEqual(session.stage, .opponentCheck(move: move, origin: .take))
+        session.handle(.identificationTapped(recapture.from))
+        guard case let .complete(completedMove, origin, concepts) = session.stage else {
+            return XCTFail("Expected favorable exchange completion, got \(session.stage)")
+        }
+        XCTAssertEqual(completedMove, move)
+        XCTAssertEqual(origin, .take)
+        XCTAssertTrue(concepts.contains(.profitableCapture))
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Your knight took a rook. Black’s pawn could take the knight back, so you would trade a knight for a rook."
+        )
+    }
+
     func testRepeatedUnprofitableCapturesPreserveHintLevelAtAvailableFocusCap() {
         let move = CoachingTestFixtures.profitableCapture
         let estimate = CoachingTestFixtures.capture(

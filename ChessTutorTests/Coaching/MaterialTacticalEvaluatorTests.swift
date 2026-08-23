@@ -704,6 +704,56 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         XCTAssertEqual(estimate.immediateRecapture?.to, target)
     }
 
+    func testFavorableExchangeDowngradesOnlyItsExpectedRecaptureToNotice() throws {
+        let state = CoachingTestFixtures.favorableDefendedCaptureState
+        let move = CoachingTestFixtures.favorableDefendedCapture
+        let recapture = CoachingTestFixtures.favorableDefendedRecapture
+
+        let evaluation = evaluator.evaluate(request(for: state))
+        let estimate = try XCTUnwrap(
+            evaluation.learnerCaptureEstimates.first { $0.move == move }
+        )
+        let assessment = try XCTUnwrap(evaluation.moveAssessments[move])
+        let recaptureIssue = try XCTUnwrap(
+            assessment.opponentIssues.first { $0.reply == recapture }
+        )
+
+        XCTAssertEqual(estimate.netGainForMover, 2)
+        XCTAssertEqual(estimate.immediateRecapture, recapture)
+        XCTAssertEqual(recaptureIssue.kind, .materialLoss(points: 3))
+        XCTAssertEqual(recaptureIssue.severity, .notice)
+        XCTAssertFalse(
+            assessment.opponentIssues.contains {
+                $0.reply != recapture && $0.severity != .reviseMove
+            },
+            "Independent tactical replies must not be downgraded with the expected recapture"
+        )
+
+        let independentReply = Move(from: sq("h8"), to: sq("h2"))
+        let stateWithIndependentFailure = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                sq("a1"): Piece(kind: .king, color: .white),
+                move.from: Piece(kind: .knight, color: .white),
+                sq("h2"): Piece(kind: .queen, color: .white),
+                sq("a8"): Piece(kind: .king, color: .black),
+                move.to: Piece(kind: .rook, color: .black),
+                recapture.from: Piece(kind: .pawn, color: .black),
+                independentReply.from: Piece(kind: .rook, color: .black),
+            ]
+        )
+        let independentAssessment = try XCTUnwrap(
+            evaluator.evaluate(request(for: stateWithIndependentFailure))
+                .moveAssessments[move]
+        )
+        XCTAssertEqual(
+            independentAssessment.opponentIssues.first {
+                $0.reply == independentReply
+            }?.severity,
+            .reviseMove
+        )
+    }
+
     func testUndefendedCaptureKeepsCapturedPieceValue() throws {
         let attacker = Square(file: .a, rank: 2)
         let target = Square(file: .a, rank: 7)
