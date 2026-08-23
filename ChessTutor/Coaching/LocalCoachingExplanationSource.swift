@@ -358,8 +358,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             case .pawn, .knight, .king:
                 return "Your \(target.rawValue) is out of the \(attacker.rawValue)'s attack. It is safe now."
             }
-        case let .capturedAttacker(target, attacker):
-            return "Your \(target.rawValue) took the attacking \(attacker.rawValue). It is safe now."
+        case let .capturedAttacker(capturer, target, attacker):
+            if capturer == target {
+                return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue). It is safe now."
+            }
+            return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue). Your \(target.rawValue) is safe now."
         case let .addedDefender(defender, target, attacker):
             return "Your other \(defender.rawValue) now protects the threatened \(target.rawValue). If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back."
         }

@@ -5,8 +5,8 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     func testCorpusContainsEveryApprovedAnchor() {
         XCTAssertEqual(CoachingGoldenPosition.allCases.count, 15)
         XCTAssertEqual(Set(CoachingGoldenPosition.allCases.map(\.rawValue)).count, 15)
-        XCTAssertEqual(CoachingGoldenCase.allCases.count, 46)
-        XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 46)
+        XCTAssertEqual(CoachingGoldenCase.allCases.count, 47)
+        XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 47)
     }
 
     func testSafeDangerAndProtectionBranchesUseBoardFacts() async throws {
@@ -42,7 +42,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
     }
 
-    private func goldenTurn(_ branch: SafeGoldenBranch) async throws -> CoachingGoldenTurn {
+    private func goldenTurn(_ branch: CoachingGoldenCase) async throws -> CoachingGoldenTurn {
         var session: CoachingSession
         switch branch {
         case .t3Entry:
@@ -77,6 +77,9 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 position: .protectPawn,
                 in: &session
             )
+
+        default:
+            preconditionFailure("No Task 4 golden turn for \(branch.rawValue)")
         }
 
         let presentation = try XCTUnwrap(session.presentation)
@@ -143,12 +146,4 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             positionRevision: 1
         )
     }
-}
-
-private enum SafeGoldenBranch {
-    case t3Entry
-    case t4LowerPriorityPawn
-    case t5PawnResolved
-    case t5ProtectedTap
-    case t8AddsDefender
 }

@@ -185,7 +185,7 @@ struct MaterialTacticalEvaluator: Sendable {
                     )
                 }
                 if let estimate = captureEstimate(for: reply, in: opponentState),
-                   estimate.netGainForMover >= 2 {
+                   estimate.netGainForMover >= 1 {
                     issues.append(
                         CoachingOpponentIssue(
                             reply: reply,

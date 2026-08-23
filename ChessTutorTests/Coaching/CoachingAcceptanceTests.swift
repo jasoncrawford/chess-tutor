@@ -171,6 +171,35 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.state.moveHistory.isEmpty)
     }
 
+    func testDangerTranscriptNamesDifferentPieceThatCapturesAttacker() async {
+        let target = Square(file: .f, rank: 3)
+        let attacker = Square(file: .e, rank: 4)
+        let capturer = Square(file: .e, rank: 2)
+        let move = Move(from: capturer, to: attacker)
+        let state = makeState(pieces: [
+            Square(file: .a, rank: 1): white(.king),
+            target: white(.knight),
+            capturer: white(.rook),
+            attacker: black(.bishop),
+            Square(file: .h, rank: 8): black(.king),
+        ])
+        let session = makeSession(state: state)
+
+        await beginCoaching(in: session)
+        XCTAssertTrue(session.handleCoachingSquareTap(target))
+        XCTAssertTrue(session.handleCoachingSquareTap(attacker))
+
+        stage(move, in: session)
+        await session.resolvePendingCoachingAdvice()
+        _ = session.chooseCoachingAction(.looksSafe)
+
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Your rook took the attacking bishop. Your knight is safe now."
+        )
+        XCTAssertTrue(session.state.moveHistory.isEmpty)
+    }
+
     func testTakeTranscriptExplainsRecaptureThenAcceptsProfitableCapture() async throws {
         let losingBishop = Square(file: .b, rank: 1)
         let badCapture = Move(from: losingBishop, to: Square(file: .e, rank: 4))

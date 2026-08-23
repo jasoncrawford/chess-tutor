@@ -59,7 +59,7 @@ enum CoachingGoldenCase: String, CaseIterable {
     case t1Entry, t1BlockedRook, t1FlankPawn, t1Hint, t1KnightSelected
     case t1PreferredKnight, t1EdgeKnight, t1CenterPawn
     case t2Entry, t2OneSquareKingMove, t2KnightSwitch, t2Castle
-    case t3WrongOwnPiece, t3Target, t3WrongAttacker, t3Attacker
+    case t3Entry, t3WrongOwnPiece, t3Target, t3WrongAttacker, t3Attacker
     case t3UnresolvedMove, t3ResolvedMove
     case t4LowerPriorityPawn, t4PrimaryKnight
     case t5PawnDanger, t5PawnResolved, t5ProtectedTap, t5ProtectedAbsence

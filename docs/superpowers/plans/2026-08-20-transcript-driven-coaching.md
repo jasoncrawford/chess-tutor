@@ -142,7 +142,7 @@ enum CoachingGoldenCase: String, CaseIterable {
     case t1Entry, t1BlockedRook, t1FlankPawn, t1Hint, t1KnightSelected
     case t1PreferredKnight, t1EdgeKnight, t1CenterPawn
     case t2Entry, t2OneSquareKingMove, t2KnightSwitch, t2Castle
-    case t3WrongOwnPiece, t3Target, t3WrongAttacker, t3Attacker
+    case t3Entry, t3WrongOwnPiece, t3Target, t3WrongAttacker, t3Attacker
     case t3UnresolvedMove, t3ResolvedMove
     case t4LowerPriorityPawn, t4PrimaryKnight
     case t5PawnDanger, t5PawnResolved, t5ProtectedTap, t5ProtectedAbsence
@@ -365,8 +365,8 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     func testCorpusContainsEveryApprovedAnchor() {
         XCTAssertEqual(CoachingGoldenPosition.allCases.count, 15)
         XCTAssertEqual(Set(CoachingGoldenPosition.allCases.map(\.rawValue)).count, 15)
-        XCTAssertEqual(CoachingGoldenCase.allCases.count, 46)
-        XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 46)
+        XCTAssertEqual(CoachingGoldenCase.allCases.count, 47)
+        XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 47)
     }
 }
 ```
@@ -815,7 +815,11 @@ Add:
 ```swift
 enum CoachingDangerResolution: Equatable, Sendable {
     case movedTarget(target: Piece.Kind, attacker: Piece.Kind)
-    case capturedAttacker(target: Piece.Kind, attacker: Piece.Kind)
+    case capturedAttacker(
+        capturer: Piece.Kind,
+        target: Piece.Kind,
+        attacker: Piece.Kind
+    )
     case addedDefender(defender: Piece.Kind, target: Piece.Kind, attacker: Piece.Kind)
 }
 ```
@@ -1341,7 +1345,7 @@ func testEveryApprovedBranchHasAGoldenTurn() {
         .t1Entry, .t1BlockedRook, .t1FlankPawn, .t1Hint, .t1KnightSelected,
         .t1PreferredKnight, .t1EdgeKnight, .t1CenterPawn,
         .t2Entry, .t2OneSquareKingMove, .t2KnightSwitch, .t2Castle,
-        .t3WrongOwnPiece, .t3Target, .t3WrongAttacker, .t3Attacker,
+        .t3Entry, .t3WrongOwnPiece, .t3Target, .t3WrongAttacker, .t3Attacker,
         .t3UnresolvedMove, .t3ResolvedMove,
         .t4LowerPriorityPawn, .t4PrimaryKnight,
         .t5PawnDanger, .t5PawnResolved, .t5ProtectedTap, .t5ProtectedAbsence,
@@ -1356,7 +1360,7 @@ func testEveryApprovedBranchHasAGoldenTurn() {
     ]
 
     XCTAssertEqual(requiredCases, CoachingGoldenCase.allCases)
-    XCTAssertEqual(requiredCases.map(goldenTurn).count, 46)
+    XCTAssertEqual(requiredCases.map(goldenTurn).count, 47)
 }
 ```
 

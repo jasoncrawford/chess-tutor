@@ -216,7 +216,11 @@ enum CoachingCompletionIdea: Equatable, Sendable {
 
 enum CoachingDangerResolution: Equatable, Sendable {
     case movedTarget(target: Piece.Kind, attacker: Piece.Kind)
-    case capturedAttacker(target: Piece.Kind, attacker: Piece.Kind)
+    case capturedAttacker(
+        capturer: Piece.Kind,
+        target: Piece.Kind,
+        attacker: Piece.Kind
+    )
     case addedDefender(defender: Piece.Kind, target: Piece.Kind, attacker: Piece.Kind)
 }
 

@@ -554,8 +554,13 @@ struct CoachingPresentationProjector: Sendable {
             return nil
         }
 
-        if LegalMoveGenerator.capture(for: move, in: state)?.square == attackerSquare {
-            return .capturedAttacker(target: target.kind, attacker: attacker.kind)
+        if LegalMoveGenerator.capture(for: move, in: state)?.square == attackerSquare,
+           let capturer = state.board[move.from] {
+            return .capturedAttacker(
+                capturer: capturer.kind,
+                target: target.kind,
+                attacker: attacker.kind
+            )
         }
         if move.from == targetSquare {
             return .movedTarget(target: target.kind, attacker: attacker.kind)

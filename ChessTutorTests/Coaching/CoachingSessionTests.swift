@@ -507,6 +507,68 @@ final class CoachingSessionTests: XCTestCase {
         )) == true)
     }
 
+    func testChangedOnePointDangerNamesTheNewPawnAndAttacker() async throws {
+        let target = sq("a3")
+        let originalAttacker = sq("b4")
+        let newlyExposedPawn = sq("a2")
+        let newAttacker = sq("a8")
+        let move = Move(from: target, to: sq("c4"))
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                sq("h1"): Piece(kind: .king, color: .white),
+                target: Piece(kind: .knight, color: .white),
+                newlyExposedPawn: Piece(kind: .pawn, color: .white),
+                sq("b1"): Piece(kind: .rook, color: .white),
+                originalAttacker: Piece(kind: .bishop, color: .black),
+                newAttacker: Piece(kind: .rook, color: .black),
+                sq("h8"): Piece(kind: .king, color: .black),
+            ]
+        )
+        let startAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 7,
+            context: .start
+        ))
+        let problem = try XCTUnwrap(startAdvice.dangerProblems.first { $0.target == target })
+        XCTAssertTrue(problem.captures.contains { $0.move.from == originalAttacker })
+
+        var session = session()
+        session.receive(startAdvice)
+        session.handle(.identificationTapped(target))
+        session.handle(.identificationTapped(originalAttacker))
+        XCTAssertEqual(session.stage, .safeResolve(target: target))
+        XCTAssertEqual(
+            stage(move, in: &session),
+            [.requestAdvice(context: .tentativeMove(origin: .safe))]
+        )
+
+        let moveAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 7,
+            context: .tentativeMove(origin: .safe)
+        ))
+        let assessment = try XCTUnwrap(moveAdvice.moveAssessments[move])
+        XCTAssertFalse(assessment.resolvesRequiredDanger)
+        XCTAssertTrue(assessment.opponentIssues.contains { issue in
+            issue.reply.from == newAttacker
+                && issue.kind == .materialLoss(points: 1)
+                && issue.answerSquares.contains(newlyExposedPawn)
+        })
+
+        session.receive(moveAdvice)
+
+        XCTAssertEqual(session.stage, .safeResolve(target: target))
+        XCTAssertEqual(
+            session.presentation?.response,
+            "The rook could still take your pawn after that move."
+        )
+    }
+
     func testCheckAndDoubleCheckAcceptEveryCheckingPieceWithoutSelectingIt() {
         for checkingPiece in [CoachingTestFixtures.blackBishop, CoachingTestFixtures.blackRook] {
             var session = session()
