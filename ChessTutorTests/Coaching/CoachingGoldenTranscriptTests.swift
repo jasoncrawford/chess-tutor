@@ -222,6 +222,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             harmlessCheck.response,
             "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works."
         )
+        XCTAssertEqual(
+            harmlessCheck.ask,
+            "That works. Your knight moved closer to the center."
+        )
     }
 
     func testHintInConcreteOpponentReviseStateRepulsesTheRealReplyOnly() async throws {
@@ -343,6 +347,30 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             "Choose a move you are considering, and I will check it with you."
         )
         XCTAssertEqual(turn.actions, [.stop])
+        XCTAssertEqual(turn.routine, [])
+        XCTAssertEqual(turn.emphasizedSquares, [])
+        XCTAssertEqual(turn.candidateSquares, [])
+        XCTAssertEqual(turn.paths, [])
+    }
+
+    func testUnsupportedSafeMoveStatesOnlyTheImmediateScanBoundary() async throws {
+        let turn = try await goldenTurn(.t12UnsupportedSafeMove)
+
+        XCTAssertEqual(
+            turn.response,
+            "Black cannot immediately check your king or win one of your pieces after this move."
+        )
+        XCTAssertEqual(
+            turn.ask,
+            "I do not see an immediate check or lost piece after this move."
+        )
+        XCTAssertEqual(turn.instruction, nil)
+        XCTAssertEqual(turn.actions, [.done, .keepLooking, .stop])
+        XCTAssertEqual(
+            turn.actionTitles,
+            ["Play this move", "Try another move", "Close help"]
+        )
+        XCTAssertEqual(turn.boardTask, .none)
         XCTAssertEqual(turn.routine, [])
         XCTAssertEqual(turn.emphasizedSquares, [])
         XCTAssertEqual(turn.candidateSquares, [])
@@ -696,8 +724,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t12UnsupportedEntry:
             session = try await preparedSession(for: .unsupportedEndgame)
 
-        default:
-            preconditionFailure("No golden turn implementation for \(branch.rawValue)")
+        case .t12UnsupportedSafeMove:
+            session = try await preparedSession(for: .unsupportedEndgame)
+            try await complete(
+                Move(from: sq("d4"), to: sq("d5")),
+                origin: .fallback,
+                position: .unsupportedEndgame,
+                in: &session
+            )
+
         }
 
         let presentation = try XCTUnwrap(

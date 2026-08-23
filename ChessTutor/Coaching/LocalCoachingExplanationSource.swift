@@ -549,6 +549,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         if case .resolvesCheck = idea {
             return completionPurpose(for: idea, opponent: opponent)
         }
+        if case .verifiedSafe = idea {
+            return completionPurpose(for: idea, opponent: opponent)
+        }
         return "That works. \(completionPurpose(for: idea, opponent: opponent))"
     }
 
@@ -579,7 +582,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .createsThreat(piece):
             concept = "Your \(piece.rawValue) creates a threat."
         case let .centralizes(piece):
-            concept = "Your \(piece.rawValue) gets a more useful place near the center."
+            concept = "Your \(piece.rawValue) moved closer to the center."
         case let .constructive(task, move, piece):
             return constructiveCompletion(
                 task: task,
@@ -588,7 +591,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 opponent: opponent
             )
         case .verifiedSafe:
-            concept = "Your move stays safe after the reply."
+            concept = "I do not see an immediate check or lost piece after this move."
         }
         return concept
     }

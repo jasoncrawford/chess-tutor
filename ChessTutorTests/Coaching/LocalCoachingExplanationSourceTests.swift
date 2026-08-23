@@ -577,9 +577,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .centralizes(piece: .queen),
-                "That works. Your queen gets a more useful place near the center."
+                "That works. Your queen moved closer to the center."
             ),
-            (.verifiedSafe, "That works. Your move stays safe after the reply."),
+            (
+                .verifiedSafe,
+                "I do not see an immediate check or lost piece after this move."
+            ),
         ]
 
         for (idea, headline) in cases {
