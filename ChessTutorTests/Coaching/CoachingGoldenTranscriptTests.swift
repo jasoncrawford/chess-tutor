@@ -277,7 +277,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t7NoSafeCapture.ask,
-            "Your king can move to a square where it has more choices. Can you find the move?"
+            "I can check immediate dangers, but I do not have a confident plan for this position yet."
         )
     }
 
@@ -941,12 +941,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t7NoSafeCapture:
             return expected(
                 response: "Right—there is no safe capture here.",
-                ask: "Your king can move to a square where it has more choices. Can you find the move?",
-                instruction: "Move the king.",
-                actions: [.hint, .stop],
-                boardTask: .move,
-                routine: wakeRoutine,
-                emphasized: ["g1"]
+                ask: "I can check immediate dangers, but I do not have a confident plan for this position yet.",
+                instruction: "Choose a move you are considering, and I will check it with you.",
+                actions: [.stop],
+                boardTask: .move
             )
 
         case .t8AddsDefender:

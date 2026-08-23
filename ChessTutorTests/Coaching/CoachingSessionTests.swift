@@ -1000,7 +1000,7 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
-    func testRealLosingCaptureExplainsKingRecaptureThenAcceptsNoSafeCapture() async throws {
+    func testRealLosingCaptureExplainsKingRecaptureThenUsesHonestFallback() async throws {
         let state = CoachingGoldenPosition.losingCapture.state
         let move = CoachingGoldenMoves.bishopTakesPawn
         let advisor = LocalCoachingAdvisor()
@@ -1045,11 +1045,17 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.actionChosen(.noAnswer))
 
         XCTAssertEqual(session.presentation?.response, "Right—there is no safe capture here.")
-        XCTAssertEqual(session.stage, .wakeChoosePiece(purpose: .centralActivity))
+        XCTAssertEqual(session.stage, .fallbackChooseMove)
         XCTAssertEqual(
             session.presentation?.headline,
-            "Your king can move to a square where it has more choices. Can you find the move?"
+            "I can check immediate dangers, but I do not have a confident plan for this position yet."
         )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Choose a move you are considering, and I will check it with you."
+        )
+        XCTAssertEqual(session.presentation?.actions.map(\.action), [.stop])
+        XCTAssertEqual(session.presentation?.routine, [])
     }
 
     func testFavorableDefendedCaptureCompletesThroughExpectedRecaptureNotice() async throws {

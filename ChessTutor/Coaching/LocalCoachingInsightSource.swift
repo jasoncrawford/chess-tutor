@@ -506,7 +506,9 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         learner: PieceColor,
         before: GameState
     ) -> CoachingOpportunity? {
-        guard let piece = before.board[move.from], piece.kind != .pawn else {
+        guard let piece = before.board[move.from],
+              piece.kind != .pawn,
+              piece.kind != .king else {
             return nil
         }
 

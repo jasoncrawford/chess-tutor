@@ -135,6 +135,17 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         )))
     }
 
+    func testLosingCaptureFixtureHasNoVerifiedWakeTask() async throws {
+        let advice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.losingCapture.state)
+        )
+
+        XCTAssertTrue(advice.takeOpportunities.isEmpty)
+        XCTAssertTrue(advice.wakeOpportunities.isEmpty)
+        XCTAssertTrue(advice.wakeTasks.isEmpty)
+        XCTAssertEqual(advice.confidence, .unsupported)
+    }
+
     func testStartingPositionOffersMinorAndCenterPawnWakeMoves() async throws {
         let request = CoachingRequest(
             committedState: .startingPosition(),
@@ -972,6 +983,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             sideToMove: .white,
             pieces: [
                 Square(file: .h, rank: 1): Piece(kind: .king, color: .white),
+                Square(file: .a, rank: 1): Piece(kind: .knight, color: .white),
                 quietMove.from: Piece(kind: .pawn, color: .white),
                 Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
             ]
