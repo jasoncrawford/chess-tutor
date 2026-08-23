@@ -173,8 +173,9 @@ After the opponent-response check succeeds:
 
 ## T2 — Ready to castle
 
-**Move sequence:** `1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6`
-**FEN:** `r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4`
+**Reviewed fixture FEN:** `r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 1`
+
+This tutoring fixture deliberately adds White's pawn on d3 while retaining White to move. The pawn protects e4, so the transcript isolates the castling lesson instead of letting `...Nxe4` introduce a competing immediate danger. It is an isolated teaching position, not a claimed reconstruction of a legal move sequence.
 
 **Teaching goal:** Do not ask an open question when the answer is mechanically obvious and the useful lesson is how to perform the move.
 

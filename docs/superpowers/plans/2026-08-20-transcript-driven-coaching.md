@@ -105,7 +105,9 @@ enum CoachingGoldenPosition: String, CaseIterable {
         case .starting:
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         case .readyToCastle:
-            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+            // d3 protects e4 so the fixture isolates castling from ...Nxe4.
+            // This is a teaching position, not a reconstructed move sequence.
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 1"
         case .endangeredKnight:
             "6k1/8/8/8/4p3/5N2/8/6K1 w - - 0 1"
         case .twoDangerPriorities:
