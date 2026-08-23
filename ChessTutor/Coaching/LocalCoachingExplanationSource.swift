@@ -72,11 +72,14 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 selectedPiece: selectedPiece,
                 learner: learner
             )
-        case let .opponentReply(opponent):
+        case let .opponentReply(opponent, threatenedPiece):
             let opponentName = colorName(opponent)
+            let instruction = threatenedPiece.map {
+                "Tap the \(opponentName.lowercased()) piece that could win your \($0.rawValue)."
+            } ?? "Tap a \(opponentName.lowercased()) piece that could check your king or win one of your pieces."
             return (
                 "What could \(opponentName) do after your move?",
-                "Tap a \(opponentName.lowercased()) piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
+                instruction
             )
         case .fallbackChooseMove:
             return (
@@ -300,8 +303,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch context.prompt {
         case .safeLocate where !context.actions.contains(.noAnswer):
             actionConsistentBase = "Tap your piece."
-        case let .opponentReply(opponent) where !context.actions.contains(.looksSafe):
-            actionConsistentBase = "Tap a \(colorName(opponent).lowercased()) piece that could check your king or take one of your pieces."
+        case let .opponentReply(opponent, threatenedPiece)
+            where !context.actions.contains(.looksSafe):
+            actionConsistentBase = threatenedPiece.map {
+                "Tap the \(colorName(opponent).lowercased()) piece that could win your \($0.rawValue)."
+            } ?? "Tap a \(colorName(opponent).lowercased()) piece that could check your king or win one of your pieces."
         default:
             actionConsistentBase = base
         }
@@ -420,7 +426,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             }
             return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
         case .notReplyIssue:
-            return "Tap a \(colorName(opponent).lowercased()) piece that could check your king or take one of your pieces."
+            return "That piece cannot immediately check your king or win one of your pieces."
+        case let .benignOpponentActivity(activity):
+            if let capturedPiece = activity.capturedPiece,
+               activity.immediateRecapture != nil {
+                return "That \(activity.opponentPiece.rawValue) attacks your \(capturedPiece.rawValue), but the \(capturedPiece.rawValue) is protected."
+            }
+            if let capturedPiece = activity.capturedPiece {
+                return "That \(activity.opponentPiece.rawValue) can take your \(capturedPiece.rawValue), but it does not win the piece."
+            }
+            return "That \(activity.opponentPiece.rawValue) does not cause immediate trouble here."
         case let .correctAbsence(kind):
             switch kind {
             case .noPieceNeedsHelp:
@@ -480,8 +495,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "One of your pieces does need help."
         case .takeChooseMove:
             return "There is a safe capture to find."
-        case let .opponentReply(opponent):
-            return "\(colorName(opponent)) could still check your king or take one of your pieces."
+        case let .opponentReply(opponent, _):
+            return "\(colorName(opponent)) could still check your king or win one of your pieces."
         default:
             return "There is something to find."
         }
@@ -573,6 +588,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         if case .verifiedSafe = idea {
             return completionPurpose(for: idea, opponent: opponent)
         }
+        if case .seemsSafe = idea {
+            return completionPurpose(for: idea, opponent: opponent)
+        }
         return "That works. \(completionPurpose(for: idea, opponent: opponent))"
     }
 
@@ -613,6 +631,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .verifiedSafe:
             concept = "I do not see an immediate check or lost piece after this move."
+        case let .seemsSafe(suggestion):
+            if suggestion == .openingDevelopment(firstMove: true) {
+                return "That move seems safe, but a center pawn or knight is a simpler start."
+            }
+            return "That move seems safe."
         }
         return concept
     }
@@ -777,7 +800,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     }
 
     private func opponentColor(for context: CoachingPresentationContext) -> PieceColor {
-        if case let .opponentReply(opponent) = context.prompt {
+        if case let .opponentReply(opponent, _) = context.prompt {
             return opponent
         }
         return context.learner.opposite

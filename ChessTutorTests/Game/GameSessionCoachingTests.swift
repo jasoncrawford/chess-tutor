@@ -42,7 +42,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertFalse(stalemate.canRequestCoaching)
     }
 
-    func testStartingFromLegalTentativeMoveGoesDirectlyToReplyCheck() async {
+    func testStartingFromQuietLegalTentativeMoveGoesDirectlyToCompletion() async {
         let move = CoachingTestFixtures.openingKnightMove
         let advice = tentativeAdvice(for: move, isLegal: true)
         let session = GameSession(
@@ -54,7 +54,7 @@ final class GameSessionCoachingTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
 
         XCTAssertTrue(session.isCoachingActive)
-        XCTAssertEqual(session.coachingPresentation?.boardTask, .identify(allowsMoveRevision: true))
+        XCTAssertEqual(session.coachingPresentation?.boardTask, CoachingBoardTask.none)
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
     }
 
@@ -531,6 +531,23 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(historyRich.pendingCoachingRequestID, direct.pendingCoachingRequestID)
     }
 
+    func testOutsidePawnAfterKnightSelectionMatchesDirectOutsidePawnDerivation() async {
+        let move = CoachingGoldenMoves.outsidePawn
+        let direct = await makeOpeningSession()
+        stage(move, in: direct)
+        await direct.resolvePendingCoachingAdvice()
+
+        let historyRich = await makeOpeningSession()
+        historyRich.select(CoachingTestFixtures.openingKnight)
+        stage(move, in: historyRich)
+        await historyRich.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(historyRich.selectedSquare, direct.selectedSquare)
+        XCTAssertEqual(historyRich.state.board, direct.state.board)
+        XCTAssertEqual(historyRich.coachingPresentation, direct.coachingPresentation)
+        XCTAssertEqual(historyRich.pendingCoachingRequestID, direct.pendingCoachingRequestID)
+    }
+
     func testOpeningSourceFeedbackTracksPawnRookEmptyAndEnemySwitches() async {
         let session = await makeOpeningSession()
 
@@ -732,7 +749,7 @@ final class GameSessionCoachingTests: XCTestCase {
         await replacementSession.resolvePendingCoachingAdvice()
         XCTAssertEqual(
             replacementSession.coachingPresentation?.boardTask,
-            .identify(allowsMoveRevision: true)
+            CoachingBoardTask.none
         )
 
         _ = replacementSession.moveSelectedPiece(to: replacement.from)
@@ -919,7 +936,7 @@ final class GameSessionCoachingTests: XCTestCase {
             XCTAssertNil(session.pendingCoachingRequestID)
             XCTAssertEqual(
                 session.coachingPresentation?.boardTask,
-                .identify(allowsMoveRevision: true)
+                CoachingBoardTask.none
             )
         }
     }
@@ -1332,14 +1349,33 @@ final class GameSessionCoachingTests: XCTestCase {
         positionRevision: Int? = nil,
         origin: CoachingMoveOrigin = .preexisting
     ) -> CoachingAdvice {
+        let activities = issues.map { issue in
+            let materialGain: Int?
+            if case let .materialLoss(points) = issue.kind {
+                materialGain = points
+            } else {
+                materialGain = nil
+            }
+            return CoachingOpponentActivity(
+                reply: issue.reply,
+                opponentPiece: .bishop,
+                checkingSquares: issue.checkingSquares,
+                capturedSquare: materialGain == nil ? nil : issue.affectedSquare,
+                capturedPiece: nil,
+                netGainForOpponent: materialGain,
+                immediateRecapture: nil,
+                isMate: issue.kind == .mateInOne
+            )
+        }
         let assessment = CoachingMoveAssessment(
             move: move,
             isLegal: isLegal,
             resolvesRequiredDanger: true,
             opponentIssues: issues,
-            opponentActivities: [],
+            opponentActivities: activities,
             concepts: [.developsKnightOrBishop],
-            isAcceptable: isLegal && !issues.contains(where: { $0.severity == .reviseMove })
+            isTacticallyAcceptable: isLegal
+                && !issues.contains(where: { $0.severity == .reviseMove })
         )
         let advice = CoachingTestFixtures.adviceForTentativeMove(
             move,

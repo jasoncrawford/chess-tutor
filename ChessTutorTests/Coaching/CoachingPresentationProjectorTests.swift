@@ -283,7 +283,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                 replyMove,
                 issues: [replyIssue],
                 concepts: [.developsKnightOrBishop],
-                isAcceptable: false
+                isTacticallyAcceptable: false
             )
         )
         let captureMove = CoachingTestFixtures.profitableCapture
@@ -507,7 +507,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                     selectedSquare: replyMove.to,
                     tentativeMove: replyMove
                 ),
-                prompt: .opponentReply(opponent: .black),
+                prompt: .opponentReply(opponent: .black, threatenedPiece: nil),
                 boardTask: .identify(allowsMoveRevision: true),
                 actions: [.stop],
                 routine: [],

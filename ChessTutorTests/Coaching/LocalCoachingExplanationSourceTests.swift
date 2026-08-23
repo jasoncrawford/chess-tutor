@@ -132,14 +132,14 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 "Tap your king."
             ),
             (
-                .opponentReply(opponent: .black),
+                .opponentReply(opponent: .black, threatenedPiece: nil),
                 "What could Black do after your move?",
-                "Tap a black piece that could check your king or take one of your pieces."
+                "Tap a black piece that could check your king or win one of your pieces."
             ),
             (
-                .opponentReply(opponent: .white),
+                .opponentReply(opponent: .white, threatenedPiece: nil),
                 "What could White do after your move?",
-                "Tap a white piece that could check your king or take one of your pieces."
+                "Tap a white piece that could check your king or win one of your pieces."
             ),
             (
                 .fallbackChooseMove,
@@ -528,22 +528,22 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
 
         let revealedOpponentIssue = source.presentation(for: context(
-            prompt: .opponentReply(opponent: .black),
+            prompt: .opponentReply(opponent: .black, threatenedPiece: nil),
             actions: [.hint, .stop]
         ))
         XCTAssertEqual(
             revealedOpponentIssue.instruction,
-            "Tap a black piece that could check your king or take one of your pieces."
+            "Tap a black piece that could check your king or win one of your pieces."
         )
         XCTAssertFalse(revealedOpponentIssue.instruction?.contains("Looks safe") == true)
 
         let unansweredOpponentScan = source.presentation(for: context(
-            prompt: .opponentReply(opponent: .black),
+            prompt: .opponentReply(opponent: .black, threatenedPiece: nil),
             actions: [.looksSafe, .hint, .stop]
         ))
         XCTAssertEqual(
             unansweredOpponentScan.instruction,
-            "Tap a black piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
+            "Tap a black piece that could check your king or win one of your pieces."
         )
     }
 
@@ -630,14 +630,14 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 "Your pawn is blocking that rook. Choose a center pawn or knight."
             ),
             (
-                .opponentReply(opponent: .black),
+                .opponentReply(opponent: .black, threatenedPiece: nil),
                 .notReplyIssue,
-                "Tap a black piece that could check your king or take one of your pieces."
+                "That piece cannot immediately check your king or win one of your pieces."
             ),
             (
-                .opponentReply(opponent: .black),
+                .opponentReply(opponent: .black, threatenedPiece: nil),
                 .missedOpponentReply,
-                "Black could still check your king or take one of your pieces."
+                "Black could still check your king or win one of your pieces."
             ),
             (
                 .safeResolve(target: .knight, attacker: .pawn),
@@ -675,7 +675,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     func testConcreteFeedbackNamesWhiteWhenWhiteIsTheOpponent() {
         let presentation = source.presentation(
             for: context(
-                prompt: .opponentReply(opponent: .white),
+                prompt: .opponentReply(opponent: .white, threatenedPiece: nil),
                 feedback: .concreteFlaw(kind: .check, affectedPiece: nil),
                 learner: .black
             )
@@ -798,7 +798,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 "Use the movement markers to choose where your knight should go."
             ),
             (
-                .opponentReply(opponent: .black),
+                .opponentReply(opponent: .black, threatenedPiece: nil),
                 .replyMarkers,
                 "Look for a red danger marker or a check marker."
             ),
@@ -870,6 +870,16 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             affectedPiece: .queen,
             learnerPiece: .queen
         )
+        let benignActivity = CoachingOpponentActivity(
+            reply: Move(from: sq("c4"), to: sq("e6")),
+            opponentPiece: .bishop,
+            checkingSquares: [],
+            capturedSquare: sq("e6"),
+            capturedPiece: .pawn,
+            netGainForOpponent: -2,
+            immediateRecapture: Move(from: sq("d7"), to: sq("e6")),
+            isMate: false
+        )
         let purposes: [CoachingWakePurpose] = [
             .openingDevelopment(firstMove: true),
             .openingDevelopment(firstMove: false),
@@ -915,6 +925,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .constructive(task: wakeTasks[3], move: move, piece: .knight),
             .constructive(task: wakeTasks[4], move: move, piece: .knight),
             .verifiedSafe,
+            .seemsSafe(suggestion: nil),
+            .seemsSafe(suggestion: .openingDevelopment(firstMove: true)),
         ]
         let origins: [CoachingMoveOrigin] = [
             .preexisting, .check, .safe, .take, .wake, .fallback,
@@ -926,8 +938,9 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .safeIdentifyAttacker(piece: .queen),
             .safeResolve(target: .queen, attacker: .rook),
             .takeChooseMove,
-            .opponentReply(opponent: .black),
-            .opponentReply(opponent: .white),
+            .opponentReply(opponent: .black, threatenedPiece: nil),
+            .opponentReply(opponent: .white, threatenedPiece: nil),
+            .opponentReply(opponent: .black, threatenedPiece: .bishop),
             .fallbackChooseMove,
             .unsupportedFallbackChooseMove,
             .opponentIssueRevise(kind: .mateInOne, affectedPiece: nil),
@@ -978,6 +991,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             .notWakeCandidate(piece: .bishop, purpose: .centralActivity),
             .notReplyIssue,
+            .benignOpponentActivity(benignActivity),
             .correctAbsence(.noPieceNeedsHelp),
             .correctAbsence(.noSafeCapture),
             .missedExistingAnswer(.noPieceNeedsHelp),

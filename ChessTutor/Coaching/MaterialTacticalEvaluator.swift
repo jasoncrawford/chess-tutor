@@ -92,7 +92,7 @@ struct MaterialTacticalEvaluator: Sendable {
                     opponentIssues: opponentIssues,
                     opponentActivities: opponentActivities,
                     concepts: [],
-                    isAcceptable: false
+                    isTacticallyAcceptable: false
                 )
             )
         })

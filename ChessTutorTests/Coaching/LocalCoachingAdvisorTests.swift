@@ -563,7 +563,9 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             Square(file: .b, rank: 1)
         )
         for move in expectedOpeningMoves {
-            XCTAssertTrue(try XCTUnwrap(startingAdvice.moveAssessments[move]).isAcceptable)
+            XCTAssertTrue(
+                try XCTUnwrap(startingAdvice.moveAssessments[move]).isTacticallyAcceptable
+            )
         }
 
         let multiPurposeMove = Move(
@@ -829,7 +831,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             .opponentReply(mateIssue)
         )
         XCTAssertFalse(advice.takeOpportunities.flatMap(\.moves).contains(badCapture))
-        XCTAssertFalse(assessment.isAcceptable)
+        XCTAssertFalse(assessment.isTacticallyAcceptable)
     }
 
     func testResolvingEqualExchangeIsAcceptedForSafeButExcludedFromTake() async throws {
@@ -860,7 +862,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertFalse(advice.takeOpportunities.contains {
             $0.concept == .captureResolvesDanger && $0.moves == [exchange]
         })
-        XCTAssertTrue(assessment.isAcceptable)
+        XCTAssertTrue(assessment.isTacticallyAcceptable)
     }
 
     func testFavorableDefendedCaptureIsAValidTakeAnswer() async throws {
@@ -874,7 +876,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             $0.moves == [move] && $0.concept == .profitableCapture
         })
         XCTAssertTrue(assessment.concepts.contains(.profitableCapture))
-        XCTAssertTrue(assessment.isAcceptable)
+        XCTAssertTrue(assessment.isTacticallyAcceptable)
         XCTAssertFalse(assessment.opponentIssues.contains {
             $0.severity == .reviseMove
         })
@@ -900,7 +902,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
             $0.concept == .mateInOne && $0.moves == [matingMove]
         })
         XCTAssertTrue(assessment.concepts.contains(.mateInOne))
-        XCTAssertTrue(assessment.isAcceptable)
+        XCTAssertTrue(assessment.isTacticallyAcceptable)
     }
 
     func testHarmlessReplyCheckProducesAllowsCheckAndVerifiedSafeFacts() async throws {
@@ -974,7 +976,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertNil(moveInsight(.safeAfterReplyCheck, move: learnerMove, in: advice))
     }
 
-    func testSafeButPurposelessMoveStaysUnacceptableOutsideFallback() async throws {
+    func testSafeButPurposelessMoveIsTacticallyAcceptableOutsideFallback() async throws {
         let quietMove = Move(
             from: Square(file: .a, rank: 2),
             to: Square(file: .a, rank: 3)
@@ -993,7 +995,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         let assessment = try XCTUnwrap(advice.moveAssessments[quietMove])
 
         XCTAssertTrue(assessment.concepts.contains(.safeAfterReplyCheck))
-        XCTAssertFalse(assessment.isAcceptable)
+        XCTAssertTrue(assessment.isTacticallyAcceptable)
         XCTAssertEqual(advice.confidence, .high)
     }
 

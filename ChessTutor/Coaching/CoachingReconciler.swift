@@ -319,40 +319,21 @@ struct CoachingReconciler: Sendable {
                 )
             )
         }
-        if origin == .wake,
-           !hasWakePurpose(assessment.concepts),
-           !isWakeTaskMove(move, in: positionAdvice) {
-            let purpose = wakePurpose(
-                for: move.from,
-                positionAdvice: positionAdvice,
-                assessment: assessment,
-                tentativeAdvice: advice
-            )
-            return originDerivation(
-                origin,
-                move: move,
-                episode: episode,
-                positionAdvice: positionAdvice,
-                feedback: .noRecognizedPurpose(purpose: purpose)
-            )
-        }
-        if origin == .check,
-           assessment.isAcceptable {
-            return completionDerivation(
+        if !assessment.opponentActivities.isEmpty {
+            return deriveReply(
                 move: move,
                 origin: origin,
-                assessment: assessment
+                assessment: assessment,
+                advice: advice,
+                positionAdvice: positionAdvice,
+                answer: episode.evidence.replyAnswer,
+                episode: episode
             )
         }
-
-        return deriveReply(
+        return completionDerivation(
             move: move,
             origin: origin,
-            assessment: assessment,
-            advice: advice,
-            positionAdvice: positionAdvice,
-            answer: episode.evidence.replyAnswer,
-            episode: episode
+            assessment: assessment
         )
     }
 
@@ -385,28 +366,11 @@ struct CoachingReconciler: Sendable {
                     ))
                 )
             }
-            if assessment.isAcceptable {
-                return completionDerivation(
-                    move: move,
-                    origin: origin,
-                    assessment: assessment,
-                    feedback: .opponentReplyLooksSafe
-                )
-            }
-            let purpose = origin == .wake
-                ? wakePurpose(
-                    for: move.from,
-                    positionAdvice: positionAdvice,
-                    assessment: assessment,
-                    tentativeAdvice: advice
-                )
-                : nil
-            return originDerivation(
-                origin,
+            return completionDerivation(
                 move: move,
-                episode: episode,
-                positionAdvice: positionAdvice,
-                feedback: .noRecognizedPurpose(purpose: purpose)
+                origin: origin,
+                assessment: assessment,
+                feedback: .opponentReplyLooksSafe
             )
 
         case let .issue(answeredMove, issue):
@@ -459,7 +423,7 @@ struct CoachingReconciler: Sendable {
                     feedback: .checkFoundOtherDangerRemains
                 )
             }
-            if assessment.isAcceptable {
+            if assessment.isTacticallyAcceptable {
                 return completionDerivation(
                     move: move,
                     origin: origin,
@@ -507,12 +471,15 @@ struct CoachingReconciler: Sendable {
         case .take:
             base = takeDerivation()
         case .wake:
-            let purpose = wakePurpose(
+            guard let purpose = wakePurpose(
                 for: move.from,
                 positionAdvice: positionAdvice,
                 assessment: nil,
                 tentativeAdvice: episode.knowledge.tentativeAdvice
-            ) ?? .centralActivity
+            ) else {
+                base = fallbackDerivation()
+                break
+            }
             base = derived(
                 stage: .wakeChooseMove(piece: move.from, purpose: purpose),
                 questionID: .wakeMove(source: move.from, purpose: purpose)
@@ -608,18 +575,6 @@ struct CoachingReconciler: Sendable {
             && !hasRevisionIssue
     }
 
-    private func hasWakePurpose(_ concepts: [CoachingConcept]) -> Bool {
-        let wakeConcepts: Set<CoachingConcept> = [
-            .developsKnightOrBishop,
-            .advancesCenterPawn,
-            .castlesForKingSafety,
-            .addsUsefulDefender,
-            .createsSafeImmediateThreat,
-            .improvesCentralActivity,
-        ]
-        return concepts.contains(where: wakeConcepts.contains)
-    }
-
     private func initialWakePurpose(in advice: CoachingAdvice) -> CoachingWakePurpose? {
         if let task = advice.wakeTasks.first {
             return wakePurpose(for: task)
@@ -657,13 +612,6 @@ struct CoachingReconciler: Sendable {
         default:
             return task.candidates.map(\.move)
         }
-    }
-
-    private func isWakeTaskMove(
-        _ move: Move,
-        in advice: CoachingAdvice?
-    ) -> Bool {
-        advice?.wakeTasks.contains { wakeMoves(in: $0).contains(move) } == true
     }
 
     private func firstSlidingBlocker(

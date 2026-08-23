@@ -147,7 +147,7 @@ final class CoachingReconcilerTests: XCTestCase {
                 move,
                 issues: [issue],
                 concepts: [.developsKnightOrBishop],
-                isAcceptable: false
+                isTacticallyAcceptable: false
             )
         )
 
@@ -172,7 +172,7 @@ final class CoachingReconcilerTests: XCTestCase {
         XCTAssertEqual(result.requestedAdvice, .tentativeMove(origin: .wake))
     }
 
-    func testExactTentativeAssessmentDerivesOpponentReply() {
+    func testExactQuietTentativeAssessmentCompletesWithoutOpponentReply() {
         let move = CoachingTestFixtures.openingKnightMove
         var episode = episode(
             advice: CoachingTestFixtures.startingPositionAdvice,
@@ -190,8 +190,15 @@ final class CoachingReconcilerTests: XCTestCase {
         )
 
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(result.stage, .opponentCheck(move: move, origin: .wake))
-        XCTAssertEqual(result.questionID, .opponentReply(move: move, origin: .wake))
+        XCTAssertEqual(
+            result.stage,
+            .complete(
+                move: move,
+                origin: .wake,
+                concepts: [.developsKnightOrBishop]
+            )
+        )
+        XCTAssertEqual(result.questionID, .complete(move: move, origin: .wake))
         XCTAssertNil(result.promptOverride)
         XCTAssertNil(result.derivedFeedback)
         XCTAssertNil(result.requestedAdvice)
@@ -275,7 +282,7 @@ final class CoachingReconcilerTests: XCTestCase {
             opponentIssues: [],
             opponentActivities: [],
             concepts: [],
-            isAcceptable: false
+            isTacticallyAcceptable: false
         )
         var episode = episode(
             advice: CoachingTestFixtures.startingPositionAdvice,
@@ -313,7 +320,7 @@ final class CoachingReconcilerTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 resolvesRequiredDanger: false,
-                isAcceptable: false
+                isTacticallyAcceptable: false
             ),
             danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         )
@@ -352,7 +359,7 @@ final class CoachingReconcilerTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 resolvesRequiredDanger: false,
-                isAcceptable: false
+                isTacticallyAcceptable: false
             ),
             danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         )
@@ -375,7 +382,7 @@ final class CoachingReconcilerTests: XCTestCase {
         )
     }
 
-    func testUnpurposefulWakeMoveReturnsToPurposeForTentativeSource() {
+    func testTacticallySafeUnpurposefulWakeMoveCompletesWithoutInventedPurpose() {
         let move = CoachingTestFixtures.alternateKnightMove
         var episode = episode(
             advice: CoachingTestFixtures.startingPositionAdvice,
@@ -388,16 +395,17 @@ final class CoachingReconcilerTests: XCTestCase {
             origin: .wake,
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
-                concepts: [],
-                isAcceptable: false
+                concepts: []
             )
         )
 
-        let purpose = CoachingWakePurpose.openingDevelopment(firstMove: true)
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(result.stage, .wakeChooseMove(piece: move.from, purpose: purpose))
-        XCTAssertEqual(result.questionID, .wakeMove(source: move.from, purpose: purpose))
-        XCTAssertEqual(result.derivedFeedback, .noRecognizedPurpose(purpose: purpose))
+        XCTAssertEqual(
+            result.stage,
+            .complete(move: move, origin: .wake, concepts: [])
+        )
+        XCTAssertEqual(result.questionID, .complete(move: move, origin: .wake))
+        XCTAssertNil(result.derivedFeedback)
     }
 
     func testCorrectReplyAnswerCompletesExactAcceptableMove() {
@@ -415,6 +423,15 @@ final class CoachingReconcilerTests: XCTestCase {
             origin: .wake,
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: Move(
+                        from: CoachingTestFixtures.blackBishop,
+                        to: move.to
+                    ),
+                    capturedSquare: move.to,
+                    capturedPiece: .knight,
+                    netGainForOpponent: 0
+                )],
                 concepts: concepts
             )
         )

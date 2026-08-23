@@ -29,7 +29,7 @@ final class CoachingGoldenPositionTests: XCTestCase {
         let assessment = try XCTUnwrap(advice.moveAssessments[CoachingGoldenMoves.castle])
 
         XCTAssertTrue(assessment.opponentIssues.isEmpty)
-        XCTAssertTrue(assessment.isAcceptable)
+        XCTAssertTrue(assessment.isTacticallyAcceptable)
     }
 
     func testDangerFixturesContainTheSpecifiedCaptures() {

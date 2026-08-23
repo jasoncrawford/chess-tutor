@@ -13,24 +13,10 @@ struct LocalCoachingAdvisor: CoachingAdvising {
     func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
         let evaluation = evaluator.evaluate(request)
         let insightSet = insightSource.insights(for: evaluation)
-        let purposeConcepts: Set<CoachingConcept> = [
-            .kingInCheck,
-            .pieceNeedsHelp,
-            .profitableCapture,
-            .mateInOne,
-            .captureResolvesDanger,
-            .developsKnightOrBishop,
-            .advancesCenterPawn,
-            .castlesForKingSafety,
-            .addsUsefulDefender,
-            .createsSafeImmediateThreat,
-            .improvesCentralActivity,
-        ]
         let assessments = evaluation.moveAssessments.mapValues { assessment in
             let concepts = insightSet.ordered
                 .filter { $0.candidateMoves.contains(assessment.move) }
                 .map(\.concept)
-            let hasRecognizedPurpose = concepts.contains { purposeConcepts.contains($0) }
             let hasRevisionIssue = assessment.opponentIssues.contains {
                 $0.severity == .reviseMove
             }
@@ -41,10 +27,9 @@ struct LocalCoachingAdvisor: CoachingAdvising {
                 opponentIssues: assessment.opponentIssues,
                 opponentActivities: assessment.opponentActivities,
                 concepts: concepts,
-                isAcceptable: assessment.isLegal
+                isTacticallyAcceptable: assessment.isLegal
                     && assessment.resolvesRequiredDanger
                     && !hasRevisionIssue
-                    && (hasRecognizedPurpose || insightSet.confidence == .unsupported)
             )
         }
         return CoachingAdvice(

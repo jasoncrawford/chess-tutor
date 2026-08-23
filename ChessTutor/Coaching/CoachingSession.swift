@@ -222,6 +222,10 @@ struct CoachingSession: Sendable {
                 $0.severity == .reviseMove
             }) ?? matchingIssues.first {
                 episode.evidence.replyAnswer = .issue(move: move, issue: issue)
+            } else if let activity = assessment.opponentActivities.first(where: {
+                $0.reply.from == square
+            }) {
+                miss = .benignOpponentActivity(activity)
             } else {
                 miss = .notReplyIssue
             }

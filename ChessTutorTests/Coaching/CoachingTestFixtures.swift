@@ -391,17 +391,39 @@ enum CoachingTestFixtures {
         _ move: Move,
         resolvesRequiredDanger: Bool = true,
         issues: [CoachingOpponentIssue] = [],
+        opponentActivities: [CoachingOpponentActivity]? = nil,
         concepts: [CoachingConcept] = [],
-        isAcceptable: Bool = true
+        isTacticallyAcceptable: Bool = true
     ) -> CoachingMoveAssessment {
         CoachingMoveAssessment(
             move: move,
             isLegal: true,
             resolvesRequiredDanger: resolvesRequiredDanger,
             opponentIssues: issues,
-            opponentActivities: [],
+            opponentActivities: opponentActivities ?? issues.map(opponentActivity),
             concepts: concepts,
-            isAcceptable: isAcceptable
+            isTacticallyAcceptable: isTacticallyAcceptable
+        )
+    }
+
+    private static func opponentActivity(
+        for issue: CoachingOpponentIssue
+    ) -> CoachingOpponentActivity {
+        let materialGain: Int?
+        if case let .materialLoss(points) = issue.kind {
+            materialGain = points
+        } else {
+            materialGain = nil
+        }
+        return CoachingOpponentActivity(
+            reply: issue.reply,
+            opponentPiece: .bishop,
+            checkingSquares: issue.checkingSquares,
+            capturedSquare: materialGain == nil ? nil : issue.affectedSquare,
+            capturedPiece: nil,
+            netGainForOpponent: materialGain,
+            immediateRecapture: nil,
+            isMate: issue.kind == .mateInOne
         )
     }
 
@@ -418,6 +440,28 @@ enum CoachingTestFixtures {
             severity: severity,
             affectedSquare: affectedSquare,
             checkingSquares: kind == .check || kind == .mateInOne ? [reply.from] : []
+        )
+    }
+
+    static func opponentActivity(
+        reply: Move,
+        opponentPiece: Piece.Kind = .bishop,
+        checkingSquares: Set<Square> = [],
+        capturedSquare: Square? = nil,
+        capturedPiece: Piece.Kind? = nil,
+        netGainForOpponent: Int? = nil,
+        immediateRecapture: Move? = nil,
+        isMate: Bool = false
+    ) -> CoachingOpponentActivity {
+        CoachingOpponentActivity(
+            reply: reply,
+            opponentPiece: opponentPiece,
+            checkingSquares: checkingSquares,
+            capturedSquare: capturedSquare,
+            capturedPiece: capturedPiece,
+            netGainForOpponent: netGainForOpponent,
+            immediateRecapture: immediateRecapture,
+            isMate: isMate
         )
     }
 

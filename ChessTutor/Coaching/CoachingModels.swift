@@ -104,7 +104,7 @@ struct CoachingMoveAssessment: Equatable, Sendable {
     let opponentIssues: [CoachingOpponentIssue]
     let opponentActivities: [CoachingOpponentActivity]
     let concepts: [CoachingConcept]
-    let isAcceptable: Bool
+    let isTacticallyAcceptable: Bool
 }
 
 enum CoachingConcept: Equatable, Hashable, Sendable {
@@ -346,7 +346,7 @@ enum CoachingPrompt: Equatable, Sendable {
     case wakeChoosePiece(purpose: CoachingWakePurpose)
     case wakeChooseMove(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case wake(task: CoachingWakeTask, selectedPiece: Piece.Kind?)
-    case opponentReply(opponent: PieceColor)
+    case opponentReply(opponent: PieceColor, threatenedPiece: Piece.Kind?)
     case fallbackChooseMove
     case unsupportedFallbackChooseMove
     case opponentIssueRevise(
@@ -372,6 +372,7 @@ enum CoachingCompletionIdea: Equatable, Sendable {
     case centralizes(piece: Piece.Kind)
     case constructive(task: CoachingWakeTask, move: Move, piece: Piece.Kind)
     case verifiedSafe
+    case seemsSafe(suggestion: CoachingWakePurpose?)
 }
 
 enum CoachingCheckResolution: Equatable, Sendable {
@@ -411,6 +412,7 @@ enum CoachingFeedback: Equatable, Sendable {
     case blockedWakePiece(piece: Piece.Kind, blocker: Piece.Kind)
     case notWakeCandidate(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case notReplyIssue
+    case benignOpponentActivity(CoachingOpponentActivity)
     case correctAbsence(CoachingAbsenceKind)
     case missedExistingAnswer(CoachingAbsenceKind)
     case missedOpponentReply

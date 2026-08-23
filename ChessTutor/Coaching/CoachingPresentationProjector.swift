@@ -139,8 +139,13 @@ struct CoachingPresentationProjector: Sendable {
                 || episode.knowledge.unsupportedContext != nil
                 ? .unsupportedFallbackChooseMove
                 : .fallbackChooseMove
-        case .opponentCheck:
-            return .opponentReply(opponent: learner.opposite)
+        case let .opponentCheck(move, _):
+            return .opponentReply(
+                opponent: learner.opposite,
+                threatenedPiece: threatenedPiece(
+                    in: advice?.moveAssessments[move]?.opponentActivities ?? []
+                )
+            )
         case .reviseMove:
             return .reviseMove
         case let .complete(move, origin, concepts):
@@ -379,6 +384,20 @@ struct CoachingPresentationProjector: Sendable {
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachFocusPresentation {
+        if case let .opponentCheck(move, origin) = stage,
+           episode.progress.questionID == .opponentReply(move: move, origin: origin),
+           case let .benignOpponentActivity(activity) = episode.progress.feedback {
+            return CoachFocusPresentation(
+                emphasizedSquares: [activity.reply.from, activity.reply.to],
+                candidateSquares: [],
+                paths: [CoachFocusPath(
+                    source: activity.reply.from,
+                    destination: activity.reply.to,
+                    role: .attacker
+                )],
+                pulseID: episode.progress.pulseID
+            )
+        }
         if case let .complete(move, .wake, _) = stage,
            let task = episode.knowledge.positionAdvice?.wakeTasks.first(where: {
                wakeMoves(in: $0).contains(move)
@@ -762,7 +781,53 @@ struct CoachingPresentationProjector: Sendable {
                 continue
             }
         }
-        return .verifiedSafe
+        return .seemsSafe(
+            suggestion: origin == .wake
+                ? initialWakePurpose(in: episode.knowledge.positionAdvice)
+                : nil
+        )
+    }
+
+    private func threatenedPiece(
+        in activities: [CoachingOpponentActivity]
+    ) -> Piece.Kind? {
+        guard !activities.contains(where: \.isCheck) else { return nil }
+        let winningActivities = activities.filter(\.canWinPiece)
+        guard let piece = winningActivities.first?.capturedPiece,
+              winningActivities.allSatisfy({ $0.capturedPiece == piece }) else {
+            return nil
+        }
+        return piece
+    }
+
+    private func initialWakePurpose(
+        in advice: CoachingAdvice?
+    ) -> CoachingWakePurpose? {
+        guard let advice else { return nil }
+        if let task = advice.wakeTasks.first {
+            return wakePurpose(for: task)
+        }
+        guard let opportunity = advice.wakeOpportunities.first,
+              !opportunity.moves.isEmpty else {
+            return nil
+        }
+        switch opportunity.concept {
+        case .developsKnightOrBishop, .advancesCenterPawn:
+            return .openingDevelopment(
+                firstMove: advice.evaluation.request.committedState
+                    == GameState.startingPosition()
+            )
+        case .addsUsefulDefender:
+            return .addsDefender
+        case .createsSafeImmediateThreat:
+            return .createsThreat
+        case .castlesForKingSafety:
+            return .castle
+        case .improvesCentralActivity:
+            return .centralActivity
+        default:
+            return nil
+        }
     }
 
     private func dangerResolution(

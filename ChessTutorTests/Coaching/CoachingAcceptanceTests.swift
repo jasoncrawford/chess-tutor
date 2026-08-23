@@ -318,7 +318,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "I do not see an immediate check or lost piece after this move."
+            "That move seems safe."
         )
     }
 
@@ -346,7 +346,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.handleCoachingSquareTap(move.to))
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "Tap a black piece that could check your king or take one of your pieces."
+            "That piece cannot immediately check your king or win one of your pieces."
         )
         XCTAssertEqual(
             session.coachingPresentation?.boardTask,
