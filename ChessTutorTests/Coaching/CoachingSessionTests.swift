@@ -770,6 +770,7 @@ final class CoachingSessionTests: XCTestCase {
             isLegal: true,
             resolvesRequiredDanger: false,
             opponentIssues: [],
+            opponentActivities: [],
             concepts: [],
             isAcceptable: false
         )
@@ -2136,6 +2137,7 @@ final class CoachingSessionTests: XCTestCase {
             isLegal: false,
             resolvesRequiredDanger: false,
             opponentIssues: [],
+            opponentActivities: [],
             concepts: [],
             isAcceptable: false
         )
@@ -2395,6 +2397,7 @@ final class CoachingSessionTests: XCTestCase {
             isLegal: false,
             resolvesRequiredDanger: false,
             opponentIssues: [],
+            opponentActivities: [],
             concepts: [],
             isAcceptable: false
         )
@@ -2438,6 +2441,7 @@ final class CoachingSessionTests: XCTestCase {
             isLegal: false,
             resolvesRequiredDanger: false,
             opponentIssues: [],
+            opponentActivities: [],
             concepts: [],
             isAcceptable: false
         )

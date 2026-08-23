@@ -273,6 +273,7 @@ final class CoachingReconcilerTests: XCTestCase {
             isLegal: false,
             resolvesRequiredDanger: false,
             opponentIssues: [],
+            opponentActivities: [],
             concepts: [],
             isAcceptable: false
         )

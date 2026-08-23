@@ -22,9 +22,12 @@ struct MaterialTacticalEvaluator: Sendable {
         let allowedMoves = state.board.pieces
             .filter { $0.value.color == request.learner }
             .flatMap { LegalMoveGenerator.allowedMoves(for: $0.key, in: state) }
-        let largestReplyLossByMove = Dictionary(uniqueKeysWithValues: legalMoves.map { move in
-            (move, largestOpponentMaterialLoss(after: move, in: state))
+        let opponentActivitiesByMove = Dictionary(uniqueKeysWithValues: legalMoves.map { move in
+            (move, opponentActivities(after: move, in: state))
         })
+        let largestReplyLossByMove = opponentActivitiesByMove.mapValues { activities in
+            activities.compactMap(\.netGainForOpponent).max() ?? 0
+        }
         let smallestWorstLoss = largestReplyLossByMove.values.min()
         let dangerIsUnavoidable = smallestWorstLoss.map { $0 >= 1 } ?? false
         let moveAssessments = Dictionary(uniqueKeysWithValues: allowedMoves.map { move in
@@ -33,7 +36,12 @@ struct MaterialTacticalEvaluator: Sendable {
             let isBestUnavoidableDefense = isLegal
                 && dangerIsUnavoidable
                 && largestReplyLoss == smallestWorstLoss
-            var opponentIssues = isLegal ? opponentIssues(after: move, in: state) : []
+            let opponentActivities = opponentActivitiesByMove[move] ?? []
+            var opponentIssues = opponentIssues(
+                from: opponentActivities,
+                after: move,
+                in: state
+            )
             if let exchange = learnerCaptureEstimates.first(where: {
                 $0.move == move
                     && $0.netGainForMover >= 1
@@ -82,6 +90,7 @@ struct MaterialTacticalEvaluator: Sendable {
                     isLegal: isLegal,
                     resolvesRequiredDanger: resolvesRequiredDanger,
                     opponentIssues: opponentIssues,
+                    opponentActivities: opponentActivities,
                     concepts: [],
                     isAcceptable: false
                 )
@@ -224,62 +233,87 @@ struct MaterialTacticalEvaluator: Sendable {
             .sorted { stableMoveKey($0.move) < stableMoveKey($1.move) }
     }
 
-    private func opponentIssues(after move: Move, in state: GameState) -> [CoachingOpponentIssue] {
-        let opponentState = state.applyingUnchecked(move)
-        return LegalMoveGenerator.allLegalMoves(in: opponentState)
-            .sorted { stableMoveKey($0) < stableMoveKey($1) }
-            .flatMap { reply -> [CoachingOpponentIssue] in
-                let replyState = opponentState.applyingUnchecked(reply)
-                let checkingPieces = LegalMoveGenerator.checkingPieceSquares(
-                    against: replyState.sideToMove,
-                    in: replyState.board
+    private func opponentActivities(after move: Move, in state: GameState) -> [CoachingOpponentActivity] {
+        let afterMove = state.applyingUnchecked(move)
+        return LegalMoveGenerator.allLegalMoves(in: afterMove)
+            .compactMap { reply in
+                let afterReply = afterMove.applyingUnchecked(reply)
+                let postReplyCheckingSquares = LegalMoveGenerator.checkingPieceSquares(
+                    against: afterReply.sideToMove,
+                    in: afterReply.board
                 )
-                let checkingAnswerSquares = visibleCheckingSquares(
-                    for: checkingPieces,
-                    after: reply
+                let estimate = captureEstimate(for: reply, in: afterMove)
+                guard !postReplyCheckingSquares.isEmpty || estimate != nil,
+                      let opponentPiece = afterMove.board[reply.from]?.kind else {
+                    return nil
+                }
+                return CoachingOpponentActivity(
+                    reply: reply,
+                    opponentPiece: opponentPiece,
+                    checkingSquares: visibleCheckingSquares(
+                        for: postReplyCheckingSquares,
+                        after: reply
+                    ),
+                    capturedSquare: estimate?.capturedSquare,
+                    capturedPiece: estimate?.capturedPiece.kind,
+                    netGainForOpponent: estimate?.netGainForMover,
+                    immediateRecapture: estimate?.immediateRecapture,
+                    isMate: !postReplyCheckingSquares.isEmpty
+                        && LegalMoveGenerator.allLegalMoves(in: afterReply).isEmpty
                 )
-                let affectedKingSquare = replyState.board.pieces.first(where: {
-                    $0.value.color == replyState.sideToMove && $0.value.kind == .king
-                })?.key
-                if LegalMoveGenerator.allLegalMoves(in: replyState).isEmpty,
-                   !checkingPieces.isEmpty {
-                    return [
-                        CoachingOpponentIssue(
-                            reply: reply,
-                            kind: .mateInOne,
-                            severity: .reviseMove,
-                            affectedSquare: affectedKingSquare,
-                            checkingSquares: checkingAnswerSquares
-                        )
-                    ]
-                }
-
-                var issues: [CoachingOpponentIssue] = []
-                if !checkingPieces.isEmpty {
-                    issues.append(
-                        CoachingOpponentIssue(
-                            reply: reply,
-                            kind: .check,
-                            severity: .notice,
-                            affectedSquare: affectedKingSquare,
-                            checkingSquares: checkingAnswerSquares
-                        )
-                    )
-                }
-                if let estimate = captureEstimate(for: reply, in: opponentState),
-                   estimate.netGainForMover >= 1 {
-                    issues.append(
-                        CoachingOpponentIssue(
-                            reply: reply,
-                            kind: .materialLoss(points: estimate.netGainForMover),
-                            severity: .reviseMove,
-                            affectedSquare: estimate.capturedSquare,
-                            checkingSquares: []
-                        )
-                    )
-                }
-                return issues
             }
+            .sorted { stableMoveKey($0.reply) < stableMoveKey($1.reply) }
+    }
+
+    private func opponentIssues(
+        from activities: [CoachingOpponentActivity],
+        after move: Move,
+        in state: GameState
+    ) -> [CoachingOpponentIssue] {
+        let afterMove = state.applyingUnchecked(move)
+        return activities.flatMap { activity -> [CoachingOpponentIssue] in
+            let replyState = afterMove.applyingUnchecked(activity.reply)
+            let affectedKingSquare = replyState.board.pieces.first(where: {
+                $0.value.color == replyState.sideToMove && $0.value.kind == .king
+            })?.key
+            if activity.isMate {
+                return [
+                    CoachingOpponentIssue(
+                        reply: activity.reply,
+                        kind: .mateInOne,
+                        severity: .reviseMove,
+                        affectedSquare: affectedKingSquare,
+                        checkingSquares: activity.checkingSquares
+                    )
+                ]
+            }
+
+            var issues: [CoachingOpponentIssue] = []
+            if activity.isCheck {
+                issues.append(
+                    CoachingOpponentIssue(
+                        reply: activity.reply,
+                        kind: .check,
+                        severity: .notice,
+                        affectedSquare: affectedKingSquare,
+                        checkingSquares: activity.checkingSquares
+                    )
+                )
+            }
+            if activity.canWinPiece,
+               let netGainForOpponent = activity.netGainForOpponent {
+                issues.append(
+                    CoachingOpponentIssue(
+                        reply: activity.reply,
+                        kind: .materialLoss(points: netGainForOpponent),
+                        severity: .reviseMove,
+                        affectedSquare: activity.capturedSquare,
+                        checkingSquares: []
+                    )
+                )
+            }
+            return issues
+        }
     }
 
     private func visibleCheckingSquares(
@@ -311,13 +345,6 @@ struct MaterialTacticalEvaluator: Sendable {
             }
             return checker
         })
-    }
-
-    private func largestOpponentMaterialLoss(after move: Move, in state: GameState) -> Int {
-        let opponentState = state.applyingUnchecked(move)
-        return LegalMoveGenerator.allLegalMoves(in: opponentState)
-            .compactMap { captureEstimate(for: $0, in: opponentState)?.netGainForMover }
-            .max() ?? 0
     }
 
     private func dangerProblems(

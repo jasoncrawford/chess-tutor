@@ -75,6 +75,21 @@ struct CoachingOpponentIssue: Equatable, Sendable {
     var answerSquares: Set<Square> { [reply.from] }
 }
 
+struct CoachingOpponentActivity: Equatable, Sendable {
+    let reply: Move
+    let opponentPiece: Piece.Kind
+    let checkingSquares: Set<Square>
+    let capturedSquare: Square?
+    let capturedPiece: Piece.Kind?
+    let netGainForOpponent: Int?
+    let immediateRecapture: Move?
+    let isMate: Bool
+
+    var isCheck: Bool { !checkingSquares.isEmpty }
+    var canWinPiece: Bool { (netGainForOpponent ?? 0) >= 1 }
+    var isQuestionAnswer: Bool { isCheck || canWinPiece }
+}
+
 struct CoachingOpponentReplyFact: Equatable, Sendable {
     let issue: CoachingOpponentIssue
     let opponentPiece: Piece.Kind
@@ -87,6 +102,7 @@ struct CoachingMoveAssessment: Equatable, Sendable {
     let isLegal: Bool
     let resolvesRequiredDanger: Bool
     let opponentIssues: [CoachingOpponentIssue]
+    let opponentActivities: [CoachingOpponentActivity]
     let concepts: [CoachingConcept]
     let isAcceptable: Bool
 }

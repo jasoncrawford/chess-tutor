@@ -39,6 +39,7 @@ struct LocalCoachingAdvisor: CoachingAdvising {
                 isLegal: assessment.isLegal,
                 resolvesRequiredDanger: assessment.resolvesRequiredDanger,
                 opponentIssues: assessment.opponentIssues,
+                opponentActivities: assessment.opponentActivities,
                 concepts: concepts,
                 isAcceptable: assessment.isLegal
                     && assessment.resolvesRequiredDanger

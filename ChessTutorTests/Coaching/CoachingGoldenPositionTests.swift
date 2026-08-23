@@ -79,6 +79,29 @@ final class CoachingGoldenPositionTests: XCTestCase {
         XCTAssertTrue(LegalMoveGenerator.legalMoves(for: sq("b5"), in: forced).contains(CoachingGoldenMoves.blocksChecker))
     }
 
+    func testOpponentActivityFixturesContainTheSpecifiedLines() throws {
+        let afterBishopToA6 = CoachingGoldenPosition.openingBishopCanBeTaken.state
+            .applyingUnchecked(CoachingGoldenMoves.bishopToA6)
+        XCTAssertTrue(
+            LegalMoveGenerator.legalMoves(for: sq("b7"), in: afterBishopToA6)
+                .contains(Move(from: sq("b7"), to: sq("a6")))
+        )
+
+        let afterBlackPawnToE6 = CoachingGoldenPosition.protectedPawnUnderBishopAttack.state
+            .applyingUnchecked(CoachingGoldenMoves.blackPawnToE6)
+        XCTAssertTrue(
+            LegalMoveGenerator.legalMoves(for: sq("c4"), in: afterBlackPawnToE6)
+                .contains(CoachingGoldenMoves.bishopTakesE6)
+        )
+        let estimate = try XCTUnwrap(
+            MaterialTacticalEvaluator().captureEstimate(
+                for: CoachingGoldenMoves.bishopTakesE6,
+                in: afterBlackPawnToE6
+            )
+        )
+        XCTAssertLessThan(estimate.netGainForMover, 0)
+    }
+
     private func assertLegal(
         _ move: Move,
         by color: PieceColor,

@@ -1337,6 +1337,7 @@ final class GameSessionCoachingTests: XCTestCase {
             isLegal: isLegal,
             resolvesRequiredDanger: true,
             opponentIssues: issues,
+            opponentActivities: [],
             concepts: [.developsKnightOrBishop],
             isAcceptable: isLegal && !issues.contains(where: { $0.severity == .reviseMove })
         )

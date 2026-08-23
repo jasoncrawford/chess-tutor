@@ -4,6 +4,43 @@ import XCTest
 final class MaterialTacticalEvaluatorTests: XCTestCase {
     private let evaluator = MaterialTacticalEvaluator()
 
+    func testQuietFirstKnightMoveHasNoOpponentActivity() throws {
+        let assessment = try assessment(
+            position: .starting,
+            tentativeMove: CoachingGoldenMoves.openingKnightToF3
+        )
+
+        XCTAssertEqual(assessment.opponentActivities, [])
+    }
+
+    func testBishopOnA6RecordsWinningPawnReply() throws {
+        let assessment = try assessment(
+            position: .openingBishopCanBeTaken,
+            tentativeMove: CoachingGoldenMoves.bishopToA6
+        )
+        let activity = try XCTUnwrap(assessment.opponentActivities.first {
+            $0.reply == Move(from: sq("b7"), to: sq("a6"))
+        })
+
+        XCTAssertEqual(activity.opponentPiece, .pawn)
+        XCTAssertEqual(activity.capturedPiece, .bishop)
+        XCTAssertTrue(activity.canWinPiece)
+    }
+
+    func testProtectedPawnAttackIsVisibleButNotWinning() throws {
+        let assessment = try assessment(
+            position: .protectedPawnUnderBishopAttack,
+            tentativeMove: CoachingGoldenMoves.blackPawnToE6
+        )
+        let activity = try XCTUnwrap(assessment.opponentActivities.first {
+            $0.reply == CoachingGoldenMoves.bishopTakesE6
+        })
+
+        XCTAssertEqual(activity.capturedPiece, .pawn)
+        XCTAssertLessThan(activity.netGainForOpponent ?? 0, 1)
+        XCTAssertFalse(activity.isQuestionAnswer)
+    }
+
     func testMaterialIssueUsesOpponentSourceAsAnswer() throws {
         let assessment = try assessment(
             position: .exposedQueen,

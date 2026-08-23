@@ -16,6 +16,8 @@ enum CoachingGoldenPosition: String, CaseIterable {
     case harmlessCheck
     case forcedCheck
     case unsupportedEndgame
+    case openingBishopCanBeTaken
+    case protectedPawnUnderBishopAttack
 
     var fen: String {
         switch self {
@@ -49,6 +51,10 @@ enum CoachingGoldenPosition: String, CaseIterable {
             "k3r3/8/8/1B6/8/8/8/4K3 w - - 0 1"
         case .unsupportedEndgame:
             "7k/8/8/8/3K4/8/8/8 w - - 0 1"
+        case .openingBishopCanBeTaken:
+            "rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+        case .protectedPawnUnderBishopAttack:
+            "rnbqkbnr/pppppppp/8/8/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 0 2"
         }
     }
 
@@ -92,6 +98,11 @@ enum CoachingGoldenMoves {
     static let rookChecks = Move(from: sq("a8"), to: sq("a1"))
     static let capturesChecker = Move(from: sq("b5"), to: sq("e8"))
     static let blocksChecker = Move(from: sq("b5"), to: sq("e2"))
+    static let outsidePawn = Move(from: sq("h2"), to: sq("h4"))
+    static let openingKnightToF3 = Move(from: sq("g1"), to: sq("f3"))
+    static let bishopToA6 = Move(from: sq("f1"), to: sq("a6"))
+    static let blackPawnToE6 = Move(from: sq("e7"), to: sq("e6"))
+    static let bishopTakesE6 = Move(from: sq("c4"), to: sq("e6"))
 }
 
 struct CoachingGoldenTurn: Equatable {

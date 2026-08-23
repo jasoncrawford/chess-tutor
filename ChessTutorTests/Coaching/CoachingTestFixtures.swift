@@ -399,6 +399,7 @@ enum CoachingTestFixtures {
             isLegal: true,
             resolvesRequiredDanger: resolvesRequiredDanger,
             opponentIssues: issues,
+            opponentActivities: [],
             concepts: concepts,
             isAcceptable: isAcceptable
         )
