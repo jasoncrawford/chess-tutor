@@ -34,7 +34,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         XCTAssertEqual(
             presentation.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "Choose a move you are considering, and I will check it with you."
         )
         XCTAssertEqual(presentation.instruction, "Make a move on the board.")
         XCTAssertEqual(presentation.boardTask, .move)
@@ -84,17 +84,17 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
-                "This knight can come into the game.",
+                "You can develop this knight.",
                 "Move it on the board."
             ),
             (
                 .wakeChoosePiece(purpose: .addsDefender),
-                "Which piece could help protect another piece?",
+                "Which piece could add a defender?",
                 "Tap the piece you want to move."
             ),
             (
                 .wakeChoosePiece(purpose: .createsThreat),
-                "Which piece could safely attack something?",
+                "Which piece could create a safe threat?",
                 "Tap the piece you want to move."
             ),
             (
@@ -119,7 +119,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .fallbackChooseMove,
-                "Nothing urgent stands out. Try a move you like, and we’ll check it together.",
+                "Choose a move you are considering, and I will check it with you.",
                 "Make a move on the board."
             ),
             (
@@ -138,6 +138,43 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             let presentation = source.presentation(for: context(prompt: prompt))
             XCTAssertEqual(presentation.headline, headline, "Unexpected headline for \(prompt)")
             XCTAssertEqual(presentation.instruction, instruction, "Unexpected instruction for \(prompt)")
+        }
+    }
+
+    func testLegacyWakePurposeCopyUsesConcreteSemanticNames() {
+        let cases: [(CoachingPrompt, CoachingFeedback?, String, String?)] = [
+            (
+                .wakeChooseMove(piece: .bishop, purpose: .addsDefender),
+                nil,
+                "This bishop can add a defender.",
+                nil
+            ),
+            (
+                .wakeChooseMove(piece: .rook, purpose: .createsThreat),
+                nil,
+                "This rook can create a safe threat.",
+                nil
+            ),
+            (
+                .wakeChoosePiece(purpose: .addsDefender),
+                .noRecognizedPurpose(purpose: .addsDefender),
+                "Which piece could add a defender?",
+                "That move is safe, but it doesn’t add a defender."
+            ),
+            (
+                .fallbackChooseMove,
+                .noRecognizedPurpose(purpose: nil),
+                "Choose a move you are considering, and I will check it with you.",
+                "That move is safe, but I cannot name a verified purpose for it."
+            ),
+        ]
+
+        for (prompt, feedback, headline, response) in cases {
+            let presentation = source.presentation(
+                for: context(prompt: prompt, feedback: feedback)
+            )
+            XCTAssertEqual(presentation.headline, headline)
+            XCTAssertEqual(presentation.response, response)
         }
     }
 
@@ -489,6 +526,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 "Tap a black piece that could check your king or take one of your pieces."
             ),
             (
+                .opponentReply(opponent: .black),
+                .missedOpponentReply,
+                "Black could still check your king or take one of your pieces."
+            ),
+            (
                 .safeResolve(target: .knight, attacker: .pawn),
                 .dangerStillPresent(attacker: .pawn, target: .knight),
                 "The pawn could still take your knight after that move."
@@ -563,7 +605,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .develops(piece: .knight),
-                "That works. Your knight came into the game. Chess players call that developing a piece."
+                "That works. You developed your knight."
             ),
             (.advancesCenterPawn, "That works. Your pawn helps control the center."),
             (.castles, "That works. Castling helps keep your king safe."),

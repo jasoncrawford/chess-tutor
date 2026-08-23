@@ -685,7 +685,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             clearSession.presentation?.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "Choose a move you are considering, and I will check it with you."
         )
         XCTAssertEqual(clearSession.presentation?.instruction, "Make a move on the board.")
         XCTAssertEqual(clearSession.presentation?.routine, [])
@@ -1046,7 +1046,7 @@ final class CoachingSessionTests: XCTestCase {
             rejected.presentation?.response,
             "That move is safe, but it doesn’t bring a new piece into the game."
         )
-        XCTAssertEqual(rejected.presentation?.headline, "This knight can come into the game.")
+        XCTAssertEqual(rejected.presentation?.headline, "You can develop this knight.")
     }
 
     func testRepeatedPurposelessWakeMovesPreserveHintLevelAtAvailableFocusCap() {
@@ -1657,7 +1657,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "That works. Your knight came into the game. Chess players call that developing a piece."
+            "That works. You developed your knight."
         )
     }
 
@@ -1763,7 +1763,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "That works. Your knight came into the game. Chess players call that developing a piece."
+            "That works. You developed your knight."
         )
     }
 
@@ -1815,7 +1815,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "That works. Your knight came into the game. Chess players call that developing a piece."
+            "That works. You developed your knight."
         )
         XCTAssertEqual(session.presentation?.actions.map(\.action), [.done, .keepLooking, .stop])
         XCTAssertEqual(
@@ -1839,7 +1839,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .fallbackChooseMove)
         XCTAssertEqual(
             session.presentation?.response,
-            "That move is safe, but it doesn’t help with a clear plan yet."
+            "That move is safe, but I cannot name a verified purpose for it."
         )
         XCTAssertEqual(
             session.presentation?.headline,
@@ -2160,7 +2160,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .reviseMove(origin: .preexisting))
         XCTAssertEqual(
             session.presentation?.response,
-            "That move is safe, but it doesn’t help with a clear plan yet."
+            "That move is safe, but I cannot name a verified purpose for it."
         )
         XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }

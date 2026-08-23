@@ -80,7 +80,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .fallbackChooseMove:
             return (
-                "Nothing urgent stands out. Try a move you like, and we’ll check it together.",
+                "Choose a move you are considering, and I will check it with you.",
                 "Make a move on the board."
             )
         case .unsupportedFallbackChooseMove:
@@ -149,9 +149,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 "Tap the piece you want to move."
             )
         case .addsDefender:
-            return ("Which piece could help protect another piece?", "Tap the piece you want to move.")
+            return ("Which piece could add a defender?", "Tap the piece you want to move.")
         case .createsThreat:
-            return ("Which piece could safely attack something?", "Tap the piece you want to move.")
+            return ("Which piece could create a safe threat?", "Tap the piece you want to move.")
         case .centralActivity:
             return ("Which piece could move closer to the center?", "Tap the piece you want to move.")
         case .castle:
@@ -259,11 +259,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .openingDevelopment:
             headline = piece == .pawn
                 ? "This pawn can help in the center."
-                : "This \(piece.rawValue) can come into the game."
+                : "You can develop this \(piece.rawValue)."
         case .addsDefender:
-            headline = "This \(piece.rawValue) can help protect another piece."
+            headline = "This \(piece.rawValue) can add a defender."
         case .createsThreat:
-            headline = "This \(piece.rawValue) can safely attack something."
+            headline = "This \(piece.rawValue) can create a safe threat."
         case .centralActivity:
             headline = "This \(piece.rawValue) can move closer to the center."
         case .castle:
@@ -445,7 +445,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             if let purpose {
                 return "That move is safe, but it doesn’t \(wakePurposeVerb(for: purpose))."
             }
-            return "That move is safe, but it doesn’t help with a clear plan yet."
+            return "That move is safe, but I cannot name a verified purpose for it."
         case .harmlessCheckFound:
             return "You found it. \(colorName(opponent)) could check your king, but your move still works."
         case .checkFoundOtherDangerRemains:
@@ -460,7 +460,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .takeChooseMove:
             return "There is a safe capture to find."
         case let .opponentReply(opponent):
-            return "\(colorName(opponent)) has a reply to notice."
+            return "\(colorName(opponent)) could still check your king or take one of your pieces."
         default:
             return "There is something to find."
         }
@@ -471,7 +471,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .openingDevelopment:
             return "bring a new piece into the game"
         case .addsDefender:
-            return "help protect another piece"
+            return "add a defender"
         case .createsThreat:
             return "create a safe threat"
         case .centralActivity:
@@ -572,7 +572,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .safeCapture(fact):
             return safeCaptureCopy(fact, opponent: opponent)
         case let .develops(piece):
-            concept = "Your \(piece.rawValue) came into the game. Chess players call that developing a piece."
+            concept = "You developed your \(piece.rawValue)."
         case .advancesCenterPawn:
             concept = "Your pawn helps control the center."
         case .castles:
