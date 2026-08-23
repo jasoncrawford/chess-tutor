@@ -278,11 +278,20 @@ final class CoachingSessionTests: XCTestCase {
 
         session.handle(.identificationTapped(sq("g4")))
 
-        XCTAssertNotEqual(session.stage, .safeLocate)
+        XCTAssertEqual(session.stage, .takeChooseMove)
         XCTAssertEqual(
             session.presentation?.response,
             "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now."
         )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Can one of your pieces safely take a black piece?"
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Make the capture, or choose No safe capture."
+        )
+        XCTAssertEqual(session.presentation?.actions.map(\.action), [.noAnswer, .stop])
     }
 
     func testProtectedPieceFeedbackStaysLocalWhenAnotherPieceNeedsHelp() async throws {
@@ -715,17 +724,22 @@ final class CoachingSessionTests: XCTestCase {
         clearSession.receive(CoachingTestFixtures.nontrivialSafeClearAdvice)
         XCTAssertEqual(clearSession.stage, .safeLocate)
         clearSession.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(clearSession.stage, .fallbackChooseMove)
+        XCTAssertEqual(clearSession.stage, .takeChooseMove)
         XCTAssertEqual(
             clearSession.presentation?.response,
             "Right—no piece needs help right now."
         )
         XCTAssertEqual(
             clearSession.presentation?.headline,
-            "Choose a move you are considering, and I will check it with you."
+            "Can one of your pieces safely take a black piece?"
         )
-        XCTAssertEqual(clearSession.presentation?.instruction, "Make a move on the board.")
-        XCTAssertEqual(clearSession.presentation?.routine, [])
+        XCTAssertEqual(
+            clearSession.presentation?.instruction,
+            "Make the capture, or choose No safe capture."
+        )
+        XCTAssertEqual(clearSession.presentation?.routine, [
+            .safeCleared, .takeCurrent, .wakePending,
+        ])
 
         var dangerSession = session()
         dangerSession.receive(CoachingTestFixtures.multipleDangerAdvice)
@@ -804,6 +818,54 @@ final class CoachingSessionTests: XCTestCase {
             stage(CoachingTestFixtures.profitableCapture, in: &takeSession),
             [.requestAdvice(context: .tentativeMove(origin: .take))]
         )
+    }
+
+    func testNoSafeCaptureFallsThroughToVerifiedNonCastleWakeTask() async throws {
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                sq("g1"): Piece(kind: .king, color: .white),
+                sq("a1"): Piece(kind: .knight, color: .white),
+                sq("c4"): Piece(kind: .bishop, color: .white),
+                sq("g8"): Piece(kind: .king, color: .black),
+                sq("f7"): Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 7,
+            context: .start
+        ))
+        XCTAssertTrue(advice.takeOpportunities.isEmpty)
+        XCTAssertTrue(advice.wakeTasks.contains {
+            if case .improveMobility(source: sq("a1"), piece: .knight, _, _, _) = $0 {
+                return true
+            }
+            return false
+        })
+        var session = session()
+        session.receive(advice)
+        XCTAssertEqual(session.stage, .takeChooseMove)
+
+        session.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(
+            session.stage,
+            .wakeChoosePiece(purpose: .centralActivity)
+        )
+        XCTAssertEqual(
+            session.presentation?.response,
+            "Right—there is no safe capture here."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Your knight has very few choices in the corner. Can you move it closer to the center?"
+        )
+        XCTAssertEqual(session.presentation?.routine, [
+            .safeCleared, .takeCleared, .wakeCurrent,
+        ])
     }
 
     func testTakeAbsenceUsesCaptureSpecificResponse() {
@@ -983,9 +1045,10 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.actionChosen(.noAnswer))
 
         XCTAssertEqual(session.presentation?.response, "Right—there is no safe capture here.")
+        XCTAssertEqual(session.stage, .wakeChoosePiece(purpose: .centralActivity))
         XCTAssertEqual(
             session.presentation?.headline,
-            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+            "Your king can move to a square where it has more choices. Can you find the move?"
         )
     }
 
@@ -2806,7 +2869,7 @@ final class CoachingSessionTests: XCTestCase {
             interaction: snapshot()
         )
         clearSafe.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(clearSafe.stage, .fallbackChooseMove)
+        XCTAssertEqual(clearSafe.stage, .takeChooseMove)
 
         let move = CoachingTestFixtures.fallbackMove
         var reply = session(

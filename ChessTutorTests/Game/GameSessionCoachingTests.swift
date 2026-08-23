@@ -179,11 +179,11 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+            "Your king can move to a square where it has more choices. Can you find the move?"
         )
         XCTAssertEqual(
             session.coachingPresentation?.actions.map(\.action),
-            [.stop]
+            [.hint, .stop]
         )
     }
 

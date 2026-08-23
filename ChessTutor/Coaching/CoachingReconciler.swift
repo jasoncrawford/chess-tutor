@@ -25,7 +25,7 @@ struct CoachingReconciler: Sendable {
             )
         }
         if episode.evidence.confirmedTakeAbsence,
-           !advice.wakeTasks.contains(where: isCastleTask) {
+           !hasVerifiedWakeEvidence(in: advice) {
             return derived(
                 stage: .fallbackChooseMove,
                 questionID: .fallback,
@@ -155,10 +155,11 @@ struct CoachingReconciler: Sendable {
         advice: CoachingAdvice,
         evidence: CoachingPedagogicalEvidence
     ) -> Bool {
-        guard advice.evaluation.learnerHasAnyLegalCapture else { return false }
         let confirmedAbsenceIsValid = evidence.confirmedTakeAbsence
             && advice.takeOpportunities.isEmpty
-        return !confirmedAbsenceIsValid
+        guard !confirmedAbsenceIsValid else { return false }
+        return advice.evaluation.learnerHasAnyLegalCapture
+            || evidence.confirmedSafeAbsence
     }
 
     private func takeDerivation() -> CoachingDerivedState {
@@ -630,9 +631,8 @@ struct CoachingReconciler: Sendable {
         return wakePurpose(for: opportunity.concept, in: advice)
     }
 
-    private func isCastleTask(_ task: CoachingWakeTask) -> Bool {
-        if case .castle = task { return true }
-        return false
+    private func hasVerifiedWakeEvidence(in advice: CoachingAdvice) -> Bool {
+        advice.confidence != .unsupported && initialWakePurpose(in: advice) != nil
     }
 
     private func wakePurpose(for task: CoachingWakeTask) -> CoachingWakePurpose {

@@ -44,18 +44,27 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             let presentation = try await goldenPresentation(branch)
             assertCoherent(presentation, branch: branch)
 
-            let response = presentation.response?.lowercased() ?? ""
-            let answerIsEstablished = [
-                "one of your pieces does need help",
-                "there is a safe capture to find",
-                "has a safe capture",
-                "no piece needs help right now",
-                "there is no safe capture here",
-            ].contains { response.contains($0) }
-            if answerIsEstablished {
+            if presentation.actions.contains(where: { $0.action == .noAnswer }) {
+                let response = presentation.response?.lowercased() ?? ""
+                let establishedAnswers: [String]
+                switch presentation.headline {
+                case "One of your pieces is in danger. Which one?":
+                    establishedAnswers = [
+                        "one of your pieces does need help",
+                        "no piece needs help right now",
+                    ]
+                case "Can one of your pieces safely take a black piece?":
+                    establishedAnswers = [
+                        "there is a safe capture to find",
+                        "has a safe capture",
+                        "there is no safe capture here",
+                    ]
+                default:
+                    establishedAnswers = []
+                }
                 XCTAssertFalse(
-                    presentation.actions.contains { $0.action == .noAnswer },
-                    "Absence action survived an established answer for \(branch.rawValue)"
+                    establishedAnswers.contains(where: response.contains),
+                    "Current absence action survived an established answer for \(branch.rawValue)"
                 )
             }
         }
@@ -268,7 +277,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t7NoSafeCapture.ask,
-            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+            "Your king can move to a square where it has more choices. Can you find the move?"
         )
     }
 
@@ -876,22 +885,22 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t5ProtectedTap:
             return expected(
                 response: "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now.",
-                ask: "Your pawn can move to a square where it attacks Black’s knight. Can you find the square?",
-                instruction: "Move the pawn so it attacks the knight.",
-                actions: [.hint, .stop],
+                ask: takeAsk,
+                instruction: "Make the capture, or choose No safe capture.",
+                actions: [.noAnswer, .stop],
+                noAnswerTitle: "No safe capture",
                 boardTask: .move,
-                routine: wakeRoutine,
-                emphasized: ["f6", "g4"]
+                routine: takeRoutine
             )
         case .t5ProtectedAbsence:
             return expected(
                 response: "Right—no piece needs help right now.",
-                ask: "Your pawn can move to a square where it attacks Black’s knight. Can you find the square?",
-                instruction: "Move the pawn so it attacks the knight.",
-                actions: [.hint, .stop],
+                ask: takeAsk,
+                instruction: "Make the capture, or choose No safe capture.",
+                actions: [.noAnswer, .stop],
+                noAnswerTitle: "No safe capture",
                 boardTask: .move,
-                routine: wakeRoutine,
-                emphasized: ["f6", "g4"]
+                routine: takeRoutine
             )
 
         case .t6WrongSource:
@@ -932,10 +941,12 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t7NoSafeCapture:
             return expected(
                 response: "Right—there is no safe capture here.",
-                ask: "I can check immediate dangers, but I do not have a confident plan for this position yet.",
-                instruction: "Choose a move you are considering, and I will check it with you.",
-                actions: [.stop],
-                boardTask: .move
+                ask: "Your king can move to a square where it has more choices. Can you find the move?",
+                instruction: "Move the king.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["g1"]
             )
 
         case .t8AddsDefender:
