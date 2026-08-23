@@ -52,6 +52,7 @@ struct LocalCoachingAdvisor: CoachingAdvising {
             dangerProblems: insightSet.dangerProblems,
             takeOpportunities: insightSet.takeOpportunities,
             wakeOpportunities: insightSet.wakeOpportunities,
+            wakeTasks: insightSet.wakeTasks,
             moveAssessments: assessments,
             openingDevelopmentIsRelevant: insightSet.openingDevelopmentIsRelevant,
             confidence: insightSet.confidence

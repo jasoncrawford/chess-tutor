@@ -62,7 +62,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "That works. Your pawn helps control the center."
+            "Your center pawn moved forward and now helps control the center."
         )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
         XCTAssertEqual(session.state.sideToMove, .white)
@@ -519,7 +519,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(switched, direct)
         XCTAssertEqual(
             switched.response,
-            "That rook can’t come out yet because other pieces are in the way."
+            "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
         XCTAssertEqual(
             switched.headline,

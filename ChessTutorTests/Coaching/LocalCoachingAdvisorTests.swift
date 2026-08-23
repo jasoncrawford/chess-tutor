@@ -4,6 +4,68 @@ import XCTest
 final class LocalCoachingAdvisorTests: XCTestCase {
     private let advisor = LocalCoachingAdvisor()
 
+    func testStartingKnightMovesHavePreferredAndAcceptableGrades() async throws {
+        let advice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.starting.state)
+        )
+
+        XCTAssertEqual(advice.grade(for: Move(from: sq("g1"), to: sq("f3"))), .preferred)
+        XCTAssertEqual(advice.grade(for: Move(from: sq("g1"), to: sq("h3"))), .acceptable)
+        XCTAssertEqual(advice.grade(for: Move(from: sq("b1"), to: sq("c3"))), .preferred)
+        XCTAssertEqual(advice.grade(for: Move(from: sq("b1"), to: sq("a3"))), .acceptable)
+    }
+
+    func testThreatTaskNamesKnightAndRook() async throws {
+        let advice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.createRookThreat.state)
+        )
+        let task = try XCTUnwrap(advice.wakeTasks.first)
+
+        XCTAssertEqual(
+            task,
+            .createThreat(
+                source: sq("a1"),
+                sourcePiece: .knight,
+                target: sq("d4"),
+                targetPiece: .rook,
+                candidates: [
+                    .init(
+                        move: CoachingGoldenMoves.knightThreatB3,
+                        grade: .acceptable
+                    ),
+                    .init(
+                        move: CoachingGoldenMoves.knightThreatC2,
+                        grade: .acceptable
+                    ),
+                ]
+            )
+        )
+    }
+
+    func testMobilityTaskKeepsBeforeAndAfterCounts() async throws {
+        let advice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.cornerKnight.state)
+        )
+
+        XCTAssertTrue(advice.wakeTasks.contains(.improveMobility(
+            source: sq("a1"),
+            piece: .knight,
+            before: 2,
+            candidates: [
+                .init(
+                    move: CoachingGoldenMoves.knightThreatB3,
+                    grade: .acceptable,
+                    resultingMobility: 6
+                ),
+                .init(
+                    move: CoachingGoldenMoves.knightThreatC2,
+                    grade: .acceptable,
+                    resultingMobility: 6
+                ),
+            ]
+        )))
+    }
+
     func testStartingPositionOffersMinorAndCenterPawnWakeMoves() async throws {
         let request = CoachingRequest(
             committedState: .startingPosition(),
@@ -131,6 +193,21 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertFalse(advice.openingDevelopmentIsRelevant)
         XCTAssertEqual(opportunity?.concept, .castlesForKingSafety)
         XCTAssertEqual(opportunity?.evidence, .castle(castle))
+    }
+
+    func testRejectedCanonicalCastleIsMechanicalTaskButNotVerifiedWakeEvidence() async throws {
+        let advice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.readyToCastle.state)
+        )
+
+        XCTAssertTrue(advice.wakeTasks.contains(.castle(move: CoachingGoldenMoves.castle)))
+        XCTAssertFalse(advice.wakeOpportunities.contains { opportunity in
+            opportunity.moves.contains(CoachingGoldenMoves.castle)
+        })
+        XCTAssertFalse(advice.insights.contains { insight in
+            insight.concept == .castlesForKingSafety
+                && insight.candidateMoves.contains(CoachingGoldenMoves.castle)
+        })
     }
 
     func testMovedPieceCanAddANewLegalDefenderToCapturablePiece() async throws {

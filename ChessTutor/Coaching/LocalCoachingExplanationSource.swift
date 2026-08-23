@@ -62,6 +62,12 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return wakePieceCopy(for: purpose)
         case let .wakeChooseMove(piece, purpose):
             return wakeMoveCopy(for: piece, purpose: purpose)
+        case let .wake(task, selectedPiece):
+            return wakeTaskCopy(
+                for: task,
+                selectedPiece: selectedPiece,
+                learner: learner
+            )
         case let .opponentReply(opponent):
             let opponentName = colorName(opponent)
             return (
@@ -121,6 +127,62 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         }
     }
 
+    private func wakeTaskCopy(
+        for task: CoachingWakeTask,
+        selectedPiece: Piece.Kind?,
+        learner: PieceColor
+    ) -> (headline: String, instruction: String) {
+        switch task {
+        case let .opening(firstMove, _):
+            if let selectedPiece {
+                if !firstMove, selectedPiece == .knight {
+                    return (
+                        "That knight can also be developed.",
+                        "Move the knight off its starting square."
+                    )
+                }
+                if selectedPiece == .pawn {
+                    return (
+                        "That center pawn can help control the middle of the board.",
+                        "Move the pawn one or two squares."
+                    )
+                }
+                if selectedPiece == .knight || selectedPiece == .bishop {
+                    return (
+                        "You chose a \(selectedPiece.rawValue). Moving it off its starting square is called developing it.",
+                        "Move the \(selectedPiece.rawValue)."
+                    )
+                }
+            }
+            return wakePieceCopy(for: .openingDevelopment(firstMove: firstMove))
+
+        case .castle:
+            return (
+                "Your king is ready to castle.",
+                "Move your king two squares toward the rook."
+            )
+
+        case let .protect(_, sourcePiece, _, targetPiece, _):
+            return (
+                "Your \(sourcePiece.rawValue) can help protect your \(targetPiece.rawValue).",
+                "Move the \(sourcePiece.rawValue) so it protects the \(targetPiece.rawValue)."
+            )
+
+        case let .createThreat(_, sourcePiece, _, targetPiece, _):
+            let opponent = colorName(learner.opposite)
+            return (
+                "Your \(sourcePiece.rawValue) can move to a square where it attacks \(opponent)’s \(targetPiece.rawValue). Can you find the square?",
+                "Move the \(sourcePiece.rawValue) so it attacks the \(targetPiece.rawValue)."
+            )
+
+        case let .improveMobility(_, piece, _, _):
+            return (
+                "Your \(piece.rawValue) has very few choices in the corner. Can you move it closer to the center?",
+                "Move the \(piece.rawValue)."
+            )
+        }
+    }
+
     private func headline(for context: CoachingPresentationContext, base: String) -> String {
         if case .lowerPriorityDanger = context.feedback {
             return "Which piece should you help first?"
@@ -130,6 +192,19 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                purpose: .openingDevelopment(firstMove: true)
            ) {
             return "Here are the four pieces you can try."
+        }
+        if context.hint == .candidatePieces,
+           case .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+            = context.prompt {
+            return "Here are the four pieces you can try."
+        }
+        if context.hint == .candidateMoves,
+           case let .wake(
+               task: .createThreat(_, sourcePiece, _, targetPiece, candidates),
+               selectedPiece: _
+           ) = context.prompt,
+           candidates.count == 2 {
+            return "Both highlighted squares let the \(sourcePiece.rawValue) attack the \(targetPiece.rawValue)."
         }
         return base
     }
@@ -188,6 +263,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Look for the red danger marker, then tap your piece."
         case (.candidatePieces, .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true))):
             return "Tap a highlighted piece."
+        case (
+            .candidatePieces,
+            .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+        ):
+            return "Tap a highlighted piece."
+        case (
+            .candidateMoves,
+            .wake(task: .createThreat(_, let sourcePiece, _, _, _), selectedPiece: _)
+        ):
+            return "Move the \(sourcePiece.rawValue) to one of the highlighted squares."
         case let (.attackerRelationship, .safeIdentifyAttacker(piece)):
             return "Follow the highlighted line to the piece attacking your \(piece.rawValue)."
         case let (.safeResponseIdeas, .safeResolve(target, _)):
@@ -239,9 +324,23 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "That \(piece.rawValue) isn’t attacking your \(target.rawValue)."
         case let .expectedAttacker(target):
             return "Tap a \(colorName(opponent).lowercased()) piece attacking your \(target.rawValue)."
-        case let .blockedWakePiece(piece):
-            return "That \(piece.rawValue) can’t come out yet because other pieces are in the way."
+        case let .blockedWakePiece(piece, blocker):
+            if case .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+                = prompt {
+                return "Your \(blocker.rawValue) is blocking that \(piece.rawValue). Choose a center pawn or knight."
+            }
+            if prompt == .wakeChoosePiece(
+                purpose: .openingDevelopment(firstMove: true)
+            ) {
+                return "Your \(blocker.rawValue) is blocking that \(piece.rawValue). Choose a center pawn or knight."
+            }
+            return "Your \(blocker.rawValue) is blocking that \(piece.rawValue)."
         case let .notWakeCandidate(piece, purpose):
+            if piece == .pawn,
+               case .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+                = prompt {
+                return "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
+            }
             return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
         case .notReplyIssue:
             return "That square doesn’t show a check or capture after this move."
@@ -279,6 +378,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             }
             return "Your \(target.rawValue) would still need help after that move."
         case let .noRecognizedPurpose(purpose):
+            if purpose == .castle,
+               case .wake(task: .castle, selectedPiece: .king) = prompt {
+                return "That is a king move, but it is not castling. Castling moves the king two squares toward the rook."
+            }
             if let purpose {
                 return "That move is safe, but it doesn’t \(wakePurposeVerb(for: purpose))."
             }
@@ -347,6 +450,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         if case .safeCapture = idea {
             return completionPurpose(for: idea, opponent: opponent)
         }
+        if case .constructive = idea {
+            return completionPurpose(for: idea, opponent: opponent)
+        }
         return "That works. \(completionPurpose(for: idea, opponent: opponent))"
     }
 
@@ -378,10 +484,62 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             concept = "Your \(piece.rawValue) creates a threat."
         case let .centralizes(piece):
             concept = "Your \(piece.rawValue) gets a more useful place near the center."
+        case let .constructive(task, move, piece):
+            return constructiveCompletion(
+                task: task,
+                move: move,
+                piece: piece,
+                opponent: opponent
+            )
         case .verifiedSafe:
             concept = "Your move stays safe after the reply."
         }
         return concept
+    }
+
+    private func constructiveCompletion(
+        task: CoachingWakeTask,
+        move: Move,
+        piece: Piece.Kind,
+        opponent: PieceColor
+    ) -> String {
+        switch task {
+        case let .opening(_, candidates):
+            if piece == .pawn {
+                return "Your center pawn moved forward and now helps control the center."
+            }
+            let grade = candidates.first(where: { $0.move == move })?.grade
+            if piece == .knight, grade == .preferred {
+                return "You developed your knight toward the center. From there it can reach more squares."
+            }
+            if piece == .knight {
+                return "You developed your knight. A square closer to the center would usually give it more choices."
+            }
+            return "You developed your \(piece.rawValue)."
+
+        case .castle:
+            return "You castled. Your king moved toward safety, and your rook moved toward the center."
+
+        case let .protect(_, sourcePiece, _, targetPiece, _):
+            return "Your \(sourcePiece.rawValue) now protects the \(targetPiece.rawValue)."
+
+        case let .createThreat(_, sourcePiece, _, targetPiece, _):
+            return "Your \(sourcePiece.rawValue) now attacks the \(targetPiece.rawValue). \(colorName(opponent)) may need to move or protect it."
+
+        case let .improveMobility(_, piece, before, candidates):
+            guard let after = candidates.first(where: { $0.move == move })?.resultingMobility else {
+                return "Your \(piece.rawValue) can reach more squares from there."
+            }
+            return "From there your \(piece.rawValue) can reach \(countName(after)) squares instead of \(countName(before)). That is why \(piece.rawValue)s are often stronger near the center."
+        }
+    }
+
+    private func countName(_ count: Int) -> String {
+        let names = [
+            "zero", "one", "two", "three", "four",
+            "five", "six", "seven", "eight",
+        ]
+        return names.indices.contains(count) ? names[count] : String(count)
     }
 
     private func safeCaptureCopy(

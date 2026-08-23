@@ -2,6 +2,63 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingPresentationProjectorTests: XCTestCase {
+    func testWakePromptsCarryTheConcreteTaskChosenByTheReconciler() async throws {
+        for position in [
+            CoachingGoldenPosition.readyToCastle,
+            .createRookThreat,
+            .cornerKnight,
+        ] {
+            let advice = try await LocalCoachingAdvisor().advice(
+                for: request(for: position)
+            )
+            let expectedTask = try XCTUnwrap(advice.wakeTasks.first)
+            let episode = episode(
+                advice: advice,
+                progress: progress(questionID: nil)
+            )
+            let derived = CoachingReconciler().derive(learner: .white, episode: episode)
+            let context = CoachingPresentationProjector().context(
+                learner: .white,
+                derived: derived,
+                episode: episode
+            )
+
+            XCTAssertEqual(context?.prompt, .wake(task: expectedTask, selectedPiece: nil))
+        }
+    }
+
+    func testThreatTaskFocusNamesSourceAndTargetBeforeHintThenRevealsDestinations() async throws {
+        let advice = try await LocalCoachingAdvisor().advice(
+            for: request(for: .createRookThreat)
+        )
+        let questionID = CoachingQuestionID.wakeSource(purpose: .createsThreat)
+        let baseEpisode = episode(
+            advice: advice,
+            progress: progress(questionID: questionID)
+        )
+        let derived = CoachingReconciler().derive(learner: .white, episode: baseEpisode)
+        let entry = CoachingPresentationProjector().context(
+            learner: .white,
+            derived: derived,
+            episode: baseEpisode
+        )
+
+        XCTAssertEqual(entry?.focus.emphasizedSquares, [sq("a1"), sq("d4")])
+        XCTAssertEqual(entry?.focus.candidateSquares, [])
+
+        var hintedEpisode = baseEpisode
+        hintedEpisode.progress.hintLevel = 1
+        let hint = CoachingPresentationProjector().context(
+            learner: .white,
+            derived: derived,
+            episode: hintedEpisode
+        )
+
+        XCTAssertEqual(hint?.hint, .candidateMoves)
+        XCTAssertEqual(hint?.focus.emphasizedSquares, [sq("a1"), sq("d4")])
+        XCTAssertEqual(hint?.focus.candidateSquares, [sq("b3"), sq("c2")])
+    }
+
     func testKnownDangerDoesNotOfferAbsenceAction() {
         let projector = CoachingPresentationProjector()
         let context = projector.context(
@@ -21,7 +78,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             questionID: .wakeSource(purpose: .openingDevelopment(firstMove: true)),
             hintLevel: 1,
             missesAtCurrentLevel: 2,
-            feedback: .blockedWakePiece(piece: .rook),
+            feedback: .blockedWakePiece(piece: .rook, blocker: .pawn),
             feedbackAnchor: .selection(square: Square(file: .a, rank: 1)),
             pulseID: 4
         )
@@ -67,7 +124,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
     func testSelectionFeedbackDisappearsWhenSelectionChangesOrClears() {
         let selected = CoachingTestFixtures.openingKnight
         var changed = progress(
-            feedback: .blockedWakePiece(piece: .rook),
+            feedback: .blockedWakePiece(piece: .rook, blocker: .pawn),
             anchor: .selection(square: selected)
         )
 
@@ -79,7 +136,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         XCTAssertNil(changed.feedbackAnchor)
 
         var cleared = progress(
-            feedback: .blockedWakePiece(piece: .rook),
+            feedback: .blockedWakePiece(piece: .rook, blocker: .pawn),
             anchor: .selection(square: selected)
         )
         cleared.discardFeedbackInvalidated(by: interaction(selectedSquare: nil))
@@ -865,6 +922,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             dangerProblems: advice.dangerProblems,
             takeOpportunities: advice.takeOpportunities,
             wakeOpportunities: advice.wakeOpportunities,
+            wakeTasks: advice.wakeTasks,
             moveAssessments: moveAssessments ?? advice.moveAssessments,
             openingDevelopmentIsRelevant: advice.openingDevelopmentIsRelevant,
             confidence: advice.confidence
@@ -925,6 +983,16 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             selectedSquare: selectedSquare,
             tentativeMove: tentativeMove,
             positionRevision: positionRevision
+        )
+    }
+
+    private func request(for position: CoachingGoldenPosition) -> CoachingRequest {
+        CoachingRequest(
+            committedState: position.state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 1,
+            context: .start
         )
     }
 }

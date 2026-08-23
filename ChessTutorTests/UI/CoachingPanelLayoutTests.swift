@@ -114,7 +114,7 @@ final class CoachingPanelLayoutTests: XCTestCase {
         let presentation = LocalCoachingExplanationSource().presentation(
             for: coachingContext(
                 prompt: .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
-                feedback: .blockedWakePiece(piece: .rook),
+                feedback: .blockedWakePiece(piece: .rook, blocker: .pawn),
                 actions: [.hint, .stop]
             )
         )
@@ -126,7 +126,7 @@ final class CoachingPanelLayoutTests: XCTestCase {
         XCTAssertEqual(compositions, [.tall, .wide])
         XCTAssertEqual(
             presentation.response,
-            "That rook can’t come out yet because other pieces are in the way."
+            "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
         XCTAssertEqual(
             presentation.headline,

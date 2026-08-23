@@ -37,7 +37,7 @@ final class CoachingReconcilerTests: XCTestCase {
                 Square(file: .a, rank: 1),
                 .wakeChoosePiece(purpose: purpose),
                 .wakeSource(purpose: purpose),
-                .blockedWakePiece(piece: .rook)
+                .blockedWakePiece(piece: .rook, blocker: .pawn)
             ),
             (
                 "movable noncandidate learner pawn",
@@ -517,6 +517,7 @@ final class CoachingReconcilerTests: XCTestCase {
             dangerProblems: advice.dangerProblems,
             takeOpportunities: advice.takeOpportunities,
             wakeOpportunities: advice.wakeOpportunities,
+            wakeTasks: advice.wakeTasks,
             moveAssessments: advice.moveAssessments,
             openingDevelopmentIsRelevant: advice.openingDevelopmentIsRelevant,
             confidence: advice.confidence

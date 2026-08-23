@@ -74,9 +74,206 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
     }
 
+    func testConstructiveWakeBranchesUseNamedEvidenceAndBoundedGrades() async throws {
+        let t1Entry = try await goldenTurn(.t1Entry)
+        let t1BlockedRook = try await goldenTurn(.t1BlockedRook)
+        let t1FlankPawn = try await goldenTurn(.t1FlankPawn)
+        let t1Hint = try await goldenTurn(.t1Hint)
+        let t1KnightSelected = try await goldenTurn(.t1KnightSelected)
+        let t1PreferredKnight = try await goldenTurn(.t1PreferredKnight)
+        let t1EdgeKnight = try await goldenTurn(.t1EdgeKnight)
+        let t1CenterPawn = try await goldenTurn(.t1CenterPawn)
+        let t2Entry = try await goldenTurn(.t2Entry)
+        let t2OneSquareKingMove = try await goldenTurn(.t2OneSquareKingMove)
+        let t2KnightSwitch = try await goldenTurn(.t2KnightSwitch)
+        let t9Entry = try await goldenTurn(.t9Entry)
+        let t9Hint = try await goldenTurn(.t9Hint)
+        let t9Completed = try await goldenTurn(.t9Completed)
+        let t10Entry = try await goldenTurn(.t10Entry)
+        let t10Completed = try await goldenTurn(.t10Completed)
+
+        XCTAssertEqual(
+            t1Entry.ask,
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
+        )
+        XCTAssertEqual(
+            t1BlockedRook.response,
+            "Your pawn is blocking that rook. Choose a center pawn or knight."
+        )
+        XCTAssertEqual(
+            t1FlankPawn.response,
+            "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
+        )
+        XCTAssertEqual(t1Hint.ask, "Here are the four pieces you can try.")
+        XCTAssertEqual(t1Hint.instruction, "Tap a highlighted piece.")
+        XCTAssertEqual(
+            t1KnightSelected.ask,
+            "You chose a knight. Moving it off its starting square is called developing it."
+        )
+        XCTAssertEqual(
+            t1PreferredKnight.ask,
+            "You developed your knight toward the center. From there it can reach more squares."
+        )
+        XCTAssertEqual(
+            t1EdgeKnight.ask,
+            "You developed your knight. A square closer to the center would usually give it more choices."
+        )
+        XCTAssertEqual(
+            t1CenterPawn.ask,
+            "Your center pawn moved forward and now helps control the center."
+        )
+        XCTAssertEqual(t2Entry.ask, "Your king is ready to castle.")
+        XCTAssertEqual(
+            t2Entry.instruction,
+            "Move your king two squares toward the rook."
+        )
+        XCTAssertEqual(
+            t2OneSquareKingMove.response,
+            "That is a king move, but it is not castling. Castling moves the king two squares toward the rook."
+        )
+        XCTAssertEqual(
+            t2KnightSwitch.ask,
+            "That knight can also be developed."
+        )
+        XCTAssertEqual(
+            t2KnightSwitch.instruction,
+            "Move the knight off its starting square."
+        )
+        XCTAssertEqual(
+            t9Entry.ask,
+            "Your knight can move to a square where it attacks Black’s rook. Can you find the square?"
+        )
+        XCTAssertEqual(
+            t9Hint.ask,
+            "Both highlighted squares let the knight attack the rook."
+        )
+        XCTAssertEqual(
+            t9Hint.instruction,
+            "Move the knight to one of the highlighted squares."
+        )
+        XCTAssertEqual(
+            t9Completed.ask,
+            "Your knight now attacks the rook. Black may need to move or protect it."
+        )
+        XCTAssertEqual(
+            t10Entry.ask,
+            "Your knight has very few choices in the corner. Can you move it closer to the center?"
+        )
+        XCTAssertEqual(
+            t10Completed.ask,
+            "From there your knight can reach six squares instead of two. That is why knights are often stronger near the center."
+        )
+    }
+
+    func testCastleCompletionNamesTheKingAndRookEffects() async throws {
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                sq("e1"): Piece(kind: .king, color: .white),
+                sq("h1"): Piece(kind: .rook, color: .white),
+                sq("e8"): Piece(kind: .king, color: .black),
+            ],
+            castlingRights: CastlingRights(whiteKingside: true)
+        )
+        var session = try await preparedSession(for: state)
+        try await complete(
+            CoachingGoldenMoves.castle,
+            origin: .wake,
+            state: state,
+            in: &session
+        )
+
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "You castled. Your king moved toward safety, and your rook moved toward the center."
+        )
+    }
+
+    func testCanonicalCastleRetainsOpponentRevisionGate() async throws {
+        var session = try await preparedSession(for: .readyToCastle)
+        try await stage(
+            CoachingGoldenMoves.castle,
+            origin: .wake,
+            position: .readyToCastle,
+            in: &session
+        )
+
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Could Black check your king or win one of your pieces?"
+        )
+
+        session.handle(.identificationTapped(sq("e4")))
+
+        XCTAssertEqual(session.presentation?.response, "Black could take your pawn.")
+        XCTAssertEqual(session.presentation?.headline, "Try another move.")
+    }
+
     private func goldenTurn(_ branch: CoachingGoldenCase) async throws -> CoachingGoldenTurn {
         var session: CoachingSession
         switch branch {
+        case .t1Entry:
+            session = try await preparedSession(for: .starting)
+
+        case .t1BlockedRook:
+            session = try await preparedSession(for: .starting)
+            session.handle(.interactionChanged(snapshot(selected: sq("a1"))))
+
+        case .t1FlankPawn:
+            session = try await preparedSession(for: .starting)
+            session.handle(.interactionChanged(snapshot(selected: sq("a2"))))
+
+        case .t1Hint:
+            session = try await preparedSession(for: .starting)
+            session.handle(.actionChosen(.hint))
+
+        case .t1KnightSelected:
+            session = try await preparedSession(for: .starting)
+            session.handle(.interactionChanged(snapshot(selected: sq("b1"))))
+
+        case .t1PreferredKnight:
+            session = try await preparedSession(for: .starting)
+            try await complete(
+                Move(from: sq("g1"), to: sq("f3")),
+                origin: .wake,
+                position: .starting,
+                in: &session
+            )
+
+        case .t1EdgeKnight:
+            session = try await preparedSession(for: .starting)
+            try await complete(
+                Move(from: sq("g1"), to: sq("h3")),
+                origin: .wake,
+                position: .starting,
+                in: &session
+            )
+
+        case .t1CenterPawn:
+            session = try await preparedSession(for: .starting)
+            try await complete(
+                Move(from: sq("e2"), to: sq("e4")),
+                origin: .wake,
+                position: .starting,
+                in: &session
+            )
+
+        case .t2Entry:
+            session = try await preparedSession(for: .readyToCastle)
+
+        case .t2OneSquareKingMove:
+            session = try await preparedSession(for: .readyToCastle)
+            try await stage(
+                Move(from: sq("e1"), to: sq("f1")),
+                origin: .wake,
+                position: .readyToCastle,
+                in: &session
+            )
+
+        case .t2KnightSwitch:
+            session = try await preparedSession(for: .readyToCastle)
+            session.handle(.interactionChanged(snapshot(selected: sq("b1"))))
+
         case .t3Entry:
             session = try await preparedSession(for: .endangeredKnight)
 
@@ -140,11 +337,43 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 in: &session
             )
 
+        case .t9Entry:
+            session = try await preparedSession(for: .createRookThreat)
+
+        case .t9Hint:
+            session = try await preparedSession(for: .createRookThreat)
+            session.handle(.actionChosen(.hint))
+
+        case .t9Completed:
+            session = try await preparedSession(for: .createRookThreat)
+            try await stage(
+                CoachingGoldenMoves.knightThreatB3,
+                origin: .wake,
+                position: .createRookThreat,
+                in: &session
+            )
+            session.handle(.identificationTapped(sq("d4")))
+
+        case .t10Entry:
+            session = try await preparedSession(for: .cornerKnight)
+
+        case .t10Completed:
+            session = try await preparedSession(for: .cornerKnight)
+            try await complete(
+                CoachingGoldenMoves.knightThreatB3,
+                origin: .wake,
+                position: .cornerKnight,
+                in: &session
+            )
+
         default:
-            preconditionFailure("No Task 4 golden turn for \(branch.rawValue)")
+            preconditionFailure("No golden turn implementation for \(branch.rawValue)")
         }
 
-        let presentation = try XCTUnwrap(session.presentation)
+        let presentation = try XCTUnwrap(
+            session.presentation,
+            "Missing presentation for \(branch.rawValue)"
+        )
         return CoachingGoldenTurn(
             response: presentation.response,
             ask: presentation.headline,
@@ -162,6 +391,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     private func preparedSession(
         for position: CoachingGoldenPosition
     ) async throws -> CoachingSession {
+        try await preparedSession(for: position.state)
+    }
+
+    private func preparedSession(for state: GameState) async throws -> CoachingSession {
         let interaction = snapshot()
         var session = CoachingSession(
             learner: .white,
@@ -169,7 +402,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             initialContext: .start
         )
         let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
-            committedState: position.state,
+            committedState: state,
             tentativeMove: nil,
             learner: .white,
             positionRevision: interaction.positionRevision,
@@ -185,7 +418,21 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         position: CoachingGoldenPosition,
         in session: inout CoachingSession
     ) async throws {
-        try await stage(move, origin: origin, position: position, in: &session)
+        try await complete(
+            move,
+            origin: origin,
+            state: position.state,
+            in: &session
+        )
+    }
+
+    private func complete(
+        _ move: Move,
+        origin: CoachingMoveOrigin,
+        state: GameState,
+        in session: inout CoachingSession
+    ) async throws {
+        try await stage(move, origin: origin, state: state, in: &session)
         session.handle(.actionChosen(.looksSafe))
     }
 
@@ -195,10 +442,24 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         position: CoachingGoldenPosition,
         in session: inout CoachingSession
     ) async throws {
+        try await stage(
+            move,
+            origin: origin,
+            state: position.state,
+            in: &session
+        )
+    }
+
+    private func stage(
+        _ move: Move,
+        origin: CoachingMoveOrigin,
+        state: GameState,
+        in session: inout CoachingSession
+    ) async throws {
         let interaction = snapshot(selected: move.to, tentativeMove: move)
         session.handle(.interactionChanged(interaction))
         let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
-            committedState: position.state,
+            committedState: state,
             tentativeMove: move,
             learner: .white,
             positionRevision: interaction.positionRevision,

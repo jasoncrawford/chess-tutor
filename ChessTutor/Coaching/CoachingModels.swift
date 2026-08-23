@@ -132,6 +132,64 @@ struct CoachingOpportunity: Equatable, Sendable {
     let evidence: CoachingEvidence
 }
 
+enum CoachingCandidateGrade: Equatable, Sendable {
+    case preferred
+    case acceptable
+}
+
+struct CoachingCandidateMove: Equatable, Sendable {
+    let move: Move
+    let grade: CoachingCandidateGrade
+    let resultingMobility: Int?
+
+    init(
+        move: Move,
+        grade: CoachingCandidateGrade,
+        resultingMobility: Int? = nil
+    ) {
+        self.move = move
+        self.grade = grade
+        self.resultingMobility = resultingMobility
+    }
+}
+
+enum CoachingWakeTask: Equatable, Sendable {
+    case opening(firstMove: Bool, candidates: [CoachingCandidateMove])
+    case castle(move: Move)
+    case protect(
+        source: Square,
+        sourcePiece: Piece.Kind,
+        target: Square,
+        targetPiece: Piece.Kind,
+        candidates: [CoachingCandidateMove]
+    )
+    case createThreat(
+        source: Square,
+        sourcePiece: Piece.Kind,
+        target: Square,
+        targetPiece: Piece.Kind,
+        candidates: [CoachingCandidateMove]
+    )
+    case improveMobility(
+        source: Square,
+        piece: Piece.Kind,
+        before: Int,
+        candidates: [CoachingCandidateMove]
+    )
+
+    var candidates: [CoachingCandidateMove] {
+        switch self {
+        case let .opening(_, candidates),
+             let .protect(_, _, _, _, candidates),
+             let .createThreat(_, _, _, _, candidates),
+             let .improveMobility(_, _, _, candidates):
+            candidates
+        case .castle:
+            []
+        }
+    }
+}
+
 struct CoachingEvaluation: Equatable, Sendable {
     let request: CoachingRequest
     let checkingPieces: Set<Square>
@@ -150,9 +208,32 @@ struct CoachingAdvice: Equatable, Sendable {
     let dangerProblems: [CoachingDangerProblem]
     let takeOpportunities: [CoachingOpportunity]
     let wakeOpportunities: [CoachingOpportunity]
+    let wakeTasks: [CoachingWakeTask]
     let moveAssessments: [Move: CoachingMoveAssessment]
     let openingDevelopmentIsRelevant: Bool
     let confidence: CoachingConfidence
+
+    init(
+        evaluation: CoachingEvaluation,
+        insights: [CoachingInsight],
+        dangerProblems: [CoachingDangerProblem],
+        takeOpportunities: [CoachingOpportunity],
+        wakeOpportunities: [CoachingOpportunity],
+        wakeTasks: [CoachingWakeTask] = [],
+        moveAssessments: [Move: CoachingMoveAssessment],
+        openingDevelopmentIsRelevant: Bool,
+        confidence: CoachingConfidence
+    ) {
+        self.evaluation = evaluation
+        self.insights = insights
+        self.dangerProblems = dangerProblems
+        self.takeOpportunities = takeOpportunities
+        self.wakeOpportunities = wakeOpportunities
+        self.wakeTasks = wakeTasks
+        self.moveAssessments = moveAssessments
+        self.openingDevelopmentIsRelevant = openingDevelopmentIsRelevant
+        self.confidence = confidence
+    }
 
     var checkingPieces: Set<Square> { evaluation.checkingPieces }
 
@@ -162,6 +243,13 @@ struct CoachingAdvice: Equatable, Sendable {
 
     func exchangeFact(for move: Move) -> CoachingExchangeFact? {
         evaluation.exchangeFacts[move]
+    }
+
+    func grade(for move: Move) -> CoachingCandidateGrade? {
+        wakeTasks.lazy
+            .flatMap(\.candidates)
+            .first(where: { $0.move == move })?
+            .grade
     }
 
     var primaryDangerProblems: [CoachingDangerProblem] {
@@ -210,6 +298,7 @@ enum CoachingPrompt: Equatable, Sendable {
     case takeChooseMove
     case wakeChoosePiece(purpose: CoachingWakePurpose)
     case wakeChooseMove(piece: Piece.Kind, purpose: CoachingWakePurpose)
+    case wake(task: CoachingWakeTask, selectedPiece: Piece.Kind?)
     case opponentReply(opponent: PieceColor)
     case fallbackChooseMove
     case unsupportedFallbackChooseMove
@@ -230,6 +319,7 @@ enum CoachingCompletionIdea: Equatable, Sendable {
     case addsDefender(piece: Piece.Kind)
     case createsThreat(piece: Piece.Kind)
     case centralizes(piece: Piece.Kind)
+    case constructive(task: CoachingWakeTask, move: Move, piece: Piece.Kind)
     case verifiedSafe
 }
 
@@ -260,7 +350,7 @@ enum CoachingFeedback: Equatable, Sendable {
     case notCheckingPiece(piece: Piece.Kind?)
     case notAttacker(piece: Piece.Kind, target: Piece.Kind)
     case expectedAttacker(target: Piece.Kind)
-    case blockedWakePiece(piece: Piece.Kind)
+    case blockedWakePiece(piece: Piece.Kind, blocker: Piece.Kind)
     case notWakeCandidate(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case notReplyIssue
     case correctAbsence(CoachingAbsenceKind)

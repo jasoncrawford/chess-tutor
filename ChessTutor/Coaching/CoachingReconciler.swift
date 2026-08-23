@@ -14,6 +14,13 @@ struct CoachingReconciler: Sendable {
         if !advice.checkingPieces.isEmpty {
             return deriveCheck(advice: advice, evidence: episode.evidence)
         }
+        if advice.wakeTasks.first.map(isCastleTask) == true {
+            return deriveWakeOrFallback(
+                learner: learner,
+                advice: advice,
+                interaction: episode.interaction
+            )
+        }
         if requiresSafeScan(advice: advice, evidence: episode.evidence) {
             return deriveSafe(advice: advice, evidence: episode.evidence)
         }
@@ -193,20 +200,28 @@ struct CoachingReconciler: Sendable {
         interaction: CoachingInteractionSnapshot
     ) -> CoachingDerivedState {
         guard advice.confidence != .unsupported,
-              let firstOpportunity = advice.wakeOpportunities.first,
-              !firstOpportunity.moves.isEmpty
+              let initialPurpose = initialWakePurpose(in: advice)
         else {
             return fallbackDerivation()
         }
 
-        let initialPurpose = wakePurpose(for: firstOpportunity.concept, in: advice)
         guard let selectedSquare = interaction.selectedSquare else {
             return wakeSourceDerivation(purpose: initialPurpose)
         }
 
-        if let opportunity = advice.wakeOpportunities.first(where: {
-            $0.moves.contains(where: { $0.from == selectedSquare })
+        if let task = advice.wakeTasks.first(where: {
+            wakeMoves(in: $0).contains(where: { $0.from == selectedSquare })
         }) {
+            let purpose = wakePurpose(for: task)
+            return derived(
+                stage: .wakeChooseMove(piece: selectedSquare, purpose: purpose),
+                questionID: .wakeMove(source: selectedSquare, purpose: purpose)
+            )
+        }
+        if advice.wakeTasks.isEmpty,
+           let opportunity = advice.wakeOpportunities.first(where: {
+               $0.moves.contains(where: { $0.from == selectedSquare })
+           }) {
             let purpose = wakePurpose(for: opportunity.concept, in: advice)
             return derived(
                 stage: .wakeChooseMove(piece: selectedSquare, purpose: purpose),
@@ -226,9 +241,17 @@ struct CoachingReconciler: Sendable {
             by: learner,
             in: advice.evaluation.request.committedState
         )
-        let feedback: CoachingFeedback = allowedMoves.isEmpty
-            ? .blockedWakePiece(piece: piece.kind)
-            : .notWakeCandidate(piece: piece.kind, purpose: initialPurpose)
+        let feedback: CoachingFeedback
+        if allowedMoves.isEmpty,
+           let blocker = firstSlidingBlocker(
+               for: selectedSquare,
+               piece: piece,
+               in: board
+           ) {
+            feedback = .blockedWakePiece(piece: piece.kind, blocker: blocker.kind)
+        } else {
+            feedback = .notWakeCandidate(piece: piece.kind, purpose: initialPurpose)
+        }
         return wakeSourceDerivation(purpose: initialPurpose, feedback: feedback)
     }
 
@@ -301,7 +324,9 @@ struct CoachingReconciler: Sendable {
                 )
             )
         }
-        if origin == .wake && !hasWakePurpose(assessment.concepts) {
+        if origin == .wake,
+           !hasWakePurpose(assessment.concepts),
+           !isWakeTaskMove(move, in: positionAdvice) {
             let purpose = wakePurpose(
                 for: move.from,
                 positionAdvice: positionAdvice,
@@ -590,12 +615,102 @@ struct CoachingReconciler: Sendable {
         return concepts.contains(where: wakeConcepts.contains)
     }
 
+    private func initialWakePurpose(in advice: CoachingAdvice) -> CoachingWakePurpose? {
+        if let task = advice.wakeTasks.first {
+            return wakePurpose(for: task)
+        }
+        guard let opportunity = advice.wakeOpportunities.first,
+              !opportunity.moves.isEmpty else {
+            return nil
+        }
+        return wakePurpose(for: opportunity.concept, in: advice)
+    }
+
+    private func isCastleTask(_ task: CoachingWakeTask) -> Bool {
+        if case .castle = task { return true }
+        return false
+    }
+
+    private func wakePurpose(for task: CoachingWakeTask) -> CoachingWakePurpose {
+        switch task {
+        case let .opening(firstMove, _):
+            return .openingDevelopment(firstMove: firstMove)
+        case .castle:
+            return .castle
+        case .protect:
+            return .addsDefender
+        case .createThreat:
+            return .createsThreat
+        case .improveMobility:
+            return .centralActivity
+        }
+    }
+
+    private func wakeMoves(in task: CoachingWakeTask) -> [Move] {
+        switch task {
+        case let .castle(move):
+            return [move]
+        default:
+            return task.candidates.map(\.move)
+        }
+    }
+
+    private func isWakeTaskMove(
+        _ move: Move,
+        in advice: CoachingAdvice?
+    ) -> Bool {
+        advice?.wakeTasks.contains { wakeMoves(in: $0).contains(move) } == true
+    }
+
+    private func firstSlidingBlocker(
+        for source: Square,
+        piece: Piece,
+        in board: Board
+    ) -> Piece? {
+        let homeRank = piece.color == .white ? 1 : 8
+        guard source.rank == homeRank else { return nil }
+        let forward = piece.color == .white ? 1 : -1
+        let directions: [(Int, Int)]
+        switch piece.kind {
+        case .bishop:
+            directions = [(-1, forward), (1, forward), (-1, -forward), (1, -forward)]
+        case .rook:
+            directions = [(0, forward), (1, 0), (-1, 0), (0, -forward)]
+        case .queen:
+            directions = [
+                (0, forward), (-1, forward), (1, forward),
+                (1, 0), (-1, 0),
+                (0, -forward), (-1, -forward), (1, -forward),
+            ]
+        case .pawn, .knight, .king:
+            return nil
+        }
+
+        for direction in directions {
+            var current = source
+            while let next = current.offset(
+                fileDelta: direction.0,
+                rankDelta: direction.1
+            ) {
+                if let blocker = board[next] { return blocker }
+                current = next
+            }
+        }
+        return nil
+    }
+
     private func wakePurpose(
         for source: Square,
         positionAdvice: CoachingAdvice?,
         assessment: CoachingMoveAssessment?,
         tentativeAdvice: CoachingAdvice?
     ) -> CoachingWakePurpose? {
+        if let positionAdvice,
+           let task = positionAdvice.wakeTasks.first(where: {
+               wakeMoves(in: $0).contains(where: { $0.from == source })
+           }) {
+            return wakePurpose(for: task)
+        }
         if let positionAdvice,
            let opportunity = positionAdvice.wakeOpportunities.first(where: {
                $0.moves.contains(where: { $0.from == source })

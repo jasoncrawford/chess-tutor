@@ -350,7 +350,7 @@ final class CoachingSessionTests: XCTestCase {
         )))
         XCTAssertEqual(
             blockedWakeSession.presentation?.response,
-            "That rook can’t come out yet because other pieces are in the way."
+            "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
         XCTAssertEqual(
             blockedWakeSession.presentation?.headline,
@@ -2299,7 +2299,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(switched.presentation, direct.presentation)
         XCTAssertEqual(
             switched.presentation?.response,
-            "That rook can’t come out yet because other pieces are in the way."
+            "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
         XCTAssertEqual(
             switched.presentation?.headline,

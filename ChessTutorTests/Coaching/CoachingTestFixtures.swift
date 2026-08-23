@@ -91,6 +91,7 @@ extension CoachingAdvice {
             dangerProblems: dangerProblems,
             takeOpportunities: takeOpportunities,
             wakeOpportunities: wakeOpportunities,
+            wakeTasks: wakeTasks,
             moveAssessments: moveAssessments,
             openingDevelopmentIsRelevant: openingDevelopmentIsRelevant,
             confidence: confidence

@@ -257,9 +257,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     func testMissResponseDoesNotReplaceOpeningAsk() {
         let presentation = source.presentation(for: context(
             prompt: .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
-            feedback: .blockedWakePiece(piece: .rook)
+            feedback: .blockedWakePiece(piece: .rook, blocker: .pawn)
         ))
-        XCTAssertEqual(presentation.response, "That rook can’t come out yet because other pieces are in the way.")
+        XCTAssertEqual(
+            presentation.response,
+            "Your pawn is blocking that rook. Choose a center pawn or knight."
+        )
         XCTAssertEqual(presentation.headline, "A center pawn or knight is a simple way to start. Which would you like to move?")
         XCTAssertEqual(presentation.instruction, "Tap one of your two center pawns or one of your knights.")
     }
@@ -407,8 +410,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
-                .blockedWakePiece(piece: .rook),
-                "That rook can’t come out yet because other pieces are in the way."
+                .blockedWakePiece(piece: .rook, blocker: .pawn),
+                "Your pawn is blocking that rook. Choose a center pawn or knight."
             ),
             (
                 .opponentReply(opponent: .black),
@@ -615,7 +618,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .notCheckingPiece(piece: .bishop),
             .notAttacker(piece: .bishop, target: .knight),
             .expectedAttacker(target: .knight),
-            .blockedWakePiece(piece: .rook),
+            .blockedWakePiece(piece: .rook, blocker: .pawn),
             .notWakeCandidate(piece: .bishop, purpose: .centralActivity),
             .notReplyIssue,
             .correctAbsence(.noPieceNeedsHelp),

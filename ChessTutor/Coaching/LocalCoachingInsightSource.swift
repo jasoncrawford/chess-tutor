@@ -7,6 +7,7 @@ struct CoachingInsightSet: Equatable, Sendable {
     let dangerProblems: [CoachingDangerProblem]
     let takeOpportunities: [CoachingOpportunity]
     let wakeOpportunities: [CoachingOpportunity]
+    let wakeTasks: [CoachingWakeTask]
     let openingDevelopmentIsRelevant: Bool
     let confidence: CoachingConfidence
 }
@@ -259,7 +260,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                 concept: .castlesForKingSafety,
                 subjectSquares: [assessment.move.from, assessment.move.to],
                 moves: [assessment.move],
-                priority: 600,
+                priority: 610,
                 evidence: .castle(assessment.move)
             )
             wakeOpportunities.append(opportunity)
@@ -298,11 +299,26 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
 
         takeOpportunities.sort(by: opportunityOrder)
         wakeOpportunities.sort(by: opportunityOrder)
+        let verifiedWakeTasks = makeWakeTasks(
+            from: wakeOpportunities,
+            in: state,
+            learner: learner
+        )
+        let mechanicalCastleTasks = sortedAssessments(evaluation.moveAssessments)
+            .filter {
+                $0.isLegal
+                    && ($0.move.special == .castleKingside
+                        || $0.move.special == .castleQueenside)
+            }
+            .map { CoachingWakeTask.castle(move: $0.move) }
+        let wakeTasks = mechanicalCastleTasks + verifiedWakeTasks.filter {
+            !mechanicalCastleTasks.contains($0)
+        }
         insights.append(contentsOf: wakeOpportunities.map(insight(from:)))
         let confidence: CoachingConfidence = evaluation.checkingPieces.isEmpty
             && evaluation.dangerProblems.isEmpty
             && takeOpportunities.isEmpty
-            && wakeOpportunities.isEmpty
+            && wakeTasks.isEmpty
             ? .unsupported
             : .high
 
@@ -311,6 +327,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
             dangerProblems: evaluation.dangerProblems,
             takeOpportunities: takeOpportunities,
             wakeOpportunities: wakeOpportunities,
+            wakeTasks: wakeTasks,
             openingDevelopmentIsRelevant: openingDevelopmentIsRelevant,
             confidence: confidence
         )
@@ -395,7 +412,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                 concept: .castlesForKingSafety,
                 subjectSquares: [move.from, move.to],
                 moves: [move],
-                priority: 600,
+                priority: 610,
                 evidence: .castle(move)
             )
         }
@@ -539,6 +556,220 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         centralSixteen.map { center in
             abs(center.file.rawValue - square.file.rawValue) + abs(center.rank - square.rank)
         }.min() ?? 0
+    }
+
+    private enum WakeTaskKey: Hashable {
+        case opening(firstMove: Bool)
+        case castle(Move)
+        case protect(source: Square, target: Square)
+        case threat(source: Square, target: Square)
+        case mobility(source: Square, before: Int, after: Int)
+    }
+
+    private struct WakeTaskGroup {
+        let key: WakeTaskKey
+        let opportunities: [CoachingOpportunity]
+        let priority: Int
+        let stableKey: Int
+    }
+
+    private func makeWakeTasks(
+        from opportunities: [CoachingOpportunity],
+        in state: GameState,
+        learner: PieceColor
+    ) -> [CoachingWakeTask] {
+        let firstMove = state == GameState.startingPosition()
+        let grouped = Dictionary(grouping: opportunities) { opportunity in
+            wakeTaskKey(for: opportunity.evidence, firstMove: firstMove)
+        }
+        return grouped.compactMap { key, groupedOpportunities -> WakeTaskGroup? in
+            guard let key else { return nil }
+            let priority = groupedOpportunities.map(\.priority).max() ?? 0
+            let stableKey: Int
+            switch key {
+            case let .castle(move):
+                stableKey = stableMoveKey(move)
+            default:
+                stableKey = groupedOpportunities
+                    .flatMap(\.moves)
+                    .map(stableMoveKey)
+                    .min() ?? Int.max
+            }
+            return WakeTaskGroup(
+                key: key,
+                opportunities: groupedOpportunities,
+                priority: priority,
+                stableKey: stableKey
+            )
+        }.sorted { lhs, rhs in
+            if lhs.priority != rhs.priority { return lhs.priority > rhs.priority }
+            return lhs.stableKey < rhs.stableKey
+        }.compactMap { group in
+            makeWakeTask(from: group, in: state, learner: learner)
+        }
+    }
+
+    private func wakeTaskKey(
+        for evidence: CoachingEvidence,
+        firstMove: Bool
+    ) -> WakeTaskKey? {
+        switch evidence {
+        case .development, .centerPawn:
+            return .opening(firstMove: firstMove)
+        case let .castle(move):
+            return .castle(move)
+        case let .defender(source, target):
+            return .protect(source: source, target: target)
+        case let .threat(source, target):
+            return .threat(source: source, target: target)
+        case let .mobility(source, _, before, after):
+            return .mobility(source: source, before: before, after: after)
+        case .check, .danger, .capture, .opponentReply, .verifiedSafe:
+            return nil
+        }
+    }
+
+    private func makeWakeTask(
+        from group: WakeTaskGroup,
+        in state: GameState,
+        learner: PieceColor
+    ) -> CoachingWakeTask? {
+        switch group.key {
+        case let .opening(firstMove):
+            return .opening(
+                firstMove: firstMove,
+                candidates: openingCandidates(
+                    from: group.opportunities,
+                    in: state,
+                    learner: learner,
+                    firstMove: firstMove
+                )
+            )
+
+        case let .castle(move):
+            return .castle(move: move)
+
+        case let .protect(source, target):
+            guard let sourcePiece = state.board[source]?.kind,
+                  let targetPiece = state.board[target]?.kind else {
+                return nil
+            }
+            return .protect(
+                source: source,
+                sourcePiece: sourcePiece,
+                target: target,
+                targetPiece: targetPiece,
+                candidates: acceptableCandidates(from: group.opportunities)
+            )
+
+        case let .threat(source, target):
+            guard let sourcePiece = state.board[source]?.kind,
+                  let targetPiece = state.board[target]?.kind else {
+                return nil
+            }
+            return .createThreat(
+                source: source,
+                sourcePiece: sourcePiece,
+                target: target,
+                targetPiece: targetPiece,
+                candidates: acceptableCandidates(from: group.opportunities)
+            )
+
+        case let .mobility(source, before, after):
+            guard let piece = state.board[source]?.kind else { return nil }
+            return .improveMobility(
+                source: source,
+                piece: piece,
+                before: before,
+                candidates: acceptableCandidates(
+                    from: group.opportunities,
+                    resultingMobility: after
+                )
+            )
+        }
+    }
+
+    private func openingCandidates(
+        from opportunities: [CoachingOpportunity],
+        in state: GameState,
+        learner: PieceColor,
+        firstMove: Bool
+    ) -> [CoachingCandidateMove] {
+        let moves = Set(opportunities.flatMap(\.moves))
+        return moves.sorted(by: stableCandidateMoveOrder).map { move in
+            CoachingCandidateMove(
+                move: move,
+                grade: openingGrade(
+                    for: move,
+                    among: moves,
+                    in: state,
+                    learner: learner,
+                    firstMove: firstMove
+                )
+            )
+        }
+    }
+
+    private func openingGrade(
+        for move: Move,
+        among openingMoves: Set<Move>,
+        in state: GameState,
+        learner: PieceColor,
+        firstMove: Bool
+    ) -> CoachingCandidateGrade {
+        guard let piece = state.board[move.from] else { return .acceptable }
+        if piece.kind == .pawn {
+            return firstMove ? .preferred : .acceptable
+        }
+        guard piece.kind == .knight else { return .acceptable }
+
+        let destinationDistance = distanceToCentralSixteen(move.to)
+        let resultingMobility = mobility(after: move, learner: learner, in: state)
+        let hasEvidenceBackedAlternative = openingMoves.contains { alternative in
+            alternative.from == move.from
+                && distanceToCentralSixteen(alternative.to) > destinationDistance
+                && mobility(after: alternative, learner: learner, in: state)
+                    < resultingMobility
+        }
+        return hasEvidenceBackedAlternative ? .preferred : .acceptable
+    }
+
+    private func mobility(
+        after move: Move,
+        learner: PieceColor,
+        in state: GameState
+    ) -> Int {
+        let after = state.applyingUnchecked(move)
+        return LegalMoveGenerator.legalMoves(
+            for: move.to,
+            by: learner,
+            in: after
+        ).count
+    }
+
+    private func acceptableCandidates(
+        from opportunities: [CoachingOpportunity],
+        resultingMobility: Int? = nil
+    ) -> [CoachingCandidateMove] {
+        Set(opportunities.flatMap(\.moves))
+            .sorted(by: stableCandidateMoveOrder)
+            .map {
+                CoachingCandidateMove(
+                    move: $0,
+                    grade: .acceptable,
+                    resultingMobility: resultingMobility
+                )
+            }
+    }
+
+    private func stableCandidateMoveOrder(_ lhs: Move, _ rhs: Move) -> Bool {
+        candidateMoveKey(lhs) < candidateMoveKey(rhs)
+    }
+
+    private func candidateMoveKey(_ move: Move) -> Int {
+        let source = (move.from.file.rawValue - 1) * 8 + move.from.rank
+        let destination = (move.to.file.rawValue - 1) * 8 + move.to.rank
+        return source * 1_000 + destination * 10 + specialOrder(move.special)
     }
 
     private func stableMoveKey(_ move: Move) -> Int {

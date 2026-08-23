@@ -108,8 +108,17 @@ struct CoachingPresentationProjector: Sendable {
         case .takeChooseMove:
             return .takeChooseMove
         case let .wakeChoosePiece(purpose):
+            if let task = wakeTask(for: stage, advice: advice) {
+                return .wake(task: task, selectedPiece: nil)
+            }
             return .wakeChoosePiece(purpose: purpose)
         case let .wakeChooseMove(piece, purpose):
+            if let task = wakeTask(for: stage, advice: advice) {
+                return .wake(
+                    task: task,
+                    selectedPiece: pieceKind(at: piece, advice: advice) ?? .pawn
+                )
+            }
             return .wakeChooseMove(
                 piece: pieceKind(at: piece, advice: advice) ?? .pawn,
                 purpose: purpose
@@ -128,6 +137,7 @@ struct CoachingPresentationProjector: Sendable {
                 origin: origin,
                 idea: completionIdea(
                     for: move,
+                    origin: origin,
                     concepts: concepts,
                     episode: episode,
                     advice: advice
@@ -224,6 +234,14 @@ struct CoachingPresentationProjector: Sendable {
                   !wakeSources(for: purpose, in: advice).isEmpty
             else {
                 return []
+            }
+            if let task = wakeTask(for: stage, advice: advice) {
+                switch task {
+                case .opening:
+                    return [.candidatePieces, .candidateMoves]
+                case .castle, .protect, .createThreat, .improveMobility:
+                    return [.candidateMoves]
+                }
             }
             return [.candidatePieces, .candidateMoves]
         case .wakeChooseMove:
@@ -350,6 +368,16 @@ struct CoachingPresentationProjector: Sendable {
                 )],
                 pulseID: episode.progress.pulseID
             )
+        case .wakeChoosePiece, .wakeChooseMove:
+            guard let task = wakeTask(for: stage, advice: advice) else {
+                return .empty
+            }
+            return CoachFocusPresentation(
+                emphasizedSquares: emphasizedSquares(for: task),
+                candidateSquares: [],
+                paths: [],
+                pulseID: episode.progress.pulseID
+            )
         default:
             return .empty
         }
@@ -387,6 +415,9 @@ struct CoachingPresentationProjector: Sendable {
         case .checkResolve, .takeChooseMove:
             return Set(candidateMoves(for: stage, advice: advice).map(\.from))
         case let .wakeChoosePiece(purpose):
+            if let task = wakeTask(for: stage, advice: advice) {
+                return Set(wakeMoves(in: task).map(\.from))
+            }
             return wakeSources(for: purpose, in: advice)
         default:
             return []
@@ -472,10 +503,16 @@ struct CoachingPresentationProjector: Sendable {
         case .takeChooseMove:
             return advice.takeOpportunities.flatMap(\.moves)
         case let .wakeChoosePiece(purpose):
+            if let task = wakeTask(for: stage, advice: advice) {
+                return wakeMoves(in: task)
+            }
             return advice.wakeOpportunities
                 .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
                 .flatMap(\.moves)
         case let .wakeChooseMove(piece, purpose):
+            if let task = wakeTask(for: stage, advice: advice) {
+                return wakeMoves(in: task).filter { $0.from == piece }
+            }
             return advice.wakeOpportunities
                 .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
                 .flatMap(\.moves)
@@ -489,7 +526,10 @@ struct CoachingPresentationProjector: Sendable {
         for purpose: CoachingWakePurpose,
         in advice: CoachingAdvice
     ) -> Set<Square> {
-        Set(advice.wakeOpportunities
+        if let task = advice.wakeTasks.first(where: { wakePurpose(for: $0) == purpose }) {
+            return Set(wakeMoves(in: task).map(\.from))
+        }
+        return Set(advice.wakeOpportunities
             .filter { wakePurpose(for: $0.concept, in: advice) == purpose }
             .flatMap(\.moves)
             .map(\.from))
@@ -515,12 +555,78 @@ struct CoachingPresentationProjector: Sendable {
         }
     }
 
+    private func wakePurpose(for task: CoachingWakeTask) -> CoachingWakePurpose {
+        switch task {
+        case let .opening(firstMove, _):
+            return .openingDevelopment(firstMove: firstMove)
+        case .castle:
+            return .castle
+        case .protect:
+            return .addsDefender
+        case .createThreat:
+            return .createsThreat
+        case .improveMobility:
+            return .centralActivity
+        }
+    }
+
+    private func wakeTask(
+        for stage: CoachingStage,
+        advice: CoachingAdvice?
+    ) -> CoachingWakeTask? {
+        guard let advice else { return nil }
+        switch stage {
+        case let .wakeChoosePiece(purpose):
+            return advice.wakeTasks.first { wakePurpose(for: $0) == purpose }
+        case let .wakeChooseMove(source, purpose):
+            return advice.wakeTasks.first {
+                wakePurpose(for: $0) == purpose
+                    && wakeMoves(in: $0).contains(where: { $0.from == source })
+            }
+        default:
+            return nil
+        }
+    }
+
+    private func wakeMoves(in task: CoachingWakeTask) -> [Move] {
+        switch task {
+        case let .castle(move):
+            return [move]
+        default:
+            return task.candidates.map(\.move)
+        }
+    }
+
+    private func emphasizedSquares(for task: CoachingWakeTask) -> Set<Square> {
+        switch task {
+        case .opening:
+            return []
+        case let .castle(move):
+            return [move.from]
+        case let .protect(source, _, target, _, _),
+             let .createThreat(source, _, target, _, _):
+            return [source, target]
+        case let .improveMobility(source, _, _, _):
+            return [source]
+        }
+    }
+
     private func completionIdea(
         for move: Move,
+        origin: CoachingMoveOrigin,
         concepts: [CoachingConcept],
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachingCompletionIdea {
+        if origin == .wake,
+           let task = (episode.knowledge.positionAdvice?.wakeTasks ?? advice?.wakeTasks ?? [])
+            .first(where: { wakeMoves(in: $0).contains(move) }) {
+            return .constructive(
+                task: task,
+                move: move,
+                piece: pieceKind(at: move.from, advice: advice) ?? .pawn
+            )
+        }
         for concept in concepts {
             switch concept {
             case .kingInCheck:
