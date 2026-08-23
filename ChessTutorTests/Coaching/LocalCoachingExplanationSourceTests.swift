@@ -69,7 +69,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .takeChooseMove,
-                "Can one of your pieces make a useful capture?",
+                "Can one of your pieces safely take a black piece?",
                 "Make the capture, or choose No safe capture."
             ),
             (
@@ -270,7 +270,99 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             feedback: .correctAbsence(.noSafeCapture)
         ))
         XCTAssertEqual(presentation.response, "Right—there is no safe capture here.")
-        XCTAssertEqual(presentation.headline, "Can one of your pieces make a useful capture?")
+        XCTAssertEqual(presentation.headline, "Can one of your pieces safely take a black piece?")
+    }
+
+    func testUnsafeCaptureFeedbackNamesTheImmediateExchange() {
+        let move = CoachingGoldenMoves.bishopTakesPawn
+        let fact = CoachingExchangeFact(
+            move: move,
+            mover: .bishop,
+            captured: .pawn,
+            immediateRecapture: CoachingGoldenMoves.kingTakesBishop,
+            immediateRecapturer: .king,
+            netGainForLearner: -2
+        )
+
+        let presentation = source.presentation(for: context(
+            prompt: .takeChooseMove,
+            feedback: .unsafeCapture(fact)
+        ))
+
+        XCTAssertEqual(
+            presentation.response,
+            "Black’s king could take your bishop. You would lose a bishop to take one pawn."
+        )
+        XCTAssertEqual(
+            presentation.instruction,
+            "Change your move, or choose No safe capture."
+        )
+    }
+
+    func testSafeCaptureCompletionNamesTheConcreteExchange() {
+        let move = CoachingGoldenMoves.bishopWinsRook
+        let fact = CoachingExchangeFact(
+            move: move,
+            mover: .bishop,
+            captured: .rook,
+            immediateRecapture: nil,
+            immediateRecapturer: nil,
+            netGainForLearner: 5
+        )
+
+        let presentation = source.presentation(for: context(
+            prompt: .complete(origin: .take, idea: .safeCapture(fact))
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "Your bishop took a rook, and Black cannot take the bishop back."
+        )
+    }
+
+    func testSafeCaptureCompletionNamesWhiteForBlackLearner() {
+        let fact = CoachingExchangeFact(
+            move: CoachingGoldenMoves.bishopWinsRook,
+            mover: .bishop,
+            captured: .rook,
+            immediateRecapture: nil,
+            immediateRecapturer: nil,
+            netGainForLearner: 5
+        )
+
+        let presentation = source.presentation(for: context(
+            prompt: .complete(origin: .take, idea: .safeCapture(fact)),
+            learner: .black
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "Your bishop took a rook, and White cannot take the bishop back."
+        )
+    }
+
+    func testSafeCaptureHintNamesThePieceAndTapInstruction() {
+        let presentation = source.presentation(for: context(
+            prompt: .takeChooseMove,
+            feedback: .safeCaptureHint(piece: .bishop),
+            hint: .candidatePieces
+        ))
+
+        XCTAssertEqual(presentation.response, "Your bishop has a safe capture.")
+        XCTAssertEqual(presentation.instruction, "Tap the highlighted white piece.")
+    }
+
+    func testWrongTakeSourceUsesCaptureSpecificMissCopy() {
+        let presentation = source.presentation(for: context(
+            prompt: .takeChooseMove,
+            feedback: .noSafeCaptureForPiece
+        ))
+
+        XCTAssertEqual(presentation.response, "That piece has no safe capture here.")
+        XCTAssertEqual(
+            presentation.instruction,
+            "Try another piece, or choose No safe capture."
+        )
     }
 
     func testHintHasNoStaleMissResponse() {
@@ -348,7 +440,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
         XCTAssertEqual(
             presentation.headline,
-            "Can one of your pieces make a useful capture?"
+            "Can one of your pieces safely take a black piece?"
         )
         XCTAssertEqual(
             presentation.instruction,

@@ -220,6 +220,40 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         XCTAssertEqual(estimate.netGainForMover, 1)
     }
 
+    func testWinningCaptureFactNamesMoverTargetAndNoRecapture() throws {
+        let evaluation = evaluator.evaluate(
+            request(for: CoachingGoldenPosition.winningCapture.state)
+        )
+
+        let fact = try XCTUnwrap(
+            evaluation.exchangeFacts[CoachingGoldenMoves.bishopWinsRook]
+        )
+
+        XCTAssertEqual(fact.mover, .bishop)
+        XCTAssertEqual(fact.captured, .rook)
+        XCTAssertNil(fact.immediateRecapturer)
+        XCTAssertEqual(fact.netGainForLearner, 5)
+    }
+
+    func testLosingCaptureFactNamesKingRecapture() throws {
+        let move = CoachingGoldenMoves.bishopTakesPawn
+        let state = CoachingGoldenPosition.losingCapture.state
+        let evaluation = evaluator.evaluate(CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 1,
+            context: .tentativeMove(origin: .take)
+        ))
+
+        let fact = try XCTUnwrap(evaluation.exchangeFacts[move])
+
+        XCTAssertEqual(fact.mover, .bishop)
+        XCTAssertEqual(fact.captured, .pawn)
+        XCTAssertEqual(fact.immediateRecapturer, .king)
+        XCTAssertEqual(fact.netGainForLearner, -2)
+    }
+
     func testRetainsEqualExchangeAtZeroGainForTakeExclusion() throws {
         let attacker = Square(file: .c, rank: 4)
         let target = Square(file: .d, rank: 5)
@@ -718,9 +752,13 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         )
 
         let estimate = try XCTUnwrap(evaluator.captureEstimate(for: promotion, in: state))
+        let fact = try XCTUnwrap(
+            evaluator.exchangeFact(for: estimate, in: state, opponentIssue: nil)
+        )
 
         XCTAssertEqual(estimate.immediateRecapture, Move(from: recapturer, to: target))
         XCTAssertEqual(estimate.netGainForMover, -6)
+        XCTAssertEqual(fact.mover, .queen)
     }
 
     private func request(for state: GameState) -> CoachingRequest {

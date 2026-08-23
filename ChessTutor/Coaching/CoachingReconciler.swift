@@ -18,7 +18,18 @@ struct CoachingReconciler: Sendable {
             return deriveSafe(advice: advice, evidence: episode.evidence)
         }
         if requiresTakeScan(advice: advice, evidence: episode.evidence) {
-            return takeDerivation()
+            return deriveTake(
+                learner: learner,
+                advice: advice,
+                interaction: episode.interaction
+            )
+        }
+        if episode.evidence.confirmedTakeAbsence {
+            return derived(
+                stage: .fallbackChooseMove,
+                questionID: .fallback,
+                promptOverride: .unsupportedFallbackChooseMove
+            )
         }
         return deriveWakeOrFallback(
             learner: learner,
@@ -143,17 +154,37 @@ struct CoachingReconciler: Sendable {
         advice: CoachingAdvice,
         evidence: CoachingPedagogicalEvidence
     ) -> Bool {
-        let scanIsRelevant = advice.evaluation.learnerHasAnyLegalCapture
-            || !advice.evaluation.mateInOneMoves.isEmpty
-        guard scanIsRelevant else { return false }
+        guard advice.evaluation.learnerHasAnyLegalCapture else { return false }
         let confirmedAbsenceIsValid = evidence.confirmedTakeAbsence
             && advice.takeOpportunities.isEmpty
-            && advice.evaluation.mateInOneMoves.isEmpty
         return !confirmedAbsenceIsValid
     }
 
     private func takeDerivation() -> CoachingDerivedState {
         derived(stage: .takeChooseMove, questionID: .take)
+    }
+
+    private func deriveTake(
+        learner: PieceColor,
+        advice: CoachingAdvice,
+        interaction: CoachingInteractionSnapshot
+    ) -> CoachingDerivedState {
+        guard let selectedSquare = interaction.selectedSquare else {
+            return takeDerivation()
+        }
+        let safeCaptureSources = Set(advice.takeOpportunities.flatMap(\.moves).map(\.from))
+        guard !safeCaptureSources.contains(selectedSquare) else {
+            return takeDerivation()
+        }
+        let feedback: CoachingFeedback = advice.evaluation.request.committedState
+            .board[selectedSquare]?.color == learner
+            ? .noSafeCaptureForPiece
+            : .expectedLearnerPiece
+        return derived(
+            stage: .takeChooseMove,
+            questionID: .take,
+            feedback: feedback
+        )
     }
 
     private func deriveWakeOrFallback(
@@ -603,12 +634,11 @@ struct CoachingReconciler: Sendable {
         advice: CoachingAdvice,
         positionAdvice: CoachingAdvice?
     ) -> CoachingFeedback {
-        let estimate = advice.evaluation.learnerCaptureEstimates.first { $0.move == move }
-        let board = positionAdvice?.evaluation.request.committedState.board
-            ?? advice.evaluation.request.committedState.board
-        let movedPiece = board[move.from]?.kind
-        let points = max(1, -(estimate?.netGainForMover ?? 0))
-        return .concreteFlaw(kind: .materialLoss(points: points), affectedPiece: movedPiece)
+        if let fact = advice.exchangeFact(for: move)
+            ?? positionAdvice?.exchangeFact(for: move) {
+            return .unsafeCapture(fact)
+        }
+        return .noSafeCaptureForPiece
     }
 
     private func unresolvedDangerFeedback(

@@ -303,8 +303,7 @@ struct CoachingSession: Sendable {
                     return directives
                 }
             case .takeChooseMove:
-                if advice.takeOpportunities.isEmpty
-                    && advice.evaluation.mateInOneMoves.isEmpty {
+                if advice.takeOpportunities.isEmpty {
                     episode.evidence.confirmedTakeAbsence = true
                     let directives = reconcile()
                     recordFeedback(

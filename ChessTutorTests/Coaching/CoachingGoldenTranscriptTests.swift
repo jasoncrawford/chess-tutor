@@ -42,6 +42,38 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
     }
 
+    func testSafeAndUnsafeCaptureBranchesUseConcreteExchangeFacts() async throws {
+        let t6WrongSource = try await goldenTurn(.t6WrongSource)
+        let t6Hint = try await goldenTurn(.t6Hint)
+        let t6Capture = try await goldenTurn(.t6Capture)
+        let t7UnsafeCapture = try await goldenTurn(.t7UnsafeCapture)
+        let t7NoSafeCapture = try await goldenTurn(.t7NoSafeCapture)
+
+        XCTAssertEqual(
+            t6WrongSource.ask,
+            "Can one of your pieces safely take a black piece?"
+        )
+        XCTAssertEqual(t6WrongSource.response, "That piece has no safe capture here.")
+        XCTAssertEqual(t6Hint.response, "Your bishop has a safe capture.")
+        XCTAssertEqual(t6Hint.instruction, "Tap the highlighted white piece.")
+        XCTAssertEqual(
+            t6Capture.ask,
+            "Your bishop took a rook, and Black cannot take the bishop back."
+        )
+        XCTAssertEqual(
+            t7UnsafeCapture.response,
+            "Black’s king could take your bishop. You would lose a bishop to take one pawn."
+        )
+        XCTAssertEqual(
+            t7NoSafeCapture.response,
+            "Right—there is no safe capture here."
+        )
+        XCTAssertEqual(
+            t7NoSafeCapture.ask,
+            "I do not have a confident plan for this position yet."
+        )
+    }
+
     private func goldenTurn(_ branch: CoachingGoldenCase) async throws -> CoachingGoldenTurn {
         var session: CoachingSession
         switch branch {
@@ -66,6 +98,36 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t5ProtectedTap:
             session = try await preparedSession(for: .protectedPawn)
             session.handle(.identificationTapped(sq("g4")))
+
+        case .t6WrongSource:
+            session = try await preparedSession(for: .winningCapture)
+            session.handle(.interactionChanged(snapshot(selected: sq("g1"))))
+
+        case .t6Hint:
+            session = try await preparedSession(for: .winningCapture)
+            session.handle(.actionChosen(.hint))
+
+        case .t6Capture:
+            session = try await preparedSession(for: .winningCapture)
+            try await complete(
+                CoachingGoldenMoves.bishopWinsRook,
+                origin: .take,
+                position: .winningCapture,
+                in: &session
+            )
+
+        case .t7UnsafeCapture:
+            session = try await preparedSession(for: .losingCapture)
+            try await stage(
+                CoachingGoldenMoves.bishopTakesPawn,
+                origin: .take,
+                position: .losingCapture,
+                in: &session
+            )
+
+        case .t7NoSafeCapture:
+            session = try await preparedSession(for: .losingCapture)
+            session.handle(.actionChosen(.noAnswer))
 
         case .t8AddsDefender:
             session = try await preparedSession(for: .protectPawn)
@@ -123,6 +185,16 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         position: CoachingGoldenPosition,
         in session: inout CoachingSession
     ) async throws {
+        try await stage(move, origin: origin, position: position, in: &session)
+        session.handle(.actionChosen(.looksSafe))
+    }
+
+    private func stage(
+        _ move: Move,
+        origin: CoachingMoveOrigin,
+        position: CoachingGoldenPosition,
+        in session: inout CoachingSession
+    ) async throws {
         let interaction = snapshot(selected: move.to, tentativeMove: move)
         session.handle(.interactionChanged(interaction))
         let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
@@ -133,7 +205,6 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             context: .tentativeMove(origin: origin)
         ))
         session.receive(advice, interaction: interaction)
-        session.handle(.actionChosen(.looksSafe))
     }
 
     private func snapshot(

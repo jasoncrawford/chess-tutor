@@ -675,7 +675,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertFalse(assessment.isAcceptable)
     }
 
-    func testResolvingEqualExchangeIsAcceptedWithoutWinningConcept() async throws {
+    func testResolvingEqualExchangeIsAcceptedForSafeButExcludedFromTake() async throws {
         let learnerBishop = Square(file: .d, rank: 4)
         let attacker = Square(file: .b, rank: 6)
         let exchange = Move(from: learnerBishop, to: attacker)
@@ -700,13 +700,13 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         )
         XCTAssertTrue(assessment.concepts.contains(.captureResolvesDanger))
         XCTAssertFalse(assessment.concepts.contains(.profitableCapture))
-        XCTAssertTrue(advice.takeOpportunities.contains {
+        XCTAssertFalse(advice.takeOpportunities.contains {
             $0.concept == .captureResolvesDanger && $0.moves == [exchange]
         })
         XCTAssertTrue(assessment.isAcceptable)
     }
 
-    func testMateInOneIsATakeOpportunityAndAcceptablePurpose() async throws {
+    func testNonCaptureMateIsAcceptedButNotOfferedAsASafeCapture() async throws {
         let matingMove = Move(
             from: Square(file: .g, rank: 6),
             to: Square(file: .g, rank: 7)
@@ -722,13 +722,9 @@ final class LocalCoachingAdvisorTests: XCTestCase {
 
         let advice = try await advisor.advice(for: request(for: state))
         let assessment = try XCTUnwrap(advice.moveAssessments[matingMove])
-        let opportunity = try XCTUnwrap(
-            advice.takeOpportunities.first { $0.concept == .mateInOne }
-        )
-
-        XCTAssertEqual(advice.takeOpportunities.first?.concept, .mateInOne)
-        XCTAssertEqual(opportunity.moves, [matingMove])
-        XCTAssertEqual(opportunity.evidence, .check(attackers: [matingMove.to]))
+        XCTAssertFalse(advice.takeOpportunities.contains {
+            $0.concept == .mateInOne && $0.moves == [matingMove]
+        })
         XCTAssertTrue(assessment.concepts.contains(.mateInOne))
         XCTAssertTrue(assessment.isAcceptable)
     }

@@ -737,16 +737,16 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             emptySession.presentation?.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "I do not have a confident plan for this position yet."
         )
 
         var takeSession = session()
         takeSession.receive(CoachingTestFixtures.takeAdvice)
         takeSession.handle(.actionChosen(.noAnswer))
-        XCTAssertEqual(takeSession.presentation?.response, "There is a useful capture to find.")
+        XCTAssertEqual(takeSession.presentation?.response, "There is a safe capture to find.")
         XCTAssertEqual(
             takeSession.presentation?.headline,
-            "Can one of your pieces make a useful capture?"
+            "Can one of your pieces safely take a black piece?"
         )
         XCTAssertEqual(
             stage(CoachingTestFixtures.profitableCapture, in: &takeSession),
@@ -766,7 +766,7 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
-    func testMateInOneKeepsTakeNontrivialWithoutALegalCapture() {
+    func testNonCaptureMateDoesNotOpenTheSafeCaptureQuestion() {
         let mate = Move(
             from: CoachingTestFixtures.whiteQueen,
             to: Square(file: .h, rank: 4)
@@ -780,11 +780,8 @@ final class CoachingSessionTests: XCTestCase {
 
         session.receive(advice)
 
-        XCTAssertEqual(session.stage, .takeChooseMove)
-        XCTAssertEqual(
-            session.presentation?.routine,
-            [.safeCleared, .takeCurrent, .wakePending]
-        )
+        XCTAssertEqual(session.stage, .fallbackChooseMove)
+        XCTAssertEqual(session.presentation?.routine, [])
     }
 
     func testUnprofitableCaptureExplainsImmediateRecaptureAndReturnsToTake() {
@@ -814,10 +811,64 @@ final class CoachingSessionTests: XCTestCase {
         ))
 
         XCTAssertEqual(session.stage, .takeChooseMove)
-        XCTAssertEqual(session.presentation?.response, "Black could take your queen.")
+        XCTAssertEqual(
+            session.presentation?.response,
+            "Black’s king could take your queen. You would lose a queen to take one rook."
+        )
         XCTAssertEqual(
             session.presentation?.headline,
-            "Can one of your pieces make a useful capture?"
+            "Can one of your pieces safely take a black piece?"
+        )
+    }
+
+    func testRealLosingCaptureExplainsKingRecaptureThenAcceptsNoSafeCapture() async throws {
+        let state = CoachingGoldenPosition.losingCapture.state
+        let move = CoachingGoldenMoves.bishopTakesPawn
+        let advisor = LocalCoachingAdvisor()
+        let initial = CoachingInteractionSnapshot(
+            selectedSquare: nil,
+            tentativeMove: nil,
+            positionRevision: 1
+        )
+        var session = CoachingSession(
+            learner: .white,
+            interaction: initial,
+            initialContext: .start
+        )
+        session.receive(try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 1,
+            context: .start
+        )), interaction: initial)
+
+        let tentative = CoachingInteractionSnapshot(
+            selectedSquare: move.to,
+            tentativeMove: move,
+            positionRevision: 1
+        )
+        session.handle(.interactionChanged(tentative))
+        session.receive(try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 1,
+            context: .tentativeMove(origin: .take)
+        )), interaction: tentative)
+
+        XCTAssertEqual(
+            session.presentation?.response,
+            "Black’s king could take your bishop. You would lose a bishop to take one pawn."
+        )
+
+        session.handle(.interactionChanged(initial))
+        session.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(session.presentation?.response, "Right—there is no safe capture here.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "I do not have a confident plan for this position yet."
         )
     }
 
@@ -958,7 +1009,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
-    func testUnsupportedAdviceAndExplicitUnsupportedPositionUseGenericFallback() {
+    func testUnsupportedAdviceAndExplicitUnsupportedPositionStateTheirBoundary() {
         var fromAdvice = session()
         fromAdvice.receive(CoachingTestFixtures.fallbackAdvice)
         XCTAssertEqual(fromAdvice.stage, .fallbackChooseMove)
@@ -972,7 +1023,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(explicit.stage, .fallbackChooseMove)
         XCTAssertEqual(
             explicit.presentation?.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "I do not have a confident plan for this position yet."
         )
         XCTAssertEqual(explicit.presentation?.routine, [])
     }
@@ -990,7 +1041,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.hintLevel, 0)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Make a move on the board."
+            "Choose a move you are considering, and I will check it with you."
         )
         XCTAssertEqual(session.presentation?.focus, .empty)
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
@@ -1009,7 +1060,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.hintLevel, 0)
         XCTAssertEqual(
             session.presentation?.instruction,
-            "Make a move on the board."
+            "Choose a move you are considering, and I will check it with you."
         )
         XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
@@ -1652,7 +1703,7 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             session.presentation?.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "I do not have a confident plan for this position yet."
         )
     }
 
@@ -1861,7 +1912,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(take.stage, .takeChooseMove)
         XCTAssertEqual(
             take.presentation?.headline,
-            "Can one of your pieces make a useful capture?"
+            "Can one of your pieces safely take a black piece?"
         )
         XCTAssertTrue(take.presentation?.actions.map(\.action).contains(.hint) == true)
         take.handle(.actionChosen(.hint))
@@ -2429,7 +2480,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .fallbackChooseMove)
         XCTAssertEqual(
             session.presentation?.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "I do not have a confident plan for this position yet."
         )
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }

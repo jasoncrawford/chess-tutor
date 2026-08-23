@@ -55,7 +55,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .takeChooseMove:
             return (
-                "Can one of your pieces make a useful capture?",
+                "Can one of your pieces safely take a \(colorName(learner.opposite).lowercased()) piece?",
                 "Make the capture, or choose No safe capture."
             )
         case let .wakeChoosePiece(purpose):
@@ -73,6 +73,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 "Nothing urgent stands out. Try a move you like, and we’ll check it together.",
                 "Make a move on the board."
             )
+        case .unsupportedFallbackChooseMove:
+            return (
+                "I do not have a confident plan for this position yet.",
+                "Choose a move you are considering, and I will check it with you."
+            )
         case .reviseMove:
             return (
                 "Try another move.",
@@ -84,7 +89,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 "Move a piece on the board."
             )
         case let .complete(_, idea):
-            return (completionHeadline(for: idea), nil)
+            return (
+                completionHeadline(for: idea, opponent: learner.opposite),
+                nil
+            )
         }
     }
 
@@ -156,6 +164,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         base: String?
     ) -> String? {
         guard let base else { return nil }
+        switch context.feedback {
+        case .unsafeCapture:
+            return "Change your move, or choose No safe capture."
+        case .noSafeCaptureForPiece:
+            return "Try another piece, or choose No safe capture."
+        case .safeCaptureHint:
+            return "Tap the highlighted \(colorName(context.learner).lowercased()) piece."
+        default:
+            break
+        }
         guard let hint = context.hint else { return base }
         return hintedInstruction(for: hint, prompt: context.prompt, base: base)
     }
@@ -239,10 +257,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             case .noPieceNeedsHelp:
                 return "One of your pieces does need help."
             case .noSafeCapture:
-                return "There is a useful capture to find."
+                return "There is a safe capture to find."
             }
         case .missedOpponentReply:
             return missedAnswerHeadline(for: prompt)
+        case .noSafeCaptureForPiece:
+            return "That piece has no safe capture here."
+        case let .safeCaptureHint(piece):
+            return "Your \(piece.rawValue) has a safe capture."
+        case let .unsafeCapture(fact):
+            return unsafeCaptureCopy(fact, opponent: opponent)
         case let .concreteFlaw(kind, affectedPiece):
             return concreteFlawHeadline(
                 kind: kind,
@@ -271,7 +295,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .safeLocate:
             return "One of your pieces does need help."
         case .takeChooseMove:
-            return "There is a useful capture to find."
+            return "There is a safe capture to find."
         case let .opponentReply(opponent):
             return "\(colorName(opponent)) has a reply to notice."
         default:
@@ -313,14 +337,23 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         }
     }
 
-    private func completionHeadline(for idea: CoachingCompletionIdea) -> String {
+    private func completionHeadline(
+        for idea: CoachingCompletionIdea,
+        opponent: PieceColor
+    ) -> String {
         if case .resolvesDanger = idea {
-            return completionPurpose(for: idea)
+            return completionPurpose(for: idea, opponent: opponent)
         }
-        return "That works. \(completionPurpose(for: idea))"
+        if case .safeCapture = idea {
+            return completionPurpose(for: idea, opponent: opponent)
+        }
+        return "That works. \(completionPurpose(for: idea, opponent: opponent))"
     }
 
-    private func completionPurpose(for idea: CoachingCompletionIdea) -> String {
+    private func completionPurpose(
+        for idea: CoachingCompletionIdea,
+        opponent: PieceColor
+    ) -> String {
         let concept: String
         switch idea {
         case let .resolvesDanger(resolution):
@@ -331,6 +364,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             concept = "You found checkmate."
         case let .profitableCapture(captured):
             concept = "Your capture wins a \(captured.rawValue)."
+        case let .safeCapture(fact):
+            return safeCaptureCopy(fact, opponent: opponent)
         case let .develops(piece):
             concept = "Your \(piece.rawValue) came into the game. Chess players call that developing a piece."
         case .advancesCenterPawn:
@@ -347,6 +382,27 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             concept = "Your move stays safe after the reply."
         }
         return concept
+    }
+
+    private func safeCaptureCopy(
+        _ fact: CoachingExchangeFact,
+        opponent: PieceColor
+    ) -> String {
+        let opponentName = colorName(opponent)
+        if let recapturer = fact.immediateRecapturer {
+            return "Your \(fact.mover.rawValue) took a \(fact.captured.rawValue). \(opponentName)’s \(recapturer.rawValue) could take the \(fact.mover.rawValue) back, so you would trade a \(fact.mover.rawValue) for a \(fact.captured.rawValue)."
+        }
+        return "Your \(fact.mover.rawValue) took a \(fact.captured.rawValue), and \(opponentName) cannot take the \(fact.mover.rawValue) back."
+    }
+
+    private func unsafeCaptureCopy(
+        _ fact: CoachingExchangeFact,
+        opponent: PieceColor
+    ) -> String {
+        guard let recapturer = fact.immediateRecapturer else {
+            return "That piece has no safe capture here."
+        }
+        return "\(colorName(opponent))’s \(recapturer.rawValue) could take your \(fact.mover.rawValue). You would lose a \(fact.mover.rawValue) to take one \(fact.captured.rawValue)."
     }
 
     private func dangerResolutionCopy(_ resolution: CoachingDangerResolution) -> String {

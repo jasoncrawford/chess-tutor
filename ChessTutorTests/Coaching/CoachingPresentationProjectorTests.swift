@@ -234,6 +234,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             ),
             learnerCaptures: [captureEstimate]
         )
+        let completeExchange = try XCTUnwrap(completeAdvice.exchangeFact)
         let safeAttackerPath = CoachFocusPath(
             source: CoachingTestFixtures.blackBishop,
             destination: CoachingTestFixtures.whiteQueen,
@@ -501,7 +502,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                 ),
                 prompt: .complete(
                     origin: .take,
-                    idea: .profitableCapture(captured: .rook)
+                    idea: .safeCapture(completeExchange)
                 ),
                 boardTask: .none,
                 actions: [.done, .keepLooking, .stop],

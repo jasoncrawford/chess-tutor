@@ -239,14 +239,17 @@ final class CoachingAcceptanceTests: XCTestCase {
         await beginCoaching(in: badSession)
         XCTAssertEqual(
             badSession.coachingPresentation?.headline,
-            "Can one of your pieces make a useful capture?"
+            "Can one of your pieces safely take a black piece?"
         )
         stage(badCapture, in: badSession)
         await badSession.resolvePendingCoachingAdvice()
-        XCTAssertEqual(badSession.coachingPresentation?.response, "Black could take your bishop.")
+        XCTAssertEqual(
+            badSession.coachingPresentation?.response,
+            "Black’s pawn could take your bishop. You would lose a bishop to take one pawn."
+        )
         XCTAssertEqual(
             badSession.coachingPresentation?.headline,
-            "Can one of your pieces make a useful capture?"
+            "Can one of your pieces safely take a black piece?"
         )
         XCTAssertEqual(badSession.coachingPresentation?.boardTask, .move)
 
@@ -257,7 +260,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = winningSession.chooseCoachingAction(.looksSafe)
         XCTAssertEqual(
             winningSession.coachingPresentation?.headline,
-            "That works. Your capture wins a rook."
+            "Your knight took a rook. Black’s bishop could take the knight back, so you would trade a knight for a rook."
         )
         XCTAssertTrue(winningSession.state.moveHistory.isEmpty)
     }
@@ -307,7 +310,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(session.coachingPresentation?.routine, [])
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "Nothing urgent stands out. Try a move you like, and we’ll check it together."
+            "I do not have a confident plan for this position yet."
         )
 
         stage(move, in: session)

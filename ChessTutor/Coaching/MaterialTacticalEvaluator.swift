@@ -126,6 +126,33 @@ struct MaterialTacticalEvaluator: Sendable {
         )
     }
 
+    func exchangeFact(
+        for estimate: CoachingCaptureEstimate,
+        in committedState: GameState,
+        opponentIssue: CoachingOpponentIssue?
+    ) -> CoachingExchangeFact? {
+        guard let originalMover = committedState.board[estimate.move.from] else { return nil }
+        let mover: Piece.Kind
+        if case let .promotion(promotedKind) = estimate.move.special {
+            mover = promotedKind
+        } else {
+            mover = originalMover.kind
+        }
+        let stateAfterMove = committedState.applyingUnchecked(estimate.move)
+        let immediateRecapture = opponentIssue?.reply ?? estimate.immediateRecapture
+        let immediateRecapturer = immediateRecapture.flatMap {
+            stateAfterMove.board[$0.from]?.kind
+        }
+        return CoachingExchangeFact(
+            move: estimate.move,
+            mover: mover,
+            captured: estimate.capturedPiece.kind,
+            immediateRecapture: immediateRecapture,
+            immediateRecapturer: immediateRecapturer,
+            netGainForLearner: estimate.netGainForMover
+        )
+    }
+
     private func recaptureGain(_ move: Move, in state: GameState) -> Int {
         guard let capture = LegalMoveGenerator.capture(for: move, in: state),
               let value = pieceValue(capture.piece.kind) else {
@@ -289,5 +316,24 @@ struct MaterialTacticalEvaluator: Sendable {
         case .promotion(.knight): 7
         case .promotion(.pawn), .promotion(.king): 8
         }
+    }
+}
+
+extension CoachingEvaluation {
+    var exchangeFacts: [Move: CoachingExchangeFact] {
+        let evaluator = MaterialTacticalEvaluator()
+        return Dictionary(uniqueKeysWithValues: learnerCaptureEstimates.compactMap { estimate in
+            let opponentIssue = moveAssessments[estimate.move]?.opponentIssues.first {
+                $0.reply == estimate.immediateRecapture
+            }
+            guard let fact = evaluator.exchangeFact(
+                for: estimate,
+                in: request.committedState,
+                opponentIssue: opponentIssue
+            ) else {
+                return nil
+            }
+            return (estimate.move, fact)
+        })
     }
 }

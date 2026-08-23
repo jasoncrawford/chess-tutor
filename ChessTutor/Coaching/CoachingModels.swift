@@ -37,6 +37,15 @@ struct CoachingCaptureEstimate: Equatable, Sendable {
     let netGainForMover: Int
 }
 
+struct CoachingExchangeFact: Equatable, Sendable {
+    let move: Move
+    let mover: Piece.Kind
+    let captured: Piece.Kind
+    let immediateRecapture: Move?
+    let immediateRecapturer: Piece.Kind?
+    let netGainForLearner: Int
+}
+
 struct CoachingDangerProblem: Equatable, Sendable {
     let target: Square
     let piece: Piece
@@ -147,6 +156,14 @@ struct CoachingAdvice: Equatable, Sendable {
 
     var checkingPieces: Set<Square> { evaluation.checkingPieces }
 
+    var exchangeFact: CoachingExchangeFact? {
+        evaluation.request.tentativeMove.flatMap { evaluation.exchangeFacts[$0] }
+    }
+
+    func exchangeFact(for move: Move) -> CoachingExchangeFact? {
+        evaluation.exchangeFacts[move]
+    }
+
     var primaryDangerProblems: [CoachingDangerProblem] {
         guard let first = dangerProblems.first else { return [] }
         return dangerProblems.filter {
@@ -195,6 +212,7 @@ enum CoachingPrompt: Equatable, Sendable {
     case wakeChooseMove(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case opponentReply(opponent: PieceColor)
     case fallbackChooseMove
+    case unsupportedFallbackChooseMove
     case reviseMove
     case illegalKingSafety
     case complete(origin: CoachingMoveOrigin, idea: CoachingCompletionIdea)
@@ -205,6 +223,7 @@ enum CoachingCompletionIdea: Equatable, Sendable {
     case resolvesCheck
     case mate
     case profitableCapture(captured: Piece.Kind)
+    case safeCapture(CoachingExchangeFact)
     case develops(piece: Piece.Kind)
     case advancesCenterPawn
     case castles
@@ -247,6 +266,9 @@ enum CoachingFeedback: Equatable, Sendable {
     case correctAbsence(CoachingAbsenceKind)
     case missedExistingAnswer(CoachingAbsenceKind)
     case missedOpponentReply
+    case noSafeCaptureForPiece
+    case safeCaptureHint(piece: Piece.Kind)
+    case unsafeCapture(CoachingExchangeFact)
     case concreteFlaw(kind: CoachingOpponentIssueKind, affectedPiece: Piece.Kind?)
     case dangerStillPresent(attacker: Piece.Kind?, target: Piece.Kind)
     case noRecognizedPurpose(purpose: CoachingWakePurpose?)

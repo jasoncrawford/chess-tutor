@@ -17,9 +17,12 @@ struct CoachingPresentationProjector: Sendable {
         let hints = hintSteps(for: derived.stage, episode: episode, advice: advice)
         let hint = hints.indices.contains(hintLevel - 1) ? hints[hintLevel - 1] : nil
         let recordedFeedback = progressMatchesQuestion ? episode.progress.feedback : nil
-        let feedback = hint != nil && recordedFeedback == nil
-            ? nil
-            : derived.derivedFeedback ?? recordedFeedback
+        let feedback: CoachingFeedback?
+        if let hint, recordedFeedback == nil {
+            feedback = hintFeedback(for: derived.stage, hint: hint, advice: advice)
+        } else {
+            feedback = derived.derivedFeedback ?? recordedFeedback
+        }
 
         return CoachingPresentationContext(
             prompt: prompt,
@@ -112,7 +115,10 @@ struct CoachingPresentationProjector: Sendable {
                 purpose: purpose
             )
         case .fallbackChooseMove:
-            return .fallbackChooseMove
+            return advice?.confidence == .unsupported
+                || episode.knowledge.unsupportedContext != nil
+                ? .unsupportedFallbackChooseMove
+                : .fallbackChooseMove
         case .opponentCheck:
             return .opponentReply(opponent: learner.opposite)
         case .reviseMove:
@@ -232,6 +238,20 @@ struct CoachingPresentationProjector: Sendable {
         case .awaitingAdvice, .fallbackChooseMove, .reviseMove, .complete:
             return []
         }
+    }
+
+    private func hintFeedback(
+        for stage: CoachingStage,
+        hint: CoachingHint,
+        advice: CoachingAdvice?
+    ) -> CoachingFeedback? {
+        guard stage == .takeChooseMove,
+              hint == .candidatePieces,
+              let move = advice?.takeOpportunities.first?.moves.first,
+              let fact = advice?.exchangeFact(for: move) else {
+            return nil
+        }
+        return .safeCaptureHint(piece: fact.mover)
     }
 
     private func focus(
@@ -517,6 +537,9 @@ struct CoachingPresentationProjector: Sendable {
             case .mateInOne:
                 return .mate
             case .profitableCapture, .captureResolvesDanger:
+                if let fact = advice?.exchangeFact(for: move) {
+                    return .safeCapture(fact)
+                }
                 return .profitableCapture(captured: capturedKind(for: move, advice: advice) ?? .pawn)
             case .developsKnightOrBishop:
                 return .develops(piece: pieceKind(at: move.from, advice: advice) ?? .knight)
