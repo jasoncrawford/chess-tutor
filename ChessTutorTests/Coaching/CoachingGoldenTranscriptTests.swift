@@ -3,8 +3,8 @@ import XCTest
 
 final class CoachingGoldenTranscriptTests: XCTestCase {
     func testCorpusContainsEveryApprovedAnchor() {
-        XCTAssertEqual(CoachingGoldenPosition.allCases.count, 15)
-        XCTAssertEqual(Set(CoachingGoldenPosition.allCases.map(\.rawValue)).count, 15)
+        XCTAssertEqual(CoachingGoldenPosition.allCases.count, 17)
+        XCTAssertEqual(Set(CoachingGoldenPosition.allCases.map(\.rawValue)).count, 17)
         XCTAssertEqual(CoachingGoldenCase.allCases.count, 47)
         XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 47)
     }
