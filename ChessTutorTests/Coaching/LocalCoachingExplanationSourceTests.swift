@@ -109,13 +109,13 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .opponentReply(opponent: .black),
-                "Could Black check your king or win one of your pieces?",
-                "Tap the black checking piece, or tap your piece Black could take. Otherwise choose Looks safe."
+                "What could Black do after your move?",
+                "Tap a black piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
             ),
             (
                 .opponentReply(opponent: .white),
-                "Could White check your king or win one of your pieces?",
-                "Tap the white checking piece, or tap your piece White could take. Otherwise choose Looks safe."
+                "What could White do after your move?",
+                "Tap a white piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
             ),
             (
                 .fallbackChooseMove,
@@ -486,7 +486,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .opponentReply(opponent: .black),
                 .notReplyIssue,
-                "That square doesn’t show a check or capture after this move."
+                "Tap a black piece that could check your king or take one of your pieces."
             ),
             (
                 .safeResolve(target: .knight, attacker: .pawn),
@@ -533,7 +533,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(presentation.response, "White could check your king.")
         XCTAssertEqual(
             presentation.headline,
-            "Could White check your king or win one of your pieces?"
+            "What could White do after your move?"
         )
     }
 

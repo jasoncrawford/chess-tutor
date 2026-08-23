@@ -69,7 +69,17 @@ struct CoachingOpponentIssue: Equatable, Sendable {
     let reply: Move
     let kind: CoachingOpponentIssueKind
     let severity: CoachingOpponentIssueSeverity
-    let answerSquares: Set<Square>
+    let affectedSquare: Square?
+    let checkingSquares: Set<Square>
+
+    var answerSquares: Set<Square> { [reply.from] }
+}
+
+struct CoachingOpponentReplyFact: Equatable, Sendable {
+    let issue: CoachingOpponentIssue
+    let opponentPiece: Piece.Kind
+    let affectedPiece: Piece.Kind?
+    let learnerPiece: Piece.Kind?
 }
 
 struct CoachingMoveAssessment: Equatable, Sendable {
@@ -330,7 +340,7 @@ enum CoachingPrompt: Equatable, Sendable {
 
 enum CoachingCompletionIdea: Equatable, Sendable {
     case resolvesDanger(CoachingDangerResolution)
-    case resolvesCheck
+    case resolvesCheck(resolution: CoachingCheckResolution, checker: Piece.Kind?)
     case mate
     case profitableCapture(captured: Piece.Kind)
     case safeCapture(CoachingExchangeFact)
@@ -342,6 +352,12 @@ enum CoachingCompletionIdea: Equatable, Sendable {
     case centralizes(piece: Piece.Kind)
     case constructive(task: CoachingWakeTask, move: Move, piece: Piece.Kind)
     case verifiedSafe
+}
+
+enum CoachingCheckResolution: Equatable, Sendable {
+    case movedKing
+    case blocked(attacker: Piece.Kind, blocker: Piece.Kind)
+    case capturedChecker(checker: Piece.Kind, capturer: Piece.Kind)
 }
 
 enum CoachingDangerResolution: Equatable, Sendable {
@@ -377,6 +393,9 @@ enum CoachingFeedback: Equatable, Sendable {
     case correctAbsence(CoachingAbsenceKind)
     case missedExistingAnswer(CoachingAbsenceKind)
     case missedOpponentReply
+    case missedOpponentIssue(CoachingOpponentReplyFact)
+    case opponentIssue(CoachingOpponentReplyFact)
+    case opponentReplyLooksSafe
     case noSafeCaptureForPiece
     case safeCaptureHint(piece: Piece.Kind)
     case unsafeCapture(CoachingExchangeFact)

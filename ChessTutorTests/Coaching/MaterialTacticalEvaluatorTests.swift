@@ -4,6 +4,75 @@ import XCTest
 final class MaterialTacticalEvaluatorTests: XCTestCase {
     private let evaluator = MaterialTacticalEvaluator()
 
+    func testMaterialIssueUsesOpponentSourceAsAnswer() throws {
+        let assessment = try assessment(
+            position: .exposedQueen,
+            tentativeMove: CoachingGoldenMoves.exposesQueen
+        )
+        let issue = try XCTUnwrap(assessment.opponentIssues.first {
+            $0.reply == CoachingGoldenMoves.rookTakesQueen
+                && $0.kind == .materialLoss(points: 9)
+        })
+
+        XCTAssertEqual(issue.reply, CoachingGoldenMoves.rookTakesQueen)
+        XCTAssertEqual(issue.answerSquares, [sq("d8")])
+        XCTAssertEqual(issue.affectedSquare, sq("d4"))
+        XCTAssertEqual(issue.checkingSquares, [])
+    }
+
+    func testHarmlessCheckPreservesReplyAffectedKingAndVisibleChecker() throws {
+        let assessment = try assessment(
+            position: .harmlessCheck,
+            tentativeMove: CoachingGoldenMoves.developsKnight
+        )
+        let issue = try XCTUnwrap(assessment.opponentIssues.first {
+            $0.reply == CoachingGoldenMoves.rookChecks && $0.kind == .check
+        })
+
+        XCTAssertEqual(issue.answerSquares, [sq("a8")])
+        XCTAssertEqual(issue.affectedSquare, sq("g1"))
+        XCTAssertEqual(issue.checkingSquares, [sq("a8")])
+    }
+
+    func testCheckResolutionClassifiesCaptureBlockAndKingMoveAfterSafetyProof() {
+        let state = CoachingGoldenPosition.forcedCheck.state
+        let kingMove = Move(from: sq("e1"), to: sq("d1"))
+
+        XCTAssertEqual(
+            evaluator.checkResolution(
+                for: CoachingGoldenMoves.capturesChecker,
+                in: state,
+                learner: .white,
+                checkingSquares: [sq("e8")]
+            ),
+            .capturedChecker(checker: .rook, capturer: .bishop)
+        )
+        XCTAssertEqual(
+            evaluator.checkResolution(
+                for: CoachingGoldenMoves.blocksChecker,
+                in: state,
+                learner: .white,
+                checkingSquares: [sq("e8")]
+            ),
+            .blocked(attacker: .rook, blocker: .bishop)
+        )
+        XCTAssertEqual(
+            evaluator.checkResolution(
+                for: kingMove,
+                in: state,
+                learner: .white,
+                checkingSquares: [sq("e8")]
+            ),
+            .movedKing
+        )
+        XCTAssertNil(evaluator.checkResolution(
+            for: Move(from: sq("b5"), to: sq("c4")),
+            in: state,
+            learner: .white,
+            checkingSquares: [sq("e8")]
+        ))
+    }
+
     func testOnePawnLossIsADangerProblem() {
         let evaluation = evaluator.evaluate(request(for: CoachingGoldenPosition.endangeredPawn.state))
 
@@ -348,6 +417,8 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
                 && $0.kind == .mateInOne
                 && $0.severity == .reviseMove
                 && $0.answerSquares == [matingReply.from]
+                && $0.affectedSquare == sq("h1")
+                && $0.checkingSquares == [matingReply.from]
         })
         XCTAssertFalse(assessment.opponentIssues.contains {
             $0.reply == matingReply && $0.kind == .check
@@ -381,7 +452,9 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             $0.reply == reply
                 && $0.kind == .materialLoss(points: 2)
                 && $0.severity == .reviseMove
-                && $0.answerSquares == [learnerMove.to]
+                && $0.answerSquares == [reply.from]
+                && $0.affectedSquare == learnerMove.to
+                && $0.checkingSquares.isEmpty
         })
     }
 
@@ -412,6 +485,8 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
                 && $0.kind == .check
                 && $0.severity == .notice
                 && $0.answerSquares == [checkingReply.from]
+                && $0.affectedSquare == sq("e1")
+                && $0.checkingSquares == [checkingReply.from]
         })
         XCTAssertFalse(assessment.opponentIssues.contains {
             $0.reply == checkingReply && $0.kind == .mateInOne
@@ -447,9 +522,10 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             reply: reply,
             kind: .check,
             severity: .notice,
-            answerSquares: [checker]
+            affectedSquare: sq("e1"),
+            checkingSquares: [checker]
         ))
-        XCTAssertFalse(issue.answerSquares.contains(blocker))
+        XCTAssertEqual(issue.answerSquares, [blocker])
     }
 
     func testDoubleCheckMapsMovedAndUnchangedCheckersToTheirVisibleSquares() throws {
@@ -481,9 +557,10 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             reply: reply,
             kind: .check,
             severity: .notice,
-            answerSquares: [unchangedChecker, movedChecker]
+            affectedSquare: sq("e1"),
+            checkingSquares: [unchangedChecker, movedChecker]
         ))
-        XCTAssertFalse(issue.answerSquares.contains(reply.to))
+        XCTAssertEqual(issue.answerSquares, [movedChecker])
     }
 
     func testCastlingCheckMapsRookToItsVisiblePreCastleSquare() throws {
@@ -519,9 +596,10 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             reply: reply,
             kind: .check,
             severity: .notice,
-            answerSquares: [rook]
+            affectedSquare: sq("f1"),
+            checkingSquares: [rook]
         ))
-        XCTAssertFalse(issue.answerSquares.contains(king))
+        XCTAssertEqual(issue.answerSquares, [king])
         XCTAssertFalse(issue.answerSquares.contains(Square(file: .f, rank: 8)))
     }
 
@@ -769,5 +847,13 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
             positionRevision: 1,
             context: .start
         )
+    }
+
+    private func assessment(
+        position: CoachingGoldenPosition,
+        tentativeMove: Move
+    ) throws -> CoachingMoveAssessment {
+        let evaluation = evaluator.evaluate(request(for: position.state))
+        return try XCTUnwrap(evaluation.moveAssessments[tentativeMove])
     }
 }

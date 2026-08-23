@@ -310,7 +310,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(session.coachingPresentation?.routine, [])
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "I do not have a confident plan for this position yet."
+            "I can check immediate dangers, but I do not have a confident plan for this position yet."
         )
 
         stage(move, in: session)
@@ -344,8 +344,17 @@ final class CoachingAcceptanceTests: XCTestCase {
             .identify(allowsMoveRevision: true)
         )
         XCTAssertTrue(session.handleCoachingSquareTap(move.to))
+        XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "Tap a black piece that could check your king or take one of your pieces."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.boardTask,
+            .identify(allowsMoveRevision: true)
+        )
+        XCTAssertTrue(session.handleCoachingSquareTap(attacker))
 
-        XCTAssertEqual(session.coachingPresentation?.response, "Black could take your bishop.")
+        XCTAssertEqual(session.coachingPresentation?.response, "Black’s pawn could take your bishop.")
         XCTAssertEqual(session.coachingPresentation?.headline, "Try another move.")
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
         XCTAssertEqual(session.state.board[move.to], white(.bishop))
@@ -373,7 +382,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.response,
-            "You found it. Black could check your king, but your move still works."
+            "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works."
         )
         XCTAssertEqual(
             session.coachingPresentation?.headline,

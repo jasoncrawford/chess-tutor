@@ -70,7 +70,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t7NoSafeCapture.ask,
-            "I do not have a confident plan for this position yet."
+            "I can check immediate dangers, but I do not have a confident plan for this position yet."
         )
     }
 
@@ -179,6 +179,172 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
     }
 
+    func testOpponentPromptHasOneTapGrammar() async throws {
+        let turn = try await opponentPromptTurn(
+            state: CoachingGoldenPosition.exposedQueen.state,
+            move: CoachingGoldenMoves.exposesQueen,
+            learner: .white
+        )
+
+        XCTAssertEqual(turn.ask, "What could Black do after your move?")
+        XCTAssertEqual(
+            turn.instruction,
+            "Tap a black piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
+        )
+    }
+
+    func testQueenLossAndHarmlessCheckCopy() async throws {
+        let queenLoss = try await goldenTurn(.t11QueenLoss)
+        let harmlessCheck = try await goldenTurn(.t11HarmlessCheck)
+
+        XCTAssertEqual(queenLoss.response, "Black’s rook could take your queen.")
+        XCTAssertEqual(
+            harmlessCheck.response,
+            "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works."
+        )
+    }
+
+    func testIncorrectLooksSafeNamesIssueAndRemovesInvalidAbsenceAction() async throws {
+        let turn = try await goldenTurn(.t11IncorrectLooksSafe)
+
+        XCTAssertEqual(turn.response, "Black’s rook could take your queen.")
+        XCTAssertEqual(turn.actions, [.hint, .stop])
+        XCTAssertEqual(turn.actionTitles, ["Hint", "Close help"])
+        XCTAssertEqual(
+            turn.instruction,
+            "Tap the black rook, or choose Hint."
+        )
+    }
+
+    func testHintAfterIncorrectLooksSafeClearsResponseWithoutRestoringLooksSafe() async throws {
+        var session = try await tentativeSession(
+            state: CoachingGoldenPosition.exposedQueen.state,
+            move: CoachingGoldenMoves.exposesQueen,
+            learner: .white
+        )
+        session.handle(.actionChosen(.looksSafe))
+        session.handle(.actionChosen(.hint))
+
+        let turn = try turn(from: session)
+        XCTAssertNil(turn.response)
+        XCTAssertEqual(turn.instruction, "Tap the black rook.")
+        XCTAssertEqual(turn.actions, [.stop])
+        XCTAssertEqual(turn.candidateSquares, [CoachingGoldenMoves.rookTakesQueen.from])
+        XCTAssertEqual(turn.paths, [
+            CoachFocusPath(
+                source: CoachingGoldenMoves.rookTakesQueen.from,
+                destination: CoachingGoldenMoves.rookTakesQueen.to,
+                role: .attacker
+            ),
+        ])
+    }
+
+    func testSafeOpponentAnswerUsesBoundedImmediateClaim() async throws {
+        let turn = try await goldenTurn(.t11Safe)
+
+        XCTAssertEqual(
+            turn.response,
+            "Black cannot immediately check your king or win one of your pieces after this move."
+        )
+        XCTAssertEqual(
+            turn.ask,
+            "You developed your knight toward the center. From there it can reach more squares."
+        )
+    }
+
+    func testForcedCheckCompletionNamesMethod() async throws {
+        let capture = try await goldenTurn(.t12Capture)
+        let block = try await goldenTurn(.t12Block)
+        let kingMove = try await goldenTurn(.t12KingMove)
+
+        XCTAssertEqual(
+            capture.ask,
+            "Your bishop took the checking rook. Your king is safe."
+        )
+        XCTAssertEqual(
+            block.ask,
+            "Your bishop blocked the rook’s path. Your king is safe."
+        )
+        XCTAssertEqual(
+            kingMove.ask,
+            "Your king moved out of the rook’s line. It is safe."
+        )
+    }
+
+    func testUnsupportedEntryIsHonestAndHasNoRoutineOrCandidateFocus() async throws {
+        let turn = try await goldenTurn(.t12UnsupportedEntry)
+
+        XCTAssertEqual(
+            turn.ask,
+            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+        )
+        XCTAssertEqual(
+            turn.instruction,
+            "Choose a move you are considering, and I will check it with you."
+        )
+        XCTAssertEqual(turn.actions, [.stop])
+        XCTAssertEqual(turn.routine, [])
+        XCTAssertEqual(turn.emphasizedSquares, [])
+        XCTAssertEqual(turn.candidateSquares, [])
+        XCTAssertEqual(turn.paths, [])
+    }
+
+    func testColorMirrorsT1T3AndT11Semantics() async throws {
+        var t1 = try await preparedSession(for: CoachingGoldenPosition.starting.state)
+        t1.handle(.actionChosen(.hint))
+        let originalT1 = try turn(from: t1)
+        var mirroredT1 = try await preparedSession(
+            for: colorMirror(CoachingGoldenPosition.starting.state),
+            learner: .black
+        )
+        mirroredT1.handle(.actionChosen(.hint))
+        let blackT1 = try turn(from: mirroredT1)
+
+        XCTAssertEqual(blackT1.ask, originalT1.ask)
+        XCTAssertEqual(blackT1.instruction, originalT1.instruction)
+        XCTAssertEqual(blackT1.actions, originalT1.actions)
+        assertMirroredFocus(originalT1, blackT1)
+
+        var t3 = try await preparedSession(for: CoachingGoldenPosition.endangeredKnight.state)
+        t3.handle(.identificationTapped(sq("f3")))
+        let originalT3 = try turn(from: t3)
+        var mirroredT3 = try await preparedSession(
+            for: colorMirror(CoachingGoldenPosition.endangeredKnight.state),
+            learner: .black
+        )
+        mirroredT3.handle(.identificationTapped(colorMirror(sq("f3"))))
+        let blackT3 = try turn(from: mirroredT3)
+
+        XCTAssertEqual(
+            originalT3.ask,
+            "You found the knight. What black piece is attacking it?"
+        )
+        XCTAssertEqual(
+            blackT3.ask,
+            "You found the knight. What white piece is attacking it?"
+        )
+        XCTAssertEqual(originalT3.actions, blackT3.actions)
+        assertMirroredFocus(originalT3, blackT3)
+
+        let originalT11 = try await opponentAnswerTurn(
+            state: CoachingGoldenPosition.exposedQueen.state,
+            move: CoachingGoldenMoves.exposesQueen,
+            learner: .white,
+            answer: CoachingGoldenMoves.rookTakesQueen.from
+        )
+        let blackT11 = try await opponentAnswerTurn(
+            state: colorMirror(CoachingGoldenPosition.exposedQueen.state),
+            move: colorMirror(CoachingGoldenMoves.exposesQueen),
+            learner: .black,
+            answer: colorMirror(CoachingGoldenMoves.rookTakesQueen.from)
+        )
+
+        XCTAssertEqual(originalT11.response, "Black’s rook could take your queen.")
+        XCTAssertEqual(blackT11.response, "White’s rook could take your queen.")
+        XCTAssertEqual(originalT11.actions, blackT11.actions)
+        assertMirroredFocus(originalT11, blackT11)
+    }
+
     func testCanonicalT2ClearsSafeAndTakeBeforeWake() async throws {
         var session = try await preparedSession(for: .readyToCastle)
 
@@ -278,7 +444,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
             XCTAssertEqual(
                 session.presentation?.headline,
-                "Could Black check your king or win one of your pieces?"
+                "What could Black do after your move?"
             )
             session.handle(.actionChosen(.looksSafe))
 
@@ -374,6 +540,79 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 in: &session
             )
 
+        case .t11Safe:
+            session = try await preparedSession(for: .starting)
+            try await complete(
+                Move(from: sq("g1"), to: sq("f3")),
+                origin: .wake,
+                position: .starting,
+                in: &session
+            )
+
+        case .t11QueenLoss:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.exposedQueen.state,
+                move: CoachingGoldenMoves.exposesQueen,
+                learner: .white
+            )
+            session.handle(.actionChosen(.looksSafe))
+
+        case .t11IncorrectLooksSafe:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.exposedQueen.state,
+                move: CoachingGoldenMoves.exposesQueen,
+                learner: .white
+            )
+            session.handle(.actionChosen(.looksSafe))
+
+        case .t11HarmlessCheck:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.harmlessCheck.state,
+                move: CoachingGoldenMoves.developsKnight,
+                learner: .white
+            )
+            session.handle(.identificationTapped(CoachingGoldenMoves.rookChecks.from))
+
+        case .t12CheckLocate:
+            session = try await preparedSession(for: .forcedCheck)
+
+        case .t12WrongChecker:
+            session = try await preparedSession(for: .forcedCheck)
+            session.handle(.identificationTapped(sq("a8")))
+
+        case .t12Capture:
+            session = try await preparedSession(for: .forcedCheck)
+            session.handle(.identificationTapped(sq("e8")))
+            try await complete(
+                CoachingGoldenMoves.capturesChecker,
+                origin: .check,
+                position: .forcedCheck,
+                in: &session
+            )
+
+        case .t12Block:
+            session = try await preparedSession(for: .forcedCheck)
+            session.handle(.identificationTapped(sq("e8")))
+            try await complete(
+                CoachingGoldenMoves.blocksChecker,
+                origin: .check,
+                position: .forcedCheck,
+                in: &session
+            )
+
+        case .t12KingMove:
+            session = try await preparedSession(for: .forcedCheck)
+            session.handle(.identificationTapped(sq("e8")))
+            try await complete(
+                Move(from: sq("e1"), to: sq("d1")),
+                origin: .check,
+                position: .forcedCheck,
+                in: &session
+            )
+
+        case .t12UnsupportedEntry:
+            session = try await preparedSession(for: .unsupportedEndgame)
+
         default:
             preconditionFailure("No golden turn implementation for \(branch.rawValue)")
         }
@@ -403,21 +642,152 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     }
 
     private func preparedSession(for state: GameState) async throws -> CoachingSession {
+        try await preparedSession(for: state, learner: .white)
+    }
+
+    private func preparedSession(
+        for state: GameState,
+        learner: PieceColor
+    ) async throws -> CoachingSession {
         let interaction = snapshot()
         var session = CoachingSession(
-            learner: .white,
+            learner: learner,
             interaction: interaction,
             initialContext: .start
         )
         let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
             committedState: state,
             tentativeMove: nil,
-            learner: .white,
+            learner: learner,
             positionRevision: interaction.positionRevision,
             context: .start
         ))
         session.receive(advice, interaction: interaction)
         return session
+    }
+
+    private func tentativeSession(
+        state: GameState,
+        move: Move,
+        learner: PieceColor
+    ) async throws -> CoachingSession {
+        let interaction = snapshot(selected: move.to, tentativeMove: move)
+        var session = CoachingSession(
+            learner: learner,
+            interaction: interaction,
+            initialContext: .tentativeMove(origin: .fallback)
+        )
+        let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: learner,
+            positionRevision: interaction.positionRevision,
+            context: .tentativeMove(origin: .fallback)
+        ))
+        session.receive(advice, interaction: interaction)
+        return session
+    }
+
+    private func opponentAnswerTurn(
+        state: GameState,
+        move: Move,
+        learner: PieceColor,
+        answer: Square
+    ) async throws -> CoachingGoldenTurn {
+        var session = try await tentativeSession(state: state, move: move, learner: learner)
+        session.handle(.identificationTapped(answer))
+        return try turn(from: session)
+    }
+
+    private func opponentPromptTurn(
+        state: GameState,
+        move: Move,
+        learner: PieceColor
+    ) async throws -> CoachingGoldenTurn {
+        let session = try await tentativeSession(
+            state: state,
+            move: move,
+            learner: learner
+        )
+        return try turn(from: session)
+    }
+
+    private func turn(from session: CoachingSession) throws -> CoachingGoldenTurn {
+        let presentation = try XCTUnwrap(session.presentation)
+        return CoachingGoldenTurn(
+            response: presentation.response,
+            ask: presentation.headline,
+            instruction: presentation.instruction,
+            actions: presentation.actions.map(\.action),
+            actionTitles: presentation.actions.map(\.title),
+            boardTask: presentation.boardTask,
+            routine: presentation.routine,
+            emphasizedSquares: presentation.focus.emphasizedSquares,
+            candidateSquares: presentation.focus.candidateSquares,
+            paths: presentation.focus.paths
+        )
+    }
+
+    private func assertMirroredFocus(
+        _ original: CoachingGoldenTurn,
+        _ mirrored: CoachingGoldenTurn,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            mirrored.emphasizedSquares,
+            Set(original.emphasizedSquares.map(colorMirror)),
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            mirrored.candidateSquares,
+            Set(original.candidateSquares.map(colorMirror)),
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            mirrored.paths,
+            Set(original.paths.map { path in
+                CoachFocusPath(
+                    source: colorMirror(path.source),
+                    destination: colorMirror(path.destination),
+                    role: path.role
+                )
+            }),
+            file: file,
+            line: line
+        )
+    }
+
+    private func colorMirror(_ square: Square) -> Square {
+        Square(file: square.file, rank: 9 - square.rank)
+    }
+
+    private func colorMirror(_ move: Move) -> Move {
+        Move(
+            from: colorMirror(move.from),
+            to: colorMirror(move.to),
+            special: move.special
+        )
+    }
+
+    private func colorMirror(_ state: GameState) -> GameState {
+        let mirroredPieces = Dictionary(uniqueKeysWithValues: state.board.pieces.map {
+            square, piece in
+            (colorMirror(square), Piece(kind: piece.kind, color: piece.color.opposite))
+        })
+        return GameState(
+            board: Board(pieces: mirroredPieces),
+            sideToMove: state.sideToMove.opposite,
+            castlingRights: CastlingRights(
+                whiteKingside: state.castlingRights.blackKingside,
+                whiteQueenside: state.castlingRights.blackQueenside,
+                blackKingside: state.castlingRights.whiteKingside,
+                blackQueenside: state.castlingRights.whiteQueenside
+            ),
+            enPassantTarget: state.enPassantTarget.map(colorMirror)
+        )
     }
 
     private func preparedT2WakeSession() async throws -> CoachingSession {

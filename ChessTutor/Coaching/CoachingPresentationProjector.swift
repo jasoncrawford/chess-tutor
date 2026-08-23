@@ -18,10 +18,21 @@ struct CoachingPresentationProjector: Sendable {
         let hint = hints.indices.contains(hintLevel - 1) ? hints[hintLevel - 1] : nil
         let recordedFeedback = progressMatchesQuestion ? episode.progress.feedback : nil
         let feedback: CoachingFeedback?
-        if let hint, recordedFeedback == nil {
-            feedback = hintFeedback(for: derived.stage, hint: hint, advice: advice)
+        if let hint,
+           recordedFeedback == nil {
+            if case .missedOpponentIssue = derived.derivedFeedback {
+                feedback = derived.derivedFeedback
+            } else {
+                feedback = hintFeedback(for: derived.stage, hint: hint, advice: advice)
+            }
         } else {
-            feedback = derived.derivedFeedback ?? recordedFeedback
+            feedback = recordedFeedback ?? derived.derivedFeedback
+        }
+        let opponentReplyWasRejected: Bool
+        if case .missedOpponentIssue = derived.derivedFeedback {
+            opponentReplyWasRejected = true
+        } else {
+            opponentReplyWasRejected = false
         }
 
         return CoachingPresentationContext(
@@ -36,7 +47,8 @@ struct CoachingPresentationProjector: Sendable {
                 hintLevel: hintLevel,
                 availableHints: hints,
                 advice: advice,
-                feedback: feedback
+                feedback: feedback,
+                opponentReplyWasRejected: opponentReplyWasRejected
             ),
             boardTask: boardTask(for: derived.stage),
             focus: focus(
@@ -179,7 +191,8 @@ struct CoachingPresentationProjector: Sendable {
         hintLevel: Int,
         availableHints: [CoachingHint],
         advice: CoachingAdvice?,
-        feedback: CoachingFeedback?
+        feedback: CoachingFeedback?,
+        opponentReplyWasRejected: Bool
     ) -> [CoachingAction] {
         let hintActions: [CoachingAction] = hintLevel < availableHints.count ? [.hint] : []
         switch stage {
@@ -190,7 +203,7 @@ struct CoachingPresentationProjector: Sendable {
         case .takeChooseMove:
             return [.noAnswer] + hintActions + [.stop]
         case .opponentCheck:
-            return [.looksSafe] + hintActions + [.stop]
+            return (opponentReplyWasRejected ? [] : [.looksSafe]) + hintActions + [.stop]
         case .complete:
             return [.done, .keepLooking, .stop]
         case .awaitingAdvice:
@@ -252,7 +265,7 @@ struct CoachingPresentationProjector: Sendable {
         case .opponentCheck:
             return opponentIssueAnswerSquares(for: stage, advice: advice).isEmpty
                 ? []
-                : [.replyMarkers, .attackerRelationship]
+                : [.attackerRelationship]
         case .awaitingAdvice, .fallbackChooseMove, .reviseMove, .complete:
             return []
         }
@@ -349,6 +362,19 @@ struct CoachingPresentationProjector: Sendable {
                     destination: target,
                     role: .attacker
                 )],
+                pulseID: episode.progress.pulseID
+            )
+        }
+        if let move = episode.interaction.tentativeMove,
+           case let .issue(answeredMove, issue) = episode.evidence.replyAnswer,
+            answeredMove == move,
+           stage.isOpponentIssueOutcome {
+            return CoachFocusPresentation(
+                emphasizedSquares: Set(
+                    [issue.reply.from] + (issue.affectedSquare.map { [$0] } ?? [])
+                ),
+                candidateSquares: [],
+                paths: Set(opponentIssuePaths(issue)),
                 pulseID: episode.progress.pulseID
             )
         }
@@ -483,23 +509,21 @@ struct CoachingPresentationProjector: Sendable {
     }
 
     private func opponentIssuePaths(_ issue: CoachingOpponentIssue) -> [CoachFocusPath] {
-        switch issue.kind {
-        case .materialLoss:
-            return issue.answerSquares.map {
-                CoachFocusPath(
-                    source: issue.reply.from,
-                    destination: $0,
-                    role: .attacker
-                )
-            }
-        case .check, .mateInOne:
-            guard issue.answerSquares.contains(issue.reply.from) else { return [] }
-            return [CoachFocusPath(
-                source: issue.reply.from,
-                destination: issue.reply.to,
+        var paths = [CoachFocusPath(
+            source: issue.reply.from,
+            destination: issue.reply.to,
+            role: .attacker
+        )]
+        if case .materialLoss = issue.kind,
+           let affectedSquare = issue.affectedSquare,
+           affectedSquare != issue.reply.to {
+            paths.append(CoachFocusPath(
+                source: issue.reply.to,
+                destination: affectedSquare,
                 role: .attacker
-            )]
+            ))
         }
+        return paths
     }
 
     private func candidateMoves(
@@ -646,7 +670,21 @@ struct CoachingPresentationProjector: Sendable {
         for concept in concepts {
             switch concept {
             case .kingInCheck:
-                return .resolvesCheck
+                guard let advice,
+                      let resolution = MaterialTacticalEvaluator().checkResolution(
+                        for: move,
+                        in: advice.evaluation.request.committedState,
+                        learner: advice.evaluation.request.learner,
+                        checkingSquares: advice.checkingPieces
+                      ) else {
+                    continue
+                }
+                let checker = advice.checkingPieces.count == 1
+                    ? advice.checkingPieces.first.flatMap {
+                        advice.evaluation.request.committedState.board[$0]?.kind
+                    }
+                    : nil
+                return .resolvesCheck(resolution: resolution, checker: checker)
             case .pieceNeedsHelp:
                 if let resolution = dangerResolution(
                     for: move,
@@ -743,6 +781,17 @@ struct CoachingPresentationProjector: Sendable {
 
     private func pieceKind(at square: Square, advice: CoachingAdvice?) -> Piece.Kind? {
         advice?.evaluation.request.committedState.board[square]?.kind
+    }
+}
+
+private extension CoachingStage {
+    var isOpponentIssueOutcome: Bool {
+        switch self {
+        case .reviseMove, .complete:
+            true
+        default:
+            false
+        }
     }
 }
 

@@ -424,7 +424,7 @@ final class CoachingReconcilerTests: XCTestCase {
             .complete(move: move, origin: .wake, concepts: concepts)
         )
         XCTAssertEqual(result.questionID, .complete(move: move, origin: .wake))
-        XCTAssertNil(result.derivedFeedback)
+        XCTAssertEqual(result.derivedFeedback, .opponentReplyLooksSafe)
     }
 
     func testTentativeAdviceMustMatchExactCurrentMoveAndOrigin() {

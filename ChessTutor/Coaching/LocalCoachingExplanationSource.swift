@@ -15,6 +15,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
 
     private func responseCopy(for context: CoachingPresentationContext) -> String? {
         guard let feedback = context.feedback else { return nil }
+        if context.hint != nil,
+           case .missedOpponentIssue = feedback {
+            return nil
+        }
         return feedbackHeadline(
             for: feedback,
             opponent: opponentColor(for: context),
@@ -71,8 +75,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .opponentReply(opponent):
             let opponentName = colorName(opponent)
             return (
-                "Could \(opponentName) check your king or win one of your pieces?",
-                "Tap the \(opponentName.lowercased()) checking piece, or tap your piece \(opponentName) could take. Otherwise choose Looks safe."
+                "What could \(opponentName) do after your move?",
+                "Tap a \(opponentName.lowercased()) piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
             )
         case .fallbackChooseMove:
             return (
@@ -81,7 +85,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .unsupportedFallbackChooseMove:
             return (
-                "I do not have a confident plan for this position yet.",
+                "I can check immediate dangers, but I do not have a confident plan for this position yet.",
                 "Choose a move you are considering, and I will check it with you."
             )
         case .reviseMove:
@@ -255,6 +259,12 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Try another piece, or choose No safe capture."
         case .safeCaptureHint:
             return "Tap the highlighted \(colorName(context.learner).lowercased()) piece."
+        case let .missedOpponentIssue(fact):
+            let opponent = colorName(context.learner.opposite).lowercased()
+            let target = "the \(opponent) \(fact.opponentPiece.rawValue)"
+            return context.actions.contains(.hint)
+                ? "Tap \(target), or choose Hint."
+                : "Tap \(target)."
         default:
             break
         }
@@ -361,7 +371,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             }
             return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
         case .notReplyIssue:
-            return "That square doesn’t show a check or capture after this move."
+            return "Tap a \(colorName(opponent).lowercased()) piece that could check your king or take one of your pieces."
         case let .correctAbsence(kind):
             switch kind {
             case .noPieceNeedsHelp:
@@ -378,6 +388,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             }
         case .missedOpponentReply:
             return missedAnswerHeadline(for: prompt)
+        case let .missedOpponentIssue(fact), let .opponentIssue(fact):
+            return opponentIssueCopy(fact, opponent: opponent)
+        case .opponentReplyLooksSafe:
+            return "\(colorName(opponent)) cannot immediately check your king or win one of your pieces after this move."
         case .noSafeCaptureForPiece:
             return "That piece has no safe capture here."
         case let .safeCaptureHint(piece):
@@ -458,6 +472,39 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         }
     }
 
+    private func opponentIssueCopy(
+        _ fact: CoachingOpponentReplyFact,
+        opponent: PieceColor
+    ) -> String {
+        let opponentName = colorName(opponent)
+        switch fact.issue.kind {
+        case .mateInOne:
+            return "\(opponentName)’s \(fact.opponentPiece.rawValue) could checkmate your king."
+        case .materialLoss:
+            if let affectedPiece = fact.affectedPiece {
+                return "\(opponentName)’s \(fact.opponentPiece.rawValue) could take your \(affectedPiece.rawValue)."
+            }
+            return "\(opponentName)’s \(fact.opponentPiece.rawValue) could take one of your pieces."
+        case .check:
+            guard fact.issue.severity == .notice else {
+                return "\(opponentName)’s \(fact.opponentPiece.rawValue) could check your king."
+            }
+            let moveDescription: String
+            let learnerBackRank = opponent == .black ? 1 : 8
+            if fact.opponentPiece == .rook,
+               fact.issue.reply.to.rank == learnerBackRank {
+                let direction = opponent == .black ? "down" : "up"
+                moveDescription = "That rook could move \(direction) to your back row and check your king."
+            } else {
+                moveDescription = "That \(fact.opponentPiece.rawValue) could check your king."
+            }
+            let learnerMove = fact.learnerPiece.map {
+                "your \($0.rawValue) move still works"
+            } ?? "your move still works"
+            return "\(moveDescription) You could answer the check, so \(learnerMove)."
+        }
+    }
+
     private func completionHeadline(
         for idea: CoachingCompletionIdea,
         opponent: PieceColor
@@ -471,6 +518,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         if case .constructive = idea {
             return completionPurpose(for: idea, opponent: opponent)
         }
+        if case .resolvesCheck = idea {
+            return completionPurpose(for: idea, opponent: opponent)
+        }
         return "That works. \(completionPurpose(for: idea, opponent: opponent))"
     }
 
@@ -482,8 +532,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch idea {
         case let .resolvesDanger(resolution):
             return dangerResolutionCopy(resolution)
-        case .resolvesCheck:
-            concept = "Your king is safe now."
+        case let .resolvesCheck(resolution, checker):
+            return checkResolutionCopy(resolution, checker: checker)
         case .mate:
             concept = "You found checkmate."
         case let .profitableCapture(captured):
@@ -601,6 +651,23 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue). Your \(target.rawValue) is safe now."
         case let .addedDefender(defender, target, attacker):
             return "Your other \(defender.rawValue) now protects the threatened \(target.rawValue). If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back."
+        }
+    }
+
+    private func checkResolutionCopy(
+        _ resolution: CoachingCheckResolution,
+        checker: Piece.Kind?
+    ) -> String {
+        switch resolution {
+        case .movedKing:
+            if let checker {
+                return "Your king moved out of the \(checker.rawValue)’s line. It is safe."
+            }
+            return "Your king moved out of check. It is safe."
+        case let .blocked(attacker, blocker):
+            return "Your \(blocker.rawValue) blocked the \(attacker.rawValue)’s path. Your king is safe."
+        case let .capturedChecker(checker, capturer):
+            return "Your \(capturer.rawValue) took the checking \(checker.rawValue). Your king is safe."
         }
     }
 

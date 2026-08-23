@@ -501,7 +501,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                     evidence: evidence(tentativeOrigin: .wake),
                     progress: progress(
                         questionID: .opponentReply(move: replyMove, origin: .wake),
-                        hintLevel: 2,
+                        hintLevel: 1,
                         pulseID: 7
                     ),
                     selectedSquare: replyMove.to,
@@ -514,7 +514,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                 hint: .attackerRelationship,
                 focus: CoachFocusPresentation(
                     emphasizedSquares: [],
-                    candidateSquares: [replyMove.to],
+                    candidateSquares: [CoachingTestFixtures.blackRook],
                     paths: [CoachFocusPath(
                         source: CoachingTestFixtures.blackRook,
                         destination: replyMove.to,

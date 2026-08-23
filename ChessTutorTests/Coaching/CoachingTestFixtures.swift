@@ -394,11 +394,13 @@ enum CoachingTestFixtures {
         severity: CoachingOpponentIssueSeverity,
         answers: Set<Square>
     ) -> CoachingOpponentIssue {
-        CoachingOpponentIssue(
+        let affectedSquare = answers.first(where: { $0 != reply.from }) ?? reply.to
+        return CoachingOpponentIssue(
             reply: reply,
             kind: kind,
             severity: severity,
-            answerSquares: answers
+            affectedSquare: affectedSquare,
+            checkingSquares: kind == .check || kind == .mateInOne ? [reply.from] : []
         )
     }
 

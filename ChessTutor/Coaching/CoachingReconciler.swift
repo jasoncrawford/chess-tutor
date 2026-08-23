@@ -335,6 +335,14 @@ struct CoachingReconciler: Sendable {
                 feedback: .noRecognizedPurpose(purpose: purpose)
             )
         }
+        if origin == .check,
+           assessment.isAcceptable {
+            return completionDerivation(
+                move: move,
+                origin: origin,
+                assessment: assessment
+            )
+        }
 
         return deriveReply(
             move: move,
@@ -365,18 +373,23 @@ struct CoachingReconciler: Sendable {
         switch answer {
         case let .looksSafe(answeredMove):
             guard answeredMove == move else { return opponentReply }
-            if !assessment.opponentIssues.isEmpty {
+            if let issue = primaryOpponentIssue(in: assessment) {
                 return derived(
                     stage: opponentReply.stage,
                     questionID: opponentReply.questionID,
-                    feedback: .missedOpponentReply
+                    feedback: .missedOpponentIssue(opponentReplyFact(
+                        for: issue,
+                        move: move,
+                        advice: advice
+                    ))
                 )
             }
             if assessment.isAcceptable {
                 return completionDerivation(
                     move: move,
                     origin: origin,
-                    assessment: assessment
+                    assessment: assessment,
+                    feedback: .opponentReplyLooksSafe
                 )
             }
             let purpose = origin == .wake
@@ -406,8 +419,7 @@ struct CoachingReconciler: Sendable {
                 move: move,
                 origin: origin,
                 assessment: assessment,
-                advice: advice,
-                positionAdvice: positionAdvice
+                advice: advice
             )
         }
     }
@@ -417,17 +429,13 @@ struct CoachingReconciler: Sendable {
         move: Move,
         origin: CoachingMoveOrigin,
         assessment: CoachingMoveAssessment,
-        advice: CoachingAdvice,
-        positionAdvice: CoachingAdvice?
+        advice: CoachingAdvice
     ) -> CoachingDerivedState {
-        let concreteFeedback = CoachingFeedback.concreteFlaw(
-            kind: issue.kind,
-            affectedPiece: affectedPieceKind(
-                for: issue,
-                move: move,
-                advice: positionAdvice ?? advice
-            )
-        )
+        let concreteFeedback = CoachingFeedback.opponentIssue(opponentReplyFact(
+            for: issue,
+            move: move,
+            advice: advice
+        ))
         switch issue.severity {
         case .reviseMove:
             return derived(
@@ -445,21 +453,18 @@ struct CoachingReconciler: Sendable {
                     feedback: .checkFoundOtherDangerRemains
                 )
             }
-            let feedback: CoachingFeedback = issue.kind == .check
-                ? .harmlessCheckFound
-                : concreteFeedback
             if assessment.isAcceptable {
                 return completionDerivation(
                     move: move,
                     origin: origin,
                     assessment: assessment,
-                    feedback: feedback
+                    feedback: concreteFeedback
                 )
             }
             return derived(
                 stage: .reviseMove(origin: origin),
                 questionID: .revise(move: move, origin: origin),
-                feedback: feedback
+                feedback: concreteFeedback
             )
         }
     }
@@ -814,15 +819,28 @@ struct CoachingReconciler: Sendable {
         return .dangerStillPresent(attacker: attacker, target: target)
     }
 
-    private func affectedPieceKind(
+    private func primaryOpponentIssue(
+        in assessment: CoachingMoveAssessment
+    ) -> CoachingOpponentIssue? {
+        assessment.opponentIssues.first(where: { $0.severity == .reviseMove })
+            ?? assessment.opponentIssues.first
+    }
+
+    private func opponentReplyFact(
         for issue: CoachingOpponentIssue,
         move: Move,
         advice: CoachingAdvice
-    ) -> Piece.Kind? {
-        let board = advice.evaluation.request.committedState.board
-        if issue.reply.to == move.to {
-            return board[move.from]?.kind
+    ) -> CoachingOpponentReplyFact {
+        let committedState = advice.evaluation.request.committedState
+        let afterMove = committedState.applyingUnchecked(move)
+        guard let opponentPiece = afterMove.board[issue.reply.from]?.kind else {
+            preconditionFailure("Opponent reply source must contain the responding piece")
         }
-        return board[issue.reply.to]?.kind
+        return CoachingOpponentReplyFact(
+            issue: issue,
+            opponentPiece: opponentPiece,
+            affectedPiece: issue.affectedSquare.flatMap { afterMove.board[$0]?.kind },
+            learnerPiece: committedState.board[move.from]?.kind
+        )
     }
 }

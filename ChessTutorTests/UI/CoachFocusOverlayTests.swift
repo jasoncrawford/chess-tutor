@@ -3,6 +3,30 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachFocusOverlayTests: XCTestCase {
+    func testOpponentReplyHintUsesFullHypotheticalReplyPaths() async throws {
+        let queenLoss = try await hintedOpponentReply(
+            position: .exposedQueen,
+            move: CoachingGoldenMoves.exposesQueen
+        )
+        let harmlessCheck = try await hintedOpponentReply(
+            position: .harmlessCheck,
+            move: CoachingGoldenMoves.developsKnight
+        )
+
+        XCTAssertEqual(queenLoss.focus.candidateSquares, [sq("d8")])
+        XCTAssertEqual(queenLoss.focus.paths, [CoachFocusPath(
+            source: sq("d8"),
+            destination: sq("d4"),
+            role: .attacker
+        )])
+        XCTAssertEqual(harmlessCheck.focus.candidateSquares, [sq("a8")])
+        XCTAssertEqual(harmlessCheck.focus.paths, [CoachFocusPath(
+            source: sq("a8"),
+            destination: sq("a1"),
+            role: .attacker
+        )])
+    }
+
     func testCandidatePathUsesReadableBoardGeometry() {
         let source = Square(file: .b, rank: 1)
         let destination = Square(file: .c, rank: 3)
@@ -94,5 +118,31 @@ final class CoachFocusOverlayTests: XCTestCase {
             boardTask: boardTask,
             focus: .empty
         )
+    }
+
+    private func hintedOpponentReply(
+        position: CoachingGoldenPosition,
+        move: Move
+    ) async throws -> CoachingPresentation {
+        let interaction = CoachingInteractionSnapshot(
+            selectedSquare: move.to,
+            tentativeMove: move,
+            positionRevision: 1
+        )
+        var session = CoachingSession(
+            learner: .white,
+            interaction: interaction,
+            initialContext: .tentativeMove(origin: .fallback)
+        )
+        let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
+            committedState: position.state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: interaction.positionRevision,
+            context: .tentativeMove(origin: .fallback)
+        ))
+        session.receive(advice, interaction: interaction)
+        session.handle(.actionChosen(.hint))
+        return try XCTUnwrap(session.presentation)
     }
 }

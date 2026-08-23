@@ -216,7 +216,7 @@ struct CoachingSession: Sendable {
                 return reconcile()
             }
             let matchingIssues = assessment.opponentIssues.filter {
-                $0.answerSquares.contains(square)
+                $0.reply.from == square
             }
             if let issue = matchingIssues.first(where: {
                 $0.severity == .reviseMove

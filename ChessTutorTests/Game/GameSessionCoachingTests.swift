@@ -180,7 +180,7 @@ final class GameSessionCoachingTests: XCTestCase {
         session.startCoaching()
         await session.resolvePendingCoachingAdvice()
 
-        XCTAssertTrue(session.handleCoachingSquareTap(move.to))
+        XCTAssertTrue(session.handleCoachingSquareTap(issue.reply.from))
         XCTAssertEqual(session.state.board, tentativeBoard)
         XCTAssertEqual(session.selectedSquare, move.to)
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
@@ -204,7 +204,7 @@ final class GameSessionCoachingTests: XCTestCase {
         session.startCoaching()
         await session.resolvePendingCoachingAdvice()
 
-        XCTAssertTrue(session.handleCoachingSquareDragStart(move.to))
+        XCTAssertTrue(session.handleCoachingSquareDragStart(issue.reply.from))
         XCTAssertEqual(session.state.board, tentativeBoard)
         XCTAssertEqual(session.selectedSquare, move.to)
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)

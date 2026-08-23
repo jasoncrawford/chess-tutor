@@ -568,7 +568,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         in state: GameState,
         learner: PieceColor
     ) -> [CoachingWakeTask] {
-        let firstMove = state == GameState.startingPosition()
+        let firstMove = isFirstMovePosition(state, learner: learner)
         let castleIsAlternative = opportunities.contains {
             if case .castle = $0.evidence { return true }
             return false
@@ -605,6 +605,29 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                 learner: learner,
                 castleIsAlternative: castleIsAlternative
             )
+        }
+    }
+
+    private func isFirstMovePosition(
+        _ state: GameState,
+        learner: PieceColor
+    ) -> Bool {
+        let starting = GameState.startingPosition()
+        if learner == .white {
+            return state == starting
+        }
+        guard state.sideToMove == .black,
+              state.moveHistory.isEmpty,
+              state.result == .ongoing,
+              state.castlingRights == starting.castlingRights,
+              state.enPassantTarget == nil,
+              state.board.pieces.count == starting.board.pieces.count else {
+            return false
+        }
+        return starting.board.pieces.allSatisfy { square, piece in
+            let mirroredSquare = Square(file: square.file, rank: 9 - square.rank)
+            return state.board[mirroredSquare]
+                == Piece(kind: piece.kind, color: piece.color.opposite)
         }
     }
 

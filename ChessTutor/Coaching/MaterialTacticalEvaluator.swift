@@ -41,7 +41,8 @@ struct MaterialTacticalEvaluator: Sendable {
                         reply: issue.reply,
                         kind: issue.kind,
                         severity: .notice,
-                        answerSquares: issue.answerSquares
+                        affectedSquare: issue.affectedSquare,
+                        checkingSquares: issue.checkingSquares
                     )
                 }
             }
@@ -153,6 +154,34 @@ struct MaterialTacticalEvaluator: Sendable {
         )
     }
 
+    func checkResolution(
+        for move: Move,
+        in state: GameState,
+        learner: PieceColor,
+        checkingSquares: Set<Square>
+    ) -> CoachingCheckResolution? {
+        guard LegalMoveGenerator.legalMoves(for: move.from, in: state).contains(move),
+              let mover = state.board[move.from] else {
+            return nil
+        }
+        let after = state.applyingUnchecked(move)
+        guard !LegalMoveGenerator.isKingInCheck(learner, in: after.board) else {
+            return nil
+        }
+        if mover.kind == .king {
+            return .movedKing
+        }
+        guard checkingSquares.count == 1,
+              let checkerSquare = checkingSquares.first,
+              let checker = state.board[checkerSquare] else {
+            return nil
+        }
+        if move.to == checkerSquare {
+            return .capturedChecker(checker: checker.kind, capturer: mover.kind)
+        }
+        return .blocked(attacker: checker.kind, blocker: mover.kind)
+    }
+
     private func recaptureGain(_ move: Move, in state: GameState) -> Int {
         guard let capture = LegalMoveGenerator.capture(for: move, in: state),
               let value = pieceValue(capture.piece.kind) else {
@@ -188,6 +217,9 @@ struct MaterialTacticalEvaluator: Sendable {
                     for: checkingPieces,
                     after: reply
                 )
+                let affectedKingSquare = replyState.board.pieces.first(where: {
+                    $0.value.color == replyState.sideToMove && $0.value.kind == .king
+                })?.key
                 if LegalMoveGenerator.allLegalMoves(in: replyState).isEmpty,
                    !checkingPieces.isEmpty {
                     return [
@@ -195,7 +227,8 @@ struct MaterialTacticalEvaluator: Sendable {
                             reply: reply,
                             kind: .mateInOne,
                             severity: .reviseMove,
-                            answerSquares: checkingAnswerSquares
+                            affectedSquare: affectedKingSquare,
+                            checkingSquares: checkingAnswerSquares
                         )
                     ]
                 }
@@ -207,7 +240,8 @@ struct MaterialTacticalEvaluator: Sendable {
                             reply: reply,
                             kind: .check,
                             severity: .notice,
-                            answerSquares: checkingAnswerSquares
+                            affectedSquare: affectedKingSquare,
+                            checkingSquares: checkingAnswerSquares
                         )
                     )
                 }
@@ -218,7 +252,8 @@ struct MaterialTacticalEvaluator: Sendable {
                             reply: reply,
                             kind: .materialLoss(points: estimate.netGainForMover),
                             severity: .reviseMove,
-                            answerSquares: [estimate.capturedSquare]
+                            affectedSquare: estimate.capturedSquare,
+                            checkingSquares: []
                         )
                     )
                 }
