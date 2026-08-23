@@ -40,17 +40,17 @@ private enum CoachingPanelAccessibilitySection: String {
 }
 
 private enum CoachingConversationAccessibilityElement {
-    case response
-    case headline
+    case primaryMessage
     case instruction
+    case observation
 
     var sortPriority: Double {
         switch self {
-        case .response:
+        case .primaryMessage:
             3
-        case .headline:
-            2
         case .instruction:
+            2
+        case .observation:
             1
         }
     }
@@ -233,23 +233,13 @@ struct CoachingPanelView: View {
     }
 
     private var conversation: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let response = presentation.response {
-                Text(response)
-                    .font(AppTheme.panelBodyFont)
-                    .foregroundStyle(AppTheme.ink.opacity(0.78))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilitySortPriority(
-                        CoachingConversationAccessibilityElement.response.sortPriority
-                    )
-            }
-
-            Text(presentation.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(presentation.primaryMessage)
                 .font(AppTheme.coachingTitleFont)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilitySortPriority(
-                    CoachingConversationAccessibilityElement.headline.sortPriority
+                    CoachingConversationAccessibilityElement.primaryMessage.sortPriority
                 )
 
             if let instruction = presentation.instruction {
@@ -259,6 +249,16 @@ struct CoachingPanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
                         CoachingConversationAccessibilityElement.instruction.sortPriority
+                    )
+            }
+
+            if let observation = presentation.observation {
+                Text(observation)
+                    .font(AppTheme.panelBodyFont)
+                    .foregroundStyle(AppTheme.ink.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilitySortPriority(
+                        CoachingConversationAccessibilityElement.observation.sortPriority
                     )
             }
         }

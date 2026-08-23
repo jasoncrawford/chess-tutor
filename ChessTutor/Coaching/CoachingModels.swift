@@ -471,9 +471,9 @@ struct CoachingPresentationContext: Equatable, Sendable {
 }
 
 struct CoachingPresentation: Equatable, Sendable {
-    let response: String?
-    let headline: String
+    let primaryMessage: String
     let instruction: String?
+    let observation: String?
     let hint: CoachingHint?
     let routine: [CoachingRoutineState]
     let actions: [CoachingActionPresentation]
@@ -483,7 +483,7 @@ struct CoachingPresentation: Equatable, Sendable {
 
 extension CoachingPresentation {
     init(
-        headline: String,
+        primaryMessage: String,
         instruction: String?,
         hint: CoachingHint?,
         routine: [CoachingRoutineState],
@@ -492,9 +492,9 @@ extension CoachingPresentation {
         focus: CoachFocusPresentation
     ) {
         self.init(
-            response: nil,
-            headline: headline,
+            primaryMessage: primaryMessage,
             instruction: instruction,
+            observation: nil,
             hint: hint,
             routine: routine,
             actions: actions,

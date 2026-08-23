@@ -5,32 +5,36 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
     func testTallCompositionKeepsConversationBeforeRoutineAndActions() {
         assertPanelLayout(
             for: "tall",
-            expectedResponse: "Right—there is no safe capture here."
+            expectedObservation: "That knight does not cause trouble here."
         )
     }
 
     func testClockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
         assertPanelLayout(
             for: "clockwise-quarter-turn",
-            expectedResponse: "Right—there is no safe capture here."
+            expectedObservation: "That knight does not cause trouble here."
         )
     }
 
     func testCounterclockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
         assertPanelLayout(
             for: "counterclockwise-quarter-turn",
-            expectedResponse: "Right—there is no safe capture here."
+            expectedObservation: "That knight does not cause trouble here."
         )
     }
 
-    func testConversationOmitsResponseCleanlyWhenNil() {
-        assertPanelLayout(for: "tall-no-response", expectedResponse: nil)
+    func testConversationOmitsObservationCleanlyWhenNil() {
+        assertPanelLayout(for: "tall-no-observation", expectedObservation: nil)
+    }
+
+    func testWideConversationOmitsObservationCleanlyWhenNil() {
+        assertPanelLayout(for: "clockwise-quarter-turn-no-observation", expectedObservation: nil)
     }
 
     func testAccessibilityExtraLargeTallCompositionKeepsEveryRegionReachable() {
         assertPanelLayout(
             for: "tall",
-            expectedResponse: "Right—there is no safe capture here.",
+            expectedObservation: "That knight does not cause trouble here.",
             accessibilityExtraLarge: true
         )
     }
@@ -38,14 +42,14 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
     func testAccessibilityExtraLargeWideCompositionKeepsEveryRegionReachable() {
         assertPanelLayout(
             for: "clockwise-quarter-turn",
-            expectedResponse: "Right—there is no safe capture here.",
+            expectedObservation: "That knight does not cause trouble here.",
             accessibilityExtraLarge: true
         )
     }
 
     private func assertPanelLayout(
         for configuration: String,
-        expectedResponse: String?,
+        expectedObservation: String?,
         accessibilityExtraLarge: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
@@ -82,16 +86,12 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
             line: line
         )
 
-        let expectedHeadline = expectedResponse == nil
-            ? "Yes—that pawn is attacking your queen. How could you help your queen?"
-            : "Can one of your pieces safely take a black piece?"
-        let expectedInstruction = expectedResponse == nil
-            ? "Try moving your queen, protecting it, or taking the attacker."
-            : "Make the capture, or choose No safe capture."
+        let expectedPrimary = "What could Black do next?"
+        let expectedInstruction = "Tap a black piece that could check your king or win one of your pieces."
         let expectedLabels = ([
-            expectedResponse,
-            expectedHeadline,
+            expectedPrimary,
             expectedInstruction,
+            expectedObservation,
             "Safe, current step",
             "Play this move",
             "Try another move",

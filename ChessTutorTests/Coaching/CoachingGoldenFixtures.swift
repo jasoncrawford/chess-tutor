@@ -95,8 +95,8 @@ enum CoachingGoldenMoves {
 }
 
 struct CoachingGoldenTurn: Equatable {
-    let response: String?
-    let ask: String
+    let observation: String?
+    let primaryMessage: String
     let instruction: String?
     let actions: [CoachingAction]
     let actionTitles: [String]

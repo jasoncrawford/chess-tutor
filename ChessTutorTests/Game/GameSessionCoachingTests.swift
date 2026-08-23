@@ -76,7 +76,7 @@ final class GameSessionCoachingTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
 
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
-        XCTAssertEqual(session.coachingPresentation?.headline, "This move leaves your king in check. Try another move.")
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "This move leaves your king in check. Try another move.")
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .rook, color: .white))
     }
 
@@ -137,14 +137,14 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         session.startCoaching()
         await session.resolvePendingCoachingAdvice()
-        let originalHeadline = session.coachingPresentation?.headline
+        let originalHeadline = session.coachingPresentation?.primaryMessage
         let originalRoutine = session.coachingPresentation?.routine
 
         XCTAssertTrue(session.handleCoachingSquareTap(Square(file: .c, rank: 3)))
         XCTAssertEqual(session.coachingPresentation?.routine, originalRoutine)
 
         _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertNotEqual(session.coachingPresentation?.headline, originalHeadline)
+        XCTAssertNotEqual(session.coachingPresentation?.primaryMessage, originalHeadline)
         XCTAssertNotEqual(session.coachingPresentation?.routine, originalRoutine)
     }
 
@@ -160,7 +160,7 @@ final class GameSessionCoachingTests: XCTestCase {
         stage(move, in: session)
         await session.resolvePendingCoachingAdvice()
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "Black’s king could take your bishop. You would lose a bishop to take one pawn."
         )
         XCTAssertEqual(
@@ -174,11 +174,11 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNil(session.selectedSquare)
         XCTAssertFalse(session.canFinishTurn)
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "Right—there is no safe capture here."
         )
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "I can check immediate dangers, but I do not have a confident plan for this position yet."
         )
         XCTAssertEqual(
@@ -417,11 +417,11 @@ final class GameSessionCoachingTests: XCTestCase {
 
         XCTAssertEqual(session.selectedSquare, blockedRook)
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
         XCTAssertEqual(
@@ -440,15 +440,15 @@ final class GameSessionCoachingTests: XCTestCase {
         let destinationsBeforeHint = session.legalDestinations
 
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
 
         _ = session.chooseCoachingAction(.hint)
 
-        XCTAssertNil(session.coachingPresentation?.response)
+        XCTAssertNil(session.coachingPresentation?.observation)
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Here are the four pieces you can try."
         )
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap a highlighted piece.")
@@ -470,14 +470,14 @@ final class GameSessionCoachingTests: XCTestCase {
         let session = GameSession(coachingAdvisor: LocalCoachingAdvisor())
         await beginOpeningCoaching(in: session)
         session.select(Square(file: .a, rank: 1))
-        XCTAssertNotNil(session.coachingPresentation?.response)
+        XCTAssertNotNil(session.coachingPresentation?.observation)
 
         _ = session.chooseCoachingAction(.hint)
-        XCTAssertNil(session.coachingPresentation?.response)
+        XCTAssertNil(session.coachingPresentation?.observation)
 
         session.select(Square(file: .a, rank: 7))
 
-        XCTAssertEqual(session.coachingPresentation?.response, "Tap one of your pieces.")
+        XCTAssertEqual(session.coachingPresentation?.observation, "Tap one of your pieces.")
     }
 
     func testOpeningBlockedRookPresentationDoesNotDependOnPriorKnightSelection() async {
@@ -539,33 +539,33 @@ final class GameSessionCoachingTests: XCTestCase {
 
         session.select(Square(file: .a, rank: 2))
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
         )
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
 
         session.select(Square(file: .a, rank: 1))
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
 
         session.select(Square(file: .e, rank: 4))
         XCTAssertNil(session.selectedSquare)
-        XCTAssertNil(session.coachingPresentation?.response)
+        XCTAssertNil(session.coachingPresentation?.observation)
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
 
         session.select(Square(file: .a, rank: 7))
         XCTAssertEqual(session.selectedSquare, Square(file: .a, rank: 7))
-        XCTAssertEqual(session.coachingPresentation?.response, "Tap one of your pieces.")
+        XCTAssertEqual(session.coachingPresentation?.observation, "Tap one of your pieces.")
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
         XCTAssertEqual(
@@ -601,7 +601,7 @@ final class GameSessionCoachingTests: XCTestCase {
             session.startCoaching()
             await session.resolvePendingCoachingAdvice()
 
-            XCTAssertEqual(session.coachingPresentation?.headline, testCase.ask)
+            XCTAssertEqual(session.coachingPresentation?.primaryMessage, testCase.ask)
             XCTAssertEqual(session.coachingPresentation?.instruction, testCase.instruction)
         }
     }
@@ -615,18 +615,18 @@ final class GameSessionCoachingTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
 
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "One of your pieces is in danger. Which one?"
         )
 
         _ = session.chooseCoachingAction(.noAnswer)
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Can one of your pieces safely take a black piece?"
         )
 
         _ = session.chooseCoachingAction(.noAnswer)
-        XCTAssertEqual(session.coachingPresentation?.headline, "Your king is ready to castle.")
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "Your king is ready to castle.")
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
             "Move your king two squares toward the rook."
@@ -877,7 +877,7 @@ final class GameSessionCoachingTests: XCTestCase {
                 session.state.board[replacement.to],
                 Piece(kind: .knight, color: .white)
             )
-            XCTAssertNil(session.coachingPresentation?.headline)
+            XCTAssertNil(session.coachingPresentation?.primaryMessage)
             XCTAssertNil(session.coachingPresentation?.actions)
             XCTAssertNil(session.coachingPresentation?.focus)
 
@@ -903,7 +903,7 @@ final class GameSessionCoachingTests: XCTestCase {
                 session.state.board[replacement.to],
                 Piece(kind: .knight, color: .white)
             )
-            XCTAssertNil(session.coachingPresentation?.headline)
+            XCTAssertNil(session.coachingPresentation?.primaryMessage)
             XCTAssertNil(session.coachingPresentation?.actions)
             XCTAssertNil(session.coachingPresentation?.focus)
 
@@ -948,8 +948,8 @@ final class GameSessionCoachingTests: XCTestCase {
             Piece(kind: .knight, color: .white)
         )
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
-            expected.coachingPresentation?.headline
+            session.coachingPresentation?.primaryMessage,
+            expected.coachingPresentation?.primaryMessage
         )
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
@@ -1044,7 +1044,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertGreaterThan(retryID, originalID)
         XCTAssertEqual(session.selectedSquare, move.to)
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
-        XCTAssertNil(session.coachingPresentation?.headline)
+        XCTAssertNil(session.coachingPresentation?.primaryMessage)
         XCTAssertNil(session.coachingPresentation?.actions)
         XCTAssertNil(session.coachingPresentation?.focus)
 
@@ -1087,7 +1087,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertGreaterThan(retryID, originalID)
         XCTAssertNil(session.selectedSquare)
         XCTAssertEqual(session.state, .startingPosition())
-        XCTAssertNil(session.coachingPresentation?.headline)
+        XCTAssertNil(session.coachingPresentation?.primaryMessage)
         XCTAssertNil(session.coachingPresentation?.actions)
         XCTAssertNil(session.coachingPresentation?.focus)
 
@@ -1124,7 +1124,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
         XCTAssertEqual(pendingRequests, [request])
         XCTAssertEqual(exactRequestCount, 1)
-        XCTAssertNil(session.coachingPresentation?.headline)
+        XCTAssertNil(session.coachingPresentation?.primaryMessage)
         XCTAssertNil(session.coachingPresentation?.actions)
         XCTAssertNil(session.coachingPresentation?.focus)
 

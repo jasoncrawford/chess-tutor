@@ -61,7 +61,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
 
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Your center pawn moved forward and now helps control the center."
         )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
@@ -82,7 +82,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Your king is in check. What is giving check?"
         )
         XCTAssertTrue(session.handleCoachingSquareTap(checkingRook))
@@ -116,7 +116,7 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         await beginCoaching(in: session)
         XCTAssertEqual(session.coachingPresentation?.routine, [.safeCurrent, .takePending, .wakePending])
-        XCTAssertEqual(session.coachingPresentation?.headline, "One of your pieces is in danger. Which one?")
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "One of your pieces is in danger. Which one?")
         XCTAssertTrue(session.handleCoachingSquareTap(target))
         XCTAssertTrue(session.handleCoachingSquareTap(Square(file: .d, rank: 5)))
 
@@ -128,7 +128,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
 
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Your other knight now protects the threatened pawn. If the pawn takes it, your knight can take the pawn back."
         )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
@@ -149,13 +149,13 @@ final class CoachingAcceptanceTests: XCTestCase {
         await beginCoaching(in: session)
         XCTAssertTrue(session.handleCoachingSquareTap(target))
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "You found the bishop. What black piece is attacking it?"
         )
         XCTAssertEqual(session.coachingPresentation?.instruction, "Tap the black piece.")
         XCTAssertTrue(session.handleCoachingSquareTap(attacker))
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Yes—that bishop is attacking your bishop. How could you help your bishop?"
         )
         XCTAssertEqual(session.coachingPresentation?.instruction, "Make a move that gets it safe.")
@@ -165,7 +165,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
 
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Your bishop took the attacking bishop. It is safe now."
         )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
@@ -194,7 +194,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
 
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Your rook took the attacking bishop. Your knight is safe now."
         )
         XCTAssertTrue(session.state.moveHistory.isEmpty)
@@ -238,17 +238,17 @@ final class CoachingAcceptanceTests: XCTestCase {
         let badSession = makeSession(state: state)
         await beginCoaching(in: badSession)
         XCTAssertEqual(
-            badSession.coachingPresentation?.headline,
+            badSession.coachingPresentation?.primaryMessage,
             "Can one of your pieces safely take a black piece?"
         )
         stage(badCapture, in: badSession)
         await badSession.resolvePendingCoachingAdvice()
         XCTAssertEqual(
-            badSession.coachingPresentation?.response,
+            badSession.coachingPresentation?.observation,
             "Black’s pawn could take your bishop. You would lose a bishop to take one pawn."
         )
         XCTAssertEqual(
-            badSession.coachingPresentation?.headline,
+            badSession.coachingPresentation?.primaryMessage,
             "Can one of your pieces safely take a black piece?"
         )
         XCTAssertEqual(badSession.coachingPresentation?.boardTask, .move)
@@ -259,7 +259,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         await winningSession.resolvePendingCoachingAdvice()
         _ = winningSession.chooseCoachingAction(.looksSafe)
         XCTAssertEqual(
-            winningSession.coachingPresentation?.headline,
+            winningSession.coachingPresentation?.primaryMessage,
             "Your knight took a rook. Black’s bishop could take the knight back, so you would trade a knight for a rook."
         )
         XCTAssertTrue(winningSession.state.moveHistory.isEmpty)
@@ -289,7 +289,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
 
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "Your other knight now protects the threatened pawn. If the bishop takes it, your knight can take the bishop back."
         )
     }
@@ -309,7 +309,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         await beginCoaching(in: session)
         XCTAssertEqual(session.coachingPresentation?.routine, [])
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "I can check immediate dangers, but I do not have a confident plan for this position yet."
         )
 
@@ -317,7 +317,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
         _ = session.chooseCoachingAction(.looksSafe)
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "I do not see an immediate check or lost piece after this move."
         )
     }
@@ -345,7 +345,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertTrue(session.handleCoachingSquareTap(move.to))
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "Tap a black piece that could check your king or take one of your pieces."
         )
         XCTAssertEqual(
@@ -354,9 +354,9 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertTrue(session.handleCoachingSquareTap(attacker))
 
-        XCTAssertEqual(session.coachingPresentation?.response, "Black’s pawn could take your bishop.")
+        XCTAssertEqual(session.coachingPresentation?.observation, "Black’s pawn could take your bishop.")
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "How can you change your move so the bishop is safe?"
         )
         XCTAssertEqual(
@@ -392,11 +392,11 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.handleCoachingSquareTap(checkingRook))
 
         XCTAssertEqual(
-            session.coachingPresentation?.response,
+            session.coachingPresentation?.observation,
             "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works."
         )
         XCTAssertEqual(
-            session.coachingPresentation?.headline,
+            session.coachingPresentation?.primaryMessage,
             "That works. Your knight moved closer to the center."
         )
         XCTAssertEqual(session.coachingPresentation?.actions.map(\.action), [.done, .keepLooking, .stop])
@@ -546,11 +546,11 @@ final class CoachingAcceptanceTests: XCTestCase {
 
         XCTAssertEqual(switched, direct)
         XCTAssertEqual(
-            switched.response,
+            switched.observation,
             "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
         XCTAssertEqual(
-            switched.headline,
+            switched.primaryMessage,
             "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
         XCTAssertEqual(

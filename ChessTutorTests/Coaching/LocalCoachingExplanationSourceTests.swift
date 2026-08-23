@@ -4,6 +4,30 @@ import XCTest
 final class LocalCoachingExplanationSourceTests: XCTestCase {
     private let source = LocalCoachingExplanationSource()
 
+    func testPresentationUsesPrimaryInstructionObservationContract() {
+        let presentation = CoachingPresentation(
+            primaryMessage: "What could Black do next?",
+            instruction: "Tap a black piece that could check your king or win one of your pieces.",
+            observation: "That knight does not cause trouble here.",
+            hint: nil,
+            routine: [],
+            actions: [],
+            boardTask: .identify(allowsMoveRevision: true),
+            focus: .empty
+        )
+
+        XCTAssertEqual(presentation.primaryMessage, "What could Black do next?")
+        XCTAssertEqual(
+            [presentation.primaryMessage, presentation.instruction, presentation.observation]
+                .compactMap { $0 },
+            [
+                "What could Black do next?",
+                "Tap a black piece that could check your king or win one of your pieces.",
+                "That knight does not cause trouble here.",
+            ]
+        )
+    }
+
     func testSafeLocatePresentationAsksForBoardTap() {
         let presentation = source.presentation(
             for: context(
@@ -14,7 +38,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(presentation.headline, "One of your pieces is in danger. Which one?")
+        XCTAssertEqual(presentation.primaryMessage, "One of your pieces is in danger. Which one?")
         XCTAssertEqual(presentation.instruction, "Tap your piece, or choose No piece needs help.")
         XCTAssertEqual(presentation.boardTask, .identify(allowsMoveRevision: false))
         XCTAssertEqual(
@@ -33,7 +57,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "Choose a move you are considering, and I will check it with you."
         )
         XCTAssertEqual(presentation.instruction, "Make a move on the board.")
@@ -136,7 +160,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         for (prompt, headline, instruction) in cases {
             let presentation = source.presentation(for: context(prompt: prompt))
-            XCTAssertEqual(presentation.headline, headline, "Unexpected headline for \(prompt)")
+            XCTAssertEqual(presentation.primaryMessage, headline, "Unexpected headline for \(prompt)")
             XCTAssertEqual(presentation.instruction, instruction, "Unexpected instruction for \(prompt)")
         }
     }
@@ -173,8 +197,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             let presentation = source.presentation(
                 for: context(prompt: prompt, feedback: feedback)
             )
-            XCTAssertEqual(presentation.headline, headline)
-            XCTAssertEqual(presentation.response, response)
+            XCTAssertEqual(presentation.primaryMessage, headline)
+            XCTAssertEqual(presentation.observation, response)
         }
     }
 
@@ -193,8 +217,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         ))
 
-        XCTAssertEqual(presentation.headline, "You developed your knight.")
-        XCTAssertFalse(presentation.headline.contains("closer to the center"))
+        XCTAssertEqual(presentation.primaryMessage, "You developed your knight.")
+        XCTAssertFalse(presentation.primaryMessage.contains("closer to the center"))
     }
 
     func testNonFirstOpeningWithoutCastleDoesNotSayKnightAlsoDevelops() {
@@ -214,11 +238,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "You chose a knight. Moving it off its starting square is called developing it."
         )
         XCTAssertEqual(presentation.instruction, "Move the knight.")
-        XCTAssertFalse(presentation.headline.contains("also"))
+        XCTAssertFalse(presentation.primaryMessage.contains("also"))
     }
 
     func testNonCornerMobilityTaskDoesNotClaimThePieceIsInTheCorner() {
@@ -241,11 +265,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "Your knight can move to a square where it has more choices. Can you find the move?"
         )
         XCTAssertEqual(presentation.instruction, "Move the knight.")
-        XCTAssertFalse(presentation.headline.contains("corner"))
+        XCTAssertFalse(presentation.primaryMessage.contains("corner"))
     }
 
     func testEveryActionHasAnUnambiguousLabelAndProminence() {
@@ -336,14 +360,14 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         let hint = source.presentation(for: context(prompt: prompt, hint: .candidatePieces))
 
         XCTAssertEqual(
-            base.headline,
+            base.primaryMessage,
             "A center pawn or knight is a simple way to start. Which would you like to move?"
         )
         XCTAssertEqual(
             base.instruction,
             "Tap one of your two center pawns or one of your knights."
         )
-        XCTAssertEqual(hint.headline, "Here are the four pieces you can try.")
+        XCTAssertEqual(hint.primaryMessage, "Here are the four pieces you can try.")
         XCTAssertEqual(hint.instruction, "Tap a highlighted piece.")
     }
 
@@ -367,10 +391,10 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             feedback: .blockedWakePiece(piece: .rook, blocker: .pawn)
         ))
         XCTAssertEqual(
-            presentation.response,
+            presentation.observation,
             "Your pawn is blocking that rook. Choose a center pawn or knight."
         )
-        XCTAssertEqual(presentation.headline, "A center pawn or knight is a simple way to start. Which would you like to move?")
+        XCTAssertEqual(presentation.primaryMessage, "A center pawn or knight is a simple way to start. Which would you like to move?")
         XCTAssertEqual(presentation.instruction, "Tap one of your two center pawns or one of your knights.")
     }
 
@@ -379,8 +403,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             prompt: .takeChooseMove,
             feedback: .correctAbsence(.noSafeCapture)
         ))
-        XCTAssertEqual(presentation.response, "Right—there is no safe capture here.")
-        XCTAssertEqual(presentation.headline, "Can one of your pieces safely take a black piece?")
+        XCTAssertEqual(presentation.observation, "Right—there is no safe capture here.")
+        XCTAssertEqual(presentation.primaryMessage, "Can one of your pieces safely take a black piece?")
     }
 
     func testUnsafeCaptureFeedbackNamesTheImmediateExchange() {
@@ -400,7 +424,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.response,
+            presentation.observation,
             "Black’s king could take your bishop. You would lose a bishop to take one pawn."
         )
         XCTAssertEqual(
@@ -425,7 +449,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "Your bishop took a rook, and Black cannot take the bishop back."
         )
     }
@@ -446,7 +470,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "Your bishop took a rook, and White cannot take the bishop back."
         )
     }
@@ -458,7 +482,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             hint: .candidatePieces
         ))
 
-        XCTAssertEqual(presentation.response, "Your bishop has a safe capture.")
+        XCTAssertEqual(presentation.observation, "Your bishop has a safe capture.")
         XCTAssertEqual(presentation.instruction, "Tap the highlighted white piece.")
     }
 
@@ -468,7 +492,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             feedback: .noSafeCaptureForPiece
         ))
 
-        XCTAssertEqual(presentation.response, "That piece has no safe capture here.")
+        XCTAssertEqual(presentation.observation, "That piece has no safe capture here.")
         XCTAssertEqual(
             presentation.instruction,
             "Try another piece, or choose No safe capture."
@@ -481,8 +505,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             feedback: nil,
             hint: .candidatePieces
         ))
-        XCTAssertNil(presentation.response)
-        XCTAssertEqual(presentation.headline, "Here are the four pieces you can try.")
+        XCTAssertNil(presentation.observation)
+        XCTAssertEqual(presentation.primaryMessage, "Here are the four pieces you can try.")
         XCTAssertEqual(presentation.instruction, "Tap a highlighted piece.")
     }
 
@@ -539,7 +563,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         ))
         XCTAssertEqual(
-            threat.headline,
+            threat.primaryMessage,
             "Your bishop can move to a square where it attacks Black’s queen. Can you find the square?"
         )
         XCTAssertEqual(threat.instruction, "Move the bishop so it attacks the queen.")
@@ -557,7 +581,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         ))
         XCTAssertEqual(
-            protection.headline,
+            protection.primaryMessage,
             "Your rook can help protect your bishop."
         )
         XCTAssertEqual(
@@ -624,7 +648,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         for (prompt, feedback, response) in cases {
             let result = source.presentation(for: context(prompt: prompt, feedback: feedback))
-            XCTAssertEqual(result.response, response)
+            XCTAssertEqual(result.observation, response)
         }
     }
 
@@ -635,11 +659,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.response,
+            presentation.observation,
             "Right—there is no safe capture here."
         )
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "Can one of your pieces safely take a black piece?"
         )
         XCTAssertEqual(
@@ -657,9 +681,9 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(presentation.response, "White could check your king.")
+        XCTAssertEqual(presentation.observation, "White could check your king.")
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "What could White do after your move?"
         )
     }
@@ -671,7 +695,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         ))
 
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "You found the knight. What white piece is attacking it?"
         )
         XCTAssertEqual(presentation.instruction, "Tap the white piece.")
@@ -716,7 +740,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             let presentation = source.presentation(
                 for: context(prompt: .complete(origin: .wake, idea: idea))
             )
-            XCTAssertEqual(presentation.headline, headline, "Unexpected completion for \(idea)")
+            XCTAssertEqual(presentation.primaryMessage, headline, "Unexpected completion for \(idea)")
             XCTAssertNil(presentation.instruction)
         }
     }
@@ -985,8 +1009,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
 
         func childFacingCopy(_ presentation: CoachingPresentation) -> [String] {
             [
-                presentation.response,
-                presentation.headline,
+                presentation.observation,
+                presentation.primaryMessage,
                 presentation.instruction,
             ].compactMap { $0 }
             + presentation.actions.flatMap { [$0.title, $0.accessibilityLabel] }
@@ -1056,9 +1080,9 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
         ))
 
-        XCTAssertEqual(presentation.response, "Black could take one of your pieces.")
+        XCTAssertEqual(presentation.observation, "Black could take one of your pieces.")
         XCTAssertEqual(
-            presentation.headline,
+            presentation.primaryMessage,
             "How can you change your move to avoid losing material?"
         )
         XCTAssertEqual(

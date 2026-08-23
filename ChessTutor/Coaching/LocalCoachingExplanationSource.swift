@@ -2,9 +2,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     func presentation(for context: CoachingPresentationContext) -> CoachingPresentation {
         let base = baseCopy(for: context.prompt, learner: context.learner)
         return CoachingPresentation(
-            response: responseCopy(for: context),
-            headline: headline(for: context, base: base.headline),
+            primaryMessage: headline(for: context, base: base.headline),
             instruction: instruction(for: context, base: base.instruction),
+            observation: responseCopy(for: context),
             hint: context.hint,
             routine: context.routine,
             actions: context.actions.map { actionPresentation(for: $0, context: context) },

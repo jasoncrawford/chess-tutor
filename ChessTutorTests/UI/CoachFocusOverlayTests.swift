@@ -110,8 +110,9 @@ final class CoachFocusOverlayTests: XCTestCase {
         boardTask: CoachingBoardTask
     ) -> CoachingPresentation {
         CoachingPresentation(
-            headline: "What do you notice?",
+            primaryMessage: "What do you notice?",
             instruction: instruction,
+            observation: nil,
             hint: nil,
             routine: [],
             actions: [],

@@ -3,24 +3,25 @@ import SwiftUI
 
 enum CoachingPanelAccessibilityFixtureConfiguration {
     case tall
-    case tallNoResponse
+    case tallNoObservation
     case clockwiseQuarterTurn
+    case clockwiseQuarterTurnNoObservation
     case counterclockwiseQuarterTurn
 
     var composition: CoachingPanelComposition {
         switch self {
-        case .tall, .tallNoResponse:
+        case .tall, .tallNoObservation:
             return .tall
-        case .clockwiseQuarterTurn, .counterclockwiseQuarterTurn:
+        case .clockwiseQuarterTurn, .clockwiseQuarterTurnNoObservation, .counterclockwiseQuarterTurn:
             return .wide
         }
     }
 
     var tableRotationDegrees: Double {
         switch self {
-        case .tall, .tallNoResponse:
+        case .tall, .tallNoObservation:
             return 0
-        case .clockwiseQuarterTurn:
+        case .clockwiseQuarterTurn, .clockwiseQuarterTurnNoObservation:
             return 90
         case .counterclockwiseQuarterTurn:
             return -90
@@ -47,10 +48,12 @@ struct CoachingPanelAccessibilityFixture: View {
         switch arguments[flagIndex + 1] {
         case "tall":
             return .tall
-        case "tall-no-response":
-            return .tallNoResponse
+        case "tall-no-observation":
+            return .tallNoObservation
         case "clockwise-quarter-turn":
             return .clockwiseQuarterTurn
+        case "clockwise-quarter-turn-no-observation":
+            return .clockwiseQuarterTurnNoObservation
         case "counterclockwise-quarter-turn":
             return .counterclockwiseQuarterTurn
         default:
@@ -99,15 +102,12 @@ struct CoachingPanelAccessibilityFixture: View {
     }
 
     private var presentation: CoachingPresentation {
-        let omitsResponse = configuration == .tallNoResponse
+        let omitsObservation = configuration == .tallNoObservation
+            || configuration == .clockwiseQuarterTurnNoObservation
         return CoachingPresentation(
-            response: omitsResponse ? nil : "Right—there is no safe capture here.",
-            headline: omitsResponse
-                ? "Yes—that pawn is attacking your queen. How could you help your queen?"
-                : "Can one of your pieces safely take a black piece?",
-            instruction: omitsResponse
-                ? "Try moving your queen, protecting it, or taking the attacker."
-                : "Make the capture, or choose No safe capture.",
+            primaryMessage: "What could Black do next?",
+            instruction: "Tap a black piece that could check your king or win one of your pieces.",
+            observation: omitsObservation ? nil : "That knight does not cause trouble here.",
             hint: nil,
             routine: [.safeCurrent, .takePending, .wakePending],
             actions: [
