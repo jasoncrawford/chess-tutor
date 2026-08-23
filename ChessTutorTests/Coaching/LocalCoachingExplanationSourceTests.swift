@@ -782,6 +782,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 attacker: .rook
             )),
             .resolvesCheck(resolution: .movedKing, checker: .rook),
+            .resolvesCheck(resolution: .movedKing, checker: nil),
             .resolvesCheck(
                 resolution: .blocked(attacker: .rook, blocker: .bishop),
                 checker: .rook
@@ -822,6 +823,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .unsupportedFallbackChooseMove,
             .opponentIssueRevise(kind: .mateInOne, affectedPiece: nil),
             .opponentIssueRevise(kind: .check, affectedPiece: .king),
+            .opponentIssueRevise(kind: .materialLoss(points: 9), affectedPiece: nil),
             .opponentIssueRevise(kind: .materialLoss(points: 9), affectedPiece: .queen),
             .reviseMove,
             .illegalKingSafety,
@@ -851,10 +853,15 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             .attackedButProtected(target: .pawn, attacker: .knight, defender: .pawn),
             .expectedLearnerPiece,
+            .notCheckingPiece(piece: nil),
             .notCheckingPiece(piece: .bishop),
             .notAttacker(piece: .bishop, target: .knight),
             .expectedAttacker(target: .knight),
             .blockedWakePiece(piece: .rook, blocker: .pawn),
+            .notWakeCandidate(
+                piece: .pawn,
+                purpose: .openingDevelopment(firstMove: true)
+            ),
             .notWakeCandidate(piece: .bishop, purpose: .centralActivity),
             .notReplyIssue,
             .correctAbsence(.noPieceNeedsHelp),
@@ -869,7 +876,10 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .safeCaptureHint(piece: .bishop),
             .unsafeCapture(exchange),
             .concreteFlaw(kind: .mateInOne, affectedPiece: nil),
+            .concreteFlaw(kind: .mateInOne, affectedPiece: .king),
+            .concreteFlaw(kind: .check, affectedPiece: nil),
             .concreteFlaw(kind: .check, affectedPiece: .king),
+            .concreteFlaw(kind: .materialLoss(points: 9), affectedPiece: nil),
             .concreteFlaw(kind: .materialLoss(points: 9), affectedPiece: .queen),
             .dangerStillPresent(attacker: nil, target: .queen),
             .dangerStillPresent(attacker: .rook, target: .queen),
@@ -942,6 +952,29 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             "Found prohibited child-facing copy"
         )
         XCTAssertNotEqual(copy.trimmingCharacters(in: .whitespacesAndNewlines), "Yes.")
+    }
+
+    func testMaterialLossWithoutAffectedPieceUsesBoundedCaptureCopy() {
+        let presentation = source.presentation(for: context(
+            prompt: .opponentIssueRevise(
+                kind: .materialLoss(points: 3),
+                affectedPiece: nil
+            ),
+            feedback: .concreteFlaw(
+                kind: .materialLoss(points: 3),
+                affectedPiece: nil
+            )
+        ))
+
+        XCTAssertEqual(presentation.response, "Black could take one of your pieces.")
+        XCTAssertEqual(
+            presentation.headline,
+            "How can you change your move to avoid losing material?"
+        )
+        XCTAssertEqual(
+            presentation.instruction,
+            "Change your move to avoid losing material."
+        )
     }
 
     private func context(

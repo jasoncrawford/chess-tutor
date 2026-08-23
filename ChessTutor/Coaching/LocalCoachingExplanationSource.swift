@@ -496,7 +496,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             if let affectedPiece {
                 return "\(name) could take your \(affectedPiece.rawValue)."
             }
-            return "\(name) could win some material."
+            return "\(name) could take one of your pieces."
         }
     }
 
