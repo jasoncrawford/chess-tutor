@@ -784,6 +784,71 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.routine, [])
     }
 
+    func testTakeRejectsZeroGainCaptureOutsideActiveSafeCaptureOpportunities() {
+        let capture = Move(
+            from: CoachingTestFixtures.whiteRook,
+            to: CoachingTestFixtures.blackRook
+        )
+        let recapture = Move(
+            from: CoachingTestFixtures.blackKing,
+            to: CoachingTestFixtures.blackRook
+        )
+        let estimate = CoachingTestFixtures.capture(
+            move: capture,
+            captured: Piece(kind: .rook, color: .black),
+            capturedSquare: capture.to,
+            recapture: recapture,
+            net: 0
+        )
+        var session = preparedSession(for: .take)
+        stage(capture, in: &session)
+
+        session.receive(CoachingTestFixtures.adviceForTentativeMove(
+            capture,
+            origin: .take,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                capture,
+                concepts: [.captureResolvesDanger]
+            ),
+            learnerCaptures: [estimate]
+        ))
+
+        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(
+            session.presentation?.response,
+            "Black’s king could take your rook. You would lose a rook to take one rook."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Can one of your pieces safely take a black piece?"
+        )
+    }
+
+    func testTakeRejectsNonCaptureMateOutsideActiveSafeCaptureOpportunities() {
+        let mate = CoachingTestFixtures.safeMove
+        var session = preparedSession(for: .take)
+        stage(mate, in: &session)
+
+        session.receive(CoachingTestFixtures.adviceForTentativeMove(
+            mate,
+            origin: .take,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                mate,
+                concepts: [.mateInOne]
+            )
+        ))
+
+        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(
+            session.presentation?.response,
+            "That piece has no safe capture here."
+        )
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Can one of your pieces safely take a black piece?"
+        )
+    }
+
     func testUnprofitableCaptureExplainsImmediateRecaptureAndReturnsToTake() {
         let capture = CoachingTestFixtures.profitableCapture
         let recapture = Move(from: CoachingTestFixtures.blackKing, to: capture.to)
@@ -2155,15 +2220,20 @@ final class CoachingSessionTests: XCTestCase {
     }
 
     func testEveryOriginCanReachOpponentCheckAndCompletion() {
-        let move = CoachingTestFixtures.safeMove
         for origin in [
             CoachingMoveOrigin.preexisting, .check, .safe, .take, .wake, .fallback,
         ] {
+            let move = origin == .take
+                ? CoachingTestFixtures.profitableCapture
+                : CoachingTestFixtures.safeMove
             var session = preparedSession(for: origin)
             stage(move, in: &session)
             let concept: CoachingConcept = origin == .wake
                 ? .developsKnightOrBishop
                 : (origin == .take ? .profitableCapture : .pieceNeedsHelp)
+            let learnerCaptures = origin == .take
+                ? CoachingTestFixtures.takeAdvice.evaluation.learnerCaptureEstimates
+                : []
             session.receive(CoachingTestFixtures.adviceForTentativeMove(
                 move,
                 origin: origin,
@@ -2171,6 +2241,7 @@ final class CoachingSessionTests: XCTestCase {
                     move,
                     concepts: [concept]
                 ),
+                learnerCaptures: learnerCaptures,
                 confidence: origin == .fallback ? .unsupported : .high
             ))
             XCTAssertEqual(session.stage, .opponentCheck(move: move, origin: origin))

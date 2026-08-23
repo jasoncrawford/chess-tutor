@@ -269,7 +269,12 @@ struct CoachingReconciler: Sendable {
                 promptOverride: .illegalKingSafety
             )
         }
-        if origin == .take && !hasTakePurpose(assessment.concepts) {
+        if origin == .take && !isActiveSafeCapture(
+            move,
+            assessment: assessment,
+            tentativeAdvice: advice,
+            positionAdvice: positionAdvice
+        ) {
             return originDerivation(
                 origin,
                 move: move,
@@ -551,10 +556,26 @@ struct CoachingReconciler: Sendable {
         )
     }
 
-    private func hasTakePurpose(_ concepts: [CoachingConcept]) -> Bool {
-        concepts.contains(.profitableCapture)
-            || concepts.contains(.mateInOne)
-            || concepts.contains(.captureResolvesDanger)
+    private func isActiveSafeCapture(
+        _ move: Move,
+        assessment: CoachingMoveAssessment,
+        tentativeAdvice: CoachingAdvice,
+        positionAdvice: CoachingAdvice?
+    ) -> Bool {
+        let isActiveOpportunity = positionAdvice?.takeOpportunities.contains(where: {
+            $0.moves.contains(move)
+        }) == true
+        let hasPositiveCurrentEstimate = tentativeAdvice.evaluation
+            .learnerCaptureEstimates
+            .contains { $0.move == move && $0.netGainForMover > 0 }
+        let hasRevisionIssue = assessment.opponentIssues.contains {
+            $0.severity == .reviseMove
+        }
+        return isActiveOpportunity
+            && hasPositiveCurrentEstimate
+            && assessment.isLegal
+            && assessment.resolvesRequiredDanger
+            && !hasRevisionIssue
     }
 
     private func hasWakePurpose(_ concepts: [CoachingConcept]) -> Bool {
