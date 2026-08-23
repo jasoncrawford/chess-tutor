@@ -349,7 +349,14 @@ struct CoachingSession: Sendable {
         case .stop:
             return [.stop(preservingTentativeMove: true)]
         case .keepLooking:
-            return [.stop(preservingTentativeMove: true)]
+            reduceInteraction(to: CoachingInteractionSnapshot(
+                selectedSquare: nil,
+                tentativeMove: nil,
+                positionRevision: episode.interaction.positionRevision
+            ))
+            episode.evidence = .empty
+            resetProgressPreservingPulse()
+            return [.discardTentativeMove] + reconcile()
         case .done:
             return [.commitWithExistingDonePath]
         }

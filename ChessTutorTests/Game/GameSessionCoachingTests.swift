@@ -769,26 +769,45 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNotNil(promotionSession.pendingCoachingRequestID)
     }
 
-    func testStopAndKeepLookingPreserveTentativeMove() async {
-        for action in [CoachingAction.stop, .keepLooking] {
-            let move = CoachingTestFixtures.openingKnightMove
-            let session = GameSession(
-                coachingAdvisor: ImmediateCoachingAdvisor(
-                    advice: tentativeAdvice(for: move, isLegal: true)
-                )
+    func testCloseHelpStopsCoachingAndPreservesTentativeMove() async {
+        let move = CoachingTestFixtures.openingKnightMove
+        let session = GameSession(
+            coachingAdvisor: ImmediateCoachingAdvisor(
+                advice: tentativeAdvice(for: move, isLegal: true)
             )
-            stage(move, in: session)
-            session.startCoaching()
-            await session.resolvePendingCoachingAdvice()
-            if action == .keepLooking {
-                _ = session.chooseCoachingAction(.looksSafe)
-            }
+        )
+        stage(move, in: session)
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
 
-            XCTAssertNil(session.chooseCoachingAction(action))
-            XCTAssertFalse(session.isCoachingActive)
-            XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
-            XCTAssertTrue(session.canFinishTurn)
-        }
+        XCTAssertNil(session.chooseCoachingAction(.stop))
+        XCTAssertFalse(session.isCoachingActive)
+        XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
+        XCTAssertEqual(session.selectedSquare, move.to)
+        XCTAssertTrue(session.canFinishTurn)
+    }
+
+    func testTryAnotherMoveKeepsCoachingAndRederivesFromCommittedPosition() async {
+        let move = CoachingTestFixtures.openingKnightMove
+        let session = GameSession(coachingAdvisor: LocalCoachingAdvisor())
+        await beginOpeningCoaching(in: session)
+        stage(move, in: session)
+        await session.resolvePendingCoachingAdvice()
+        _ = session.chooseCoachingAction(.looksSafe)
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.done, .keepLooking, .stop]
+        )
+
+        XCTAssertNil(session.chooseCoachingAction(.keepLooking))
+
+        let fresh = await makeOpeningSession()
+        XCTAssertTrue(session.isCoachingActive)
+        XCTAssertEqual(session.state, .startingPosition())
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertNil(session.pendingCoachingRequestID)
+        XCTAssertEqual(session.coachingPresentation, fresh.coachingPresentation)
     }
 
     func testCoachingDoneReturnsExactMoveFromExistingFinishPath() async {

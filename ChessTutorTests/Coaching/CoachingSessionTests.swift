@@ -2165,26 +2165,38 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.headline, "Try another move.")
     }
 
-    func testStopAndKeepLookingPreserveTentativeMove() {
+    func testStopPreservesTentativeMove() {
         var active = session()
         active.receive(CoachingTestFixtures.fallbackAdvice)
         XCTAssertEqual(
             active.handle(.actionChosen(.stop)),
             [.stop(preservingTentativeMove: true)]
         )
+    }
 
+    func testKeepLookingDiscardsTentativeMoveAndRestartsFromCommittedAdvice() {
         var complete = opponentCheckSession(
-            move: CoachingTestFixtures.fallbackMove,
-            origin: .fallback,
+            move: CoachingTestFixtures.openingKnightMove,
+            origin: .wake,
             assessment: CoachingTestFixtures.acceptableAssessment(
-                CoachingTestFixtures.fallbackMove
+                CoachingTestFixtures.openingKnightMove,
+                concepts: [.developsKnightOrBishop]
             )
         )
         complete.handle(.actionChosen(.looksSafe))
         XCTAssertEqual(
             complete.handle(.actionChosen(.keepLooking)),
-            [.stop(preservingTentativeMove: true)]
+            [.discardTentativeMove]
         )
+        XCTAssertEqual(
+            complete.stage,
+            .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true))
+        )
+        XCTAssertEqual(
+            complete.presentation?.headline,
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
+        )
+        XCTAssertNil(complete.presentation?.response)
     }
 
     func testHintAdvancesOneLevelOnlyAfterActionAndCapsAtStrongestFocusLevel() {
@@ -2731,8 +2743,9 @@ final class CoachingSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             reply.handle(.actionChosen(.keepLooking)),
-            [.stop(preservingTentativeMove: true)]
+            [.discardTentativeMove, .requestAdvice(context: .start)]
         )
+        XCTAssertEqual(reply.stage, .awaitingAdvice(origin: nil))
     }
 
     private func opponentCheckSession(
