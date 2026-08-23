@@ -104,7 +104,7 @@ struct CoachingPanelAccessibilityFixture: View {
             response: omitsResponse ? nil : "Right—there is no safe capture here.",
             headline: omitsResponse
                 ? "Yes—that pawn is attacking your queen. How could you help your queen?"
-                : "Can one of your pieces make a useful capture?",
+                : "Can one of your pieces safely take a black piece?",
             instruction: omitsResponse
                 ? "Try moving your queen, protecting it, or taking the attacker."
                 : "Make the capture, or choose No safe capture.",

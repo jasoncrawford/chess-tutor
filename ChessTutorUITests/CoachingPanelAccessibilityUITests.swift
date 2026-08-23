@@ -27,15 +27,38 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
         assertPanelLayout(for: "tall-no-response", expectedResponse: nil)
     }
 
+    func testAccessibilityExtraLargeTallCompositionKeepsEveryRegionReachable() {
+        assertPanelLayout(
+            for: "tall",
+            expectedResponse: "Right—there is no safe capture here.",
+            accessibilityExtraLarge: true
+        )
+    }
+
+    func testAccessibilityExtraLargeWideCompositionKeepsEveryRegionReachable() {
+        assertPanelLayout(
+            for: "clockwise-quarter-turn",
+            expectedResponse: "Right—there is no safe capture here.",
+            accessibilityExtraLarge: true
+        )
+    }
+
     private func assertPanelLayout(
         for configuration: String,
         expectedResponse: String?,
+        accessibilityExtraLarge: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["-ui-test-coaching-panel", configuration]
+        if accessibilityExtraLarge {
+            app.launchArguments += [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityExtraLarge",
+            ]
+        }
         app.launch()
 
         let expectedSectionIdentifiers = [
@@ -61,7 +84,7 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
 
         let expectedHeadline = expectedResponse == nil
             ? "Yes—that pawn is attacking your queen. How could you help your queen?"
-            : "Can one of your pieces make a useful capture?"
+            : "Can one of your pieces safely take a black piece?"
         let expectedInstruction = expectedResponse == nil
             ? "Try moving your queen, protecting it, or taking the attacker."
             : "Make the capture, or choose No safe capture."

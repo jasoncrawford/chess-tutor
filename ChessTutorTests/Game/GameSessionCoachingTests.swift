@@ -473,6 +473,25 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNil(switched.pendingCoachingRequestID)
     }
 
+    func testTentativeMoveReplacementProjectionMatchesDirectCurrentMove() async {
+        let currentMove = CoachingTestFixtures.alternateKnightMove
+        let direct = await makeOpeningSession()
+        stage(currentMove, in: direct)
+        await direct.resolvePendingCoachingAdvice()
+
+        let historyRich = await makeOpeningSession()
+        stage(CoachingTestFixtures.openingKnightMove, in: historyRich)
+        await historyRich.resolvePendingCoachingAdvice()
+        historyRich.select(currentMove.from)
+        stage(currentMove, in: historyRich)
+        await historyRich.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(historyRich.selectedSquare, direct.selectedSquare)
+        XCTAssertEqual(historyRich.state.board, direct.state.board)
+        XCTAssertEqual(historyRich.coachingPresentation, direct.coachingPresentation)
+        XCTAssertEqual(historyRich.pendingCoachingRequestID, direct.pendingCoachingRequestID)
+    }
+
     func testOpeningSourceFeedbackTracksPawnRookEmptyAndEnemySwitches() async {
         let session = await makeOpeningSession()
 

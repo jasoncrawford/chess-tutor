@@ -703,6 +703,112 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     }
 
     func testCanonicalOutputAvoidsJudgmentalAndEngineVocabulary() {
+        let move = Move(from: sq("b1"), to: sq("c3"))
+        let alternative = Move(from: sq("b1"), to: sq("a3"))
+        let candidate = CoachingCandidateMove(
+            move: move,
+            grade: .preferred,
+            resultingMobility: 6,
+            centralityComparison: .closerWithMoreMobility(
+                alternative: alternative,
+                candidateMobility: 6,
+                alternativeMobility: 2
+            )
+        )
+        let wakeTasks: [CoachingWakeTask] = [
+            .opening(firstMove: true, castleIsAlternative: false, candidates: [candidate]),
+            .castle(move: Move(from: sq("e1"), to: sq("g1"), special: .castleKingside)),
+            .protect(
+                source: sq("b1"),
+                sourcePiece: .knight,
+                target: sq("e4"),
+                targetPiece: .pawn,
+                candidates: [candidate]
+            ),
+            .createThreat(
+                source: sq("b1"),
+                sourcePiece: .knight,
+                target: sq("d4"),
+                targetPiece: .rook,
+                candidates: [candidate]
+            ),
+            .improveMobility(
+                source: sq("b1"),
+                piece: .knight,
+                sourceIsCorner: true,
+                before: 2,
+                candidates: [candidate]
+            ),
+        ]
+        let exchange = CoachingExchangeFact(
+            move: Move(from: sq("c4"), to: sq("f7")),
+            mover: .bishop,
+            captured: .rook,
+            immediateRecapture: Move(from: sq("g8"), to: sq("f7")),
+            immediateRecapturer: .king,
+            netGainForLearner: -2
+        )
+        let issue = CoachingOpponentIssue(
+            reply: Move(from: sq("d8"), to: sq("d4")),
+            kind: .materialLoss(points: 9),
+            severity: .reviseMove,
+            affectedSquare: sq("d4"),
+            checkingSquares: []
+        )
+        let replyFact = CoachingOpponentReplyFact(
+            issue: issue,
+            opponentPiece: .rook,
+            affectedPiece: .queen,
+            learnerPiece: .queen
+        )
+        let purposes: [CoachingWakePurpose] = [
+            .openingDevelopment(firstMove: true),
+            .openingDevelopment(firstMove: false),
+            .addsDefender,
+            .createsThreat,
+            .centralActivity,
+            .castle,
+        ]
+        let completions: [CoachingCompletionIdea] = [
+            .resolvesDanger(.movedTarget(target: .queen, attacker: .rook)),
+            .resolvesDanger(.capturedAttacker(
+                capturer: .bishop,
+                target: .queen,
+                attacker: .rook
+            )),
+            .resolvesDanger(.addedDefender(
+                defender: .knight,
+                target: .queen,
+                attacker: .rook
+            )),
+            .resolvesCheck(resolution: .movedKing, checker: .rook),
+            .resolvesCheck(
+                resolution: .blocked(attacker: .rook, blocker: .bishop),
+                checker: .rook
+            ),
+            .resolvesCheck(
+                resolution: .capturedChecker(checker: .rook, capturer: .bishop),
+                checker: .rook
+            ),
+            .mate,
+            .profitableCapture(captured: .rook),
+            .safeCapture(exchange),
+            .develops(piece: .knight),
+            .advancesCenterPawn,
+            .castles,
+            .addsDefender(piece: .bishop),
+            .createsThreat(piece: .rook),
+            .centralizes(piece: .queen),
+            .constructive(task: wakeTasks[0], move: move, piece: .knight),
+            .constructive(task: wakeTasks[1], move: move, piece: .king),
+            .constructive(task: wakeTasks[2], move: move, piece: .knight),
+            .constructive(task: wakeTasks[3], move: move, piece: .knight),
+            .constructive(task: wakeTasks[4], move: move, piece: .knight),
+            .verifiedSafe,
+        ]
+        let origins: [CoachingMoveOrigin] = [
+            .preexisting, .check, .safe, .take, .wake, .fallback,
+        ]
         let prompts: [CoachingPrompt] = [
             .checkLocate,
             .checkResolve,
@@ -710,15 +816,30 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .safeIdentifyAttacker(piece: .queen),
             .safeResolve(target: .queen, attacker: .rook),
             .takeChooseMove,
-            .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
-            .wakeChoosePiece(purpose: .centralActivity),
-            .wakeChooseMove(piece: .knight, purpose: .openingDevelopment(firstMove: true)),
             .opponentReply(opponent: .black),
+            .opponentReply(opponent: .white),
             .fallbackChooseMove,
+            .unsupportedFallbackChooseMove,
+            .opponentIssueRevise(kind: .mateInOne, affectedPiece: nil),
+            .opponentIssueRevise(kind: .check, affectedPiece: .king),
+            .opponentIssueRevise(kind: .materialLoss(points: 9), affectedPiece: .queen),
             .reviseMove,
             .illegalKingSafety,
-            .complete(origin: .safe, idea: .verifiedSafe),
         ]
+        + purposes.flatMap { purpose in
+            [
+                .wakeChoosePiece(purpose: purpose),
+                .wakeChooseMove(piece: .knight, purpose: purpose),
+            ]
+        }
+        + wakeTasks.flatMap { task in
+            [
+                .wake(task: task, selectedPiece: nil),
+                .wake(task: task, selectedPiece: .knight),
+            ]
+        }
+        + completions.map { .complete(origin: .wake, idea: $0) }
+        + origins.map { .complete(origin: $0, idea: .verifiedSafe) }
         let feedback: [CoachingFeedback?] = [
             nil,
             .safePiece(piece: .bishop),
@@ -741,40 +862,59 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .missedExistingAnswer(.noPieceNeedsHelp),
             .missedExistingAnswer(.noSafeCapture),
             .missedOpponentReply,
+            .missedOpponentIssue(replyFact),
+            .opponentIssue(replyFact),
+            .opponentReplyLooksSafe,
+            .noSafeCaptureForPiece,
+            .safeCaptureHint(piece: .bishop),
+            .unsafeCapture(exchange),
+            .concreteFlaw(kind: .mateInOne, affectedPiece: nil),
+            .concreteFlaw(kind: .check, affectedPiece: .king),
             .concreteFlaw(kind: .materialLoss(points: 9), affectedPiece: .queen),
+            .dangerStillPresent(attacker: nil, target: .queen),
             .dangerStillPresent(attacker: .rook, target: .queen),
+            .noRecognizedPurpose(purpose: nil),
+            .noRecognizedPurpose(purpose: .openingDevelopment(firstMove: true)),
+            .noRecognizedPurpose(purpose: .addsDefender),
+            .noRecognizedPurpose(purpose: .createsThreat),
             .noRecognizedPurpose(purpose: .centralActivity),
+            .noRecognizedPurpose(purpose: .castle),
             .harmlessCheckFound,
             .checkFoundOtherDangerRemains,
         ]
 
-        let feedbackCopy = prompts.flatMap { prompt in
-            feedback.map { item in
-                let presentation = source.presentation(
-                    for: context(prompt: prompt, feedback: item)
-                )
-                return ([
-                    presentation.response,
-                    presentation.headline,
-                    presentation.instruction,
-                ].compactMap { $0 })
-                    .joined(separator: " ")
-            }
-        }.joined(separator: " ")
-        let hintCopy = prompts.map { prompt in
-            let presentation = source.presentation(
-                for: context(
-                    prompt: prompt,
-                    hint: .candidatePieces,
-                    actions: [.hint]
-                )
-            )
-            return ([
+        func childFacingCopy(_ presentation: CoachingPresentation) -> [String] {
+            [
                 presentation.response,
                 presentation.headline,
                 presentation.instruction,
-            ].compactMap { $0 })
-                .joined(separator: " ")
+            ].compactMap { $0 }
+            + presentation.actions.flatMap { [$0.title, $0.accessibilityLabel] }
+        }
+
+        let feedbackCopy = prompts.flatMap { prompt in
+            feedback.map { item in
+                let presentation = source.presentation(
+                    for: context(
+                        prompt: prompt,
+                        feedback: item,
+                        actions: [.noAnswer, .looksSafe, .hint, .stop, .done, .keepLooking]
+                    )
+                )
+                return childFacingCopy(presentation).joined(separator: " ")
+            }
+        }.joined(separator: " ")
+        let hints: [CoachingHint] = [
+            .checkMarker, .dangerMarker, .replyMarkers, .candidatePieces,
+            .attackerRelationship, .safeResponseIdeas, .movementMarkers,
+            .candidateMoves,
+        ]
+        let hintCopy = prompts.flatMap { prompt in
+            hints.map { hint in
+                childFacingCopy(source.presentation(
+                    for: context(prompt: prompt, hint: hint, actions: [.hint])
+                )).joined(separator: " ")
+            }
         }.joined(separator: " ")
         let copy = "\(feedbackCopy) \(hintCopy)".lowercased()
 
@@ -783,14 +923,24 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertNil(copy.range(of: #"\b[+-]?\d+(?:\.\d+)?\b"#, options: .regularExpression))
 
         let prohibited = [
-            "job",
             "part of this problem",
             "big danger",
+            "job",
             "tap the problem",
+            "nothing urgent stands out",
+            "clear plan",
+            "reply to notice",
+            "win some material",
+            "come into the game",
+            "attack something",
+            "protect another piece",
+            "more useful place",
         ]
-        for phrase in prohibited {
-            XCTAssertFalse(copy.contains(phrase), "Found prohibited copy: \(phrase)")
-        }
+        XCTAssertEqual(
+            prohibited.filter(copy.contains),
+            [],
+            "Found prohibited child-facing copy"
+        )
         XCTAssertNotEqual(copy.trimmingCharacters(in: .whitespacesAndNewlines), "Yes.")
     }
 

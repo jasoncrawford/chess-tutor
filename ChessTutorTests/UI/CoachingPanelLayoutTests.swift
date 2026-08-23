@@ -98,6 +98,24 @@ final class CoachingPanelLayoutTests: XCTestCase {
         XCTAssertEqual(wide.composition.actionTabletopAxis, .horizontal)
     }
 
+    func testPermanentUATFixtureSizesExerciseBothPhysicalCompositions() {
+        let tall = CoachingPanelLayout(
+            tabletopRegionSize: CGSize(width: 260, height: 446),
+            physicalRegionSize: CGSize(width: 260, height: 446),
+            physicalAxis: .vertical
+        )
+        let wide = CoachingPanelLayout(
+            tabletopRegionSize: CGSize(width: 246.67, height: 503.34),
+            physicalRegionSize: CGSize(width: 503.34, height: 246.67),
+            physicalAxis: .horizontal
+        )
+
+        XCTAssertEqual(tall.composition, .tall)
+        XCTAssertEqual(tall.tabletopContentSize, CGSize(width: 228, height: 414))
+        XCTAssertEqual(wide.composition, .wide)
+        XCTAssertEqual(wide.physicalContentSize, CGSize(width: 471.34, height: 214.67))
+    }
+
     func testAuthoredActionOrderAndProminenceReachPanelUnchanged() {
         let presentation = LocalCoachingExplanationSource().presentation(
             for: coachingContext(

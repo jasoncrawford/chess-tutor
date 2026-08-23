@@ -9,6 +9,181 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 47)
     }
 
+    func testEveryApprovedBranchHasAGoldenTurn() async throws {
+        let requiredCases: [CoachingGoldenCase] = [
+            .t1Entry, .t1BlockedRook, .t1FlankPawn, .t1Hint, .t1KnightSelected,
+            .t1PreferredKnight, .t1EdgeKnight, .t1CenterPawn,
+            .t2Entry, .t2OneSquareKingMove, .t2KnightSwitch, .t2Castle,
+            .t3Entry, .t3WrongOwnPiece, .t3Target, .t3WrongAttacker, .t3Attacker,
+            .t3UnresolvedMove, .t3ResolvedMove,
+            .t4LowerPriorityPawn, .t4PrimaryKnight,
+            .t5PawnDanger, .t5PawnResolved, .t5ProtectedTap, .t5ProtectedAbsence,
+            .t6WrongSource, .t6Hint, .t6Capture,
+            .t7UnsafeCapture, .t7NoSafeCapture,
+            .t8AddsDefender,
+            .t9Entry, .t9Hint, .t9Completed,
+            .t10Entry, .t10Completed,
+            .t11Safe, .t11QueenLoss, .t11IncorrectLooksSafe, .t11HarmlessCheck,
+            .t12CheckLocate, .t12WrongChecker, .t12Capture, .t12Block, .t12KingMove,
+            .t12UnsupportedEntry, .t12UnsupportedSafeMove,
+        ]
+
+        XCTAssertEqual(requiredCases, CoachingGoldenCase.allCases)
+        for testCase in requiredCases {
+            let turn = try await goldenTurn(testCase)
+            XCTAssertEqual(
+                turn,
+                expectedTurn(testCase),
+                "Unexpected transcript for \(testCase.rawValue)"
+            )
+        }
+    }
+
+    func testEveryGoldenPresentationIsSemanticallyCoherent() async throws {
+        for branch in CoachingGoldenCase.allCases {
+            let presentation = try await goldenPresentation(branch)
+            assertCoherent(presentation, branch: branch)
+
+            let response = presentation.response?.lowercased() ?? ""
+            let answerIsEstablished = [
+                "one of your pieces does need help",
+                "there is a safe capture to find",
+                "no piece needs help right now",
+                "there is no safe capture here",
+            ].contains { response.contains($0) }
+            if answerIsEstablished {
+                XCTAssertFalse(
+                    presentation.actions.contains { $0.action == .noAnswer },
+                    "Absence action survived an established answer for \(branch.rawValue)"
+                )
+            }
+        }
+    }
+
+    func testGoldenCorpusChildFacingCopyAvoidsProhibitedPhrases() async throws {
+        var childFacingValues: [String] = []
+        for branch in CoachingGoldenCase.allCases {
+            let presentation = try await goldenPresentation(branch)
+            childFacingValues.append(contentsOf: [
+                presentation.response,
+                presentation.headline,
+                presentation.instruction,
+            ].compactMap { $0 })
+            childFacingValues.append(contentsOf: presentation.actions.flatMap {
+                [$0.title, $0.accessibilityLabel]
+            })
+        }
+
+        assertNoProhibitedChildFacingCopy(
+            childFacingValues,
+            source: "47-case golden corpus"
+        )
+    }
+
+    func testHintReplacesRatherThanStacksMissFeedback() async throws {
+        var t1 = try await preparedSession(for: .starting)
+        t1.handle(.interactionChanged(snapshot(selected: sq("a1"))))
+        let t1Miss = try XCTUnwrap(t1.presentation?.response)
+        t1.handle(.actionChosen(.hint))
+        XCTAssertNil(t1.presentation?.response)
+        XCTAssertFalse(try XCTUnwrap(t1.presentation).headline.contains(t1Miss))
+
+        var t3 = try await preparedSession(for: .endangeredKnight)
+        t3.handle(.identificationTapped(sq("g1")))
+        let t3Miss = try XCTUnwrap(t3.presentation?.response)
+        t3.handle(.actionChosen(.hint))
+        XCTAssertNil(t3.presentation?.response)
+        XCTAssertFalse(try XCTUnwrap(t3.presentation).headline.contains(t3Miss))
+
+        var t6 = try await preparedSession(for: .winningCapture)
+        t6.handle(.interactionChanged(snapshot(selected: sq("g1"))))
+        let t6Miss = try XCTUnwrap(t6.presentation?.response)
+        t6.handle(.actionChosen(.hint))
+        XCTAssertEqual(t6.presentation?.response, "Your bishop has a safe capture.")
+        XCTAssertNotEqual(t6.presentation?.response, t6Miss)
+
+        var t11 = try await tentativeSession(
+            state: CoachingGoldenPosition.exposedQueen.state,
+            move: CoachingGoldenMoves.exposesQueen,
+            learner: .white
+        )
+        t11.handle(.actionChosen(.looksSafe))
+        let t11Miss = try XCTUnwrap(t11.presentation?.response)
+        t11.handle(.actionChosen(.hint))
+        XCTAssertNil(t11.presentation?.response)
+        XCTAssertFalse(try XCTUnwrap(t11.presentation).headline.contains(t11Miss))
+    }
+
+    func testT1SourceSwitchingIsHistoryIndependent() async throws {
+        let sources = [sq("a1"), sq("a2"), sq("b1")]
+        for source in sources {
+            var direct = try await preparedSession(for: .starting)
+            direct.handle(.interactionChanged(snapshot(selected: source)))
+
+            var historyRich = try await preparedSession(for: .starting)
+            for prior in sources where prior != source {
+                historyRich.handle(.interactionChanged(snapshot(selected: prior)))
+            }
+            historyRich.handle(.interactionChanged(snapshot(selected: source)))
+
+            XCTAssertEqual(
+                try turn(from: historyRich),
+                try turn(from: direct),
+                "T1 source \(source) depended on selection history"
+            )
+        }
+    }
+
+    func testT3TargetSwitchingIsHistoryIndependent() async throws {
+        var direct = try await preparedSession(for: .endangeredKnight)
+        direct.handle(.identificationTapped(sq("f3")))
+
+        for misses in 1...3 {
+            var historyRich = try await preparedSession(for: .endangeredKnight)
+            for _ in 0..<misses {
+                historyRich.handle(.identificationTapped(sq("g1")))
+            }
+            historyRich.handle(.identificationTapped(sq("f3")))
+
+            XCTAssertEqual(
+                try turn(from: historyRich),
+                try turn(from: direct),
+                "T3 target depended on \(misses) prior miss(es)"
+            )
+        }
+    }
+
+    func testT11TentativeMoveReplacementIsHistoryIndependent() async throws {
+        let state = CoachingGoldenPosition.harmlessCheck.state
+        let centerMove = CoachingGoldenMoves.developsKnight
+        let edgeMove = Move(from: sq("b1"), to: sq("a3"))
+
+        for (prior, current) in [(edgeMove, centerMove), (centerMove, edgeMove)] {
+            let direct = try await tentativeSession(
+                state: state,
+                move: current,
+                learner: .white
+            )
+            var historyRich = try await tentativeSession(
+                state: state,
+                move: prior,
+                learner: .white
+            )
+            try await stage(
+                current,
+                origin: .fallback,
+                state: state,
+                in: &historyRich
+            )
+
+            XCTAssertEqual(
+                try turn(from: historyRich),
+                try turn(from: direct),
+                "T11 move \(current) depended on prior tentative move"
+            )
+        }
+    }
+
     func testSafeDangerAndProtectionBranchesUseBoardFacts() async throws {
         let t3Entry = try await goldenTurn(.t3Entry)
         let t4LowerPriorityPawn = try await goldenTurn(.t4LowerPriorityPawn)
@@ -478,7 +653,474 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
     }
 
+    private func expectedTurn(_ branch: CoachingGoldenCase) -> CoachingGoldenTurn {
+        let immediateBoundary =
+            "Black cannot immediately check your king or win one of your pieces after this move."
+        let openingAsk =
+            "A center pawn or knight is a simple way to start. Which would you like to move?"
+        let openingInstruction =
+            "Tap one of your two center pawns or one of your knights."
+        let safeAsk = "One of your pieces is in danger. Which one?"
+        let safeInstruction = "Tap your piece, or choose No piece needs help."
+        let takeAsk = "Can one of your pieces safely take a black piece?"
+
+        switch branch {
+        case .t1Entry:
+            return expected(
+                ask: openingAsk,
+                instruction: openingInstruction,
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine
+            )
+        case .t1BlockedRook:
+            return expected(
+                response: "Your pawn is blocking that rook. Choose a center pawn or knight.",
+                ask: openingAsk,
+                instruction: openingInstruction,
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine
+            )
+        case .t1FlankPawn:
+            return expected(
+                response: "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight.",
+                ask: openingAsk,
+                instruction: openingInstruction,
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine
+            )
+        case .t1Hint:
+            return expected(
+                ask: "Here are the four pieces you can try.",
+                instruction: "Tap a highlighted piece.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                candidates: ["b1", "d2", "e2", "g1"]
+            )
+        case .t1KnightSelected:
+            return expected(
+                ask: "You chose a knight. Moving it off its starting square is called developing it.",
+                instruction: "Move the knight.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine
+            )
+        case .t1PreferredKnight:
+            return completion(
+                response: immediateBoundary,
+                ask: "You developed your knight toward the center. From there it can reach more squares."
+            )
+        case .t1EdgeKnight:
+            return completion(
+                response: immediateBoundary,
+                ask: "You developed your knight. A square closer to the center would usually give it more choices."
+            )
+        case .t1CenterPawn:
+            return completion(
+                response: immediateBoundary,
+                ask: "Your center pawn moved forward and now helps control the center."
+            )
+
+        case .t2Entry:
+            return expected(
+                response: "Right—there is no safe capture here.",
+                ask: "Your king is ready to castle.",
+                instruction: "Move your king two squares toward the rook.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["e1"]
+            )
+        case .t2OneSquareKingMove:
+            return expected(
+                response: "That is a king move, but it is not castling. Castling moves the king two squares toward the rook.",
+                ask: "Your king is ready to castle.",
+                instruction: "Move your king two squares toward the rook.",
+                actions: [.stop],
+                boardTask: .move,
+                routine: wakeRoutine
+            )
+        case .t2KnightSwitch:
+            return expected(
+                ask: "That knight can also be developed.",
+                instruction: "Move the knight off its starting square.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine
+            )
+        case .t2Castle:
+            return completion(
+                response: immediateBoundary,
+                ask: "You castled. Your king moved toward safety, and your rook moved toward the center."
+            )
+
+        case .t3Entry:
+            return expected(
+                ask: safeAsk,
+                instruction: safeInstruction,
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine
+            )
+        case .t3WrongOwnPiece:
+            return expected(
+                response: "That king is safe right now.",
+                ask: safeAsk,
+                instruction: safeInstruction,
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine
+            )
+        case .t3Target:
+            return expected(
+                ask: "You found the knight. What black piece is attacking it?",
+                instruction: "Tap the black piece.",
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine,
+                emphasized: ["f3"]
+            )
+        case .t3WrongAttacker:
+            return expected(
+                response: "That king isn’t attacking your knight.",
+                ask: "You found the knight. What black piece is attacking it?",
+                instruction: "Tap the black piece.",
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine,
+                emphasized: ["f3"]
+            )
+        case .t3Attacker:
+            return expected(
+                ask: "Yes—that pawn is attacking your knight. How could you help your knight?",
+                instruction: "Make a move that gets it safe.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: safeRoutine,
+                emphasized: ["e4", "f3"],
+                paths: [("e4", "f3", .attacker)]
+            )
+        case .t3UnresolvedMove:
+            return expected(
+                response: "The pawn could still take your knight after that move.",
+                ask: "Yes—that pawn is attacking your knight. How could you help your knight?",
+                instruction: "Make a move that gets it safe.",
+                actions: [.stop],
+                boardTask: .move,
+                routine: safeRoutine
+            )
+        case .t3ResolvedMove:
+            return completion(
+                response: immediateBoundary,
+                ask: "Your knight is out of the pawn's attack. It is safe now."
+            )
+
+        case .t4LowerPriorityPawn:
+            return expected(
+                response: "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more.",
+                ask: "Which piece should you help first?",
+                instruction: safeInstruction,
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine
+            )
+        case .t4PrimaryKnight:
+            return expected(
+                ask: "You found the knight. What black piece is attacking it?",
+                instruction: "Tap the black piece.",
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine,
+                emphasized: ["f3"]
+            )
+
+        case .t5PawnDanger:
+            return expected(
+                ask: safeAsk,
+                instruction: safeInstruction,
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false),
+                routine: safeRoutine
+            )
+        case .t5PawnResolved:
+            return completion(
+                response: immediateBoundary,
+                ask: "Your pawn moved out of the bishop’s path. It is safe now."
+            )
+        case .t5ProtectedTap:
+            return expected(
+                response: "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now.",
+                ask: "Your pawn can move to a square where it attacks Black’s knight. Can you find the square?",
+                instruction: "Move the pawn so it attacks the knight.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["f6", "g4"]
+            )
+        case .t5ProtectedAbsence:
+            return expected(
+                response: "Right—no piece needs help right now.",
+                ask: "Your pawn can move to a square where it attacks Black’s knight. Can you find the square?",
+                instruction: "Move the pawn so it attacks the knight.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["f6", "g4"]
+            )
+
+        case .t6WrongSource:
+            return expected(
+                response: "That piece has no safe capture here.",
+                ask: takeAsk,
+                instruction: "Try another piece, or choose No safe capture.",
+                actions: [.noAnswer, .hint, .stop],
+                noAnswerTitle: "No safe capture",
+                boardTask: .move,
+                routine: takeRoutine
+            )
+        case .t6Hint:
+            return expected(
+                response: "Your bishop has a safe capture.",
+                ask: takeAsk,
+                instruction: "Tap the highlighted white piece.",
+                actions: [.noAnswer, .hint, .stop],
+                noAnswerTitle: "No safe capture",
+                boardTask: .move,
+                routine: takeRoutine,
+                candidates: ["c4"]
+            )
+        case .t6Capture:
+            return completion(
+                response: immediateBoundary,
+                ask: "Your bishop took a rook, and Black cannot take the bishop back."
+            )
+        case .t7UnsafeCapture:
+            return expected(
+                response: "Black’s king could take your bishop. You would lose a bishop to take one pawn.",
+                ask: takeAsk,
+                instruction: "Change your move, or choose No safe capture.",
+                actions: [.noAnswer, .stop],
+                noAnswerTitle: "No safe capture",
+                boardTask: .move,
+                routine: takeRoutine
+            )
+        case .t7NoSafeCapture:
+            return expected(
+                response: "Right—there is no safe capture here.",
+                ask: "I can check immediate dangers, but I do not have a confident plan for this position yet.",
+                instruction: "Choose a move you are considering, and I will check it with you.",
+                actions: [.stop],
+                boardTask: .move
+            )
+
+        case .t8AddsDefender:
+            return completion(
+                response: immediateBoundary,
+                ask: "Your other pawn now protects the threatened pawn. If the knight takes it, your pawn can take the knight back."
+            )
+
+        case .t9Entry:
+            return expected(
+                ask: "Your knight can move to a square where it attacks Black’s rook. Can you find the square?",
+                instruction: "Move the knight so it attacks the rook.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["a1", "d4"]
+            )
+        case .t9Hint:
+            return expected(
+                ask: "Both highlighted squares let the knight attack the rook.",
+                instruction: "Move the knight to one of the highlighted squares.",
+                actions: [.stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["a1", "d4"],
+                candidates: ["b3", "c2"],
+                paths: [
+                    ("a1", "b3", .candidate),
+                    ("a1", "c2", .candidate),
+                ]
+            )
+        case .t9Completed:
+            return completion(
+                response: "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works.",
+                ask: "Your knight now attacks the rook. Black may need to move or protect it.",
+                emphasized: ["b3", "d4"],
+                paths: [("b3", "d4", .attacker)]
+            )
+
+        case .t10Entry:
+            return expected(
+                ask: "Your knight has very few choices in the corner. Can you move it closer to the center?",
+                instruction: "Move the knight.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                routine: wakeRoutine,
+                emphasized: ["a1"]
+            )
+        case .t10Completed:
+            return completion(
+                response: immediateBoundary,
+                ask: "From there your knight can reach six squares instead of two. That is why knights are often stronger near the center."
+            )
+
+        case .t11Safe:
+            return completion(
+                response: immediateBoundary,
+                ask: "You developed your knight toward the center. From there it can reach more squares."
+            )
+        case .t11QueenLoss:
+            return expected(
+                response: "Black’s rook could take your queen.",
+                ask: "How can you change your move so the queen is safe?",
+                instruction: "Change your move so the queen is safe.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                emphasized: ["d4", "d8"],
+                paths: [("d8", "d4", .attacker)]
+            )
+        case .t11IncorrectLooksSafe:
+            return expected(
+                response: "Black’s rook could take your queen.",
+                ask: "What could Black do after your move?",
+                instruction: "Tap the black rook, or choose Hint.",
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: true)
+            )
+        case .t11HarmlessCheck:
+            return completion(
+                response: "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works.",
+                ask: "That works. Your knight moved closer to the center.",
+                emphasized: ["a8", "g1"],
+                paths: [("a8", "a1", .attacker)]
+            )
+
+        case .t12CheckLocate:
+            return expected(
+                ask: "Your king is in check. What is giving check?",
+                instruction: "Tap the piece giving check.",
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false)
+            )
+        case .t12WrongChecker:
+            return expected(
+                response: "That king isn’t giving check.",
+                ask: "Your king is in check. What is giving check?",
+                instruction: "Tap the piece giving check.",
+                actions: [.hint, .stop],
+                boardTask: .identify(allowsMoveRevision: false)
+            )
+        case .t12Capture:
+            return completion(
+                ask: "Your bishop took the checking rook. Your king is safe."
+            )
+        case .t12Block:
+            return completion(
+                ask: "Your bishop blocked the rook’s path. Your king is safe."
+            )
+        case .t12KingMove:
+            return completion(
+                ask: "Your king moved out of the rook’s line. It is safe."
+            )
+        case .t12UnsupportedEntry:
+            return expected(
+                ask: "I can check immediate dangers, but I do not have a confident plan for this position yet.",
+                instruction: "Choose a move you are considering, and I will check it with you.",
+                actions: [.stop],
+                boardTask: .move
+            )
+        case .t12UnsupportedSafeMove:
+            return completion(
+                response: immediateBoundary,
+                ask: "I do not see an immediate check or lost piece after this move."
+            )
+        }
+    }
+
+    private var safeRoutine: [CoachingRoutineState] {
+        [.safeCurrent, .takePending, .wakePending]
+    }
+
+    private var takeRoutine: [CoachingRoutineState] {
+        [.safeCleared, .takeCurrent, .wakePending]
+    }
+
+    private var wakeRoutine: [CoachingRoutineState] {
+        [.safeCleared, .takeCleared, .wakeCurrent]
+    }
+
+    private func completion(
+        response: String? = nil,
+        ask: String,
+        emphasized: [String] = [],
+        paths: [(String, String, CoachFocusPath.Role)] = []
+    ) -> CoachingGoldenTurn {
+        expected(
+            response: response,
+            ask: ask,
+            actions: [.done, .keepLooking, .stop],
+            emphasized: emphasized,
+            paths: paths
+        )
+    }
+
+    private func expected(
+        response: String? = nil,
+        ask: String,
+        instruction: String? = nil,
+        actions: [CoachingAction],
+        noAnswerTitle: String = "No piece needs help",
+        boardTask: CoachingBoardTask = .none,
+        routine: [CoachingRoutineState] = [],
+        emphasized: [String] = [],
+        candidates: [String] = [],
+        paths: [(String, String, CoachFocusPath.Role)] = []
+    ) -> CoachingGoldenTurn {
+        CoachingGoldenTurn(
+            response: response,
+            ask: ask,
+            instruction: instruction,
+            actions: actions,
+            actionTitles: actions.map { action in
+                action == .noAnswer ? noAnswerTitle : actionTitle(action)
+            },
+            boardTask: boardTask,
+            routine: routine,
+            emphasizedSquares: Set(emphasized.map(sq)),
+            candidateSquares: Set(candidates.map(sq)),
+            paths: Set(paths.map { source, destination, role in
+                CoachFocusPath(
+                    source: sq(source),
+                    destination: sq(destination),
+                    role: role
+                )
+            })
+        )
+    }
+
+    private func actionTitle(_ action: CoachingAction) -> String {
+        switch action {
+        case .noAnswer: "No piece needs help"
+        case .looksSafe: "Looks safe"
+        case .hint: "Hint"
+        case .stop: "Close help"
+        case .done: "Play this move"
+        case .keepLooking: "Try another move"
+        }
+    }
+
     private func goldenTurn(_ branch: CoachingGoldenCase) async throws -> CoachingGoldenTurn {
+        let presentation = try await goldenPresentation(branch)
+        return turn(from: presentation)
+    }
+
+    private func goldenPresentation(
+        _ branch: CoachingGoldenCase
+    ) async throws -> CoachingPresentation {
         var session: CoachingSession
         switch branch {
         case .t1Entry:
@@ -560,9 +1202,56 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t3Entry:
             session = try await preparedSession(for: .endangeredKnight)
 
+        case .t3WrongOwnPiece:
+            session = try await preparedSession(for: .endangeredKnight)
+            session.handle(.identificationTapped(sq("g1")))
+
+        case .t3Target:
+            session = try await preparedSession(for: .endangeredKnight)
+            session.handle(.identificationTapped(sq("f3")))
+
+        case .t3WrongAttacker:
+            session = try await preparedSession(for: .endangeredKnight)
+            session.handle(.identificationTapped(sq("f3")))
+            session.handle(.identificationTapped(sq("g8")))
+
+        case .t3Attacker:
+            session = try await preparedSession(for: .endangeredKnight)
+            session.handle(.identificationTapped(sq("f3")))
+            session.handle(.identificationTapped(sq("e4")))
+
+        case .t3UnresolvedMove:
+            session = try await preparedSession(for: .endangeredKnight)
+            session.handle(.identificationTapped(sq("f3")))
+            session.handle(.identificationTapped(sq("e4")))
+            try await stage(
+                Move(from: sq("g1"), to: sq("h1")),
+                origin: .safe,
+                position: .endangeredKnight,
+                in: &session
+            )
+
+        case .t3ResolvedMove:
+            session = try await preparedSession(for: .endangeredKnight)
+            session.handle(.identificationTapped(sq("f3")))
+            session.handle(.identificationTapped(sq("e4")))
+            try await complete(
+                Move(from: sq("f3"), to: sq("g5")),
+                origin: .safe,
+                position: .endangeredKnight,
+                in: &session
+            )
+
         case .t4LowerPriorityPawn:
             session = try await preparedSession(for: .twoDangerPriorities)
             session.handle(.identificationTapped(sq("a3")))
+
+        case .t4PrimaryKnight:
+            session = try await preparedSession(for: .twoDangerPriorities)
+            session.handle(.identificationTapped(sq("f3")))
+
+        case .t5PawnDanger:
+            session = try await preparedSession(for: .endangeredPawn)
 
         case .t5PawnResolved:
             session = try await preparedSession(for: .endangeredPawn)
@@ -578,6 +1267,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t5ProtectedTap:
             session = try await preparedSession(for: .protectedPawn)
             session.handle(.identificationTapped(sq("g4")))
+
+        case .t5ProtectedAbsence:
+            session = try await preparedSession(for: .protectedPawn)
+            session.handle(.actionChosen(.noAnswer))
 
         case .t6WrongSource:
             session = try await preparedSession(for: .winningCapture)
@@ -735,11 +1428,14 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         }
 
-        let presentation = try XCTUnwrap(
+        return try XCTUnwrap(
             session.presentation,
             "Missing presentation for \(branch.rawValue)"
         )
-        return CoachingGoldenTurn(
+    }
+
+    private func turn(from presentation: CoachingPresentation) -> CoachingGoldenTurn {
+        CoachingGoldenTurn(
             response: presentation.response,
             ask: presentation.headline,
             instruction: presentation.instruction,
@@ -750,6 +1446,70 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             emphasizedSquares: presentation.focus.emphasizedSquares,
             candidateSquares: presentation.focus.candidateSquares,
             paths: presentation.focus.paths
+        )
+    }
+
+    private func assertCoherent(
+        _ presentation: CoachingPresentation,
+        branch: CoachingGoldenCase,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertFalse(
+            presentation.headline
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty,
+            "Empty headline for \(branch.rawValue)",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            Set(presentation.actions.map(\.action)).count,
+            presentation.actions.count,
+            "Duplicate action for \(branch.rawValue)",
+            file: file,
+            line: line
+        )
+        if presentation.instruction?.contains("highlighted") == true {
+            XCTAssertFalse(
+                presentation.focus.candidateSquares.isEmpty
+                    && presentation.focus.paths.isEmpty,
+                "Highlighted instruction has no focus for \(branch.rawValue)",
+                file: file,
+                line: line
+            )
+        }
+        if presentation.response?.contains("attacks") == true
+            || presentation.headline.contains("attacks") {
+            XCTAssertFalse(
+                presentation.focus.emphasizedSquares.isEmpty
+                    && presentation.focus.paths.isEmpty,
+                "Attack copy has no focus for \(branch.rawValue)",
+                file: file,
+                line: line
+            )
+        }
+    }
+
+    private func assertNoProhibitedChildFacingCopy(
+        _ values: [String],
+        source: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let prohibited = [
+            "part of this problem", "big danger", "job", "tap the problem",
+            "nothing urgent stands out", "clear plan", "reply to notice",
+            "win some material", "come into the game", "attack something",
+            "protect another piece", "more useful place",
+        ]
+        let copy = values.joined(separator: " ").lowercased()
+        XCTAssertEqual(
+            prohibited.filter(copy.contains),
+            [],
+            "Found prohibited copy in \(source)",
+            file: file,
+            line: line
         )
     }
 
@@ -831,19 +1591,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     }
 
     private func turn(from session: CoachingSession) throws -> CoachingGoldenTurn {
-        let presentation = try XCTUnwrap(session.presentation)
-        return CoachingGoldenTurn(
-            response: presentation.response,
-            ask: presentation.headline,
-            instruction: presentation.instruction,
-            actions: presentation.actions.map(\.action),
-            actionTitles: presentation.actions.map(\.title),
-            boardTask: presentation.boardTask,
-            routine: presentation.routine,
-            emphasizedSquares: presentation.focus.emphasizedSquares,
-            candidateSquares: presentation.focus.candidateSquares,
-            paths: presentation.focus.paths
-        )
+        turn(from: try XCTUnwrap(session.presentation))
     }
 
     private func assertMirroredFocus(

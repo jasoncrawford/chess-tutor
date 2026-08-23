@@ -318,7 +318,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         _ = session.chooseCoachingAction(.looksSafe)
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "That works. Your move stays safe after the reply."
+            "I do not see an immediate check or lost piece after this move."
         )
     }
 
@@ -397,7 +397,7 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertEqual(
             session.coachingPresentation?.headline,
-            "That works. Your knight gets a more useful place near the center."
+            "That works. Your knight moved closer to the center."
         )
         XCTAssertEqual(session.coachingPresentation?.actions.map(\.action), [.done, .keepLooking, .stop])
         XCTAssertTrue(session.state.moveHistory.isEmpty)
