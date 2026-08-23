@@ -473,21 +473,29 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.canFinishTurn)
     }
 
-    func testKeepLookingPreservesAcceptedTentativeMoveAndNeverCommits() async {
+    func testKeepLookingDiscardsAcceptedTentativeMoveAndRestartsCoaching() async {
         let session = makeSession()
+        let freshSession = makeSession()
         let move = Move(
             from: Square(file: .g, rank: 1),
             to: Square(file: .f, rank: 3)
         )
 
         await completeStartingMove(move, in: session)
+        let completedPresentation = session.coachingPresentation
         XCTAssertNil(session.chooseCoachingAction(.keepLooking))
+        await beginCoaching(in: freshSession)
 
-        XCTAssertFalse(session.isCoachingActive)
-        XCTAssertEqual(session.state.board[move.to], white(.knight))
+        XCTAssertTrue(session.isCoachingActive)
+        XCTAssertEqual(session.state, .startingPosition())
+        XCTAssertEqual(session.state.board[move.from], white(.knight))
+        XCTAssertNil(session.state.board[move.to])
         XCTAssertEqual(session.state.sideToMove, .white)
         XCTAssertTrue(session.state.moveHistory.isEmpty)
-        XCTAssertTrue(session.canFinishTurn)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertNotEqual(session.coachingPresentation, completedPresentation)
+        XCTAssertEqual(session.coachingPresentation, freshSession.coachingPresentation)
     }
 
     func testSameTranscriptProducesIdenticalPresentationsAndHistoryVisibleOutputs() async {
