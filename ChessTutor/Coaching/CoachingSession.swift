@@ -550,7 +550,8 @@ struct CoachingSession: Sendable {
             return .attackedButProtected(
                 target: piece.kind,
                 attacker: attacker.kind,
-                defender: defender.kind
+                defender: defender.kind,
+                noPieceNeedsHelp: advice.dangerProblems.isEmpty
             )
         }
 

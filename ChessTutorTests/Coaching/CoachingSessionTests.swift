@@ -285,6 +285,43 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
+    func testProtectedPieceFeedbackStaysLocalWhenAnotherPieceNeedsHelp() async throws {
+        let protectedPawn = sq("g4")
+        let endangeredKnight = sq("f3")
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                sq("g1"): Piece(kind: .king, color: .white),
+                protectedPawn: Piece(kind: .pawn, color: .white),
+                sq("h3"): Piece(kind: .pawn, color: .white),
+                endangeredKnight: Piece(kind: .knight, color: .white),
+                sq("g8"): Piece(kind: .king, color: .black),
+                sq("f6"): Piece(kind: .knight, color: .black),
+                sq("e4"): Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 7,
+            context: .start
+        ))
+        XCTAssertEqual(advice.dangerProblems.map(\.target), [endangeredKnight])
+        var session = session()
+        session.receive(advice)
+
+        session.handle(.identificationTapped(protectedPawn))
+
+        XCTAssertEqual(session.stage, .safeLocate)
+        XCTAssertEqual(
+            session.presentation?.response,
+            "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back."
+        )
+        XCTAssertEqual(session.presentation?.instruction, "Tap your piece.")
+        XCTAssertEqual(session.presentation?.actions.map(\.action), [.hint, .stop])
+    }
+
     func testTapFeedbackClassifiesBoardFactsWithoutChangingCandidateSelection() {
         let pawn = Square(file: .a, rank: 2)
         let pawnCapture = CoachingTestFixtures.capture(

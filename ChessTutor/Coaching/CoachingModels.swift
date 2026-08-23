@@ -385,7 +385,8 @@ enum CoachingFeedback: Equatable, Sendable {
     case attackedButProtected(
         target: Piece.Kind,
         attacker: Piece.Kind,
-        defender: Piece.Kind
+        defender: Piece.Kind,
+        noPieceNeedsHelp: Bool
     )
     case expectedLearnerPiece
     case notCheckingPiece(piece: Piece.Kind?)

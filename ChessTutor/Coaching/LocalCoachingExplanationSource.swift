@@ -296,8 +296,21 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         default:
             break
         }
-        guard let hint = context.hint else { return base }
-        return hintedInstruction(for: hint, prompt: context.prompt, base: base)
+        let actionConsistentBase: String
+        switch context.prompt {
+        case .safeLocate where !context.actions.contains(.noAnswer):
+            actionConsistentBase = "Tap your piece."
+        case let .opponentReply(opponent) where !context.actions.contains(.looksSafe):
+            actionConsistentBase = "Tap a \(colorName(opponent).lowercased()) piece that could check your king or take one of your pieces."
+        default:
+            actionConsistentBase = base
+        }
+        guard let hint = context.hint else { return actionConsistentBase }
+        return hintedInstruction(
+            for: hint,
+            prompt: context.prompt,
+            base: actionConsistentBase
+        )
     }
 
     private func hintedInstruction(
@@ -361,8 +374,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 return "You found a threatened \(chosen.rawValue). Losing the \(primary.rawValue) would cost more."
             }
             return "You found a threatened \(chosen.rawValue). Your \(primary.rawValue) is worth more, so help it first."
-        case let .attackedButProtected(target, attacker, defender):
-            return "The \(target.rawValue) is attacked, but your other \(defender.rawValue) protects it. If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back. No piece needs help right now."
+        case let .attackedButProtected(
+            target,
+            attacker,
+            defender,
+            noPieceNeedsHelp
+        ):
+            let localFact = "The \(target.rawValue) is attacked, but your other \(defender.rawValue) protects it. If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back."
+            return noPieceNeedsHelp
+                ? "\(localFact) No piece needs help right now."
+                : localFact
         case .expectedLearnerPiece:
             return "Tap one of your pieces."
         case let .notCheckingPiece(piece):

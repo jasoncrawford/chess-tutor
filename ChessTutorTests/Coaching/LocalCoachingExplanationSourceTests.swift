@@ -55,7 +55,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .safeLocate,
                 "One of your pieces is in danger. Which one?",
-                "Tap your piece, or choose No piece needs help."
+                "Tap your piece."
             ),
             (
                 .safeIdentifyAttacker(piece: .knight),
@@ -110,12 +110,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .opponentReply(opponent: .black),
                 "What could Black do after your move?",
-                "Tap a black piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
+                "Tap a black piece that could check your king or take one of your pieces."
             ),
             (
                 .opponentReply(opponent: .white),
                 "What could White do after your move?",
-                "Tap a white piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
+                "Tap a white piece that could check your king or take one of your pieces."
             ),
             (
                 .fallbackChooseMove,
@@ -486,6 +486,86 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(presentation.instruction, "Tap a highlighted piece.")
     }
 
+    func testInstructionsNameOnlyActionsThatAreActuallyExposed() {
+        let knownDanger = source.presentation(for: context(
+            prompt: .safeLocate,
+            actions: [.hint, .stop]
+        ))
+        XCTAssertEqual(knownDanger.instruction, "Tap your piece.")
+        XCTAssertFalse(knownDanger.instruction?.contains("No piece needs help") == true)
+
+        let protectedOnly = source.presentation(for: context(
+            prompt: .safeLocate,
+            actions: [.noAnswer, .hint, .stop]
+        ))
+        XCTAssertEqual(
+            protectedOnly.instruction,
+            "Tap your piece, or choose No piece needs help."
+        )
+
+        let revealedOpponentIssue = source.presentation(for: context(
+            prompt: .opponentReply(opponent: .black),
+            actions: [.hint, .stop]
+        ))
+        XCTAssertEqual(
+            revealedOpponentIssue.instruction,
+            "Tap a black piece that could check your king or take one of your pieces."
+        )
+        XCTAssertFalse(revealedOpponentIssue.instruction?.contains("Looks safe") == true)
+
+        let unansweredOpponentScan = source.presentation(for: context(
+            prompt: .opponentReply(opponent: .black),
+            actions: [.looksSafe, .hint, .stop]
+        ))
+        XCTAssertEqual(
+            unansweredOpponentScan.instruction,
+            "Tap a black piece that could check your king or take one of your pieces. Otherwise choose Looks safe."
+        )
+    }
+
+    func testWakeRelationshipCopyNamesSourceAndTargetFromSemanticPayload() {
+        let move = Move(from: sq("c1"), to: sq("g5"))
+        let candidate = CoachingCandidateMove(move: move, grade: .acceptable)
+        let threat = source.presentation(for: context(
+            prompt: .wake(
+                task: .createThreat(
+                    source: move.from,
+                    sourcePiece: .bishop,
+                    target: sq("d8"),
+                    targetPiece: .queen,
+                    candidates: [candidate]
+                ),
+                selectedPiece: nil
+            )
+        ))
+        XCTAssertEqual(
+            threat.headline,
+            "Your bishop can move to a square where it attacks Black’s queen. Can you find the square?"
+        )
+        XCTAssertEqual(threat.instruction, "Move the bishop so it attacks the queen.")
+
+        let protection = source.presentation(for: context(
+            prompt: .wake(
+                task: .protect(
+                    source: sq("a1"),
+                    sourcePiece: .rook,
+                    target: sq("c3"),
+                    targetPiece: .bishop,
+                    candidates: [candidate]
+                ),
+                selectedPiece: nil
+            )
+        ))
+        XCTAssertEqual(
+            protection.headline,
+            "Your rook can help protect your bishop."
+        )
+        XCTAssertEqual(
+            protection.instruction,
+            "Move the rook so it protects the bishop."
+        )
+    }
+
     func testFeedbackStatesAVisibleChessFact() {
         let cases: [(CoachingPrompt, CoachingFeedback, String)] = [
             (.safeLocate, .safePiece(piece: .bishop), "That bishop is safe right now."),
@@ -501,7 +581,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .safeLocate,
-                .attackedButProtected(target: .pawn, attacker: .knight, defender: .pawn),
+                .attackedButProtected(
+                    target: .pawn,
+                    attacker: .knight,
+                    defender: .pawn,
+                    noPieceNeedsHelp: true
+                ),
                 "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now."
             ),
             (.safeLocate, .expectedLearnerPiece, "Tap one of your pieces."),
@@ -851,7 +936,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 primary: .knight,
                 primaryLoss: 3
             ),
-            .attackedButProtected(target: .pawn, attacker: .knight, defender: .pawn),
+            .attackedButProtected(
+                target: .pawn,
+                attacker: .knight,
+                defender: .pawn,
+                noPieceNeedsHelp: true
+            ),
             .expectedLearnerPiece,
             .notCheckingPiece(piece: nil),
             .notCheckingPiece(piece: .bishop),

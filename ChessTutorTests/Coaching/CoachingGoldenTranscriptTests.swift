@@ -684,7 +684,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         let openingInstruction =
             "Tap one of your two center pawns or one of your knights."
         let safeAsk = "One of your pieces is in danger. Which one?"
-        let safeInstruction = "Tap your piece, or choose No piece needs help."
+        let safeInstruction = "Tap your piece."
         let takeAsk = "Can one of your pieces safely take a black piece?"
 
         switch branch {
@@ -1507,6 +1507,26 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 presentation.focus.emphasizedSquares.isEmpty
                     && presentation.focus.paths.isEmpty,
                 "Attack copy has no focus for \(branch.rawValue)",
+                file: file,
+                line: line
+            )
+        }
+        let namedActions: [(phrase: String, action: CoachingAction)] = [
+            ("No piece needs help", .noAnswer),
+            ("No safe capture", .noAnswer),
+            ("Looks safe", .looksSafe),
+            ("Hint", .hint),
+            ("Play this move", .done),
+            ("Try another move", .keepLooking),
+            ("Close help", .stop),
+        ]
+        for namedAction in namedActions where
+            presentation.instruction?.localizedCaseInsensitiveContains(
+                namedAction.phrase
+            ) == true {
+            XCTAssertTrue(
+                presentation.actions.contains { $0.action == namedAction.action },
+                "Instruction names hidden action \(namedAction.phrase) for \(branch.rawValue)",
                 file: file,
                 line: line
             )
