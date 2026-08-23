@@ -509,7 +509,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                 ),
                 prompt: .opponentReply(opponent: .black),
                 boardTask: .identify(allowsMoveRevision: true),
-                actions: [.looksSafe, .stop],
+                actions: [.stop],
                 routine: [],
                 hint: .attackerRelationship,
                 focus: CoachFocusPresentation(

@@ -28,12 +28,12 @@ struct CoachingPresentationProjector: Sendable {
         } else {
             feedback = recordedFeedback ?? derived.derivedFeedback
         }
-        let opponentReplyWasRejected: Bool
-        if case .missedOpponentIssue = derived.derivedFeedback {
-            opponentReplyWasRejected = true
-        } else {
-            opponentReplyWasRejected = false
-        }
+        let positiveAnswerWasRevealed = positiveAnswerWasRevealed(
+            for: derived.stage,
+            hint: hint,
+            feedback: feedback,
+            advice: advice
+        )
 
         return CoachingPresentationContext(
             prompt: prompt,
@@ -47,8 +47,7 @@ struct CoachingPresentationProjector: Sendable {
                 hintLevel: hintLevel,
                 availableHints: hints,
                 advice: advice,
-                feedback: feedback,
-                opponentReplyWasRejected: opponentReplyWasRejected
+                positiveAnswerWasRevealed: positiveAnswerWasRevealed
             ),
             boardTask: boardTask(for: derived.stage),
             focus: focus(
@@ -191,25 +190,52 @@ struct CoachingPresentationProjector: Sendable {
         hintLevel: Int,
         availableHints: [CoachingHint],
         advice: CoachingAdvice?,
-        feedback: CoachingFeedback?,
-        opponentReplyWasRejected: Bool
+        positiveAnswerWasRevealed: Bool
     ) -> [CoachingAction] {
         let hintActions: [CoachingAction] = hintLevel < availableHints.count ? [.hint] : []
         switch stage {
         case .safeLocate:
             let absenceIsValid = advice?.dangerProblems.isEmpty == true
-                && feedback != .missedExistingAnswer(.noPieceNeedsHelp)
+                && !positiveAnswerWasRevealed
             return (absenceIsValid ? [.noAnswer] : []) + hintActions + [.stop]
         case .takeChooseMove:
-            return [.noAnswer] + hintActions + [.stop]
+            return (positiveAnswerWasRevealed ? [] : [.noAnswer]) + hintActions + [.stop]
         case .opponentCheck:
-            return (opponentReplyWasRejected ? [] : [.looksSafe]) + hintActions + [.stop]
+            return (positiveAnswerWasRevealed ? [] : [.looksSafe]) + hintActions + [.stop]
         case .complete:
             return [.done, .keepLooking, .stop]
         case .awaitingAdvice:
             return [.stop]
         default:
             return hintActions + [.stop]
+        }
+    }
+
+    private func positiveAnswerWasRevealed(
+        for stage: CoachingStage,
+        hint: CoachingHint?,
+        feedback: CoachingFeedback?,
+        advice: CoachingAdvice?
+    ) -> Bool {
+        switch stage {
+        case .safeLocate:
+            return advice?.dangerProblems.isEmpty == false
+                || feedback == .missedExistingAnswer(.noPieceNeedsHelp)
+        case .takeChooseMove:
+            if case .safeCaptureHint = feedback {
+                return true
+            }
+            return feedback == .missedExistingAnswer(.noSafeCapture)
+        case .opponentCheck:
+            if case .missedOpponentIssue = feedback {
+                return true
+            }
+            return hint != nil
+                && !opponentIssueAnswerSquares(for: stage, advice: advice).isEmpty
+        case .awaitingAdvice, .checkLocate, .checkResolve, .safeIdentifyAttacker,
+             .safeResolve, .wakeChoosePiece, .wakeChooseMove, .fallbackChooseMove,
+             .reviseMove, .complete:
+            return false
         }
     }
 

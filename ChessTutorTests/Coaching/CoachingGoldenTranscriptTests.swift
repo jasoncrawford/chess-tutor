@@ -48,6 +48,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             let answerIsEstablished = [
                 "one of your pieces does need help",
                 "there is a safe capture to find",
+                "has a safe capture",
                 "no piece needs help right now",
                 "there is no safe capture here",
             ].contains { response.contains($0) }
@@ -58,6 +59,28 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 )
             }
         }
+    }
+
+    func testRevealedPositiveAnswersRemoveContradictoryAbsenceActions() async throws {
+        let takeHint = try await goldenPresentation(.t6Hint)
+        XCTAssertEqual(takeHint.response, "Your bishop has a safe capture.")
+        XCTAssertEqual(takeHint.actions.map(\.action), [.hint, .stop])
+        XCTAssertFalse(takeHint.actions.map(\.title).contains("No safe capture"))
+
+        let safe = try await goldenPresentation(.t3Entry)
+        XCTAssertFalse(safe.actions.map(\.action).contains(.noAnswer))
+
+        var opponent = try await tentativeSession(
+            state: CoachingGoldenPosition.exposedQueen.state,
+            move: CoachingGoldenMoves.exposesQueen,
+            learner: .white
+        )
+        opponent.handle(.actionChosen(.hint))
+
+        let opponentHint = try XCTUnwrap(opponent.presentation)
+        XCTAssertEqual(opponentHint.hint, .attackerRelationship)
+        XCTAssertEqual(opponentHint.actions.map(\.action), [.stop])
+        XCTAssertFalse(opponentHint.actions.map(\.title).contains("Looks safe"))
     }
 
     func testGoldenCorpusChildFacingCopyAvoidsProhibitedPhrases() async throws {
@@ -886,8 +909,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 response: "Your bishop has a safe capture.",
                 ask: takeAsk,
                 instruction: "Tap the highlighted white piece.",
-                actions: [.noAnswer, .hint, .stop],
-                noAnswerTitle: "No safe capture",
+                actions: [.hint, .stop],
                 boardTask: .move,
                 routine: takeRoutine,
                 candidates: ["c4"]
