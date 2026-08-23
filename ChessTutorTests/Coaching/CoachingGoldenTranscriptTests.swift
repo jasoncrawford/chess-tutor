@@ -198,10 +198,70 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         let harmlessCheck = try await goldenTurn(.t11HarmlessCheck)
 
         XCTAssertEqual(queenLoss.response, "Black’s rook could take your queen.")
+        XCTAssertEqual(queenLoss.ask, "How can you change your move so the queen is safe?")
+        XCTAssertEqual(queenLoss.instruction, "Change your move so the queen is safe.")
+        XCTAssertEqual(queenLoss.actions, [.hint, .stop])
+        XCTAssertEqual(queenLoss.actionTitles, ["Hint", "Close help"])
+        XCTAssertEqual(queenLoss.boardTask, .move)
+        XCTAssertEqual(
+            queenLoss.emphasizedSquares,
+            [
+                CoachingGoldenMoves.rookTakesQueen.from,
+                CoachingGoldenMoves.rookTakesQueen.to,
+            ]
+        )
+        XCTAssertEqual(queenLoss.candidateSquares, [])
+        XCTAssertEqual(queenLoss.paths, [
+            CoachFocusPath(
+                source: CoachingGoldenMoves.rookTakesQueen.from,
+                destination: CoachingGoldenMoves.rookTakesQueen.to,
+                role: .attacker
+            ),
+        ])
         XCTAssertEqual(
             harmlessCheck.response,
             "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works."
         )
+    }
+
+    func testHintInConcreteOpponentReviseStateRepulsesTheRealReplyOnly() async throws {
+        var session = try await tentativeSession(
+            state: CoachingGoldenPosition.exposedQueen.state,
+            move: CoachingGoldenMoves.exposesQueen,
+            learner: .white
+        )
+        session.handle(.identificationTapped(CoachingGoldenMoves.rookTakesQueen.from))
+        let initialPulseID = try XCTUnwrap(session.presentation).focus.pulseID
+
+        session.handle(.actionChosen(.hint))
+
+        let presentation = try XCTUnwrap(session.presentation)
+        XCTAssertNil(presentation.response)
+        XCTAssertEqual(
+            presentation.headline,
+            "How can you change your move so the queen is safe?"
+        )
+        XCTAssertEqual(
+            presentation.instruction,
+            "Change your move so the queen is safe."
+        )
+        XCTAssertEqual(presentation.actions.map(\.action), [.stop])
+        XCTAssertEqual(presentation.focus.pulseID, initialPulseID + 1)
+        XCTAssertEqual(presentation.focus.candidateSquares, [])
+        XCTAssertEqual(
+            presentation.focus.emphasizedSquares,
+            [
+                CoachingGoldenMoves.rookTakesQueen.from,
+                CoachingGoldenMoves.rookTakesQueen.to,
+            ]
+        )
+        XCTAssertEqual(presentation.focus.paths, [
+            CoachFocusPath(
+                source: CoachingGoldenMoves.rookTakesQueen.from,
+                destination: CoachingGoldenMoves.rookTakesQueen.to,
+                role: .attacker
+            ),
+        ])
     }
 
     func testIncorrectLooksSafeNamesIssueAndRemovesInvalidAbsenceAction() async throws {
@@ -300,10 +360,13 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         mirroredT1.handle(.actionChosen(.hint))
         let blackT1 = try turn(from: mirroredT1)
 
-        XCTAssertEqual(blackT1.ask, originalT1.ask)
-        XCTAssertEqual(blackT1.instruction, originalT1.instruction)
-        XCTAssertEqual(blackT1.actions, originalT1.actions)
-        assertMirroredFocus(originalT1, blackT1)
+        XCTAssertNil(originalT1.response)
+        XCTAssertNil(blackT1.response)
+        XCTAssertEqual(originalT1.ask, "Here are the four pieces you can try.")
+        XCTAssertEqual(blackT1.ask, "Here are the four pieces you can try.")
+        XCTAssertEqual(originalT1.instruction, "Tap a highlighted piece.")
+        XCTAssertEqual(blackT1.instruction, "Tap a highlighted piece.")
+        assertMatchingStructureAndMirroredFocus(originalT1, blackT1)
 
         var t3 = try await preparedSession(for: CoachingGoldenPosition.endangeredKnight.state)
         t3.handle(.identificationTapped(sq("f3")))
@@ -323,8 +386,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             blackT3.ask,
             "You found the knight. What white piece is attacking it?"
         )
-        XCTAssertEqual(originalT3.actions, blackT3.actions)
-        assertMirroredFocus(originalT3, blackT3)
+        XCTAssertNil(originalT3.response)
+        XCTAssertNil(blackT3.response)
+        XCTAssertEqual(originalT3.instruction, "Tap the black piece.")
+        XCTAssertEqual(blackT3.instruction, "Tap the white piece.")
+        assertMatchingStructureAndMirroredFocus(originalT3, blackT3)
 
         let originalT11 = try await opponentAnswerTurn(
             state: CoachingGoldenPosition.exposedQueen.state,
@@ -341,8 +407,23 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(originalT11.response, "Black’s rook could take your queen.")
         XCTAssertEqual(blackT11.response, "White’s rook could take your queen.")
-        XCTAssertEqual(originalT11.actions, blackT11.actions)
-        assertMirroredFocus(originalT11, blackT11)
+        XCTAssertEqual(
+            originalT11.ask,
+            "How can you change your move so the queen is safe?"
+        )
+        XCTAssertEqual(
+            blackT11.ask,
+            "How can you change your move so the queen is safe?"
+        )
+        XCTAssertEqual(
+            originalT11.instruction,
+            "Change your move so the queen is safe."
+        )
+        XCTAssertEqual(
+            blackT11.instruction,
+            "Change your move so the queen is safe."
+        )
+        assertMatchingStructureAndMirroredFocus(originalT11, blackT11)
     }
 
     func testCanonicalT2ClearsSafeAndTakeBeforeWake() async throws {
@@ -555,7 +636,9 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 move: CoachingGoldenMoves.exposesQueen,
                 learner: .white
             )
-            session.handle(.actionChosen(.looksSafe))
+            session.handle(
+                .identificationTapped(CoachingGoldenMoves.rookTakesQueen.from)
+            )
 
         case .t11IncorrectLooksSafe:
             session = try await tentativeSession(
@@ -758,6 +841,24 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             file: file,
             line: line
         )
+    }
+
+    private func assertMatchingStructureAndMirroredFocus(
+        _ original: CoachingGoldenTurn,
+        _ mirrored: CoachingGoldenTurn,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(mirrored.actions, original.actions, file: file, line: line)
+        XCTAssertEqual(
+            mirrored.actionTitles,
+            original.actionTitles,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(mirrored.boardTask, original.boardTask, file: file, line: line)
+        XCTAssertEqual(mirrored.routine, original.routine, file: file, line: line)
+        assertMirroredFocus(original, mirrored, file: file, line: line)
     }
 
     private func colorMirror(_ square: Square) -> Square {

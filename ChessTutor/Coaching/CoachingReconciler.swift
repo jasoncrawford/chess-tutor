@@ -431,16 +431,21 @@ struct CoachingReconciler: Sendable {
         assessment: CoachingMoveAssessment,
         advice: CoachingAdvice
     ) -> CoachingDerivedState {
-        let concreteFeedback = CoachingFeedback.opponentIssue(opponentReplyFact(
+        let replyFact = opponentReplyFact(
             for: issue,
             move: move,
             advice: advice
-        ))
+        )
+        let concreteFeedback = CoachingFeedback.opponentIssue(replyFact)
         switch issue.severity {
         case .reviseMove:
             return derived(
                 stage: .reviseMove(origin: origin),
                 questionID: .revise(move: move, origin: origin),
+                promptOverride: .opponentIssueRevise(
+                    kind: issue.kind,
+                    affectedPiece: replyFact.affectedPiece
+                ),
                 feedback: concreteFeedback
             )
 

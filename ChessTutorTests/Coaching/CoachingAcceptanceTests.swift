@@ -355,7 +355,18 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertTrue(session.handleCoachingSquareTap(attacker))
 
         XCTAssertEqual(session.coachingPresentation?.response, "Black’s pawn could take your bishop.")
-        XCTAssertEqual(session.coachingPresentation?.headline, "Try another move.")
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "How can you change your move so the bishop is safe?"
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Change your move so the bishop is safe."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.hint, .stop]
+        )
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
         XCTAssertEqual(session.state.board[move.to], white(.bishop))
         XCTAssertTrue(session.state.moveHistory.isEmpty)

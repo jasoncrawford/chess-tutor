@@ -266,7 +266,11 @@ struct CoachingPresentationProjector: Sendable {
             return opponentIssueAnswerSquares(for: stage, advice: advice).isEmpty
                 ? []
                 : [.attackerRelationship]
-        case .awaitingAdvice, .fallbackChooseMove, .reviseMove, .complete:
+        case .reviseMove:
+            return answeredOpponentIssue(in: episode, advice: advice) == nil
+                ? []
+                : [.attackerRelationship]
+        case .awaitingAdvice, .fallbackChooseMove, .complete:
             return []
         }
     }
@@ -506,6 +510,20 @@ struct CoachingPresentationProjector: Sendable {
         guard case let .opponentCheck(move, _) = stage else { return [] }
         return Set(advice?.moveAssessments[move]?.opponentIssues
             .flatMap(\.answerSquares) ?? [])
+    }
+
+    private func answeredOpponentIssue(
+        in episode: CoachingEpisodeState,
+        advice: CoachingAdvice?
+    ) -> CoachingOpponentIssue? {
+        guard let move = episode.interaction.tentativeMove,
+              case let .issue(answeredMove, issue) = episode.evidence.replyAnswer,
+              answeredMove == move,
+              advice?.moveAssessments[move]?.opponentIssues.contains(issue) == true
+        else {
+            return nil
+        }
+        return issue
     }
 
     private func opponentIssuePaths(_ issue: CoachingOpponentIssue) -> [CoachFocusPath] {

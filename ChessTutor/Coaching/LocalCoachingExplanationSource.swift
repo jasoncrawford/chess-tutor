@@ -88,6 +88,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 "I can check immediate dangers, but I do not have a confident plan for this position yet.",
                 "Choose a move you are considering, and I will check it with you."
             )
+        case let .opponentIssueRevise(kind, affectedPiece):
+            return opponentIssueReviseCopy(
+                kind: kind,
+                affectedPiece: affectedPiece
+            )
         case .reviseMove:
             return (
                 "Try another move.",
@@ -102,6 +107,29 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return (
                 completionHeadline(for: idea, opponent: learner.opposite),
                 nil
+            )
+        }
+    }
+
+    private func opponentIssueReviseCopy(
+        kind: CoachingOpponentIssueKind,
+        affectedPiece: Piece.Kind?
+    ) -> (headline: String, instruction: String) {
+        switch (kind, affectedPiece) {
+        case (.materialLoss, let piece?):
+            return (
+                "How can you change your move so the \(piece.rawValue) is safe?",
+                "Change your move so the \(piece.rawValue) is safe."
+            )
+        case (.check, _), (.mateInOne, _):
+            return (
+                "How can you change your move so your king is safe?",
+                "Change your move so your king is safe."
+            )
+        case (.materialLoss, nil):
+            return (
+                "How can you change your move to avoid losing material?",
+                "Change your move to avoid losing material."
             )
         }
     }

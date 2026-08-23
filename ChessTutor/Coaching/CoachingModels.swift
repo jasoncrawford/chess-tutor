@@ -333,6 +333,10 @@ enum CoachingPrompt: Equatable, Sendable {
     case opponentReply(opponent: PieceColor)
     case fallbackChooseMove
     case unsupportedFallbackChooseMove
+    case opponentIssueRevise(
+        kind: CoachingOpponentIssueKind,
+        affectedPiece: Piece.Kind?
+    )
     case reviseMove
     case illegalKingSafety
     case complete(origin: CoachingMoveOrigin, idea: CoachingCompletionIdea)

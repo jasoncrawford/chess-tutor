@@ -663,7 +663,14 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.handle(.identificationTapped(materialAttacker)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .check))
         XCTAssertEqual(session.presentation?.response, "Black’s rook could take your bishop.")
-        XCTAssertEqual(session.presentation?.headline, "Try another move.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "How can you change your move so the bishop is safe?"
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Change your move so the bishop is safe."
+        )
     }
 
     func testNontrivialSafeOffersOnlyValidAbsenceClaim() {
@@ -1563,7 +1570,15 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .reviseMove(origin: .fallback))
         XCTAssertEqual(session.presentation?.boardTask, .move)
         XCTAssertEqual(session.presentation?.response, "Black’s rook could take your pawn.")
-        XCTAssertEqual(session.presentation?.headline, "Try another move.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "How can you change your move so the pawn is safe?"
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Change your move so the pawn is safe."
+        )
+        XCTAssertEqual(session.presentation?.actions.map(\.action), [.hint, .stop])
     }
 
     func testReviseIssueWinsWhenTappedSquareAlsoMatchesNoticeIssue() {
@@ -1599,7 +1614,14 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.handle(.identificationTapped(sharedAnswer)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .wake))
         XCTAssertEqual(session.presentation?.response, "Black’s bishop could take your knight.")
-        XCTAssertEqual(session.presentation?.headline, "Try another move.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "How can you change your move so the knight is safe?"
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Change your move so the knight is safe."
+        )
     }
 
     func testHarmlessCheckCanBeFoundAndCompletesAnAcceptableMove() {
@@ -1698,7 +1720,14 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.handle(.identificationTapped(materialAttacker)).isEmpty)
         XCTAssertEqual(session.stage, .reviseMove(origin: .preexisting))
         XCTAssertEqual(session.presentation?.response, "Black’s bishop could take your queen.")
-        XCTAssertEqual(session.presentation?.headline, "Try another move.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "How can you change your move so the queen is safe?"
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Change your move so the queen is safe."
+        )
     }
 
     func testNoticeLevelBestCaseMaterialLossCanBeFoundAndAccepted() {
