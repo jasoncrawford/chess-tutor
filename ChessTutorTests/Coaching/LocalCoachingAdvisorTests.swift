@@ -13,6 +13,74 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertEqual(advice.grade(for: Move(from: sq("g1"), to: sq("h3"))), .acceptable)
         XCTAssertEqual(advice.grade(for: Move(from: sq("b1"), to: sq("c3"))), .preferred)
         XCTAssertEqual(advice.grade(for: Move(from: sq("b1"), to: sq("a3"))), .acceptable)
+
+        let opening = try XCTUnwrap(advice.wakeTasks.first)
+        let candidates = opening.candidates
+        XCTAssertEqual(
+            candidates.first { $0.move == Move(from: sq("b1"), to: sq("a3")) }?
+                .centralityComparison,
+            .fartherWithLessMobility(
+                alternative: Move(from: sq("b1"), to: sq("c3")),
+                candidateMobility: 3,
+                alternativeMobility: 5
+            )
+        )
+        XCTAssertEqual(
+            candidates.first { $0.move == Move(from: sq("b1"), to: sq("c3")) }?
+                .centralityComparison,
+            .closerWithMoreMobility(
+                alternative: Move(from: sq("b1"), to: sq("a3")),
+                candidateMobility: 5,
+                alternativeMobility: 3
+            )
+        )
+    }
+
+    func testOpeningTaskCarriesWhetherCastlingIsAnExplicitAlternative() async throws {
+        let castleAdvice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.readyToCastle.state)
+        )
+        let castleOpening = try XCTUnwrap(castleAdvice.wakeTasks.first {
+            if case .opening = $0 { return true }
+            return false
+        })
+        guard case let .opening(firstMove, castleIsAlternative, _) = castleOpening else {
+            return XCTFail("Expected canonical opening task")
+        }
+        XCTAssertFalse(firstMove)
+        XCTAssertTrue(castleIsAlternative)
+
+        let nonFirstState = GameState.startingPosition()
+            .applyingUnchecked(Move(from: sq("e2"), to: sq("e3")))
+            .applyingUnchecked(Move(from: sq("a7"), to: sq("a6")))
+        let ordinaryAdvice = try await advisor.advice(for: request(for: nonFirstState))
+        let ordinaryOpening = try XCTUnwrap(ordinaryAdvice.wakeTasks.first {
+            if case .opening = $0 { return true }
+            return false
+        })
+        guard case let .opening(nonFirst, ordinaryCastleIsAlternative, _) = ordinaryOpening else {
+            return XCTFail("Expected ordinary opening task")
+        }
+        XCTAssertFalse(nonFirst)
+        XCTAssertFalse(ordinaryCastleIsAlternative)
+    }
+
+    func testStartingTaskCandidatesUseLiteralRankMajorMoveOrder() async throws {
+        let advice = try await advisor.advice(
+            for: request(for: CoachingGoldenPosition.starting.state)
+        )
+        let opening = try XCTUnwrap(advice.wakeTasks.first)
+
+        XCTAssertEqual(opening.candidates.map(\.move), [
+            Move(from: sq("b1"), to: sq("a3")),
+            Move(from: sq("b1"), to: sq("c3")),
+            Move(from: sq("g1"), to: sq("f3")),
+            Move(from: sq("g1"), to: sq("h3")),
+            Move(from: sq("d2"), to: sq("d3")),
+            Move(from: sq("d2"), to: sq("d4")),
+            Move(from: sq("e2"), to: sq("e3")),
+            Move(from: sq("e2"), to: sq("e4")),
+        ])
     }
 
     func testThreatTaskNamesKnightAndRook() async throws {
@@ -30,11 +98,11 @@ final class LocalCoachingAdvisorTests: XCTestCase {
                 targetPiece: .rook,
                 candidates: [
                     .init(
-                        move: CoachingGoldenMoves.knightThreatB3,
+                        move: CoachingGoldenMoves.knightThreatC2,
                         grade: .acceptable
                     ),
                     .init(
-                        move: CoachingGoldenMoves.knightThreatC2,
+                        move: CoachingGoldenMoves.knightThreatB3,
                         grade: .acceptable
                     ),
                 ]
@@ -50,15 +118,16 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertTrue(advice.wakeTasks.contains(.improveMobility(
             source: sq("a1"),
             piece: .knight,
+            sourceIsCorner: true,
             before: 2,
             candidates: [
                 .init(
-                    move: CoachingGoldenMoves.knightThreatB3,
+                    move: CoachingGoldenMoves.knightThreatC2,
                     grade: .acceptable,
                     resultingMobility: 6
                 ),
                 .init(
-                    move: CoachingGoldenMoves.knightThreatC2,
+                    move: CoachingGoldenMoves.knightThreatB3,
                     grade: .acceptable,
                     resultingMobility: 6
                 ),
@@ -195,16 +264,16 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         XCTAssertEqual(opportunity?.evidence, .castle(castle))
     }
 
-    func testRejectedCanonicalCastleIsMechanicalTaskButNotVerifiedWakeEvidence() async throws {
+    func testCanonicalCastleIsVerifiedWakeEvidenceWhenEPawnIsProtected() async throws {
         let advice = try await advisor.advice(
             for: request(for: CoachingGoldenPosition.readyToCastle.state)
         )
 
         XCTAssertTrue(advice.wakeTasks.contains(.castle(move: CoachingGoldenMoves.castle)))
-        XCTAssertFalse(advice.wakeOpportunities.contains { opportunity in
+        XCTAssertTrue(advice.wakeOpportunities.contains { opportunity in
             opportunity.moves.contains(CoachingGoldenMoves.castle)
         })
-        XCTAssertFalse(advice.insights.contains { insight in
+        XCTAssertTrue(advice.insights.contains { insight in
             insight.concept == .castlesForKingSafety
                 && insight.candidateMoves.contains(CoachingGoldenMoves.castle)
         })

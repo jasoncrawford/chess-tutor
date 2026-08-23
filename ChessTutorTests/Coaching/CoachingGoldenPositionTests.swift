@@ -15,6 +15,23 @@ final class CoachingGoldenPositionTests: XCTestCase {
         XCTAssertTrue(LegalMoveGenerator.legalMoves(for: sq("e1"), in: state).contains(CoachingGoldenMoves.castle))
     }
 
+    func testReadyToCastleFixtureProtectsE4ThroughTheOpponentReplyScan() async throws {
+        let state = CoachingGoldenPosition.readyToCastle.state
+        let request = CoachingRequest(
+            committedState: state,
+            tentativeMove: CoachingGoldenMoves.castle,
+            learner: .white,
+            positionRevision: 1,
+            context: .tentativeMove(origin: .wake)
+        )
+
+        let advice = try await LocalCoachingAdvisor().advice(for: request)
+        let assessment = try XCTUnwrap(advice.moveAssessments[CoachingGoldenMoves.castle])
+
+        XCTAssertTrue(assessment.opponentIssues.isEmpty)
+        XCTAssertTrue(assessment.isAcceptable)
+    }
+
     func testDangerFixturesContainTheSpecifiedCaptures() {
         assertLegal(CoachingGoldenMoves.knightTaken, by: .black, in: .endangeredKnight)
         assertLegal(CoachingGoldenMoves.pawnTaken, by: .black, in: .twoDangerPriorities)

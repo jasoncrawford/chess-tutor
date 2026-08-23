@@ -299,26 +299,16 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
 
         takeOpportunities.sort(by: opportunityOrder)
         wakeOpportunities.sort(by: opportunityOrder)
-        let verifiedWakeTasks = makeWakeTasks(
+        let wakeTasks = makeWakeTasks(
             from: wakeOpportunities,
             in: state,
             learner: learner
         )
-        let mechanicalCastleTasks = sortedAssessments(evaluation.moveAssessments)
-            .filter {
-                $0.isLegal
-                    && ($0.move.special == .castleKingside
-                        || $0.move.special == .castleQueenside)
-            }
-            .map { CoachingWakeTask.castle(move: $0.move) }
-        let wakeTasks = mechanicalCastleTasks + verifiedWakeTasks.filter {
-            !mechanicalCastleTasks.contains($0)
-        }
         insights.append(contentsOf: wakeOpportunities.map(insight(from:)))
         let confidence: CoachingConfidence = evaluation.checkingPieces.isEmpty
             && evaluation.dangerProblems.isEmpty
             && takeOpportunities.isEmpty
-            && wakeTasks.isEmpty
+            && wakeOpportunities.isEmpty
             ? .unsupported
             : .high
 
@@ -579,6 +569,10 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         learner: PieceColor
     ) -> [CoachingWakeTask] {
         let firstMove = state == GameState.startingPosition()
+        let castleIsAlternative = opportunities.contains {
+            if case .castle = $0.evidence { return true }
+            return false
+        }
         let grouped = Dictionary(grouping: opportunities) { opportunity in
             wakeTaskKey(for: opportunity.evidence, firstMove: firstMove)
         }
@@ -605,7 +599,12 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
             if lhs.priority != rhs.priority { return lhs.priority > rhs.priority }
             return lhs.stableKey < rhs.stableKey
         }.compactMap { group in
-            makeWakeTask(from: group, in: state, learner: learner)
+            makeWakeTask(
+                from: group,
+                in: state,
+                learner: learner,
+                castleIsAlternative: castleIsAlternative
+            )
         }
     }
 
@@ -632,12 +631,14 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
     private func makeWakeTask(
         from group: WakeTaskGroup,
         in state: GameState,
-        learner: PieceColor
+        learner: PieceColor,
+        castleIsAlternative: Bool
     ) -> CoachingWakeTask? {
         switch group.key {
         case let .opening(firstMove):
             return .opening(
                 firstMove: firstMove,
+                castleIsAlternative: castleIsAlternative,
                 candidates: openingCandidates(
                     from: group.opportunities,
                     in: state,
@@ -680,6 +681,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
             return .improveMobility(
                 source: source,
                 piece: piece,
+                sourceIsCorner: isCorner(source),
                 before: before,
                 candidates: acceptableCandidates(
                     from: group.opportunities,
@@ -696,42 +698,73 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         firstMove: Bool
     ) -> [CoachingCandidateMove] {
         let moves = Set(opportunities.flatMap(\.moves))
-        return moves.sorted(by: stableCandidateMoveOrder).map { move in
-            CoachingCandidateMove(
+        return moves.sorted(by: stableMoveOrder).map { move in
+            let comparison = openingCentralityComparison(
+                for: move,
+                among: moves,
+                in: state,
+                learner: learner
+            )
+            return CoachingCandidateMove(
                 move: move,
                 grade: openingGrade(
                     for: move,
-                    among: moves,
                     in: state,
-                    learner: learner,
-                    firstMove: firstMove
-                )
+                    firstMove: firstMove,
+                    comparison: comparison
+                ),
+                centralityComparison: comparison
             )
         }
     }
 
     private func openingGrade(
         for move: Move,
-        among openingMoves: Set<Move>,
         in state: GameState,
-        learner: PieceColor,
-        firstMove: Bool
+        firstMove: Bool,
+        comparison: CoachingCentralityComparison?
     ) -> CoachingCandidateGrade {
         guard let piece = state.board[move.from] else { return .acceptable }
         if piece.kind == .pawn {
             return firstMove ? .preferred : .acceptable
         }
         guard piece.kind == .knight else { return .acceptable }
+        if case .closerWithMoreMobility = comparison { return .preferred }
+        return .acceptable
+    }
 
-        let destinationDistance = distanceToCentralSixteen(move.to)
-        let resultingMobility = mobility(after: move, learner: learner, in: state)
-        let hasEvidenceBackedAlternative = openingMoves.contains { alternative in
-            alternative.from == move.from
-                && distanceToCentralSixteen(alternative.to) > destinationDistance
-                && mobility(after: alternative, learner: learner, in: state)
-                    < resultingMobility
+    private func openingCentralityComparison(
+        for move: Move,
+        among openingMoves: Set<Move>,
+        in state: GameState,
+        learner: PieceColor
+    ) -> CoachingCentralityComparison? {
+        guard state.board[move.from]?.kind == .knight else { return nil }
+        let candidateDistance = distanceToCentralSixteen(move.to)
+        let candidateMobility = mobility(after: move, learner: learner, in: state)
+
+        for alternative in openingMoves.sorted(by: stableMoveOrder)
+        where alternative.from == move.from && alternative != move {
+            let alternativeDistance = distanceToCentralSixteen(alternative.to)
+            let alternativeMobility = mobility(after: alternative, learner: learner, in: state)
+            if candidateDistance < alternativeDistance,
+               candidateMobility > alternativeMobility {
+                return .closerWithMoreMobility(
+                    alternative: alternative,
+                    candidateMobility: candidateMobility,
+                    alternativeMobility: alternativeMobility
+                )
+            }
+            if candidateDistance > alternativeDistance,
+               candidateMobility < alternativeMobility {
+                return .fartherWithLessMobility(
+                    alternative: alternative,
+                    candidateMobility: candidateMobility,
+                    alternativeMobility: alternativeMobility
+                )
+            }
         }
-        return hasEvidenceBackedAlternative ? .preferred : .acceptable
+        return nil
     }
 
     private func mobility(
@@ -752,7 +785,7 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
         resultingMobility: Int? = nil
     ) -> [CoachingCandidateMove] {
         Set(opportunities.flatMap(\.moves))
-            .sorted(by: stableCandidateMoveOrder)
+            .sorted(by: stableMoveOrder)
             .map {
                 CoachingCandidateMove(
                     move: $0,
@@ -762,14 +795,9 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
             }
     }
 
-    private func stableCandidateMoveOrder(_ lhs: Move, _ rhs: Move) -> Bool {
-        candidateMoveKey(lhs) < candidateMoveKey(rhs)
-    }
-
-    private func candidateMoveKey(_ move: Move) -> Int {
-        let source = (move.from.file.rawValue - 1) * 8 + move.from.rank
-        let destination = (move.to.file.rawValue - 1) * 8 + move.to.rank
-        return source * 1_000 + destination * 10 + specialOrder(move.special)
+    private func isCorner(_ square: Square) -> Bool {
+        (square.file == .a || square.file == .h)
+            && (square.rank == 1 || square.rank == 8)
     }
 
     private func stableMoveKey(_ move: Move) -> Int {

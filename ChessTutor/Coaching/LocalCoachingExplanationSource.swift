@@ -133,9 +133,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         learner: PieceColor
     ) -> (headline: String, instruction: String) {
         switch task {
-        case let .opening(firstMove, _):
+        case let .opening(firstMove, castleIsAlternative, _):
             if let selectedPiece {
-                if !firstMove, selectedPiece == .knight {
+                if !firstMove, castleIsAlternative, selectedPiece == .knight {
                     return (
                         "That knight can also be developed.",
                         "Move the knight off its starting square."
@@ -175,7 +175,13 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 "Move the \(sourcePiece.rawValue) so it attacks the \(targetPiece.rawValue)."
             )
 
-        case let .improveMobility(_, piece, _, _):
+        case let .improveMobility(_, piece, sourceIsCorner, _, _):
+            guard sourceIsCorner else {
+                return (
+                    "Your \(piece.rawValue) can move to a square where it has more choices. Can you find the move?",
+                    "Move the \(piece.rawValue)."
+                )
+            }
             return (
                 "Your \(piece.rawValue) has very few choices in the corner. Can you move it closer to the center?",
                 "Move the \(piece.rawValue)."
@@ -194,7 +200,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Here are the four pieces you can try."
         }
         if context.hint == .candidatePieces,
-           case .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+           case .wake(
+               task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
+               selectedPiece: nil
+           )
             = context.prompt {
             return "Here are the four pieces you can try."
         }
@@ -265,7 +274,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Tap a highlighted piece."
         case (
             .candidatePieces,
-            .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+            .wake(
+                task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
+                selectedPiece: nil
+            )
         ):
             return "Tap a highlighted piece."
         case (
@@ -325,7 +337,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .expectedAttacker(target):
             return "Tap a \(colorName(opponent).lowercased()) piece attacking your \(target.rawValue)."
         case let .blockedWakePiece(piece, blocker):
-            if case .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+            if case .wake(
+                task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
+                selectedPiece: nil
+            )
                 = prompt {
                 return "Your \(blocker.rawValue) is blocking that \(piece.rawValue). Choose a center pawn or knight."
             }
@@ -337,7 +352,10 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Your \(blocker.rawValue) is blocking that \(piece.rawValue)."
         case let .notWakeCandidate(piece, purpose):
             if piece == .pawn,
-               case .wake(task: .opening(firstMove: true, candidates: _), selectedPiece: nil)
+               case .wake(
+                   task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
+                   selectedPiece: nil
+               )
                 = prompt {
                 return "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
             }
@@ -504,17 +522,21 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         opponent: PieceColor
     ) -> String {
         switch task {
-        case let .opening(_, candidates):
+        case let .opening(_, _, candidates):
             if piece == .pawn {
                 return "Your center pawn moved forward and now helps control the center."
             }
-            let grade = candidates.first(where: { $0.move == move })?.grade
-            if piece == .knight, grade == .preferred {
+            let comparison = candidates.first(where: { $0.move == move })?
+                .centralityComparison
+            if piece == .knight,
+               case .closerWithMoreMobility = comparison {
                 return "You developed your knight toward the center. From there it can reach more squares."
             }
-            if piece == .knight {
+            if piece == .knight,
+               case .fartherWithLessMobility = comparison {
                 return "You developed your knight. A square closer to the center would usually give it more choices."
             }
+            if piece == .knight { return "You developed your knight." }
             return "You developed your \(piece.rawValue)."
 
         case .castle:
@@ -526,7 +548,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .createThreat(_, sourcePiece, _, targetPiece, _):
             return "Your \(sourcePiece.rawValue) now attacks the \(targetPiece.rawValue). \(colorName(opponent)) may need to move or protect it."
 
-        case let .improveMobility(_, piece, before, candidates):
+        case let .improveMobility(_, piece, _, before, candidates):
             guard let after = candidates.first(where: { $0.move == move })?.resultingMobility else {
                 return "Your \(piece.rawValue) can reach more squares from there."
             }

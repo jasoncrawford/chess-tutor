@@ -336,6 +336,22 @@ struct CoachingPresentationProjector: Sendable {
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachFocusPresentation {
+        if case let .complete(move, .wake, _) = stage,
+           let task = episode.knowledge.positionAdvice?.wakeTasks.first(where: {
+               wakeMoves(in: $0).contains(move)
+           }),
+           case let .createThreat(_, _, target, _, _) = task {
+            return CoachFocusPresentation(
+                emphasizedSquares: [move.to, target],
+                candidateSquares: [],
+                paths: [CoachFocusPath(
+                    source: move.to,
+                    destination: target,
+                    role: .attacker
+                )],
+                pulseID: episode.progress.pulseID
+            )
+        }
         guard episode.interaction.tentativeMove == nil else { return .empty }
         switch stage {
         case let .safeIdentifyAttacker(target):
@@ -557,7 +573,7 @@ struct CoachingPresentationProjector: Sendable {
 
     private func wakePurpose(for task: CoachingWakeTask) -> CoachingWakePurpose {
         switch task {
-        case let .opening(firstMove, _):
+        case let .opening(firstMove, _, _):
             return .openingDevelopment(firstMove: firstMove)
         case .castle:
             return .castle
@@ -606,7 +622,7 @@ struct CoachingPresentationProjector: Sendable {
         case let .protect(source, _, target, _, _),
              let .createThreat(source, _, target, _, _):
             return [source, target]
-        case let .improveMobility(source, _, _, _):
+        case let .improveMobility(source, _, _, _, _):
             return [source]
         }
     }

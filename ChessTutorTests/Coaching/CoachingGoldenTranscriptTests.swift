@@ -86,6 +86,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         let t2Entry = try await goldenTurn(.t2Entry)
         let t2OneSquareKingMove = try await goldenTurn(.t2OneSquareKingMove)
         let t2KnightSwitch = try await goldenTurn(.t2KnightSwitch)
+        let t2Castle = try await goldenTurn(.t2Castle)
         let t9Entry = try await goldenTurn(.t9Entry)
         let t9Hint = try await goldenTurn(.t9Hint)
         let t9Completed = try await goldenTurn(.t9Completed)
@@ -140,6 +141,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             "Move the knight off its starting square."
         )
         XCTAssertEqual(
+            t2Castle.ask,
+            "You castled. Your king moved toward safety, and your rook moved toward the center."
+        )
+        XCTAssertEqual(
             t9Entry.ask,
             "Your knight can move to a square where it attacks Black’s rook. Can you find the square?"
         )
@@ -155,6 +160,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             t9Completed.ask,
             "Your knight now attacks the rook. Black may need to move or protect it."
         )
+        XCTAssertEqual(t9Completed.emphasizedSquares, [sq("b3"), sq("d4")])
+        XCTAssertEqual(t9Completed.candidateSquares, [])
+        XCTAssertEqual(t9Completed.paths, [
+            CoachFocusPath(
+                source: sq("b3"),
+                destination: sq("d4"),
+                role: .attacker
+            ),
+        ])
         XCTAssertEqual(
             t10Entry.ask,
             "Your knight has very few choices in the corner. Can you move it closer to the center?"
@@ -165,48 +179,28 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
     }
 
-    func testCastleCompletionNamesTheKingAndRookEffects() async throws {
-        let state = CoachingTestFixtures.state(
-            sideToMove: .white,
-            pieces: [
-                sq("e1"): Piece(kind: .king, color: .white),
-                sq("h1"): Piece(kind: .rook, color: .white),
-                sq("e8"): Piece(kind: .king, color: .black),
-            ],
-            castlingRights: CastlingRights(whiteKingside: true)
-        )
-        var session = try await preparedSession(for: state)
-        try await complete(
-            CoachingGoldenMoves.castle,
-            origin: .wake,
-            state: state,
-            in: &session
-        )
-
-        XCTAssertEqual(
-            session.presentation?.headline,
-            "You castled. Your king moved toward safety, and your rook moved toward the center."
-        )
-    }
-
-    func testCanonicalCastleRetainsOpponentRevisionGate() async throws {
+    func testCanonicalT2ClearsSafeAndTakeBeforeWake() async throws {
         var session = try await preparedSession(for: .readyToCastle)
-        try await stage(
-            CoachingGoldenMoves.castle,
-            origin: .wake,
-            position: .readyToCastle,
-            in: &session
-        )
 
         XCTAssertEqual(
             session.presentation?.headline,
-            "Could Black check your king or win one of your pieces?"
+            "One of your pieces is in danger. Which one?"
         )
 
-        session.handle(.identificationTapped(sq("e4")))
+        session.handle(.actionChosen(.noAnswer))
 
-        XCTAssertEqual(session.presentation?.response, "Black could take your pawn.")
-        XCTAssertEqual(session.presentation?.headline, "Try another move.")
+        XCTAssertEqual(
+            session.presentation?.headline,
+            "Can one of your pieces safely take a black piece?"
+        )
+
+        session.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(session.presentation?.headline, "Your king is ready to castle.")
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Move your king two squares toward the rook."
+        )
     }
 
     private func goldenTurn(_ branch: CoachingGoldenCase) async throws -> CoachingGoldenTurn {
@@ -259,10 +253,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
 
         case .t2Entry:
-            session = try await preparedSession(for: .readyToCastle)
+            session = try await preparedT2WakeSession()
 
         case .t2OneSquareKingMove:
-            session = try await preparedSession(for: .readyToCastle)
+            session = try await preparedT2WakeSession()
             try await stage(
                 Move(from: sq("e1"), to: sq("f1")),
                 origin: .wake,
@@ -271,8 +265,22 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
 
         case .t2KnightSwitch:
-            session = try await preparedSession(for: .readyToCastle)
+            session = try await preparedT2WakeSession()
             session.handle(.interactionChanged(snapshot(selected: sq("b1"))))
+
+        case .t2Castle:
+            session = try await preparedT2WakeSession()
+            try await stage(
+                CoachingGoldenMoves.castle,
+                origin: .wake,
+                position: .readyToCastle,
+                in: &session
+            )
+            XCTAssertEqual(
+                session.presentation?.headline,
+                "Could Black check your king or win one of your pieces?"
+            )
+            session.handle(.actionChosen(.looksSafe))
 
         case .t3Entry:
             session = try await preparedSession(for: .endangeredKnight)
@@ -409,6 +417,13 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             context: .start
         ))
         session.receive(advice, interaction: interaction)
+        return session
+    }
+
+    private func preparedT2WakeSession() async throws -> CoachingSession {
+        var session = try await preparedSession(for: .readyToCastle)
+        session.handle(.actionChosen(.noAnswer))
+        session.handle(.actionChosen(.noAnswer))
         return session
     }
 

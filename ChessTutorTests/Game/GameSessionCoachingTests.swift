@@ -524,11 +524,6 @@ final class GameSessionCoachingTests: XCTestCase {
             instruction: String
         )] = [
             (
-                .readyToCastle,
-                "Your king is ready to castle.",
-                "Move your king two squares toward the rook."
-            ),
-            (
                 .createRookThreat,
                 "Your knight can move to a square where it attacks Black’s rook. Can you find the square?",
                 "Move the knight so it attacks the rook."
@@ -551,6 +546,33 @@ final class GameSessionCoachingTests: XCTestCase {
             XCTAssertEqual(session.coachingPresentation?.headline, testCase.ask)
             XCTAssertEqual(session.coachingPresentation?.instruction, testCase.instruction)
         }
+    }
+
+    func testCanonicalCastleEntryFollowsSafeAndTakeAbsenceChecks() async {
+        let session = GameSession(
+            state: CoachingGoldenPosition.readyToCastle.state,
+            coachingAdvisor: LocalCoachingAdvisor()
+        )
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "One of your pieces is in danger. Which one?"
+        )
+
+        _ = session.chooseCoachingAction(.noAnswer)
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "Can one of your pieces safely take a black piece?"
+        )
+
+        _ = session.chooseCoachingAction(.noAnswer)
+        XCTAssertEqual(session.coachingPresentation?.headline, "Your king is ready to castle.")
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Move your king two squares toward the rook."
+        )
     }
 
     func testOpeningTapAndDragSourceSelectionProduceTheSameCoachingResult() async {

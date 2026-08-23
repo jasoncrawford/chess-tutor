@@ -137,24 +137,44 @@ enum CoachingCandidateGrade: Equatable, Sendable {
     case acceptable
 }
 
+enum CoachingCentralityComparison: Equatable, Sendable {
+    case closerWithMoreMobility(
+        alternative: Move,
+        candidateMobility: Int,
+        alternativeMobility: Int
+    )
+    case fartherWithLessMobility(
+        alternative: Move,
+        candidateMobility: Int,
+        alternativeMobility: Int
+    )
+}
+
 struct CoachingCandidateMove: Equatable, Sendable {
     let move: Move
     let grade: CoachingCandidateGrade
     let resultingMobility: Int?
+    let centralityComparison: CoachingCentralityComparison?
 
     init(
         move: Move,
         grade: CoachingCandidateGrade,
-        resultingMobility: Int? = nil
+        resultingMobility: Int? = nil,
+        centralityComparison: CoachingCentralityComparison? = nil
     ) {
         self.move = move
         self.grade = grade
         self.resultingMobility = resultingMobility
+        self.centralityComparison = centralityComparison
     }
 }
 
 enum CoachingWakeTask: Equatable, Sendable {
-    case opening(firstMove: Bool, candidates: [CoachingCandidateMove])
+    case opening(
+        firstMove: Bool,
+        castleIsAlternative: Bool,
+        candidates: [CoachingCandidateMove]
+    )
     case castle(move: Move)
     case protect(
         source: Square,
@@ -173,16 +193,17 @@ enum CoachingWakeTask: Equatable, Sendable {
     case improveMobility(
         source: Square,
         piece: Piece.Kind,
+        sourceIsCorner: Bool,
         before: Int,
         candidates: [CoachingCandidateMove]
     )
 
     var candidates: [CoachingCandidateMove] {
         switch self {
-        case let .opening(_, candidates),
+        case let .opening(_, _, candidates),
              let .protect(_, _, _, _, candidates),
              let .createThreat(_, _, _, _, candidates),
-             let .improveMobility(_, _, _, candidates):
+             let .improveMobility(_, _, _, _, candidates):
             candidates
         case .castle:
             []

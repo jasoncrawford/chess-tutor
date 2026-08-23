@@ -14,13 +14,6 @@ struct CoachingReconciler: Sendable {
         if !advice.checkingPieces.isEmpty {
             return deriveCheck(advice: advice, evidence: episode.evidence)
         }
-        if advice.wakeTasks.first.map(isCastleTask) == true {
-            return deriveWakeOrFallback(
-                learner: learner,
-                advice: advice,
-                interaction: episode.interaction
-            )
-        }
         if requiresSafeScan(advice: advice, evidence: episode.evidence) {
             return deriveSafe(advice: advice, evidence: episode.evidence)
         }
@@ -31,7 +24,8 @@ struct CoachingReconciler: Sendable {
                 interaction: episode.interaction
             )
         }
-        if episode.evidence.confirmedTakeAbsence {
+        if episode.evidence.confirmedTakeAbsence,
+           !advice.wakeTasks.contains(where: isCastleTask) {
             return derived(
                 stage: .fallbackChooseMove,
                 questionID: .fallback,
@@ -633,7 +627,7 @@ struct CoachingReconciler: Sendable {
 
     private func wakePurpose(for task: CoachingWakeTask) -> CoachingWakePurpose {
         switch task {
-        case let .opening(firstMove, _):
+        case let .opening(firstMove, _, _):
             return .openingDevelopment(firstMove: firstMove)
         case .castle:
             return .castle

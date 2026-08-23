@@ -141,6 +141,76 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         }
     }
 
+    func testGenericAcceptableKnightDoesNotInventACentralAlternative() {
+        let move = Move(from: sq("b1"), to: sq("a3"))
+        let task = CoachingWakeTask.opening(
+            firstMove: false,
+            castleIsAlternative: false,
+            candidates: [.init(move: move, grade: .acceptable)]
+        )
+
+        let presentation = source.presentation(for: context(
+            prompt: .complete(
+                origin: .wake,
+                idea: .constructive(task: task, move: move, piece: .knight)
+            )
+        ))
+
+        XCTAssertEqual(presentation.headline, "You developed your knight.")
+        XCTAssertFalse(presentation.headline.contains("closer to the center"))
+    }
+
+    func testNonFirstOpeningWithoutCastleDoesNotSayKnightAlsoDevelops() {
+        let task = CoachingWakeTask.opening(
+            firstMove: false,
+            castleIsAlternative: false,
+            candidates: [
+                .init(
+                    move: Move(from: sq("b1"), to: sq("c3")),
+                    grade: .acceptable
+                ),
+            ]
+        )
+
+        let presentation = source.presentation(for: context(
+            prompt: .wake(task: task, selectedPiece: .knight)
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "You chose a knight. Moving it off its starting square is called developing it."
+        )
+        XCTAssertEqual(presentation.instruction, "Move the knight.")
+        XCTAssertFalse(presentation.headline.contains("also"))
+    }
+
+    func testNonCornerMobilityTaskDoesNotClaimThePieceIsInTheCorner() {
+        let task = CoachingWakeTask.improveMobility(
+            source: sq("c3"),
+            piece: .knight,
+            sourceIsCorner: false,
+            before: 4,
+            candidates: [
+                .init(
+                    move: Move(from: sq("c3"), to: sq("d5")),
+                    grade: .acceptable,
+                    resultingMobility: 6
+                ),
+            ]
+        )
+
+        let presentation = source.presentation(for: context(
+            prompt: .wake(task: task, selectedPiece: nil)
+        ))
+
+        XCTAssertEqual(
+            presentation.headline,
+            "Your knight can move to a square where it has more choices. Can you find the move?"
+        )
+        XCTAssertEqual(presentation.instruction, "Move the knight.")
+        XCTAssertFalse(presentation.headline.contains("corner"))
+    }
+
     func testEveryActionHasAnUnambiguousLabelAndProminence() {
         let presentation = source.presentation(
             for: context(

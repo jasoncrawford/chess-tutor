@@ -14,6 +14,17 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             let expectedTask = try XCTUnwrap(advice.wakeTasks.first)
             let episode = episode(
                 advice: advice,
+                evidence: position == .readyToCastle
+                    ? CoachingPedagogicalEvidence(
+                        checkingPiece: nil,
+                        safeTarget: nil,
+                        safeAttacker: nil,
+                        confirmedSafeAbsence: true,
+                        confirmedTakeAbsence: true,
+                        tentativeOrigin: nil,
+                        replyAnswer: nil
+                    )
+                    : .empty,
                 progress: progress(questionID: nil)
             )
             let derived = CoachingReconciler().derive(learner: .white, episode: episode)
