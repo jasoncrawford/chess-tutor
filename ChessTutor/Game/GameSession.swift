@@ -774,6 +774,8 @@ final class GameSession {
             switch directive {
             case let .requestAdvice(context):
                 queueCoachingRequest(context: context)
+            case .discardTentativeMove:
+                restoreCommittedPosition()
             case .stop:
                 stopCoaching()
             case .commitWithExistingDonePath:

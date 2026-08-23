@@ -22,6 +22,7 @@ enum CoachingEvent: Equatable, Sendable {
 
 enum CoachingDirective: Equatable, Sendable {
     case requestAdvice(context: CoachingRequest.Context)
+    case discardTentativeMove
     case stop(preservingTentativeMove: Bool)
     case commitWithExistingDonePath
 }

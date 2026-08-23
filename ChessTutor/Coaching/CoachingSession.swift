@@ -304,13 +304,22 @@ struct CoachingSession: Sendable {
                 }
             case .takeChooseMove:
                 if advice.takeOpportunities.isEmpty {
+                    let discardsTentativeMove = episode.interaction.tentativeMove != nil
+                    if discardsTentativeMove {
+                        reduceInteraction(to: CoachingInteractionSnapshot(
+                            selectedSquare: nil,
+                            tentativeMove: nil,
+                            positionRevision: episode.interaction.positionRevision
+                        ))
+                    }
                     episode.evidence.confirmedTakeAbsence = true
                     let directives = reconcile()
                     recordFeedback(
                         .correctAbsence(.noSafeCapture),
                         anchor: .action(.noAnswer)
                     )
-                    return directives
+                    return (discardsTentativeMove ? [.discardTentativeMove] : [])
+                        + directives
                 }
             default:
                 return []

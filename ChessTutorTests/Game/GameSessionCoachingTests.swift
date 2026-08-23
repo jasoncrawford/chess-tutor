@@ -148,6 +148,45 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNotEqual(session.coachingPresentation?.routine, originalRoutine)
     }
 
+    func testTruthfulNoSafeCaptureAfterUnsafeCandidateClearsCandidateAndAdvances() async {
+        let originalState = CoachingGoldenPosition.losingCapture.state
+        let move = CoachingGoldenMoves.bishopTakesPawn
+        let session = GameSession(
+            state: originalState,
+            coachingAdvisor: LocalCoachingAdvisor()
+        )
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+        stage(move, in: session)
+        await session.resolvePendingCoachingAdvice()
+        XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "Black’s king could take your bishop. You would lose a bishop to take one pawn."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.noAnswer, .stop]
+        )
+
+        _ = session.chooseCoachingAction(.noAnswer)
+
+        XCTAssertEqual(session.state, originalState)
+        XCTAssertNil(session.selectedSquare)
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertEqual(
+            session.coachingPresentation?.response,
+            "Right—there is no safe capture here."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.headline,
+            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.stop]
+        )
+    }
+
     func testMoveTaskAlwaysPassesBoardTapThroughToOrdinaryHandling() async {
         let session = GameSession(
             state: CoachingTestFixtures.coachingState,
