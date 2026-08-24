@@ -120,12 +120,50 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
         ] as [String?]).compactMap { $0 }
         let conversation = app.descendants(matching: .any)[expectedSectionIdentifiers[0]]
         XCTAssertEqual(
-            conversation.staticTexts.allElementsBoundByIndex.map(\.label),
+            conversation.descendants(matching: .any).allElementsBoundByIndex
+                .filter {
+                    expectedConversationLabels.contains($0.label)
+                        && ($0.label != expectedObservation
+                            || $0.identifier == "coaching-response-note")
+                }
+                .map(\.label),
             expectedConversationLabels,
             "Unexpected conversation reading order for \(configuration), \(turn).",
             file: file,
             line: line
         )
+        if let expectedObservation {
+            let instruction = app.staticTexts[expectedInstruction]
+            let response = app.otherElements["coaching-response-note"]
+            XCTAssertTrue(
+                response.waitForExistence(timeout: 3),
+                "The response note is missing in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
+            XCTAssertEqual(response.label, expectedObservation, file: file, line: line)
+            assertResponseFollowsInstruction(
+                instruction.frame,
+                response.frame,
+                configuration: configuration,
+                turn: turn,
+                file: file,
+                line: line
+            )
+            XCTAssertTrue(
+                conversation.frame.contains(response.frame),
+                "The response leaves the conversation in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
+        } else {
+            XCTAssertFalse(
+                app.otherElements["coaching-response-note"].exists,
+                "A response note appeared without an observation in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
+        }
         let expectedLabels = ([
             expectedPrimary,
             expectedInstruction,
@@ -133,7 +171,13 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
             "Safe, current step",
         ] as [String?]).compactMap { $0 } + expectedActions
         XCTAssertEqual(
-            semanticElements.map(\.label).filter(expectedLabels.contains),
+            semanticElements
+                .filter {
+                    expectedLabels.contains($0.label)
+                        && ($0.label != expectedObservation
+                            || $0.identifier == "coaching-response-note")
+                }
+                .map(\.label),
             expectedLabels,
             "Unexpected VoiceOver reading order for \(configuration).",
             file: file,
@@ -183,6 +227,42 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
                     line: line
                 )
             }
+        }
+    }
+
+    private func assertResponseFollowsInstruction(
+        _ instruction: CGRect,
+        _ response: CGRect,
+        configuration: String,
+        turn: String,
+        file: StaticString,
+        line: UInt
+    ) {
+        switch configuration {
+        case "clockwise-quarter-turn":
+            XCTAssertLessThan(
+                response.maxX,
+                instruction.minX,
+                "The response does not follow the instruction in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
+        case "counterclockwise-quarter-turn":
+            XCTAssertLessThan(
+                instruction.maxX,
+                response.minX,
+                "The response does not follow the instruction in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
+        default:
+            XCTAssertLessThan(
+                instruction.maxY,
+                response.minY,
+                "The response does not follow the instruction in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
         }
     }
 

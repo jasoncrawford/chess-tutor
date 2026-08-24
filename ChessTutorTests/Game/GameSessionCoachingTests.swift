@@ -3,6 +3,41 @@ import XCTest
 
 @MainActor
 final class GameSessionCoachingTests: XCTestCase {
+    func testLocalCoachingNeverPublishesPendingTurnBetweenMoveAndAdvice() {
+        let session = GameSession(coachingAdvisor: LocalCoachingAdvisor())
+        session.startCoaching()
+
+        XCTAssertNil(session.pendingCoachingRequestID)
+        XCTAssertNotEqual(
+            session.coachingPresentation?.primaryMessage,
+            "I'm checking the board."
+        )
+
+        session.select(Square(file: .g, rank: 1))
+        XCTAssertEqual(
+            session.moveSelectedPiece(to: Square(file: .f, rank: 3)),
+            .moved
+        )
+
+        XCTAssertNil(session.pendingCoachingRequestID)
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "You developed your knight toward the center."
+        )
+
+        session.select(Square(file: .b, rank: 1))
+        XCTAssertEqual(
+            session.moveSelectedPiece(to: Square(file: .c, rank: 3)),
+            .moved
+        )
+
+        XCTAssertNil(session.pendingCoachingRequestID)
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "You developed your knight toward the center."
+        )
+    }
+
     func testPendingAdviceShowsCloseHelpAndStaleCompletionCannotReopenIt() async {
         let advisor = ControllableCoachingAdvisor()
         let session = GameSession(coachingAdvisor: advisor)
@@ -912,7 +947,7 @@ final class GameSessionCoachingTests: XCTestCase {
             promotionSession.state.board[promotionTo],
             Piece(kind: .queen, color: .white)
         )
-        XCTAssertNotNil(promotionSession.pendingCoachingRequestID)
+        XCTAssertNil(promotionSession.pendingCoachingRequestID)
     }
 
     func testCloseHelpStopsCoachingAndPreservesTentativeMove() async {

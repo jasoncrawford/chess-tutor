@@ -661,28 +661,11 @@ final class GameSession {
 
         do {
             let advice = try await coachingAdvisor.advice(for: pending.request)
-            guard pendingCoachingRequestIsApplicable(pending) else { return }
-            guard advice.evaluation.request == pending.request else {
-                pendingCoachingRequest = nil
-                queueCoachingRequest(context: pending.request.context)
-                return
-            }
-            pendingCoachingRequest = nil
-            let directives = coachingSession?.receive(
-                advice,
-                interaction: coachingInteractionSnapshot
-            ) ?? []
-            _ = applyCoachingDirectives(directives)
+            receiveCoachingAdvice(advice, for: pending)
         } catch is CancellationError {
             return
         } catch {
-            guard pendingCoachingRequestIsApplicable(pending) else { return }
-            pendingCoachingRequest = nil
-            let directives = coachingSession?.receiveUnsupportedPosition(
-                for: pending.request.context,
-                interaction: coachingInteractionSnapshot
-            ) ?? []
-            _ = applyCoachingDirectives(directives)
+            receiveUnsupportedCoachingPosition(for: pending)
         }
     }
 
@@ -745,7 +728,7 @@ final class GameSession {
             requestedTentativeMove = tentativeMove
         }
         nextCoachingRequestID += 1
-        pendingCoachingRequest = PendingCoachingRequest(
+        let pending = PendingCoachingRequest(
             id: nextCoachingRequestID,
             request: CoachingRequest(
                 committedState: committedState,
@@ -755,6 +738,49 @@ final class GameSession {
                 context: context
             )
         )
+        pendingCoachingRequest = pending
+
+        guard let immediateAdvisor = coachingAdvisor as? any ImmediateCoachingAdvising else {
+            return
+        }
+        do {
+            let advice = try immediateAdvisor.immediateAdvice(for: pending.request)
+            receiveCoachingAdvice(advice, for: pending)
+        } catch is CancellationError {
+            return
+        } catch {
+            receiveUnsupportedCoachingPosition(for: pending)
+        }
+    }
+
+    private func receiveCoachingAdvice(
+        _ advice: CoachingAdvice,
+        for pending: PendingCoachingRequest
+    ) {
+        guard pendingCoachingRequestIsApplicable(pending) else { return }
+        guard advice.evaluation.request == pending.request else {
+            pendingCoachingRequest = nil
+            queueCoachingRequest(context: pending.request.context)
+            return
+        }
+        pendingCoachingRequest = nil
+        let directives = coachingSession?.receive(
+            advice,
+            interaction: coachingInteractionSnapshot
+        ) ?? []
+        _ = applyCoachingDirectives(directives)
+    }
+
+    private func receiveUnsupportedCoachingPosition(
+        for pending: PendingCoachingRequest
+    ) {
+        guard pendingCoachingRequestIsApplicable(pending) else { return }
+        pendingCoachingRequest = nil
+        let directives = coachingSession?.receiveUnsupportedPosition(
+            for: pending.request.context,
+            interaction: coachingInteractionSnapshot
+        ) ?? []
+        _ = applyCoachingDirectives(directives)
     }
 
     private func pendingCoachingRequestIsApplicable(

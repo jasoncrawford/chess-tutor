@@ -24,6 +24,16 @@ protocol CoachingAdvising: Sendable {
     func advice(for request: CoachingRequest) async throws -> CoachingAdvice
 }
 
+protocol ImmediateCoachingAdvising: CoachingAdvising {
+    func immediateAdvice(for request: CoachingRequest) throws -> CoachingAdvice
+}
+
+extension ImmediateCoachingAdvising {
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        try immediateAdvice(for: request)
+    }
+}
+
 enum CoachingConfidence: Equatable, Sendable {
     case high
     case unsupported

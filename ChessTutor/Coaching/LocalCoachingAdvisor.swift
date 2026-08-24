@@ -1,4 +1,4 @@
-struct LocalCoachingAdvisor: CoachingAdvising {
+struct LocalCoachingAdvisor: ImmediateCoachingAdvising {
     private let evaluator: MaterialTacticalEvaluator
     private let insightSource: LocalCoachingInsightSource
 
@@ -10,7 +10,7 @@ struct LocalCoachingAdvisor: CoachingAdvising {
         self.insightSource = insightSource
     }
 
-    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+    func immediateAdvice(for request: CoachingRequest) throws -> CoachingAdvice {
         let evaluation = evaluator.evaluate(request)
         let insightSet = insightSource.insights(for: evaluation)
         let assessments = evaluation.moveAssessments.mapValues { assessment in

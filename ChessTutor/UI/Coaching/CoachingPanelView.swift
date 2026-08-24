@@ -264,12 +264,18 @@ struct CoachingPanelView: View {
             }
 
             if let observation = presentation.observation {
-                Text(observation)
-                    .font(bodyFont)
-                    .lineLimit(1)
-                    .accessibilitySortPriority(
-                        CoachingConversationAccessibilityElement.observation.sortPriority
-                    )
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(observation)
+                        .font(bodyFont)
+                        .lineLimit(1)
+                        .accessibilityHidden(true)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(observation)
+                .accessibilityIdentifier("coaching-response-note")
+                .accessibilitySortPriority(
+                    CoachingConversationAccessibilityElement.observation.sortPriority
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -296,10 +302,7 @@ struct CoachingPanelView: View {
             }
 
             if let observation = presentation.observation {
-                Text(observation)
-                    .font(bodyFont)
-                    .foregroundStyle(AppTheme.ink.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+                CoachingResponseNote(text: observation, font: bodyFont)
                     .accessibilitySortPriority(
                         CoachingConversationAccessibilityElement.observation.sortPriority
                     )
@@ -401,6 +404,29 @@ struct CoachingPanelView: View {
 
     private var actionFont: Font {
         AppTheme.coachingActionFont(size: min(coachingActionSize, 23))
+    }
+}
+
+private struct CoachingResponseNote: View {
+    let text: String
+    let font: Font
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(AppTheme.ink.opacity(0.78))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 9)
+            .padding(.horizontal, 11)
+            .background(AppTheme.coachingResponseFill)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(AppTheme.coachingResponseRule)
+                    .frame(width: 3)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("coaching-response-note")
     }
 }
 

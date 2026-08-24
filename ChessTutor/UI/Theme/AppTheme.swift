@@ -9,6 +9,8 @@ enum AppTheme {
     static let panelWarmth = Color(red: 0.96, green: 0.91, blue: 0.80).opacity(0.72)
     static let panelTopLight = Color.white.opacity(0.28)
     static let captureBoxWood = Color(red: 0.53, green: 0.40, blue: 0.24)
+    static let coachingResponseFill = captureBoxWood.opacity(0.10)
+    static let coachingResponseRule = captureBoxWood.opacity(0.52)
     static let captureBoxFelt = Color(red: 0.26, green: 0.43, blue: 0.35)
     static let captureBoxShadow = Color.black.opacity(0.15)
     static let selectedPiecePlinth = Color(red: 0.32, green: 0.23, blue: 0.14).opacity(0.12)

@@ -4,6 +4,15 @@ import XCTest
 final class LocalCoachingAdvisorTests: XCTestCase {
     private let advisor = LocalCoachingAdvisor()
 
+    func testLocalAdviceIsAvailableImmediately() async throws {
+        let request = request(for: GameState.startingPosition())
+
+        let immediate = try advisor.immediateAdvice(for: request)
+        let asynchronous = try await advisor.advice(for: request)
+
+        XCTAssertEqual(immediate, asynchronous)
+    }
+
     func testStartingKnightMovesHavePreferredAndAcceptableGrades() async throws {
         let advice = try await advisor.advice(
             for: request(for: CoachingGoldenPosition.starting.state)
