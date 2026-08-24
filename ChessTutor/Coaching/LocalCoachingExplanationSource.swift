@@ -75,6 +75,12 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     private func currentTaskCopy(for context: CoachingPresentationContext) -> AuthoredTurn {
         let learner = context.learner
         switch context.prompt {
+        case .awaitingAdvice:
+            return AuthoredTurn(
+                primaryMessage: "I'm checking the board.",
+                instruction: nil,
+                observation: nil
+            )
         case .checkLocate:
             return AuthoredTurn(
                 primaryMessage: "What piece is checking your king?",
@@ -371,7 +377,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "Tap the highlighted \(colorName(context.learner).lowercased()) piece."
         case let .missedOpponentIssue(fact):
             let opponent = colorName(context.learner.opposite).lowercased()
-            let target = "the \(opponent) \(fact.opponentPiece.rawValue)"
+            let target = "the \(opponent) \(fact.replyPiece.rawValue)"
             return context.actions.contains(.hint)
                 ? "Tap \(target), or choose Hint."
                 : "Tap \(target)."
@@ -600,29 +606,93 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         let opponentName = colorName(opponent)
         switch fact.issue.kind {
         case .mateInOne:
-            return "\(opponentName)'s \(fact.opponentPiece.rawValue) could checkmate your king."
+            return checkCopy(
+                fact,
+                opponentName: opponentName,
+                result: "checkmate your king"
+            )
         case .materialLoss:
             if let affectedPiece = fact.affectedPiece {
-                return "\(opponentName)'s \(fact.opponentPiece.rawValue) could take your \(affectedPiece.rawValue)."
+                return "\(opponentName)'s \(fact.replyPiece.rawValue) could take your \(affectedPiece.rawValue)."
             }
-            return "\(opponentName)'s \(fact.opponentPiece.rawValue) could take one of your pieces."
+            return "\(opponentName)'s \(fact.replyPiece.rawValue) could take one of your pieces."
         case .check:
             guard fact.issue.severity == .notice else {
-                return "\(opponentName)'s \(fact.opponentPiece.rawValue) could check your king."
+                return checkCopy(
+                    fact,
+                    opponentName: opponentName,
+                    result: "check your king"
+                )
             }
             let learnerBackRank = opponent == .black ? 1 : 8
             let checkDescription: String
-            if fact.opponentPiece == .rook,
+            if isDirectSingleChecker(fact, kind: .rook),
                fact.issue.reply.to.rank == learnerBackRank {
                 checkDescription = "That rook could check along your back row"
             } else {
-                checkDescription = "That \(fact.opponentPiece.rawValue) could check your king"
+                checkDescription = checkCopy(
+                    fact,
+                    opponentName: opponentName,
+                    result: "check your king",
+                    ending: ""
+                )
             }
             let learnerMove = fact.learnerPiece.map {
                 "your \($0.rawValue) move still works"
             } ?? "your move still works"
             return "\(checkDescription), but \(learnerMove)."
         }
+    }
+
+    private func checkCopy(
+        _ fact: CoachingOpponentReplyFact,
+        opponentName: String,
+        result: String,
+        ending: String = "."
+    ) -> String {
+        guard !fact.checkingPieces.isEmpty else {
+            return "\(opponentName) could \(result)\(ending)"
+        }
+        if fact.checkingPieces.count == 1,
+           let checker = fact.checkingPieces.first,
+           checker.visibleSquare == fact.issue.reply.from,
+           checker.checkingSquare == fact.issue.reply.to {
+            return "That \(checker.piece.rawValue) could \(result)\(ending)"
+        }
+
+        let names = fact.checkingPieces.map { $0.piece.rawValue }
+        let checkerNames: String
+        if names.count == 2, names[0] == names[1] {
+            checkerNames = "two \(names[0])s"
+        } else if let last = names.last {
+            checkerNames = names.count == 1
+                ? last
+                : names.dropLast().joined(separator: ", ") + " and " + last
+        } else {
+            return "\(opponentName) could \(result)\(ending)"
+        }
+        let both = names.count > 1 ? " both" : ""
+        let enablingAction: String
+        switch fact.issue.reply.special {
+        case .castleKingside, .castleQueenside:
+            enablingAction = " after the \(fact.replyPiece.rawValue) castles"
+        case nil, .enPassant, .promotion:
+            enablingAction = " after the \(fact.replyPiece.rawValue) moves"
+        }
+        return "\(opponentName)'s \(checkerNames) could\(both) \(result)\(enablingAction)\(ending)"
+    }
+
+    private func isDirectSingleChecker(
+        _ fact: CoachingOpponentReplyFact,
+        kind: Piece.Kind
+    ) -> Bool {
+        guard fact.checkingPieces.count == 1,
+              let checker = fact.checkingPieces.first else {
+            return false
+        }
+        return checker.piece == kind
+            && checker.visibleSquare == fact.issue.reply.from
+            && checker.checkingSquare == fact.issue.reply.to
     }
 
     private func completionCopy(

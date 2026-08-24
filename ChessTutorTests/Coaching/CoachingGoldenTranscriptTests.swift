@@ -1195,8 +1195,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             return completion(
                 observation: "That rook could check along your back row, but your knight move still works.",
                 primaryMessage: "Your knight moved closer to the center.",
-                emphasized: ["a8", "g1"],
-                paths: [("a8", "a1", .attacker)]
+                emphasized: ["a8", "a1", "g1"],
+                paths: [
+                    ("a8", "a1", .attacker),
+                    ("a1", "g1", .attacker),
+                ]
             )
         case .t11UnsafeBishopEntry:
             return expected(

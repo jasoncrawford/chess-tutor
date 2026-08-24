@@ -41,6 +41,58 @@ final class MaterialTacticalEvaluatorTests: XCTestCase {
         XCTAssertFalse(activity.isQuestionAnswer)
     }
 
+    func testOpponentActivitiesHaveStableOrderAndCompleteTacticalFields() throws {
+        let move = CoachingTestFixtures.compoundOpponentActivityMove
+        let assessment = try XCTUnwrap(
+            evaluator.evaluate(request(
+                for: CoachingTestFixtures.compoundOpponentActivityState
+            )).moveAssessments[move]
+        )
+
+        XCTAssertEqual(assessment.opponentActivities, [
+            CoachingOpponentActivity(
+                reply: Move(from: sq("b4"), to: sq("c3")),
+                opponentPiece: .bishop,
+                checkingSquares: [],
+                capturedSquare: sq("c3"),
+                capturedPiece: .knight,
+                netGainForOpponent: 3,
+                immediateRecapture: nil,
+                isMate: false
+            ),
+            CoachingOpponentActivity(
+                reply: Move(from: sq("h5"), to: sq("f4")),
+                opponentPiece: .knight,
+                checkingSquares: [],
+                capturedSquare: sq("f4"),
+                capturedPiece: .pawn,
+                netGainForOpponent: -2,
+                immediateRecapture: Move(from: sq("e3"), to: sq("f4")),
+                isMate: false
+            ),
+            CoachingOpponentActivity(
+                reply: Move(from: sq("a8"), to: sq("a1")),
+                opponentPiece: .rook,
+                checkingSquares: [sq("a8")],
+                capturedSquare: nil,
+                capturedPiece: nil,
+                netGainForOpponent: nil,
+                immediateRecapture: nil,
+                isMate: false
+            ),
+            CoachingOpponentActivity(
+                reply: Move(from: sq("a8"), to: sq("g8")),
+                opponentPiece: .rook,
+                checkingSquares: [sq("a8")],
+                capturedSquare: nil,
+                capturedPiece: nil,
+                netGainForOpponent: nil,
+                immediateRecapture: nil,
+                isMate: false
+            ),
+        ])
+    }
+
     func testMaterialIssueUsesOpponentSourceAsAnswer() throws {
         let assessment = try assessment(
             position: .exposedQueen,

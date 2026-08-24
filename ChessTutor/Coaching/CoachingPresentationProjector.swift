@@ -53,6 +53,7 @@ struct CoachingPresentationProjector: Sendable {
             focus: focus(
                 for: derived.stage,
                 hint: hint,
+                feedback: feedback,
                 episode: episode,
                 advice: advice
             )
@@ -98,7 +99,7 @@ struct CoachingPresentationProjector: Sendable {
     ) -> CoachingPrompt? {
         switch stage {
         case .awaitingAdvice:
-            return nil
+            return .awaitingAdvice
         case .checkLocate:
             return .checkLocate
         case .checkResolve:
@@ -327,10 +328,16 @@ struct CoachingPresentationProjector: Sendable {
     private func focus(
         for stage: CoachingStage,
         hint: CoachingHint?,
+        feedback: CoachingFeedback?,
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachFocusPresentation {
-        let persistent = persistentFocus(for: stage, episode: episode, advice: advice)
+        let persistent = persistentFocus(
+            for: stage,
+            feedback: feedback,
+            episode: episode,
+            advice: advice
+        )
         let hinted = hintFocus(
             for: stage,
             hint: hint,
@@ -385,6 +392,7 @@ struct CoachingPresentationProjector: Sendable {
 
     private func persistentFocus(
         for stage: CoachingStage,
+        feedback: CoachingFeedback?,
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachFocusPresentation {
@@ -438,6 +446,15 @@ struct CoachingPresentationProjector: Sendable {
                     destination: target,
                     role: .attacker
                 )],
+                pulseID: episode.progress.pulseID
+            )
+        }
+        if stage.isOpponentIssueOutcome,
+           let fact = opponentReplyFact(from: feedback) {
+            return CoachFocusPresentation(
+                emphasizedSquares: opponentIssueEmphasizedSquares(fact),
+                candidateSquares: [],
+                paths: Set(opponentIssuePaths(fact)),
                 pulseID: episode.progress.pulseID
             )
         }
@@ -612,6 +629,70 @@ struct CoachingPresentationProjector: Sendable {
                 destination: affectedSquare,
                 role: .attacker
             ))
+        }
+        return paths
+    }
+
+    private func opponentReplyFact(
+        from feedback: CoachingFeedback?
+    ) -> CoachingOpponentReplyFact? {
+        switch feedback {
+        case let .opponentIssue(fact), let .missedOpponentIssue(fact):
+            return fact
+        default:
+            return nil
+        }
+    }
+
+    private func opponentIssueEmphasizedSquares(
+        _ fact: CoachingOpponentReplyFact
+    ) -> Set<Square> {
+        var squares: Set<Square> = [fact.issue.reply.from, fact.issue.reply.to]
+        if let affectedSquare = fact.issue.affectedSquare {
+            squares.insert(affectedSquare)
+        }
+        if let secondaryReply = fact.secondaryReply {
+            squares.insert(secondaryReply.from)
+            squares.insert(secondaryReply.to)
+        }
+        for checker in fact.checkingPieces {
+            squares.insert(checker.visibleSquare)
+            squares.insert(checker.checkingSquare)
+        }
+        return squares
+    }
+
+    private func opponentIssuePaths(
+        _ fact: CoachingOpponentReplyFact
+    ) -> [CoachFocusPath] {
+        var paths = [CoachFocusPath(
+            source: fact.issue.reply.from,
+            destination: fact.issue.reply.to,
+            role: .attacker
+        )]
+        if let secondaryReply = fact.secondaryReply {
+            paths.append(CoachFocusPath(
+                source: secondaryReply.from,
+                destination: secondaryReply.to,
+                role: .attacker
+            ))
+        }
+        if let affectedSquare = fact.issue.affectedSquare {
+            paths += fact.checkingPieces.map {
+                CoachFocusPath(
+                    source: $0.checkingSquare,
+                    destination: affectedSquare,
+                    role: .attacker
+                )
+            }
+            if case .materialLoss = fact.issue.kind,
+               affectedSquare != fact.issue.reply.to {
+                paths.append(CoachFocusPath(
+                    source: fact.issue.reply.to,
+                    destination: affectedSquare,
+                    role: .attacker
+                ))
+            }
         }
         return paths
     }

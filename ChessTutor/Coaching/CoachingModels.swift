@@ -90,9 +90,17 @@ struct CoachingOpponentActivity: Equatable, Sendable {
     var isQuestionAnswer: Bool { isCheck || canWinPiece }
 }
 
+struct CoachingCheckingPieceFact: Equatable, Sendable {
+    let piece: Piece.Kind
+    let visibleSquare: Square
+    let checkingSquare: Square
+}
+
 struct CoachingOpponentReplyFact: Equatable, Sendable {
     let issue: CoachingOpponentIssue
-    let opponentPiece: Piece.Kind
+    let replyPiece: Piece.Kind
+    let secondaryReply: Move?
+    let checkingPieces: [CoachingCheckingPieceFact]
     let affectedPiece: Piece.Kind?
     let learnerPiece: Piece.Kind?
 }
@@ -337,6 +345,7 @@ enum CoachingWakePurpose: Equatable, Sendable {
 }
 
 enum CoachingPrompt: Equatable, Sendable {
+    case awaitingAdvice
     case checkLocate
     case checkResolve
     case safeLocate

@@ -99,7 +99,9 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
         let fact = CoachingOpponentReplyFact(
             issue: issue,
-            opponentPiece: .pawn,
+            replyPiece: .pawn,
+            secondaryReply: nil,
+            checkingPieces: [],
             affectedPiece: .bishop,
             learnerPiece: .bishop
         )
@@ -1029,7 +1031,9 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
         let replyFact = CoachingOpponentReplyFact(
             issue: issue,
-            opponentPiece: .rook,
+            replyPiece: .rook,
+            secondaryReply: nil,
+            checkingPieces: [],
             affectedPiece: .queen,
             learnerPiece: .queen
         )

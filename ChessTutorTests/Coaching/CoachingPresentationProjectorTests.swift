@@ -2,6 +2,31 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingPresentationProjectorTests: XCTestCase {
+    func testAwaitingAdviceProjectsMinimalCloseablePresentation() throws {
+        let episode = episode(progress: progress(questionID: nil))
+        let context = try XCTUnwrap(CoachingPresentationProjector().context(
+            learner: .white,
+            derived: CoachingDerivedState(
+                stage: .awaitingAdvice(origin: nil),
+                questionID: nil,
+                promptOverride: nil,
+                derivedFeedback: nil,
+                requestedAdvice: nil
+            ),
+            episode: episode
+        ))
+
+        XCTAssertEqual(context.prompt, .awaitingAdvice)
+        XCTAssertEqual(context.actions, [.stop])
+        XCTAssertEqual(context.boardTask, .none)
+        XCTAssertEqual(context.focus, .empty)
+
+        let presentation = LocalCoachingExplanationSource().presentation(for: context)
+        XCTAssertEqual(presentation.primaryMessage, "I'm checking the board.")
+        XCTAssertNil(presentation.instruction)
+        XCTAssertNil(presentation.observation)
+    }
+
     func testWakePromptsCarryTheConcreteTaskChosenByTheReconciler() async throws {
         for position in [
             CoachingGoldenPosition.readyToCastle,

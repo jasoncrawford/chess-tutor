@@ -3,6 +3,36 @@ import XCTest
 
 @MainActor
 final class GameSessionCoachingTests: XCTestCase {
+    func testPendingAdviceShowsCloseHelpAndStaleCompletionCannotReopenIt() async {
+        let advisor = ControllableCoachingAdvisor()
+        let session = GameSession(coachingAdvisor: advisor)
+
+        session.startCoaching()
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await waitForOnlyPendingRequest(advisor)
+
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "I'm checking the board.")
+        XCTAssertNil(session.coachingPresentation?.instruction)
+        XCTAssertNil(session.coachingPresentation?.observation)
+        XCTAssertEqual(session.coachingPresentation?.actions.map(\.action), [.stop])
+        XCTAssertEqual(session.coachingPresentation?.boardTask, CoachingBoardTask.none)
+        XCTAssertEqual(session.coachingPresentation?.focus, .empty)
+
+        XCTAssertNil(session.chooseCoachingAction(.stop))
+        XCTAssertFalse(session.isCoachingActive)
+        XCTAssertNil(session.coachingPresentation)
+
+        await advisor.resolve(
+            request: request,
+            with: CoachingTestFixtures.startingPositionAdvice.replacingRequest(with: request)
+        )
+        await task.value
+
+        XCTAssertFalse(session.isCoachingActive)
+        XCTAssertNil(session.coachingPresentation)
+        XCTAssertNil(session.pendingCoachingRequestID)
+    }
+
     func testHelpAvailabilityRequiresOngoingUnlockedLocalTurnWithoutPromotionOrEpisode() {
         let session = GameSession()
         XCTAssertTrue(session.canRequestCoaching)
@@ -359,7 +389,7 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         XCTAssertNil(session.state.board[move.to])
         XCTAssertEqual(session.selectedSquare, move.from)
-        XCTAssertNil(session.coachingPresentation)
+        assertAwaitingAdvice(session)
         XCTAssertNotNil(session.pendingCoachingRequestID)
     }
 
@@ -401,7 +431,7 @@ final class GameSessionCoachingTests: XCTestCase {
             Piece(kind: .knight, color: .white)
         )
         XCTAssertNil(session.state.board[move.to])
-        XCTAssertNil(session.coachingPresentation)
+        assertAwaitingAdvice(session)
         XCTAssertNotNil(session.pendingCoachingRequestID)
     }
 
@@ -955,7 +985,7 @@ final class GameSessionCoachingTests: XCTestCase {
         let pendingID = cancelling.pendingCoachingRequestID
         await cancelling.resolvePendingCoachingAdvice()
         XCTAssertTrue(cancelling.isCoachingActive)
-        XCTAssertNil(cancelling.coachingPresentation)
+        assertAwaitingAdvice(cancelling)
         XCTAssertEqual(cancelling.pendingCoachingRequestID, pendingID)
     }
 
@@ -993,9 +1023,7 @@ final class GameSessionCoachingTests: XCTestCase {
                 session.state.board[replacement.to],
                 Piece(kind: .knight, color: .white)
             )
-            XCTAssertNil(session.coachingPresentation?.primaryMessage)
-            XCTAssertNil(session.coachingPresentation?.actions)
-            XCTAssertNil(session.coachingPresentation?.focus)
+            assertAwaitingAdvice(session)
 
             if oldRequestFails {
                 await advisor.fail(request: firstRequest)
@@ -1019,9 +1047,7 @@ final class GameSessionCoachingTests: XCTestCase {
                 session.state.board[replacement.to],
                 Piece(kind: .knight, color: .white)
             )
-            XCTAssertNil(session.coachingPresentation?.primaryMessage)
-            XCTAssertNil(session.coachingPresentation?.actions)
-            XCTAssertNil(session.coachingPresentation?.focus)
+            assertAwaitingAdvice(session)
 
             await advisor.resolve(
                 request: replacementRequest,
@@ -1113,7 +1139,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(startRequest.positionRevision, moveRequest.positionRevision)
         XCTAssertEqual(session.selectedSquare, CoachingTestFixtures.alternateKnight)
         XCTAssertNil(session.state.board[move.to])
-        XCTAssertNil(session.coachingPresentation)
+        assertAwaitingAdvice(session)
         XCTAssertNotEqual(session.coachingPresentation, completedPresentation)
 
         session.select(CoachingTestFixtures.alternateKnight)
@@ -1160,9 +1186,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertGreaterThan(retryID, originalID)
         XCTAssertEqual(session.selectedSquare, move.to)
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
-        XCTAssertNil(session.coachingPresentation?.primaryMessage)
-        XCTAssertNil(session.coachingPresentation?.actions)
-        XCTAssertNil(session.coachingPresentation?.focus)
+        assertAwaitingAdvice(session)
 
         let retryTask = Task { await session.resolvePendingCoachingAdvice() }
         let retryRequest = await waitForOnlyPendingRequest(advisor)
@@ -1203,9 +1227,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertGreaterThan(retryID, originalID)
         XCTAssertNil(session.selectedSquare)
         XCTAssertEqual(session.state, .startingPosition())
-        XCTAssertNil(session.coachingPresentation?.primaryMessage)
-        XCTAssertNil(session.coachingPresentation?.actions)
-        XCTAssertNil(session.coachingPresentation?.focus)
+        assertAwaitingAdvice(session)
 
         let retryTask = Task { await session.resolvePendingCoachingAdvice() }
         let retryRequest = await waitForOnlyPendingRequest(advisor)
@@ -1240,9 +1262,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .knight, color: .white))
         XCTAssertEqual(pendingRequests, [request])
         XCTAssertEqual(exactRequestCount, 1)
-        XCTAssertNil(session.coachingPresentation?.primaryMessage)
-        XCTAssertNil(session.coachingPresentation?.actions)
-        XCTAssertNil(session.coachingPresentation?.focus)
+        assertAwaitingAdvice(session)
 
         await advisor.resolve(
             request: request,
@@ -1427,6 +1447,34 @@ final class GameSessionCoachingTests: XCTestCase {
     private func beginOpeningCoaching(in session: GameSession) async {
         session.startCoaching()
         await session.resolvePendingCoachingAdvice()
+    }
+
+    private func assertAwaitingAdvice(
+        _ session: GameSession,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "I'm checking the board.",
+            file: file,
+            line: line
+        )
+        XCTAssertNil(session.coachingPresentation?.instruction, file: file, line: line)
+        XCTAssertNil(session.coachingPresentation?.observation, file: file, line: line)
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.stop],
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.boardTask,
+            CoachingBoardTask.none,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(session.coachingPresentation?.focus, .empty, file: file, line: line)
     }
 
     private func makeOpeningSession() async -> GameSession {

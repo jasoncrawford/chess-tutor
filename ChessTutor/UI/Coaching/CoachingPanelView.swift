@@ -139,6 +139,10 @@ enum CoachingActionRouting {
 
 struct CoachingPanelView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title2) private var coachingTitleSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .body) private var coachingBodySize: CGFloat = 18
+    @ScaledMetric(relativeTo: .body) private var coachingActionSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var actionMinimumHeight: CGFloat = 44
 
     @Bindable var session: GameSession
     let presentation: CoachingPresentation
@@ -199,6 +203,7 @@ struct CoachingPanelView: View {
     private var accessibilityPanelContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             accessibleConversation
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if !presentation.routine.isEmpty {
                 routineHeader(axis: .horizontal)
@@ -206,6 +211,11 @@ struct CoachingPanelView: View {
 
             readableActions(axis: .vertical)
         }
+        .frame(
+            width: layout.tabletopContentSize.width,
+            height: layout.tabletopContentSize.height,
+            alignment: .topLeading
+        )
     }
 
     private var panelDivider: some View {
@@ -220,22 +230,55 @@ struct CoachingPanelView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
+        .clipped()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
         .accessibilitySortPriority(CoachingPanelAccessibilitySection.conversation.sortPriority)
     }
 
     private var accessibleConversation: some View {
-        conversation
+        accessibilityConversationCopy
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
             .accessibilitySortPriority(CoachingPanelAccessibilitySection.conversation.sortPriority)
     }
 
+    private var accessibilityConversationCopy: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(presentation.primaryMessage)
+                .font(titleFont)
+                .lineLimit(1)
+                .accessibilitySortPriority(
+                    CoachingConversationAccessibilityElement.primaryMessage.sortPriority
+                )
+
+            if let instruction = presentation.instruction {
+                Text(instruction)
+                    .font(bodyFont)
+                    .lineLimit(1)
+                    .accessibilitySortPriority(
+                        CoachingConversationAccessibilityElement.instruction.sortPriority
+                    )
+            }
+
+            if let observation = presentation.observation {
+                Text(observation)
+                    .font(bodyFont)
+                    .lineLimit(1)
+                    .accessibilitySortPriority(
+                        CoachingConversationAccessibilityElement.observation.sortPriority
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(presentation.primaryMessage)
-                .font(AppTheme.coachingTitleFont)
+                .font(titleFont)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilitySortPriority(
@@ -244,7 +287,7 @@ struct CoachingPanelView: View {
 
             if let instruction = presentation.instruction {
                 Text(instruction)
-                    .font(AppTheme.panelBodyFont)
+                    .font(bodyFont)
                     .foregroundStyle(AppTheme.ink.opacity(0.78))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
@@ -254,7 +297,7 @@ struct CoachingPanelView: View {
 
             if let observation = presentation.observation {
                 Text(observation)
-                    .font(AppTheme.panelBodyFont)
+                    .font(bodyFont)
                     .foregroundStyle(AppTheme.ink.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
@@ -305,7 +348,7 @@ struct CoachingPanelView: View {
                 }
             }
         }
-        .font(.system(size: 17, weight: .semibold, design: .rounded))
+        .font(actionFont)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.actions.identifier)
         .accessibilitySortPriority(CoachingPanelAccessibilitySection.actions.sortPriority)
@@ -320,7 +363,11 @@ struct CoachingPanelView: View {
                 Text(action.title)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(minWidth: 44, maxWidth: .infinity, minHeight: 44)
+                    .frame(
+                        minWidth: 44,
+                        maxWidth: .infinity,
+                        minHeight: min(actionMinimumHeight, 48)
+                    )
             }
             .buttonStyle(CoachingActionButtonStyle(prominence: action.prominence))
             .accessibilityLabel(action.accessibilityLabel)
@@ -342,6 +389,18 @@ struct CoachingPanelView: View {
         }
 
         _ = session.chooseCoachingAction(action)
+    }
+
+    private var titleFont: Font {
+        AppTheme.coachingTitleFont(size: min(coachingTitleSize, 34))
+    }
+
+    private var bodyFont: Font {
+        AppTheme.coachingBodyFont(size: min(coachingBodySize, 25))
+    }
+
+    private var actionFont: Font {
+        AppTheme.coachingActionFont(size: min(coachingActionSize, 23))
     }
 }
 

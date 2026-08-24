@@ -786,14 +786,63 @@ struct CoachingReconciler: Sendable {
     ) -> CoachingOpponentReplyFact {
         let committedState = advice.evaluation.request.committedState
         let afterMove = committedState.applyingUnchecked(move)
-        guard let opponentPiece = afterMove.board[issue.reply.from]?.kind else {
+        guard let replyPiece = afterMove.board[issue.reply.from]?.kind else {
             preconditionFailure("Opponent reply source must contain the responding piece")
         }
         return CoachingOpponentReplyFact(
             issue: issue,
-            opponentPiece: opponentPiece,
+            replyPiece: replyPiece,
+            secondaryReply: secondaryReply(for: issue.reply),
+            checkingPieces: issue.checkingSquares
+                .sorted(by: stableSquareOrder)
+                .compactMap { visibleSquare in
+                    afterMove.board[visibleSquare].map {
+                        CoachingCheckingPieceFact(
+                            piece: $0.kind,
+                            visibleSquare: visibleSquare,
+                            checkingSquare: resultingSquare(
+                                for: visibleSquare,
+                                after: issue.reply
+                            )
+                        )
+                    }
+                },
             affectedPiece: issue.affectedSquare.flatMap { afterMove.board[$0]?.kind },
             learnerPiece: committedState.board[move.from]?.kind
         )
+    }
+
+    private func secondaryReply(for reply: Move) -> Move? {
+        switch reply.special {
+        case .castleKingside:
+            return Move(
+                from: Square(file: .h, rank: reply.from.rank),
+                to: Square(file: .f, rank: reply.from.rank)
+            )
+        case .castleQueenside:
+            return Move(
+                from: Square(file: .a, rank: reply.from.rank),
+                to: Square(file: .d, rank: reply.from.rank)
+            )
+        case nil, .enPassant, .promotion:
+            return nil
+        }
+    }
+
+    private func resultingSquare(for visibleSquare: Square, after reply: Move) -> Square {
+        if visibleSquare == reply.from {
+            return reply.to
+        }
+        if let secondaryReply = secondaryReply(for: reply),
+           visibleSquare == secondaryReply.from {
+            return secondaryReply.to
+        }
+        return visibleSquare
+    }
+
+    private func stableSquareOrder(_ lhs: Square, _ rhs: Square) -> Bool {
+        let lhsKey = (lhs.rank - 1) * 8 + lhs.file.rawValue
+        let rhsKey = (rhs.rank - 1) * 8 + rhs.file.rawValue
+        return lhsKey < rhsKey
     }
 }

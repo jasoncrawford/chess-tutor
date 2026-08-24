@@ -72,7 +72,16 @@ struct CoachingPanelAccessibilityFixture: View {
         }
     }
 
+    @ViewBuilder
     var body: some View {
+        if let fixtureDynamicTypeSize {
+            fixtureBody.environment(\.dynamicTypeSize, fixtureDynamicTypeSize)
+        } else {
+            fixtureBody
+        }
+    }
+
+    private var fixtureBody: some View {
         ZStack {
             AppTheme.table.ignoresSafeArea()
 
@@ -93,6 +102,17 @@ struct CoachingPanelAccessibilityFixture: View {
                 height: layout.physicalRegionSize.height
             )
         }
+    }
+
+    private var fixtureDynamicTypeSize: DynamicTypeSize? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: "-ui-test-dynamic-type-size"),
+              arguments.indices.contains(flagIndex + 1) else {
+            return nil
+        }
+        return arguments[flagIndex + 1] == "accessibility-extra-large"
+            ? .accessibility3
+            : .large
     }
 
     private var layout: CoachingPanelLayout {

@@ -2,6 +2,14 @@ import XCTest
 
 @MainActor
 final class CoachingPanelAccessibilityUITests: XCTestCase {
+    func testCoachingTypographyAndActionGrowAtAccessibilityExtraLargeInTallLayout() {
+        assertTypographyGrows(configuration: "tall")
+    }
+
+    func testCoachingTypographyAndActionGrowAtAccessibilityExtraLargeInWideLayout() {
+        assertTypographyGrows(configuration: "clockwise-quarter-turn")
+    }
+
     func testCompactTurnsStayOrderedDisjointAndContainedAtStandardText() {
         assertPermanentMatrix(accessibilityExtraLarge: false)
     }
@@ -74,12 +82,14 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["-ui-test-coaching-panel", configuration, turn]
-        if accessibilityExtraLarge {
-            app.launchArguments += [
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityExtraLarge",
-            ]
-        }
+        app.launchArguments += [
+            "-UIPreferredContentSizeCategoryName",
+            accessibilityExtraLarge
+                ? "UICTContentSizeCategoryAccessibilityExtraLarge"
+                : "UICTContentSizeCategoryLarge",
+            "-ui-test-dynamic-type-size",
+            accessibilityExtraLarge ? "accessibility-extra-large" : "large",
+        ]
         app.launch()
 
         let expectedSectionIdentifiers = [
@@ -145,6 +155,23 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
                 line: line
             )
         }
+        let actionSection = sections[2]
+        for label in expectedActions {
+            let button = app.buttons[label]
+            XCTAssertTrue(
+                button.exists && button.isHittable,
+                "\(label) is not reachable in \(configuration), \(turn).",
+                file: file,
+                line: line
+            )
+            XCTAssertTrue(
+                panel.frame.contains(button.frame) && actionSection.frame.contains(button.frame),
+                "\(label) leaves its action region in \(configuration), \(turn): "
+                    + "panel=\(panel.frame), actions=\(actionSection.frame), button=\(button.frame)",
+                file: file,
+                line: line
+            )
+        }
         for firstIndex in sections.indices {
             for secondIndex in sections.indices where secondIndex > firstIndex {
                 XCTAssertFalse(
@@ -157,5 +184,100 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
                 )
             }
         }
+    }
+
+    private func typographyMetrics(
+        configuration: String,
+        contentSizeCategory: String,
+        terminateAfterMeasurement: Bool
+    ) -> (
+        primaryThickness: CGFloat,
+        instructionThickness: CGFloat,
+        observationThickness: CGFloat,
+        actionThickness: CGFloat
+    ) {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ui-test-coaching-panel",
+            configuration,
+            "compact-with-observation",
+            "-UIPreferredContentSizeCategoryName",
+            contentSizeCategory,
+            "-ui-test-dynamic-type-size",
+            contentSizeCategory == "UICTContentSizeCategoryAccessibilityExtraLarge"
+                ? "accessibility-extra-large"
+                : "large",
+        ]
+        app.launch()
+
+        let primary = app.staticTexts["What could White do next?"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 3))
+        let instruction = app.staticTexts[
+            "Tap a white piece that could check your king or win one of your pieces."
+        ]
+        let observation = app.staticTexts[
+            "That bishop attacks your pawn, but the pawn is protected."
+        ]
+        let action = app.buttons["Looks safe"]
+        XCTAssertTrue(instruction.exists)
+        XCTAssertTrue(observation.exists)
+        XCTAssertTrue(action.exists)
+        let result = (
+            min(primary.frame.width, primary.frame.height),
+            min(instruction.frame.width, instruction.frame.height),
+            min(observation.frame.width, observation.frame.height),
+            min(action.frame.width, action.frame.height)
+        )
+        if terminateAfterMeasurement {
+            app.terminate()
+        }
+        return result
+    }
+
+    private func assertTypographyGrows(
+        configuration: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let large = typographyMetrics(
+            configuration: configuration,
+            contentSizeCategory: "UICTContentSizeCategoryLarge",
+            terminateAfterMeasurement: true
+        )
+        let accessibilityExtraLarge = typographyMetrics(
+            configuration: configuration,
+            contentSizeCategory: "UICTContentSizeCategoryAccessibilityExtraLarge",
+            terminateAfterMeasurement: false
+        )
+
+        XCTAssertGreaterThan(
+            accessibilityExtraLarge.primaryThickness,
+            large.primaryThickness,
+            "Primary coaching copy did not scale in \(configuration).",
+            file: file,
+            line: line
+        )
+        XCTAssertGreaterThan(
+            accessibilityExtraLarge.instructionThickness,
+            large.instructionThickness,
+            "Instruction copy did not scale in \(configuration).",
+            file: file,
+            line: line
+        )
+        XCTAssertGreaterThan(
+            accessibilityExtraLarge.observationThickness,
+            large.observationThickness,
+            "Observation copy did not scale in \(configuration).",
+            file: file,
+            line: line
+        )
+        XCTAssertGreaterThan(
+            accessibilityExtraLarge.actionThickness,
+            large.actionThickness,
+            "Coaching actions did not scale in \(configuration).",
+            file: file,
+            line: line
+        )
     }
 }
