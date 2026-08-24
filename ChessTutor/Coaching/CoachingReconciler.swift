@@ -353,7 +353,7 @@ struct CoachingReconciler: Sendable {
         guard let answer else { return opponentReply }
 
         switch answer {
-        case let .looksSafe(answeredMove):
+        case let .looksSafe(answeredMove, afterBenignActivity):
             guard answeredMove == move else { return opponentReply }
             if let issue = primaryOpponentIssue(in: assessment) {
                 return derived(
@@ -370,7 +370,7 @@ struct CoachingReconciler: Sendable {
                 move: move,
                 origin: origin,
                 assessment: assessment,
-                feedback: .opponentReplyLooksSafe
+                feedback: afterBenignActivity ? nil : .opponentReplyLooksSafe
             )
 
         case let .issue(answeredMove, issue):

@@ -2,61 +2,78 @@ import XCTest
 
 @MainActor
 final class CoachingPanelAccessibilityUITests: XCTestCase {
-    func testTallCompositionKeepsConversationBeforeRoutineAndActions() {
-        assertPanelLayout(
-            for: "tall",
-            expectedObservation: "That knight does not cause trouble here."
-        )
+    func testCompactTurnsStayOrderedDisjointAndContainedAtStandardText() {
+        assertPermanentMatrix(accessibilityExtraLarge: false)
     }
 
-    func testClockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
-        assertPanelLayout(
-            for: "clockwise-quarter-turn",
-            expectedObservation: "That knight does not cause trouble here."
-        )
+    func testCompactTurnsStayOrderedDisjointAndContainedAtAccessibilityExtraLarge() {
+        assertPermanentMatrix(accessibilityExtraLarge: true)
     }
 
-    func testCounterclockwiseQuarterTurnKeepsReadableRegionsDisjointAndInsidePanel() {
-        assertPanelLayout(
-            for: "counterclockwise-quarter-turn",
-            expectedObservation: "That knight does not cause trouble here."
-        )
-    }
+    private func assertPermanentMatrix(
+        accessibilityExtraLarge: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let rotations = [
+            "tall",
+            "clockwise-quarter-turn",
+            "counterclockwise-quarter-turn",
+        ]
+        let turns: [(
+            configuration: String,
+            primary: String,
+            instruction: String,
+            observation: String?,
+            actions: [String]
+        )] = [
+            (
+                "compact-no-observation",
+                "That move seems safe.",
+                "Play it, or try another move.",
+                nil,
+                ["Play this move", "Try another move", "Close coaching help"]
+            ),
+            (
+                "compact-with-observation",
+                "What could White do next?",
+                "Tap a white piece that could check your king or win one of your pieces.",
+                "That bishop attacks your pawn, but the pawn is protected.",
+                ["Looks safe", "Show a hint", "Close coaching help"]
+            ),
+        ]
 
-    func testConversationOmitsObservationCleanlyWhenNil() {
-        assertPanelLayout(for: "tall-no-observation", expectedObservation: nil)
-    }
-
-    func testWideConversationOmitsObservationCleanlyWhenNil() {
-        assertPanelLayout(for: "clockwise-quarter-turn-no-observation", expectedObservation: nil)
-    }
-
-    func testAccessibilityExtraLargeTallCompositionKeepsEveryRegionReachable() {
-        assertPanelLayout(
-            for: "tall",
-            expectedObservation: "That knight does not cause trouble here.",
-            accessibilityExtraLarge: true
-        )
-    }
-
-    func testAccessibilityExtraLargeWideCompositionKeepsEveryRegionReachable() {
-        assertPanelLayout(
-            for: "clockwise-quarter-turn",
-            expectedObservation: "That knight does not cause trouble here.",
-            accessibilityExtraLarge: true
-        )
+        for rotation in rotations {
+            for turn in turns {
+                assertPanelLayout(
+                    for: rotation,
+                    turn: turn.configuration,
+                    expectedPrimary: turn.primary,
+                    expectedInstruction: turn.instruction,
+                    expectedObservation: turn.observation,
+                    expectedActions: turn.actions,
+                    accessibilityExtraLarge: accessibilityExtraLarge,
+                    file: file,
+                    line: line
+                )
+            }
+        }
     }
 
     private func assertPanelLayout(
         for configuration: String,
+        turn: String,
+        expectedPrimary: String,
+        expectedInstruction: String,
         expectedObservation: String?,
+        expectedActions: [String],
         accessibilityExtraLarge: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-test-coaching-panel", configuration]
+        app.launchArguments = ["-ui-test-coaching-panel", configuration, turn]
         if accessibilityExtraLarge {
             app.launchArguments += [
                 "-UIPreferredContentSizeCategoryName",
@@ -86,17 +103,25 @@ final class CoachingPanelAccessibilityUITests: XCTestCase {
             line: line
         )
 
-        let expectedPrimary = "What could Black do next?"
-        let expectedInstruction = "Tap a black piece that could check your king or win one of your pieces."
+        let expectedConversationLabels = ([
+            expectedPrimary,
+            expectedInstruction,
+            expectedObservation,
+        ] as [String?]).compactMap { $0 }
+        let conversation = app.descendants(matching: .any)[expectedSectionIdentifiers[0]]
+        XCTAssertEqual(
+            conversation.staticTexts.allElementsBoundByIndex.map(\.label),
+            expectedConversationLabels,
+            "Unexpected conversation reading order for \(configuration), \(turn).",
+            file: file,
+            line: line
+        )
         let expectedLabels = ([
             expectedPrimary,
             expectedInstruction,
             expectedObservation,
             "Safe, current step",
-            "Play this move",
-            "Try another move",
-            "Close coaching help",
-        ] as [String?]).compactMap { $0 }
+        ] as [String?]).compactMap { $0 } + expectedActions
         XCTAssertEqual(
             semanticElements.map(\.label).filter(expectedLabels.contains),
             expectedLabels,

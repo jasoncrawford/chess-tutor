@@ -68,6 +68,69 @@ final class CoachingAcceptanceTests: XCTestCase {
         XCTAssertEqual(session.state.sideToMove, .white)
     }
 
+    func testReportedUnsafeBishopPathUsesExactPresentationWithoutCommitting() async {
+        let state = CoachingGoldenPosition.openingBishopCanBeTaken.state
+        let move = CoachingGoldenMoves.bishopToA6
+        let session = makeSession(state: state)
+        stage(move, in: session)
+
+        await beginCoaching(in: session)
+
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "What could Black do next?")
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Tap the black piece that could win your bishop."
+        )
+        XCTAssertNil(session.coachingPresentation?.observation)
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.looksSafe, .hint, .stop]
+        )
+        XCTAssertTrue(session.handleCoachingSquareTap(sq("b7")))
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "Black's pawn could take your bishop."
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Try a different bishop move."
+        )
+        XCTAssertEqual(session.coachingPresentation?.focus.emphasizedSquares, [sq("a6"), sq("b7")])
+        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [])
+        XCTAssertEqual(session.coachingPresentation?.focus.paths, [CoachFocusPath(
+            source: sq("b7"),
+            destination: sq("a6"),
+            role: .attacker
+        )])
+        XCTAssertEqual(session.state.moveHistory, [])
+        XCTAssertEqual(session.state.sideToMove, .white)
+    }
+
+    func testBenignCaptureHintRemainsAvailableAfterObservationClears() async {
+        let session = makeSession(
+            state: CoachingGoldenPosition.protectedPawnUnderBishopAttack.state
+        )
+        stage(CoachingGoldenMoves.blackPawnToE6, in: session)
+        await beginCoaching(in: session)
+
+        XCTAssertTrue(session.handleCoachingSquareTap(sq("c4")))
+        XCTAssertEqual(
+            session.coachingPresentation?.observation,
+            "That bishop attacks your pawn, but the pawn is protected."
+        )
+
+        _ = session.chooseCoachingAction(.hint)
+
+        XCTAssertNil(session.coachingPresentation?.observation)
+        XCTAssertEqual(session.coachingPresentation?.hint, .replyMarkers)
+        XCTAssertEqual(session.coachingPresentation?.focus.pulseID, 1)
+        XCTAssertEqual(
+            session.coachingPresentation?.actions.map(\.action),
+            [.looksSafe, .stop]
+        )
+        XCTAssertEqual(session.state.moveHistory, [])
+    }
+
     func testCheckTranscriptLetsChildFindCheckerResolveCheckAndCommitOnlyWithDone() async {
         let checkingRook = Square(file: .e, rank: 8)
         let resolvingBishop = Square(file: .b, rank: 5)

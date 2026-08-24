@@ -49,7 +49,7 @@ enum CoachingQuestionID: Equatable, Sendable {
 }
 
 enum CoachingReplyAnswer: Equatable, Sendable {
-    case looksSafe(move: Move)
+    case looksSafe(move: Move, afterBenignActivity: Bool = false)
     case issue(move: Move, issue: CoachingOpponentIssue)
 }
 
@@ -61,6 +61,7 @@ struct CoachingPedagogicalEvidence: Equatable, Sendable {
     var confirmedTakeAbsence: Bool
     var tentativeOrigin: CoachingMoveOrigin?
     var replyAnswer: CoachingReplyAnswer?
+    var benignOpponentActivityObserved: Bool = false
 
     static let empty = CoachingPedagogicalEvidence(
         checkingPiece: nil,
@@ -69,7 +70,8 @@ struct CoachingPedagogicalEvidence: Equatable, Sendable {
         confirmedSafeAbsence: false,
         confirmedTakeAbsence: false,
         tentativeOrigin: nil,
-        replyAnswer: nil
+        replyAnswer: nil,
+        benignOpponentActivityObserved: false
     )
 }
 

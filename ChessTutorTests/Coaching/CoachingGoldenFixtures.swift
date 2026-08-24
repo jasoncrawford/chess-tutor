@@ -63,7 +63,7 @@ enum CoachingGoldenPosition: String, CaseIterable {
 
 enum CoachingGoldenCase: String, CaseIterable {
     case t1Entry, t1BlockedRook, t1FlankPawn, t1Hint, t1KnightSelected
-    case t1PreferredKnight, t1EdgeKnight, t1CenterPawn
+    case t1PreferredKnight, t1EdgeKnight, t1CenterPawn, t1OutsidePawnMove
     case t2Entry, t2OneSquareKingMove, t2KnightSwitch, t2Castle
     case t3Entry, t3WrongOwnPiece, t3Target, t3WrongAttacker, t3Attacker
     case t3UnresolvedMove, t3ResolvedMove
@@ -75,6 +75,8 @@ enum CoachingGoldenCase: String, CaseIterable {
     case t9Entry, t9Hint, t9Completed
     case t10Entry, t10Completed
     case t11Safe, t11QueenLoss, t11IncorrectLooksSafe, t11HarmlessCheck
+    case t11UnsafeBishopEntry, t11UnsafeBishopFound
+    case t11BenignCaptureTap, t11BenignCaptureLooksSafe
     case t12CheckLocate, t12WrongChecker, t12Capture, t12Block, t12KingMove
     case t12UnsupportedEntry, t12UnsupportedSafeMove
 }

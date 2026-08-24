@@ -116,6 +116,24 @@ final class CoachingPanelLayoutTests: XCTestCase {
         XCTAssertEqual(wide.physicalContentSize, CGSize(width: 471.34, height: 214.67))
     }
 
+    func testPermanentAccessibilityFixtureCoversBothCompactTurnsInEveryRotation() {
+        XCTAssertEqual(
+            CoachingPanelAccessibilityFixtureTurn.allCases,
+            [.compactNoObservation, .compactWithObservation]
+        )
+
+        for turn in CoachingPanelAccessibilityFixtureTurn.allCases {
+            let configurations: [CoachingPanelAccessibilityFixtureConfiguration] = [
+                .tall(turn),
+                .clockwiseQuarterTurn(turn),
+                .counterclockwiseQuarterTurn(turn),
+            ]
+            XCTAssertEqual(configurations.map(\.composition), [.tall, .wide, .wide])
+            XCTAssertEqual(configurations.map(\.tableRotationDegrees), [0, 90, -90])
+            XCTAssertEqual(configurations.map(\.turn), [turn, turn, turn])
+        }
+    }
+
     func testAuthoredActionOrderAndProminenceReachPanelUnchanged() {
         let presentation = LocalCoachingExplanationSource().presentation(
             for: coachingContext(

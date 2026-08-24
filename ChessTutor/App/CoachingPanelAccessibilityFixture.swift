@@ -2,26 +2,24 @@
 import SwiftUI
 
 enum CoachingPanelAccessibilityFixtureConfiguration {
-    case tall
-    case tallNoObservation
-    case clockwiseQuarterTurn
-    case clockwiseQuarterTurnNoObservation
-    case counterclockwiseQuarterTurn
+    case tall(CoachingPanelAccessibilityFixtureTurn)
+    case clockwiseQuarterTurn(CoachingPanelAccessibilityFixtureTurn)
+    case counterclockwiseQuarterTurn(CoachingPanelAccessibilityFixtureTurn)
 
     var composition: CoachingPanelComposition {
         switch self {
-        case .tall, .tallNoObservation:
+        case .tall:
             return .tall
-        case .clockwiseQuarterTurn, .clockwiseQuarterTurnNoObservation, .counterclockwiseQuarterTurn:
+        case .clockwiseQuarterTurn, .counterclockwiseQuarterTurn:
             return .wide
         }
     }
 
     var tableRotationDegrees: Double {
         switch self {
-        case .tall, .tallNoObservation:
+        case .tall:
             return 0
-        case .clockwiseQuarterTurn, .clockwiseQuarterTurnNoObservation:
+        case .clockwiseQuarterTurn:
             return 90
         case .counterclockwiseQuarterTurn:
             return -90
@@ -31,6 +29,20 @@ enum CoachingPanelAccessibilityFixtureConfiguration {
     var readableRotationDegrees: Double {
         -tableRotationDegrees
     }
+
+    var turn: CoachingPanelAccessibilityFixtureTurn {
+        switch self {
+        case let .tall(turn),
+             let .clockwiseQuarterTurn(turn),
+             let .counterclockwiseQuarterTurn(turn):
+            return turn
+        }
+    }
+}
+
+enum CoachingPanelAccessibilityFixtureTurn: String, CaseIterable {
+    case compactNoObservation = "compact-no-observation"
+    case compactWithObservation = "compact-with-observation"
 }
 
 struct CoachingPanelAccessibilityFixture: View {
@@ -41,21 +53,20 @@ struct CoachingPanelAccessibilityFixture: View {
     static var launchConfiguration: CoachingPanelAccessibilityFixtureConfiguration? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let flagIndex = arguments.firstIndex(of: "-ui-test-coaching-panel"),
-              arguments.indices.contains(flagIndex + 1) else {
+              arguments.indices.contains(flagIndex + 2),
+              let turn = CoachingPanelAccessibilityFixtureTurn(
+                rawValue: arguments[flagIndex + 2]
+              ) else {
             return nil
         }
 
         switch arguments[flagIndex + 1] {
         case "tall":
-            return .tall
-        case "tall-no-observation":
-            return .tallNoObservation
+            return .tall(turn)
         case "clockwise-quarter-turn":
-            return .clockwiseQuarterTurn
-        case "clockwise-quarter-turn-no-observation":
-            return .clockwiseQuarterTurnNoObservation
+            return .clockwiseQuarterTurn(turn)
         case "counterclockwise-quarter-turn":
-            return .counterclockwiseQuarterTurn
+            return .counterclockwiseQuarterTurn(turn)
         default:
             return nil
         }
@@ -102,36 +113,66 @@ struct CoachingPanelAccessibilityFixture: View {
     }
 
     private var presentation: CoachingPresentation {
-        let omitsObservation = configuration == .tallNoObservation
-            || configuration == .clockwiseQuarterTurnNoObservation
-        return CoachingPresentation(
-            primaryMessage: "What could Black do next?",
-            instruction: "Tap a black piece that could check your king or win one of your pieces.",
-            observation: omitsObservation ? nil : "That knight does not cause trouble here.",
-            hint: nil,
-            routine: [.safeCurrent, .takePending, .wakePending],
-            actions: [
-                CoachingActionPresentation(
-                    action: .done,
-                    title: "Play this move",
-                    accessibilityLabel: "Play this move",
-                    prominence: .primary
-                ),
-                CoachingActionPresentation(
-                    action: .keepLooking,
-                    title: "Try another move",
-                    accessibilityLabel: "Try another move",
-                    prominence: .secondary
-                ),
-                CoachingActionPresentation(
-                    action: .stop,
-                    title: "Close help",
-                    accessibilityLabel: "Close coaching help",
-                    prominence: .quiet
-                ),
-            ],
-            boardTask: .none,
-            focus: .empty
+        switch configuration.turn {
+        case .compactNoObservation:
+            return CoachingPresentation(
+                primaryMessage: "That move seems safe.",
+                instruction: "Play it, or try another move.",
+                observation: nil,
+                hint: nil,
+                routine: [.safeCurrent, .takePending, .wakePending],
+                actions: [
+                    CoachingActionPresentation(
+                        action: .done,
+                        title: "Play this move",
+                        accessibilityLabel: "Play this move",
+                        prominence: .primary
+                    ),
+                    CoachingActionPresentation(
+                        action: .keepLooking,
+                        title: "Try another move",
+                        accessibilityLabel: "Try another move",
+                        prominence: .secondary
+                    ),
+                    stopAction,
+                ],
+                boardTask: .none,
+                focus: .empty
+            )
+        case .compactWithObservation:
+            return CoachingPresentation(
+                primaryMessage: "What could White do next?",
+                instruction: "Tap a white piece that could check your king or win one of your pieces.",
+                observation: "That bishop attacks your pawn, but the pawn is protected.",
+                hint: nil,
+                routine: [.safeCurrent, .takePending, .wakePending],
+                actions: [
+                    CoachingActionPresentation(
+                        action: .looksSafe,
+                        title: "Looks safe",
+                        accessibilityLabel: "Looks safe",
+                        prominence: .primary
+                    ),
+                    CoachingActionPresentation(
+                        action: .hint,
+                        title: "Hint",
+                        accessibilityLabel: "Show a hint",
+                        prominence: .primary
+                    ),
+                    stopAction,
+                ],
+                boardTask: .identify(allowsMoveRevision: true),
+                focus: .empty
+            )
+        }
+    }
+
+    private var stopAction: CoachingActionPresentation {
+        CoachingActionPresentation(
+            action: .stop,
+            title: "Close help",
+            accessibilityLabel: "Close coaching help",
+            prominence: .quiet
         )
     }
 }

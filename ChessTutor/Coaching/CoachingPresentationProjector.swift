@@ -294,6 +294,10 @@ struct CoachingPresentationProjector: Sendable {
                 ? [.movementMarkers]
                 : [.movementMarkers, .candidateMoves]
         case .opponentCheck:
+            if opponentIssueAnswerSquares(for: stage, advice: advice).isEmpty,
+               episode.evidence.benignOpponentActivityObserved {
+                return [.replyMarkers]
+            }
             return opponentIssueAnswerSquares(for: stage, advice: advice).isEmpty
                 ? []
                 : [.attackerRelationship]
@@ -744,6 +748,12 @@ struct CoachingPresentationProjector: Sendable {
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachingCompletionIdea {
+        if origin == .fallback,
+           case let .looksSafe(answeredMove, afterBenignActivity) = episode.evidence.replyAnswer,
+           answeredMove == move,
+           afterBenignActivity {
+            return .seemsSafe(suggestion: nil)
+        }
         if origin == .wake,
            let task = (episode.knowledge.positionAdvice?.wakeTasks ?? advice?.wakeTasks ?? [])
             .first(where: { wakeMoves(in: $0).contains(move) }) {

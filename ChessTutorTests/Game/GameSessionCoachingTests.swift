@@ -620,7 +620,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(historyRich.pendingCoachingRequestID, direct.pendingCoachingRequestID)
     }
 
-    func testOutsidePawnAfterKnightSelectionMatchesDirectOutsidePawnDerivation() async {
+    func testOutsidePawnMatchesDirectDerivationAfterFullReportedInteractionHistory() async {
         let move = CoachingGoldenMoves.outsidePawn
         let direct = await makeOpeningSession()
         stage(move, in: direct)
@@ -628,12 +628,22 @@ final class GameSessionCoachingTests: XCTestCase {
 
         let historyRich = await makeOpeningSession()
         historyRich.select(CoachingTestFixtures.openingKnight)
+        historyRich.select(Square(file: .a, rank: 1))
+        historyRich.select(Square(file: .a, rank: 2))
+        historyRich.select(Square(file: .a, rank: 7))
+        XCTAssertNil(historyRich.tapEmptySquare(at: Square(file: .e, rank: 4)))
+        _ = historyRich.chooseCoachingAction(.hint)
+        stage(CoachingTestFixtures.openingKnightMove, in: historyRich)
+        await historyRich.resolvePendingCoachingAdvice()
         stage(move, in: historyRich)
         await historyRich.resolvePendingCoachingAdvice()
 
         XCTAssertEqual(historyRich.selectedSquare, direct.selectedSquare)
         XCTAssertEqual(historyRich.state.board, direct.state.board)
         XCTAssertEqual(historyRich.coachingPresentation, direct.coachingPresentation)
+        XCTAssertEqual(historyRich.coachingPresentation?.focus, direct.coachingPresentation?.focus)
+        XCTAssertEqual(historyRich.state.moveHistory, [])
+        XCTAssertEqual(historyRich.state.moveHistory, direct.state.moveHistory)
         XCTAssertEqual(historyRich.pendingCoachingRequestID, direct.pendingCoachingRequestID)
     }
 

@@ -5,14 +5,14 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     func testCorpusContainsEveryApprovedAnchor() {
         XCTAssertEqual(CoachingGoldenPosition.allCases.count, 17)
         XCTAssertEqual(Set(CoachingGoldenPosition.allCases.map(\.rawValue)).count, 17)
-        XCTAssertEqual(CoachingGoldenCase.allCases.count, 47)
-        XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 47)
+        XCTAssertEqual(CoachingGoldenCase.allCases.count, 52)
+        XCTAssertEqual(Set(CoachingGoldenCase.allCases.map(\.rawValue)).count, 52)
     }
 
     func testEveryApprovedBranchHasAGoldenTurn() async throws {
         let requiredCases: [CoachingGoldenCase] = [
             .t1Entry, .t1BlockedRook, .t1FlankPawn, .t1Hint, .t1KnightSelected,
-            .t1PreferredKnight, .t1EdgeKnight, .t1CenterPawn,
+            .t1PreferredKnight, .t1EdgeKnight, .t1CenterPawn, .t1OutsidePawnMove,
             .t2Entry, .t2OneSquareKingMove, .t2KnightSwitch, .t2Castle,
             .t3Entry, .t3WrongOwnPiece, .t3Target, .t3WrongAttacker, .t3Attacker,
             .t3UnresolvedMove, .t3ResolvedMove,
@@ -24,6 +24,8 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             .t9Entry, .t9Hint, .t9Completed,
             .t10Entry, .t10Completed,
             .t11Safe, .t11QueenLoss, .t11IncorrectLooksSafe, .t11HarmlessCheck,
+            .t11UnsafeBishopEntry, .t11UnsafeBishopFound,
+            .t11BenignCaptureTap, .t11BenignCaptureLooksSafe,
             .t12CheckLocate, .t12WrongChecker, .t12Capture, .t12Block, .t12KingMove,
             .t12UnsupportedEntry, .t12UnsupportedSafeMove,
         ]
@@ -220,6 +222,76 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 try turn(from: direct),
                 "T11 move \(current) depended on prior tentative move"
             )
+        }
+    }
+
+    @MainActor
+    func testReportedMovePresentationsAreIndependentOfPriorInteractionHistory() async throws {
+        let paths = [
+            ReportedMovePath(
+                name: "h2-h4",
+                state: CoachingGoldenPosition.starting.state,
+                learner: .white,
+                move: CoachingGoldenMoves.outsidePawn,
+                knight: sq("b1"),
+                rook: sq("a1"),
+                friendly: sq("a2"),
+                enemy: sq("a7"),
+                empty: sq("e4"),
+                hintSource: nil,
+                replacement: CoachingGoldenMoves.openingKnightToF3
+            ),
+            ReportedMovePath(
+                name: "Bf1-a6",
+                state: CoachingGoldenPosition.openingBishopCanBeTaken.state,
+                learner: .white,
+                move: CoachingGoldenMoves.bishopToA6,
+                knight: sq("b1"),
+                rook: sq("a1"),
+                friendly: sq("a2"),
+                enemy: sq("a7"),
+                empty: sq("e3"),
+                hintSource: nil,
+                replacement: Move(from: sq("f1"), to: sq("b5"))
+            ),
+            ReportedMovePath(
+                name: "e7-e6",
+                state: CoachingGoldenPosition.protectedPawnUnderBishopAttack.state,
+                learner: .black,
+                move: CoachingGoldenMoves.blackPawnToE6,
+                knight: sq("b8"),
+                rook: sq("a8"),
+                friendly: sq("a7"),
+                enemy: sq("c4"),
+                empty: sq("h6"),
+                hintSource: sq("c4"),
+                replacement: Move(from: sq("e7"), to: sq("e5"))
+            ),
+        ]
+
+        for path in paths {
+            let direct = try await reportedPresentation(for: path, history: nil)
+            for history in ReportedInteractionHistory.allCases {
+                let historyRich = try await reportedPresentation(
+                    for: path,
+                    history: history
+                )
+                XCTAssertEqual(
+                    historyRich.presentation,
+                    direct.presentation,
+                    "\(path.name) depended on prior \(history.rawValue) interaction"
+                )
+                XCTAssertEqual(
+                    historyRich.presentation.focus,
+                    direct.presentation.focus,
+                    "\(path.name) focus depended on prior \(history.rawValue) interaction"
+                )
+                XCTAssertEqual(
+                    historyRich.moveHistory,
+                    direct.moveHistory,
+                    "\(path.name) committed after prior \(history.rawValue) interaction"
+                )
+            }
         }
     }
 
@@ -842,6 +914,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             return completion(
                 primaryMessage: "Your center pawn moved forward and helps control the center."
             )
+        case .t1OutsidePawnMove:
+            return completion(
+                primaryMessage: "That move seems safe, but a center pawn or knight is a simpler start."
+            )
 
         case .t2Entry:
             return expected(
@@ -1122,6 +1198,37 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 emphasized: ["a8", "g1"],
                 paths: [("a8", "a1", .attacker)]
             )
+        case .t11UnsafeBishopEntry:
+            return expected(
+                primaryMessage: "What could Black do next?",
+                instruction: "Tap the black piece that could win your bishop.",
+                actions: [.looksSafe, .hint, .stop],
+                boardTask: .identify(allowsMoveRevision: true)
+            )
+        case .t11UnsafeBishopFound:
+            return expected(
+                primaryMessage: "Black's pawn could take your bishop.",
+                instruction: "Try a different bishop move.",
+                actions: [.hint, .stop],
+                boardTask: .move,
+                emphasized: ["a6", "b7"],
+                paths: [("b7", "a6", .attacker)]
+            )
+        case .t11BenignCaptureTap:
+            return expected(
+                observation: "That bishop attacks your pawn, but the pawn is protected.",
+                primaryMessage: "What could White do next?",
+                instruction: "Tap a white piece that could check your king or win one of your pieces.",
+                actions: [.looksSafe, .hint, .stop],
+                hintIsPrimary: true,
+                boardTask: .identify(allowsMoveRevision: true),
+                emphasized: ["c4", "e6"],
+                paths: [("c4", "e6", .attacker)]
+            )
+        case .t11BenignCaptureLooksSafe:
+            return completion(
+                primaryMessage: "That move seems safe."
+            )
 
         case .t12CheckLocate:
             return expected(
@@ -1352,6 +1459,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 in: &session
             )
 
+        case .t1OutsidePawnMove:
+            session = try await preparedSession(for: .starting)
+            try await complete(
+                CoachingGoldenMoves.outsidePawn,
+                origin: .wake,
+                position: .starting,
+                in: &session
+            )
+
         case .t2Entry:
             session = try await preparedT2WakeSession()
 
@@ -1559,6 +1675,38 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 learner: .white
             )
             session.handle(.identificationTapped(CoachingGoldenMoves.rookChecks.from))
+
+        case .t11UnsafeBishopEntry:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.openingBishopCanBeTaken.state,
+                move: CoachingGoldenMoves.bishopToA6,
+                learner: .white
+            )
+
+        case .t11UnsafeBishopFound:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.openingBishopCanBeTaken.state,
+                move: CoachingGoldenMoves.bishopToA6,
+                learner: .white
+            )
+            session.handle(.identificationTapped(sq("b7")))
+
+        case .t11BenignCaptureTap:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.protectedPawnUnderBishopAttack.state,
+                move: CoachingGoldenMoves.blackPawnToE6,
+                learner: .black
+            )
+            session.handle(.identificationTapped(sq("c4")))
+
+        case .t11BenignCaptureLooksSafe:
+            session = try await tentativeSession(
+                state: CoachingGoldenPosition.protectedPawnUnderBishopAttack.state,
+                move: CoachingGoldenMoves.blackPawnToE6,
+                learner: .black
+            )
+            session.handle(.identificationTapped(sq("c4")))
+            session.handle(.actionChosen(.looksSafe))
 
         case .t12CheckLocate:
             session = try await preparedSession(for: .forcedCheck)
@@ -1837,6 +1985,66 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         return session
     }
 
+    @MainActor
+    private func reportedPresentation(
+        for path: ReportedMovePath,
+        history: ReportedInteractionHistory?
+    ) async throws -> ReportedPathResult {
+        let session = GameSession(
+            state: path.state,
+            coachingAdvisor: LocalCoachingAdvisor()
+        )
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+
+        switch history {
+        case .knight:
+            session.select(path.knight)
+        case .rook:
+            session.select(path.rook)
+        case .friendly:
+            session.select(path.friendly)
+        case .enemy:
+            session.select(path.enemy)
+        case .emptySquare:
+            XCTAssertNil(session.tapEmptySquare(at: path.empty))
+        case .hint:
+            if session.coachingPresentation?.actions.map(\.action).contains(.hint) != true,
+               let hintSource = path.hintSource {
+                stage(path.move, in: session)
+                await session.resolvePendingCoachingAdvice()
+                XCTAssertTrue(session.handleCoachingSquareTap(hintSource))
+            }
+            XCTAssertTrue(
+                session.coachingPresentation?.actions.map(\.action).contains(.hint) == true,
+                "\(path.name) did not expose Hint before the reported move"
+            )
+            _ = session.chooseCoachingAction(.hint)
+        case .replacement:
+            stage(path.replacement, in: session)
+            await session.resolvePendingCoachingAdvice()
+        case nil:
+            break
+        }
+
+        stage(path.move, in: session)
+        await session.resolvePendingCoachingAdvice()
+        XCTAssertEqual(session.state.moveHistory, [], "\(path.name) committed during coaching")
+        return ReportedPathResult(
+            presentation: try XCTUnwrap(
+                session.coachingPresentation,
+                "\(path.name) had no presentation after \(history?.rawValue ?? "direct") history"
+            ),
+            moveHistory: session.state.moveHistory
+        )
+    }
+
+    @MainActor
+    private func stage(_ move: Move, in session: GameSession) {
+        session.select(move.from)
+        XCTAssertEqual(session.moveSelectedPiece(to: move.to), .moved)
+    }
+
     private func tentativeSession(
         state: GameState,
         move: Move,
@@ -2017,6 +2225,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         _ move: Move,
         origin: CoachingMoveOrigin,
         state: GameState,
+        learner: PieceColor = .white,
         in session: inout CoachingSession
     ) async throws {
         let interaction = snapshot(selected: move.to, tentativeMove: move)
@@ -2024,7 +2233,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
             committedState: state,
             tentativeMove: move,
-            learner: .white,
+            learner: learner,
             positionRevision: interaction.positionRevision,
             context: .tentativeMove(origin: origin)
         ))
@@ -2041,4 +2250,33 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             positionRevision: 1
         )
     }
+}
+
+private enum ReportedInteractionHistory: String, CaseIterable {
+    case knight
+    case rook
+    case friendly
+    case enemy
+    case emptySquare
+    case hint
+    case replacement
+}
+
+private struct ReportedMovePath {
+    let name: String
+    let state: GameState
+    let learner: PieceColor
+    let move: Move
+    let knight: Square
+    let rook: Square
+    let friendly: Square
+    let enemy: Square
+    let empty: Square
+    let hintSource: Square?
+    let replacement: Move
+}
+
+private struct ReportedPathResult: Equatable {
+    let presentation: CoachingPresentation
+    let moveHistory: [Move]
 }

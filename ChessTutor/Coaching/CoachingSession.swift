@@ -338,7 +338,10 @@ struct CoachingSession: Sendable {
 
         case .looksSafe:
             guard case let .opponentCheck(move, _) = current.stage else { return [] }
-            episode.evidence.replyAnswer = .looksSafe(move: move)
+            episode.evidence.replyAnswer = .looksSafe(
+                move: move,
+                afterBenignActivity: episode.evidence.benignOpponentActivityObserved
+            )
             let derived = reconciler.derive(learner: learner, episode: episode)
             let directives = reconcile()
             if derived.derivedFeedback != nil,
@@ -398,6 +401,8 @@ struct CoachingSession: Sendable {
         episode.knowledge.unsupportedContext = nil
         episode.knowledge.pendingContext = nil
         episode.evidence.replyAnswer = nil
+        episode.evidence.benignOpponentActivityObserved = false
+        episode.progress.pulseID = 0
     }
 
     @discardableResult
@@ -437,6 +442,9 @@ struct CoachingSession: Sendable {
         feedback: CoachingFeedback?,
         anchor: CoachingFeedbackAnchor
     ) {
+        if case .benignOpponentActivity = feedback {
+            episode.evidence.benignOpponentActivityObserved = true
+        }
         episode.progress.missesAtCurrentLevel += 1
         episode.progress.feedback = feedback
         episode.progress.feedbackAnchor = anchor
