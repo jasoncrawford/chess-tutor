@@ -1436,6 +1436,7 @@ final class CoachingSessionTests: XCTestCase {
                 blackMove,
                 opponentActivities: [CoachingTestFixtures.opponentActivity(
                     reply: Move(from: whiteBishop, to: blackMove.to),
+                    opponentPiece: .bishop,
                     capturedSquare: blackMove.to,
                     capturedPiece: .knight,
                     netGainForOpponent: 0
@@ -1447,6 +1448,93 @@ final class CoachingSessionTests: XCTestCase {
             replySession.presentation?.instruction,
             "Tap a white piece that could check your king or win one of your pieces."
         )
+    }
+
+    func testBenignOpponentTapAfterHintPreservesIssueCandidateFocus() {
+        let move = CoachingTestFixtures.openingKnightMove
+        let issueSource = Square(file: .c, rank: 8)
+        let benignSource = Square(file: .b, rank: 4)
+        let recapturer = Square(file: .b, rank: 2)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                move.from: Piece(kind: .knight, color: .white),
+                recapturer: Piece(kind: .pawn, color: .white),
+                issueSource: Piece(kind: .rook, color: .black),
+                benignSource: Piece(kind: .bishop, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+        let issueReply = Move(
+            from: issueSource,
+            to: move.to
+        )
+        let benignReply = Move(
+            from: benignSource,
+            to: move.to
+        )
+        let issue = CoachingOpponentIssue(
+            reply: issueReply,
+            kind: .materialLoss(points: 3),
+            severity: .reviseMove,
+            affectedSquare: move.to,
+            checkingSquares: []
+        )
+        let recapture = Move(
+            from: recapturer,
+            to: move.to
+        )
+        let activities = [
+            CoachingTestFixtures.opponentActivity(
+                reply: issueReply,
+                opponentPiece: .rook,
+                capturedSquare: move.to,
+                capturedPiece: .knight,
+                netGainForOpponent: 3
+            ),
+            CoachingTestFixtures.opponentActivity(
+                reply: benignReply,
+                opponentPiece: .bishop,
+                capturedSquare: move.to,
+                capturedPiece: .knight,
+                netGainForOpponent: 0,
+                immediateRecapture: recapture
+            ),
+        ]
+        var session = session()
+        stage(move, in: &session)
+        session.receive(CoachingTestFixtures.advice(
+            state: state,
+            tentativeMove: move,
+            context: .tentativeMove(origin: .preexisting),
+            opponentHasCapture: true,
+            learnerHasCapture: false,
+            assessments: [CoachingTestFixtures.acceptableAssessment(
+                move,
+                issues: [issue],
+                opponentActivities: activities,
+                isTacticallyAcceptable: false
+            )]
+        ))
+
+        session.handle(.actionChosen(.hint))
+        session.handle(.identificationTapped(benignReply.from))
+
+        XCTAssertEqual(session.stage, .opponentCheck(move: move, origin: .preexisting))
+        XCTAssertEqual(session.presentation?.focus.candidateSquares, [issueReply.from])
+        XCTAssertEqual(session.presentation?.focus.paths, [
+            CoachFocusPath(
+                source: issueReply.from,
+                destination: issueReply.to,
+                role: .attacker
+            ),
+            CoachFocusPath(
+                source: benignReply.from,
+                destination: benignReply.to,
+                role: .attacker
+            ),
+        ])
     }
 
     func testOpponentMaterialHintShowsSourceLandingAndDistinctEnPassantTarget() {
@@ -1482,7 +1570,14 @@ final class CoachingSessionTests: XCTestCase {
             learnerHasCapture: false,
             assessments: [CoachingTestFixtures.acceptableAssessment(
                 learnerMove,
-                issues: [issue]
+                issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .pawn,
+                    capturedSquare: capturedPawn,
+                    capturedPiece: .pawn,
+                    netGainForOpponent: 1
+                )]
             )]
         ))
 
@@ -1546,7 +1641,12 @@ final class CoachingSessionTests: XCTestCase {
             learnerHasCapture: false,
             assessments: [CoachingTestFixtures.acceptableAssessment(
                 learnerMove,
-                issues: [issue]
+                issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .king,
+                    checkingSquares: issue.checkingSquares
+                )]
             )]
         )
         var session = session()
@@ -1602,7 +1702,12 @@ final class CoachingSessionTests: XCTestCase {
             learnerHasCapture: false,
             assessments: [CoachingTestFixtures.acceptableAssessment(
                 learnerMove,
-                issues: [issue]
+                issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .bishop,
+                    checkingSquares: issue.checkingSquares
+                )]
             )]
         )
         var session = session()
@@ -1719,6 +1824,13 @@ final class CoachingSessionTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .rook,
+                    capturedSquare: move.to,
+                    capturedPiece: .pawn,
+                    netGainForOpponent: 3
+                )],
                 isTacticallyAcceptable: false
             )
         )
@@ -1770,6 +1882,14 @@ final class CoachingSessionTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 issues: [notice, revise],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .bishop,
+                    checkingSquares: notice.checkingSquares,
+                    capturedSquare: move.to,
+                    capturedPiece: .knight,
+                    netGainForOpponent: 3
+                )],
                 concepts: [.developsKnightOrBishop],
                 isTacticallyAcceptable: false
             )
@@ -1806,6 +1926,11 @@ final class CoachingSessionTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .bishop,
+                    checkingSquares: issue.checkingSquares
+                )],
                 concepts: [.developsKnightOrBishop]
             )
         )
@@ -1912,6 +2037,13 @@ final class CoachingSessionTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: reply,
+                    opponentPiece: .bishop,
+                    capturedSquare: move.to,
+                    capturedPiece: .knight,
+                    netGainForOpponent: 1
+                )],
                 concepts: [.developsKnightOrBishop]
             )
         )
@@ -1945,6 +2077,13 @@ final class CoachingSessionTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: issue.reply,
+                    opponentPiece: .rook,
+                    capturedSquare: move.to,
+                    capturedPiece: .pawn,
+                    netGainForOpponent: 3
+                )],
                 isTacticallyAcceptable: false
             )
         )
@@ -2908,6 +3047,9 @@ final class CoachingSessionTests: XCTestCase {
     ) -> CoachingSession {
         let effectiveAssessment: CoachingMoveAssessment
         if assessment.opponentActivities.isEmpty {
+            let state = origin == .wake
+                ? GameState.startingPosition()
+                : CoachingTestFixtures.coachingState
             effectiveAssessment = CoachingMoveAssessment(
                 move: assessment.move,
                 isLegal: assessment.isLegal,
@@ -2918,8 +3060,10 @@ final class CoachingSessionTests: XCTestCase {
                         from: CoachingTestFixtures.blackBishop,
                         to: move.to
                     ),
+                    opponentPiece: state.board[CoachingTestFixtures.blackBishop]?.kind
+                        ?? .bishop,
                     capturedSquare: move.to,
-                    capturedPiece: .pawn,
+                    capturedPiece: state.board[move.from]?.kind,
                     netGainForOpponent: 0
                 )],
                 concepts: assessment.concepts,

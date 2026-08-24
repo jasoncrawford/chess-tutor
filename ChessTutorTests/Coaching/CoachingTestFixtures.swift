@@ -390,40 +390,53 @@ enum CoachingTestFixtures {
     static func acceptableAssessment(
         _ move: Move,
         resolvesRequiredDanger: Bool = true,
-        issues: [CoachingOpponentIssue] = [],
-        opponentActivities: [CoachingOpponentActivity]? = nil,
+        opponentActivities: [CoachingOpponentActivity] = [],
         concepts: [CoachingConcept] = [],
         isTacticallyAcceptable: Bool = true
     ) -> CoachingMoveAssessment {
-        CoachingMoveAssessment(
+        return CoachingMoveAssessment(
             move: move,
             isLegal: true,
             resolvesRequiredDanger: resolvesRequiredDanger,
-            opponentIssues: issues,
-            opponentActivities: opponentActivities ?? issues.map(opponentActivity),
+            opponentIssues: [],
+            opponentActivities: opponentActivities,
             concepts: concepts,
             isTacticallyAcceptable: isTacticallyAcceptable
         )
     }
 
-    private static func opponentActivity(
-        for issue: CoachingOpponentIssue
-    ) -> CoachingOpponentActivity {
-        let materialGain: Int?
-        if case let .materialLoss(points) = issue.kind {
-            materialGain = points
-        } else {
-            materialGain = nil
-        }
-        return CoachingOpponentActivity(
-            reply: issue.reply,
-            opponentPiece: .bishop,
-            checkingSquares: issue.checkingSquares,
-            capturedSquare: materialGain == nil ? nil : issue.affectedSquare,
-            capturedPiece: nil,
-            netGainForOpponent: materialGain,
-            immediateRecapture: nil,
-            isMate: issue.kind == .mateInOne
+    static func acceptableAssessment(
+        _ move: Move,
+        resolvesRequiredDanger: Bool = true,
+        issues: [CoachingOpponentIssue],
+        opponentActivities: [CoachingOpponentActivity],
+        concepts: [CoachingConcept] = [],
+        isTacticallyAcceptable: Bool = true
+    ) -> CoachingMoveAssessment {
+        precondition(!issues.isEmpty)
+        precondition(issues.allSatisfy { issue in
+            opponentActivities.contains { activity in
+                guard activity.reply == issue.reply else { return false }
+                switch issue.kind {
+                case .check:
+                    return activity.isCheck
+                case .mateInOne:
+                    return activity.isMate
+                case .materialLoss:
+                    return activity.canWinPiece
+                        && activity.capturedSquare == issue.affectedSquare
+                        && activity.capturedPiece != nil
+                }
+            }
+        })
+        return CoachingMoveAssessment(
+            move: move,
+            isLegal: true,
+            resolvesRequiredDanger: resolvesRequiredDanger,
+            opponentIssues: issues,
+            opponentActivities: opponentActivities,
+            concepts: concepts,
+            isTacticallyAcceptable: isTacticallyAcceptable
         )
     }
 
@@ -445,7 +458,7 @@ enum CoachingTestFixtures {
 
     static func opponentActivity(
         reply: Move,
-        opponentPiece: Piece.Kind = .bishop,
+        opponentPiece: Piece.Kind,
         checkingSquares: Set<Square> = [],
         capturedSquare: Square? = nil,
         capturedPiece: Piece.Kind? = nil,

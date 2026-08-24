@@ -89,7 +89,18 @@ final class GameSessionCoachingTests: XCTestCase {
             severity: .reviseMove,
             answers: [issueSquare, move.to]
         )
-        let advice = tentativeAdvice(for: move, isLegal: true, issues: [issue])
+        let advice = tentativeAdvice(
+            for: move,
+            isLegal: true,
+            issues: [issue],
+            opponentActivities: [CoachingTestFixtures.opponentActivity(
+                reply: issue.reply,
+                opponentPiece: .pawn,
+                capturedSquare: move.to,
+                capturedPiece: .knight,
+                netGainForOpponent: 3
+            )]
+        )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(advice: advice)
         )
@@ -211,7 +222,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .knight,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -235,7 +257,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .knight,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -260,7 +293,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .pawn,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -288,7 +332,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .pawn,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -318,7 +373,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .pawn,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -350,7 +416,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .pawn,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -377,7 +454,18 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         let session = GameSession(
             coachingAdvisor: ImmediateCoachingAdvisor(
-                advice: tentativeAdvice(for: move, isLegal: true, issues: [issue])
+                advice: tentativeAdvice(
+                    for: move,
+                    isLegal: true,
+                    issues: [issue],
+                    opponentActivities: [CoachingTestFixtures.opponentActivity(
+                        reply: issue.reply,
+                        opponentPiece: .pawn,
+                        capturedSquare: move.to,
+                        capturedPiece: .knight,
+                        netGainForOpponent: 3
+                    )]
+                )
             )
         )
         stage(move, in: session)
@@ -1345,34 +1433,48 @@ final class GameSessionCoachingTests: XCTestCase {
     private func tentativeAdvice(
         for move: Move,
         isLegal: Bool,
-        issues: [CoachingOpponentIssue] = [],
         positionRevision: Int? = nil,
         origin: CoachingMoveOrigin = .preexisting
     ) -> CoachingAdvice {
-        let activities = issues.map { issue in
-            let materialGain: Int?
-            if case let .materialLoss(points) = issue.kind {
-                materialGain = points
-            } else {
-                materialGain = nil
+        tentativeAdvice(
+            for: move,
+            isLegal: isLegal,
+            issues: [],
+            opponentActivities: [],
+            positionRevision: positionRevision,
+            origin: origin
+        )
+    }
+
+    private func tentativeAdvice(
+        for move: Move,
+        isLegal: Bool,
+        issues: [CoachingOpponentIssue],
+        opponentActivities: [CoachingOpponentActivity],
+        positionRevision: Int? = nil,
+        origin: CoachingMoveOrigin = .preexisting
+    ) -> CoachingAdvice {
+        precondition(issues.isEmpty || issues.allSatisfy { issue in
+            opponentActivities.contains { activity in
+                guard activity.reply == issue.reply else { return false }
+                switch issue.kind {
+                case .check:
+                    return activity.isCheck
+                case .mateInOne:
+                    return activity.isMate
+                case .materialLoss:
+                    return activity.canWinPiece
+                        && activity.capturedSquare == issue.affectedSquare
+                        && activity.capturedPiece != nil
+                }
             }
-            return CoachingOpponentActivity(
-                reply: issue.reply,
-                opponentPiece: .bishop,
-                checkingSquares: issue.checkingSquares,
-                capturedSquare: materialGain == nil ? nil : issue.affectedSquare,
-                capturedPiece: nil,
-                netGainForOpponent: materialGain,
-                immediateRecapture: nil,
-                isMate: issue.kind == .mateInOne
-            )
-        }
+        })
         let assessment = CoachingMoveAssessment(
             move: move,
             isLegal: isLegal,
             resolvesRequiredDanger: true,
             opponentIssues: issues,
-            opponentActivities: activities,
+            opponentActivities: opponentActivities,
             concepts: [.developsKnightOrBishop],
             isTacticallyAcceptable: isLegal
                 && !issues.contains(where: { $0.severity == .reviseMove })

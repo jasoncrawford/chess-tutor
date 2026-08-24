@@ -146,6 +146,13 @@ final class CoachingReconcilerTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 move,
                 issues: [issue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: issue.reply,
+                    opponentPiece: .knight,
+                    capturedSquare: move.to,
+                    capturedPiece: .knight,
+                    netGainForOpponent: 3
+                )],
                 concepts: [.developsKnightOrBishop],
                 isTacticallyAcceptable: false
             )
@@ -428,6 +435,7 @@ final class CoachingReconcilerTests: XCTestCase {
                         from: CoachingTestFixtures.blackBishop,
                         to: move.to
                     ),
+                    opponentPiece: .knight,
                     capturedSquare: move.to,
                     capturedPiece: .knight,
                     netGainForOpponent: 0

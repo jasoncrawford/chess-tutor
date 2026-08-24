@@ -131,8 +131,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case (.materialLoss, nil):
             return (
-                "How can you change your move to avoid losing material?",
-                "Change your move to avoid losing material."
+                "How can you change your move to keep your pieces safe?",
+                "Change your move to keep your pieces safe."
             )
         }
     }
@@ -481,7 +481,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             if let purpose {
                 return "That move is safe, but it doesn’t \(wakePurposeVerb(for: purpose))."
             }
-            return "That move is safe, but I cannot name a verified purpose for it."
+            return "That move seems safe."
         case .harmlessCheckFound:
             return "You found it. \(colorName(opponent)) could check your king, but your move still works."
         case .checkFoundOtherDangerRemains:
@@ -505,7 +505,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     private func wakePurposeVerb(for purpose: CoachingWakePurpose) -> String {
         switch purpose {
         case .openingDevelopment:
-            return "bring a new piece into the game"
+            return "move a knight or bishop off its starting square"
         case .addsDefender:
             return "add a defender"
         case .createsThreat:

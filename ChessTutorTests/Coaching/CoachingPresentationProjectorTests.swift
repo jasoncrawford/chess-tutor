@@ -84,6 +84,94 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         XCTAssertEqual(context?.actions, [.hint, .stop])
     }
 
+    func testMixedCheckAndWinningCaptureUsesGenericOpponentPrompt() throws {
+        let move = CoachingTestFixtures.openingKnightMove
+        let checkingRook = Square(file: .e, rank: 8)
+        let capturingBishop = Square(file: .b, rank: 4)
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                move.from: Piece(kind: .knight, color: .white),
+                checkingRook: Piece(kind: .rook, color: .black),
+                capturingBishop: Piece(kind: .bishop, color: .black),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            ]
+        )
+        let checkingReply = Move(
+            from: checkingRook,
+            to: Square(file: .e, rank: 2)
+        )
+        let captureReply = Move(
+            from: capturingBishop,
+            to: move.to
+        )
+        let checkIssue = CoachingOpponentIssue(
+            reply: checkingReply,
+            kind: .check,
+            severity: .notice,
+            affectedSquare: checkingReply.to,
+            checkingSquares: [checkingReply.to]
+        )
+        let captureIssue = CoachingOpponentIssue(
+            reply: captureReply,
+            kind: .materialLoss(points: 3),
+            severity: .reviseMove,
+            affectedSquare: move.to,
+            checkingSquares: []
+        )
+        let activities = [
+            CoachingTestFixtures.opponentActivity(
+                reply: checkingReply,
+                opponentPiece: .rook,
+                checkingSquares: [checkingReply.to]
+            ),
+            CoachingTestFixtures.opponentActivity(
+                reply: captureReply,
+                opponentPiece: .bishop,
+                capturedSquare: move.to,
+                capturedPiece: .knight,
+                netGainForOpponent: 3
+            ),
+        ]
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .wake,
+            state: state,
+            assessment: CoachingTestFixtures.acceptableAssessment(
+                move,
+                issues: [checkIssue, captureIssue],
+                opponentActivities: activities,
+                concepts: [.developsKnightOrBishop],
+                isTacticallyAcceptable: false
+            )
+        )
+        let question = CoachingQuestionID.opponentReply(move: move, origin: .wake)
+        let context = try XCTUnwrap(CoachingPresentationProjector().context(
+            learner: .white,
+            derived: derived(
+                .opponentCheck(move: move, origin: .wake),
+                questionID: question
+            ),
+            episode: episode(
+                tentativeAdvice: advice,
+                evidence: evidence(tentativeOrigin: .wake),
+                progress: progress(questionID: question),
+                selectedSquare: move.to,
+                tentativeMove: move
+            )
+        ))
+
+        XCTAssertEqual(
+            context.prompt,
+            .opponentReply(opponent: .black, threatenedPiece: nil)
+        )
+        XCTAssertEqual(
+            LocalCoachingExplanationSource().presentation(for: context).instruction,
+            "Tap a black piece that could check your king or win one of your pieces."
+        )
+    }
+
     func testQuestionChangeResetsHintMissAndFeedbackTogether() {
         var progress = CoachingQuestionProgress(
             questionID: .wakeSource(purpose: .openingDevelopment(firstMove: true)),
@@ -282,6 +370,13 @@ final class CoachingPresentationProjectorTests: XCTestCase {
             assessment: CoachingTestFixtures.acceptableAssessment(
                 replyMove,
                 issues: [replyIssue],
+                opponentActivities: [CoachingTestFixtures.opponentActivity(
+                    reply: replyIssue.reply,
+                    opponentPiece: .pawn,
+                    capturedSquare: replyMove.to,
+                    capturedPiece: .knight,
+                    netGainForOpponent: 3
+                )],
                 concepts: [.developsKnightOrBishop],
                 isTacticallyAcceptable: false
             )
@@ -507,7 +602,7 @@ final class CoachingPresentationProjectorTests: XCTestCase {
                     selectedSquare: replyMove.to,
                     tentativeMove: replyMove
                 ),
-                prompt: .opponentReply(opponent: .black, threatenedPiece: nil),
+                prompt: .opponentReply(opponent: .black, threatenedPiece: .knight),
                 boardTask: .identify(allowsMoveRevision: true),
                 actions: [.stop],
                 routine: [],

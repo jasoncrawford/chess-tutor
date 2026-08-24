@@ -189,7 +189,13 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 .fallbackChooseMove,
                 .noRecognizedPurpose(purpose: nil),
                 "Choose a move you are considering, and I will check it with you.",
-                "That move is safe, but I cannot name a verified purpose for it."
+                "That move seems safe."
+            ),
+            (
+                .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true)),
+                .noRecognizedPurpose(purpose: .openingDevelopment(firstMove: true)),
+                "A center pawn or knight is a simple way to start. Which would you like to move?",
+                "That move is safe, but it doesn’t move a knight or bishop off its starting square."
             ),
         ]
 
@@ -1073,6 +1079,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             "attack something",
             "protect another piece",
             "more useful place",
+            "verified purpose",
+            "qualifying issue",
+            "immediate-response scan",
+            "material",
+            "cannot name a purpose",
+            "bring a new piece into the game",
         ]
         XCTAssertEqual(
             prohibited.filter(copy.contains),
@@ -1097,11 +1109,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(presentation.observation, "Black could take one of your pieces.")
         XCTAssertEqual(
             presentation.primaryMessage,
-            "How can you change your move to avoid losing material?"
+            "How can you change your move to keep your pieces safe?"
         )
         XCTAssertEqual(
             presentation.instruction,
-            "Change your move to avoid losing material."
+            "Change your move to keep your pieces safe."
         )
     }
 
