@@ -84,68 +84,37 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         XCTAssertEqual(context?.actions, [.hint, .stop])
     }
 
-    func testMixedCheckAndWinningCaptureUsesGenericOpponentPrompt() throws {
-        let move = CoachingTestFixtures.openingKnightMove
-        let checkingRook = Square(file: .e, rank: 8)
-        let capturingBishop = Square(file: .b, rank: 4)
-        let state = CoachingTestFixtures.state(
-            sideToMove: .white,
-            pieces: [
-                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
-                move.from: Piece(kind: .knight, color: .white),
-                checkingRook: Piece(kind: .rook, color: .black),
-                capturingBishop: Piece(kind: .bishop, color: .black),
-                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
-            ]
-        )
+    func testMixedCheckAndWinningCaptureUsesGenericOpponentPrompt() async throws {
+        let move = CoachingTestFixtures.compoundOpponentActivityMove
+        let state = CoachingTestFixtures.compoundOpponentActivityState
         let checkingReply = Move(
-            from: checkingRook,
-            to: Square(file: .e, rank: 2)
+            from: Square(file: .a, rank: 8),
+            to: Square(file: .a, rank: 1)
         )
         let captureReply = Move(
-            from: capturingBishop,
+            from: Square(file: .b, rank: 4),
             to: move.to
         )
-        let checkIssue = CoachingOpponentIssue(
-            reply: checkingReply,
-            kind: .check,
-            severity: .notice,
-            affectedSquare: checkingReply.to,
-            checkingSquares: [checkingReply.to]
-        )
-        let captureIssue = CoachingOpponentIssue(
-            reply: captureReply,
-            kind: .materialLoss(points: 3),
-            severity: .reviseMove,
-            affectedSquare: move.to,
-            checkingSquares: []
-        )
-        let activities = [
-            CoachingTestFixtures.opponentActivity(
-                reply: checkingReply,
-                opponentPiece: .rook,
-                checkingSquares: [checkingReply.to]
-            ),
-            CoachingTestFixtures.opponentActivity(
-                reply: captureReply,
-                opponentPiece: .bishop,
-                capturedSquare: move.to,
-                capturedPiece: .knight,
-                netGainForOpponent: 3
-            ),
-        ]
-        let advice = CoachingTestFixtures.adviceForTentativeMove(
-            move,
-            origin: .wake,
-            state: state,
-            assessment: CoachingTestFixtures.acceptableAssessment(
-                move,
-                issues: [checkIssue, captureIssue],
-                opponentActivities: activities,
-                concepts: [.developsKnightOrBishop],
-                isTacticallyAcceptable: false
-            )
-        )
+        let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 1,
+            context: .tentativeMove(origin: .wake)
+        ))
+        let assessment = try XCTUnwrap(advice.moveAssessments[move])
+        XCTAssertTrue(assessment.opponentActivities.contains(where: {
+            $0.reply == checkingReply
+                && $0.opponentPiece == .rook
+                && $0.isCheck
+        }))
+        XCTAssertTrue(assessment.opponentActivities.contains(where: {
+            $0.reply == captureReply
+                && $0.opponentPiece == .bishop
+                && $0.capturedSquare == move.to
+                && $0.capturedPiece == .knight
+                && $0.canWinPiece
+        }))
         let question = CoachingQuestionID.opponentReply(move: move, origin: .wake)
         let context = try XCTUnwrap(CoachingPresentationProjector().context(
             learner: .white,

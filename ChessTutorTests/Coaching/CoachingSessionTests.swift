@@ -1450,91 +1450,70 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
-    func testBenignOpponentTapAfterHintPreservesIssueCandidateFocus() {
-        let move = CoachingTestFixtures.openingKnightMove
-        let issueSource = Square(file: .c, rank: 8)
-        let benignSource = Square(file: .b, rank: 4)
-        let recapturer = Square(file: .b, rank: 2)
-        let state = CoachingTestFixtures.state(
-            sideToMove: .white,
-            pieces: [
-                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
-                move.from: Piece(kind: .knight, color: .white),
-                recapturer: Piece(kind: .pawn, color: .white),
-                issueSource: Piece(kind: .rook, color: .black),
-                benignSource: Piece(kind: .bishop, color: .black),
-                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
-            ]
-        )
+    func testBenignOpponentTapAfterHintPreservesIssueCandidateFocus() async throws {
+        let move = CoachingTestFixtures.compoundOpponentActivityMove
+        let state = CoachingTestFixtures.compoundOpponentActivityState
         let issueReply = Move(
-            from: issueSource,
+            from: Square(file: .b, rank: 4),
             to: move.to
         )
         let benignReply = Move(
-            from: benignSource,
-            to: move.to
-        )
-        let issue = CoachingOpponentIssue(
-            reply: issueReply,
-            kind: .materialLoss(points: 3),
-            severity: .reviseMove,
-            affectedSquare: move.to,
-            checkingSquares: []
+            from: Square(file: .h, rank: 5),
+            to: Square(file: .f, rank: 4)
         )
         let recapture = Move(
-            from: recapturer,
-            to: move.to
+            from: Square(file: .e, rank: 3),
+            to: benignReply.to
         )
-        let activities = [
-            CoachingTestFixtures.opponentActivity(
-                reply: issueReply,
-                opponentPiece: .rook,
-                capturedSquare: move.to,
-                capturedPiece: .knight,
-                netGainForOpponent: 3
-            ),
-            CoachingTestFixtures.opponentActivity(
-                reply: benignReply,
-                opponentPiece: .bishop,
-                capturedSquare: move.to,
-                capturedPiece: .knight,
-                netGainForOpponent: 0,
-                immediateRecapture: recapture
-            ),
-        ]
+        let advice = try await LocalCoachingAdvisor().advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: move,
+            learner: .white,
+            positionRevision: 7,
+            context: .tentativeMove(origin: .preexisting)
+        ))
+        let assessment = try XCTUnwrap(advice.moveAssessments[move])
+        XCTAssertTrue(assessment.opponentIssues.contains(where: {
+            $0.reply == issueReply && $0.kind == .materialLoss(points: 3)
+        }))
+        XCTAssertTrue(assessment.opponentIssues.contains(where: {
+            $0.reply.from != benignReply.from
+        }))
+        XCTAssertTrue(assessment.opponentActivities.contains(where: {
+            $0.reply == benignReply
+                && $0.opponentPiece == .knight
+                && $0.capturedSquare == benignReply.to
+                && $0.capturedPiece == .pawn
+                && $0.immediateRecapture == recapture
+                && !$0.isQuestionAnswer
+        }))
         var session = session()
         stage(move, in: &session)
-        session.receive(CoachingTestFixtures.advice(
-            state: state,
-            tentativeMove: move,
-            context: .tentativeMove(origin: .preexisting),
-            opponentHasCapture: true,
-            learnerHasCapture: false,
-            assessments: [CoachingTestFixtures.acceptableAssessment(
-                move,
-                issues: [issue],
-                opponentActivities: activities,
-                isTacticallyAcceptable: false
-            )]
-        ))
+        session.receive(advice)
 
         session.handle(.actionChosen(.hint))
+        let hintedCandidates = try XCTUnwrap(session.presentation).focus.candidateSquares
+        let hintedPaths = try XCTUnwrap(session.presentation).focus.paths
+        XCTAssertFalse(hintedCandidates.isEmpty)
+        XCTAssertTrue(hintedCandidates.contains(issueReply.from))
+        XCTAssertFalse(hintedCandidates.contains(benignReply.from))
+        XCTAssertTrue(hintedPaths.contains(CoachFocusPath(
+            source: issueReply.from,
+            destination: issueReply.to,
+            role: .attacker
+        )))
         session.handle(.identificationTapped(benignReply.from))
 
         XCTAssertEqual(session.stage, .opponentCheck(move: move, origin: .preexisting))
-        XCTAssertEqual(session.presentation?.focus.candidateSquares, [issueReply.from])
-        XCTAssertEqual(session.presentation?.focus.paths, [
-            CoachFocusPath(
-                source: issueReply.from,
-                destination: issueReply.to,
-                role: .attacker
-            ),
-            CoachFocusPath(
-                source: benignReply.from,
-                destination: benignReply.to,
-                role: .attacker
-            ),
-        ])
+        XCTAssertEqual(session.presentation?.focus.candidateSquares, hintedCandidates)
+        XCTAssertTrue(hintedPaths.allSatisfy {
+            session.presentation?.focus.paths.contains($0) == true
+        })
+        XCTAssertTrue(session.presentation?.focus.paths.contains(CoachFocusPath(
+            source: benignReply.from,
+            destination: benignReply.to,
+            role: .attacker
+        )) == true)
     }
 
     func testOpponentMaterialHintShowsSourceLandingAndDistinctEnPassantTarget() {

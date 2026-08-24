@@ -163,6 +163,20 @@ enum CoachingTestFixtures {
         from: openingKnight,
         to: Square(file: .c, rank: 3)
     )
+    static let compoundOpponentActivityMove = openingKnightMove
+    static let compoundOpponentActivityState = state(
+        sideToMove: .white,
+        pieces: [
+            Square(file: .g, rank: 1): Piece(kind: .king, color: .white),
+            compoundOpponentActivityMove.from: Piece(kind: .knight, color: .white),
+            Square(file: .e, rank: 3): Piece(kind: .pawn, color: .white),
+            Square(file: .f, rank: 4): Piece(kind: .pawn, color: .white),
+            Square(file: .a, rank: 8): Piece(kind: .rook, color: .black),
+            Square(file: .b, rank: 4): Piece(kind: .bishop, color: .black),
+            Square(file: .h, rank: 5): Piece(kind: .knight, color: .black),
+            Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+        ]
+    )
     static let alternateKnight = Square(file: .g, rank: 1)
     static let alternateKnightMove = Move(
         from: alternateKnight,
