@@ -2,6 +2,44 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingGoldenTranscriptTests: XCTestCase {
+    func testNoncapturingMateUsesFirstClassExactGoldenTurn() async throws {
+        let matingMove = Move(from: sq("g6"), to: sq("g7"))
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                sq("f6"): Piece(kind: .king, color: .white),
+                matingMove.from: Piece(kind: .queen, color: .white),
+                sq("h8"): Piece(kind: .king, color: .black),
+            ]
+        )
+        var session = try await preparedSession(for: state)
+
+        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(session.presentation?.primaryMessage, "Can you find checkmate in one move?")
+        XCTAssertEqual(session.presentation?.instruction, "Make the checkmating move.")
+        XCTAssertEqual(session.presentation?.observation, nil)
+        XCTAssertEqual(session.presentation?.routine, [.safeCleared, .takeCurrent, .wakePending])
+        XCTAssertEqual(session.presentation?.actions.map(\.action), [.hint, .stop])
+        XCTAssertEqual(session.presentation?.boardTask, .move)
+
+        try await stage(matingMove, origin: .take, state: state, in: &session)
+
+        XCTAssertEqual(
+            session.stage,
+            .complete(move: matingMove, origin: .take, concepts: [.mateInOne, .safeAfterReplyCheck])
+        )
+        XCTAssertEqual(session.presentation?.primaryMessage, "You found checkmate.")
+        XCTAssertEqual(session.presentation?.instruction, "Play it, or try another move.")
+        XCTAssertEqual(session.presentation?.actions.map(\.action), [.done, .keepLooking, .stop])
+        let childCopy = [
+            session.presentation?.primaryMessage,
+            session.presentation?.instruction,
+            session.presentation?.observation,
+        ].compactMap { $0 }.joined(separator: " ").lowercased()
+        XCTAssertFalse(childCopy.contains("capture"))
+        XCTAssertFalse(childCopy.contains("take a piece"))
+    }
+
     func testCorpusContainsEveryApprovedAnchor() {
         XCTAssertEqual(CoachingGoldenPosition.allCases.count, 17)
         XCTAssertEqual(Set(CoachingGoldenPosition.allCases.map(\.rawValue)).count, 17)

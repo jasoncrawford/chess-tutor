@@ -196,4 +196,65 @@ struct CoachingPanelAccessibilityFixture: View {
         )
     }
 }
+
+private struct DelayedLocalCoachingAdvisor: CoachingAdvising {
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        try await Task.sleep(for: .milliseconds(850))
+        return try await LocalCoachingAdvisor().advice(for: request)
+    }
+}
+
+struct CoachingContinuityUITestFixture: View {
+    @State private var session = GameSession(
+        coachingAdvisor: DelayedLocalCoachingAdvisor()
+    )
+    @Namespace private var captureNamespace
+
+    static var isEnabled: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ui-test-coaching-continuity")
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            AppTheme.table.ignoresSafeArea()
+            SidePanelView(
+                session: session,
+                viewingAngle: .normal,
+                readableRotationDegrees: 0,
+                captureNamespace: captureNamespace,
+                sideLength: 720,
+                remotePlayFlow: nil,
+                onAbout: {},
+                onPlayRemotely: {},
+                onNewGame: {},
+                remoteNewGameOpponentName: nil,
+                remotePresence: nil,
+                onInviteRemoteNewGame: {},
+                onCommittedMove: { _ in },
+                fakeRemoteLab: nil
+            )
+            .frame(
+                width: PlaySurfaceLayout.sidePanelWidth,
+                height: 720,
+                alignment: .top
+            )
+
+            Button("Stage knight move for continuity test") {
+                let move = Move(
+                    from: Square(file: .g, rank: 1),
+                    to: Square(file: .f, rank: 3)
+                )
+                session.select(move.from)
+                _ = session.moveSelectedPiece(to: move.to)
+            }
+            .padding()
+        }
+        .task {
+            session.startCoaching()
+        }
+        .task(id: session.pendingCoachingRequestID) {
+            await session.resolvePendingCoachingAdvice()
+        }
+    }
+}
 #endif

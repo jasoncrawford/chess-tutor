@@ -1,4 +1,4 @@
-struct LocalCoachingAdvisor: ImmediateCoachingAdvising {
+struct LocalCoachingAdvisor: CoachingAdvising {
     private let evaluator: MaterialTacticalEvaluator
     private let insightSource: LocalCoachingInsightSource
 
@@ -10,7 +10,7 @@ struct LocalCoachingAdvisor: ImmediateCoachingAdvising {
         self.insightSource = insightSource
     }
 
-    func immediateAdvice(for request: CoachingRequest) throws -> CoachingAdvice {
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
         let evaluation = evaluator.evaluate(request)
         let insightSet = insightSource.insights(for: evaluation)
         let assessments = evaluation.moveAssessments.mapValues { assessment in
@@ -26,6 +26,9 @@ struct LocalCoachingAdvisor: ImmediateCoachingAdvising {
                 resolvesRequiredDanger: assessment.resolvesRequiredDanger,
                 opponentIssues: assessment.opponentIssues,
                 opponentActivities: assessment.opponentActivities,
+                checkResolution: assessment.checkResolution,
+                checkingPiece: assessment.checkingPiece,
+                dangerResolutionFacts: assessment.dangerResolutionFacts,
                 concepts: concepts,
                 isTacticallyAcceptable: assessment.isLegal
                     && assessment.resolvesRequiredDanger

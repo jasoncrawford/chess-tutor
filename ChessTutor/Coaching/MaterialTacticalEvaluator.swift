@@ -14,6 +14,10 @@ struct MaterialTacticalEvaluator: Sendable {
             .compactMap { captureEstimate(for: $0, in: state) }
             .sorted { stableMoveKey($0.move) < stableMoveKey($1.move) }
         let legalMoves = Set(LegalMoveGenerator.allLegalMoves(in: state))
+        let checkingPieces = LegalMoveGenerator.checkingPieceSquares(
+            against: request.learner,
+            in: state.board
+        )
         let mateInOneMoves = Set(legalMoves.filter { move in
             let next = state.applyingUnchecked(move)
             return LegalMoveGenerator.allLegalMoves(in: next).isEmpty
@@ -91,6 +95,22 @@ struct MaterialTacticalEvaluator: Sendable {
                     resolvesRequiredDanger: resolvesRequiredDanger,
                     opponentIssues: opponentIssues,
                     opponentActivities: opponentActivities,
+                    checkResolution: isLegal ? checkResolution(
+                        for: move,
+                        in: state,
+                        learner: request.learner,
+                        checkingSquares: checkingPieces
+                    ) : nil,
+                    checkingPiece: checkingPieces.count == 1
+                        ? checkingPieces.first.flatMap { state.board[$0]?.kind }
+                        : nil,
+                    dangerResolutionFacts: isLegal
+                        ? dangerResolutionFacts(
+                            for: move,
+                            problems: dangerProblems,
+                            in: state
+                        )
+                        : [],
                     concepts: [],
                     isTacticallyAcceptable: false
                 )
@@ -99,10 +119,7 @@ struct MaterialTacticalEvaluator: Sendable {
 
         return CoachingEvaluation(
             request: request,
-            checkingPieces: LegalMoveGenerator.checkingPieceSquares(
-                against: request.learner,
-                in: state.board
-            ),
+            checkingPieces: checkingPieces,
             opponentHasAnyLegalCapture: !opponentCaptureEstimates.isEmpty,
             learnerHasAnyLegalCapture: !learnerCaptureEstimates.isEmpty,
             opponentCaptureEstimates: opponentCaptureEstimates,
@@ -210,6 +227,74 @@ struct MaterialTacticalEvaluator: Sendable {
             return .capturedChecker(checker: checker.kind, capturer: mover.kind)
         }
         return .blocked(attacker: checker.kind, blocker: mover.kind)
+    }
+
+    private func dangerResolutionFacts(
+        for move: Move,
+        problems: [CoachingDangerProblem],
+        in state: GameState
+    ) -> [CoachingDangerResolutionFact] {
+        problems.flatMap { problem in
+            problem.captures.compactMap { capture in
+                dangerResolutionFact(
+                    for: move,
+                    targetSquare: problem.target,
+                    attackerSquare: capture.move.from,
+                    in: state
+                )
+            }
+        }
+    }
+
+    private func dangerResolutionFact(
+        for move: Move,
+        targetSquare: Square,
+        attackerSquare: Square,
+        in state: GameState
+    ) -> CoachingDangerResolutionFact? {
+        guard let target = state.board[targetSquare],
+              let attacker = state.board[attackerSquare] else {
+            return nil
+        }
+
+        let resolution: CoachingDangerResolution
+        if LegalMoveGenerator.capture(for: move, in: state)?.square == attackerSquare,
+           let capturer = state.board[move.from] {
+            resolution = .capturedAttacker(
+                capturer: capturer.kind,
+                target: target.kind,
+                attacker: attacker.kind
+            )
+        } else if move.from == targetSquare {
+            resolution = .movedTarget(target: target.kind, attacker: attacker.kind)
+        } else {
+            let stateAfterMove = state.applyingUnchecked(move)
+            guard let attackMove = LegalMoveGenerator.legalMoves(
+                for: attackerSquare,
+                in: stateAfterMove
+            ).first(where: {
+                LegalMoveGenerator.capture(for: $0, in: stateAfterMove)?.square
+                    == targetSquare
+            }),
+            let estimate = captureEstimate(for: attackMove, in: stateAfterMove),
+            estimate.netGainForMover <= 0,
+            let recapture = estimate.immediateRecapture,
+            recapture.from == move.to,
+            let defender = stateAfterMove.board[recapture.from] else {
+                return nil
+            }
+            resolution = .addedDefender(
+                defender: defender.kind,
+                target: target.kind,
+                attacker: attacker.kind
+            )
+        }
+
+        return CoachingDangerResolutionFact(
+            targetSquare: targetSquare,
+            attackerSquare: attackerSquare,
+            resolution: resolution
+        )
     }
 
     private func recaptureGain(_ move: Move, in state: GameState) -> Int {

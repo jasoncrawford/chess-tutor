@@ -128,6 +128,27 @@ struct CancellingCoachingAdvisor: CoachingAdvising {
     }
 }
 
+actor PersistentlyMismatchingCoachingAdvisor: CoachingAdvising {
+    private var requests: [CoachingRequest] = []
+
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        requests.append(request)
+        let mismatched = CoachingRequest(
+            committedState: request.committedState,
+            tentativeMove: request.tentativeMove,
+            learner: request.learner.opposite,
+            positionRevision: request.positionRevision,
+            context: request.context
+        )
+        return CoachingTestFixtures.startingPositionAdvice
+            .replacingRequest(with: mismatched)
+    }
+
+    func requestCount() -> Int {
+        requests.count
+    }
+}
+
 enum CoachingTestFixtures {
     static func state(
         sideToMove: PieceColor,

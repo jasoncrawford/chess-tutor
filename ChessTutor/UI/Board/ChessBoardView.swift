@@ -592,7 +592,7 @@ struct ChessBoardView: View {
                 }
 
                 let distance = hypot(value.translation.width, value.translation.height)
-                if case .identify = session.coachingPresentation?.boardTask {
+                if case .identify = session.authoritativeCoachingBoardTask {
                     guard distance > 8 else {
                         return
                     }

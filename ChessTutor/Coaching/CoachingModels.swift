@@ -24,16 +24,6 @@ protocol CoachingAdvising: Sendable {
     func advice(for request: CoachingRequest) async throws -> CoachingAdvice
 }
 
-protocol ImmediateCoachingAdvising: CoachingAdvising {
-    func immediateAdvice(for request: CoachingRequest) throws -> CoachingAdvice
-}
-
-extension ImmediateCoachingAdvising {
-    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
-        try immediateAdvice(for: request)
-    }
-}
-
 enum CoachingConfidence: Equatable, Sendable {
     case high
     case unsupported
@@ -121,8 +111,35 @@ struct CoachingMoveAssessment: Equatable, Sendable {
     let resolvesRequiredDanger: Bool
     let opponentIssues: [CoachingOpponentIssue]
     let opponentActivities: [CoachingOpponentActivity]
+    let checkResolution: CoachingCheckResolution?
+    let checkingPiece: Piece.Kind?
+    let dangerResolutionFacts: [CoachingDangerResolutionFact]
     let concepts: [CoachingConcept]
     let isTacticallyAcceptable: Bool
+
+    init(
+        move: Move,
+        isLegal: Bool,
+        resolvesRequiredDanger: Bool,
+        opponentIssues: [CoachingOpponentIssue],
+        opponentActivities: [CoachingOpponentActivity],
+        checkResolution: CoachingCheckResolution? = nil,
+        checkingPiece: Piece.Kind? = nil,
+        dangerResolutionFacts: [CoachingDangerResolutionFact] = [],
+        concepts: [CoachingConcept],
+        isTacticallyAcceptable: Bool
+    ) {
+        self.move = move
+        self.isLegal = isLegal
+        self.resolvesRequiredDanger = resolvesRequiredDanger
+        self.opponentIssues = opponentIssues
+        self.opponentActivities = opponentActivities
+        self.checkResolution = checkResolution
+        self.checkingPiece = checkingPiece
+        self.dangerResolutionFacts = dangerResolutionFacts
+        self.concepts = concepts
+        self.isTacticallyAcceptable = isTacticallyAcceptable
+    }
 }
 
 enum CoachingConcept: Equatable, Hashable, Sendable {
@@ -362,6 +379,7 @@ enum CoachingPrompt: Equatable, Sendable {
     case safeIdentifyAttacker(piece: Piece.Kind)
     case safeResolve(target: Piece.Kind, attacker: Piece.Kind)
     case takeChooseMove
+    case mateChooseMove
     case wakeChoosePiece(purpose: CoachingWakePurpose)
     case wakeChooseMove(piece: Piece.Kind, purpose: CoachingWakePurpose)
     case wake(task: CoachingWakeTask, selectedPiece: Piece.Kind?)
@@ -408,6 +426,12 @@ enum CoachingDangerResolution: Equatable, Sendable {
         attacker: Piece.Kind
     )
     case addedDefender(defender: Piece.Kind, target: Piece.Kind, attacker: Piece.Kind)
+}
+
+struct CoachingDangerResolutionFact: Equatable, Sendable {
+    let targetSquare: Square
+    let attackerSquare: Square
+    let resolution: CoachingDangerResolution
 }
 
 struct CoachingProtectedPieceFact: Equatable, Sendable {

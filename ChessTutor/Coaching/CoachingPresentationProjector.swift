@@ -118,7 +118,9 @@ struct CoachingPresentationProjector: Sendable {
                 ).flatMap { pieceKind(at: $0, advice: advice) } ?? .pawn
             )
         case .takeChooseMove:
-            return .takeChooseMove
+            return advice?.evaluation.mateInOneMoves.isEmpty == false
+                ? .mateChooseMove
+                : .takeChooseMove
         case let .wakeChoosePiece(purpose):
             if let task = wakeTask(for: stage, advice: advice) {
                 return .wake(task: task, selectedPiece: nil)
@@ -205,6 +207,9 @@ struct CoachingPresentationProjector: Sendable {
                 && !positiveAnswerWasRevealed
             return (absenceIsValid ? [.noAnswer] : []) + hintActions + [.stop]
         case .takeChooseMove:
+            if advice?.evaluation.mateInOneMoves.isEmpty == false {
+                return hintActions + [.stop]
+            }
             return (positiveAnswerWasRevealed ? [] : [.noAnswer]) + hintActions + [.stop]
         case .opponentCheck:
             return (positiveAnswerWasRevealed ? [] : [.looksSafe]) + hintActions + [.stop]
@@ -847,27 +852,21 @@ struct CoachingPresentationProjector: Sendable {
         for concept in concepts {
             switch concept {
             case .kingInCheck:
-                guard let advice,
-                      let resolution = MaterialTacticalEvaluator().checkResolution(
-                        for: move,
-                        in: advice.evaluation.request.committedState,
-                        learner: advice.evaluation.request.learner,
-                        checkingSquares: advice.checkingPieces
-                      ) else {
+                guard let assessment = advice?.moveAssessments[move],
+                      let resolution = assessment.checkResolution else {
                     continue
                 }
-                let checker = advice.checkingPieces.count == 1
-                    ? advice.checkingPieces.first.flatMap {
-                        advice.evaluation.request.committedState.board[$0]?.kind
-                    }
-                    : nil
-                return .resolvesCheck(resolution: resolution, checker: checker)
+                return .resolvesCheck(
+                    resolution: resolution,
+                    checker: assessment.checkingPiece
+                )
             case .pieceNeedsHelp:
-                if let resolution = dangerResolution(
-                    for: move,
-                    episode: episode,
-                    advice: advice
-                ) {
+                if let target = episode.evidence.safeTarget,
+                   let attacker = episode.evidence.safeAttacker,
+                   let resolution = advice?.moveAssessments[move]?
+                    .dangerResolutionFacts.first(where: {
+                        $0.targetSquare == target && $0.attackerSquare == attacker
+                    })?.resolution {
                     return .resolvesDanger(resolution)
                 }
                 continue
@@ -942,58 +941,6 @@ struct CoachingPresentationProjector: Sendable {
         default:
             return nil
         }
-    }
-
-    private func dangerResolution(
-        for move: Move,
-        episode: CoachingEpisodeState,
-        advice: CoachingAdvice?
-    ) -> CoachingDangerResolution? {
-        guard let advice,
-              let targetSquare = episode.evidence.safeTarget,
-              let attackerSquare = episode.evidence.safeAttacker else {
-            return nil
-        }
-        let state = advice.evaluation.request.committedState
-        guard let target = state.board[targetSquare],
-              let attacker = state.board[attackerSquare] else {
-            return nil
-        }
-
-        if LegalMoveGenerator.capture(for: move, in: state)?.square == attackerSquare,
-           let capturer = state.board[move.from] {
-            return .capturedAttacker(
-                capturer: capturer.kind,
-                target: target.kind,
-                attacker: attacker.kind
-            )
-        }
-        if move.from == targetSquare {
-            return .movedTarget(target: target.kind, attacker: attacker.kind)
-        }
-
-        let stateAfterMove = state.applyingUnchecked(move)
-        guard let attackMove = LegalMoveGenerator.legalMoves(
-            for: attackerSquare,
-            in: stateAfterMove
-        ).first(where: {
-            LegalMoveGenerator.capture(for: $0, in: stateAfterMove)?.square == targetSquare
-        }),
-        let estimate = MaterialTacticalEvaluator().captureEstimate(
-            for: attackMove,
-            in: stateAfterMove
-        ),
-        estimate.netGainForMover <= 0,
-        let recapture = estimate.immediateRecapture,
-        recapture.from == move.to,
-        let defender = stateAfterMove.board[recapture.from] else {
-            return nil
-        }
-        return .addedDefender(
-            defender: defender.kind,
-            target: target.kind,
-            attacker: attacker.kind
-        )
     }
 
     private func capturedKind(for move: Move, advice: CoachingAdvice?) -> Piece.Kind? {

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747E6891942AFE9A8B73651F /* SidebarPanelView.swift */; };
 		0746FACA8781C7FFB19FB001 /* TurnStatusPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */; };
+		083A54DB020EFC3F6BDD1433 /* CoachingContinuityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF5876081BDE54BD5891388 /* CoachingContinuityUITests.swift */; };
 		0A5EB8EB7C3DA3C8019E6C4F /* CoachingReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1879FE2B4A3D846947DFAD3 /* CoachingReconcilerTests.swift */; };
 		0AE720628604C79E18D283DE /* RemotePresencePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6250F032F949E7618A1AC7AD /* RemotePresencePolicy.swift */; };
 		0BBAC9DA3293C60DB15BE7BE /* RemoteInviteConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C2424C22CF6B5348610FF9 /* RemoteInviteConfirmation.swift */; };
@@ -301,6 +302,7 @@
 		E79A88E3BD48DC472E496410 /* BoardGuidanceOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGuidanceOverlay.swift; sourceTree = "<group>"; };
 		E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelView.swift; sourceTree = "<group>"; };
 		E8C06A24BB39F7F61DACF6D0 /* CoachingPanelAccessibilityFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelAccessibilityFixture.swift; sourceTree = "<group>"; };
+		EDF5876081BDE54BD5891388 /* CoachingContinuityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingContinuityUITests.swift; sourceTree = "<group>"; };
 		F0C34DD0B8F34D966E92E299 /* RemoteGameSessionControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameSessionControllerTests.swift; sourceTree = "<group>"; };
 		F13E0EE4C35EED64A264EF55 /* GameLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLifecycleTests.swift; sourceTree = "<group>"; };
 		F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutbox.swift; sourceTree = "<group>"; };
@@ -705,6 +707,7 @@
 		F781FAE5DA8AE6200D78B9BE /* ChessTutorUITests */ = {
 			isa = PBXGroup;
 			children = (
+				EDF5876081BDE54BD5891388 /* CoachingContinuityUITests.swift */,
 				7BC9C9BC80BEB85BA5DE0A21 /* CoachingPanelAccessibilityUITests.swift */,
 			);
 			path = ChessTutorUITests;
@@ -1012,6 +1015,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				083A54DB020EFC3F6BDD1433 /* CoachingContinuityUITests.swift in Sources */,
 				7B130C58145B8B91B694D853 /* CoachingPanelAccessibilityUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

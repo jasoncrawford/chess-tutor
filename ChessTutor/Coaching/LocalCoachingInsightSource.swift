@@ -181,19 +181,15 @@ struct LocalCoachingInsightSource: CoachingInsightSourcing {
                     evidence: evidence
                 )
             )
-            if evaluation.learnerCaptureEstimates.contains(where: {
-                $0.move == move && $0.netGainForMover > 0
-            }) {
-                takeOpportunities.append(
-                    CoachingOpportunity(
-                        concept: .mateInOne,
-                        subjectSquares: subjectSquares,
-                        moves: [move],
-                        priority: 1_000,
-                        evidence: evidence
-                    )
+            takeOpportunities.append(
+                CoachingOpportunity(
+                    concept: .mateInOne,
+                    subjectSquares: subjectSquares,
+                    moves: [move],
+                    priority: 1_000,
+                    evidence: evidence
                 )
-            }
+            )
         }
 
         for assessment in sortedAssessments(evaluation.moveAssessments) {

@@ -717,6 +717,111 @@ final class CoachingPresentationProjectorTests: XCTestCase {
         XCTAssertTrue(context.focus.paths.isEmpty)
     }
 
+    func testCheckCompletionUsesProviderAuthoredResolutionInsteadOfAnalyzingBoard() throws {
+        let move = CoachingTestFixtures.openingKnightMove
+        let assessment = CoachingMoveAssessment(
+            move: move,
+            isLegal: true,
+            resolvesRequiredDanger: true,
+            opponentIssues: [],
+            opponentActivities: [],
+            checkResolution: .movedKing,
+            checkingPiece: .queen,
+            dangerResolutionFacts: [],
+            concepts: [.kingInCheck],
+            isTacticallyAcceptable: true
+        )
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .check,
+            state: .startingPosition(),
+            assessment: assessment
+        )
+        let question = CoachingQuestionID.complete(move: move, origin: .check)
+
+        let context = try XCTUnwrap(CoachingPresentationProjector().context(
+            learner: .white,
+            derived: derived(
+                .complete(move: move, origin: .check, concepts: [.kingInCheck]),
+                questionID: question
+            ),
+            episode: episode(
+                tentativeAdvice: advice,
+                evidence: evidence(tentativeOrigin: .check),
+                progress: progress(questionID: question),
+                selectedSquare: move.to,
+                tentativeMove: move,
+                positionRevision: advice.evaluation.request.positionRevision
+            )
+        ))
+
+        XCTAssertEqual(
+            context.prompt,
+            .complete(
+                origin: .check,
+                idea: .resolvesCheck(resolution: .movedKing, checker: .queen)
+            )
+        )
+    }
+
+    func testDangerCompletionUsesProviderAuthoredResolutionInsteadOfAnalyzingBoard() throws {
+        let move = CoachingTestFixtures.safeMove
+        let target = CoachingTestFixtures.whiteQueen
+        let attacker = CoachingTestFixtures.blackBishop
+        let authoredResolution = CoachingDangerResolution.addedDefender(
+            defender: .knight,
+            target: .rook,
+            attacker: .queen
+        )
+        let assessment = CoachingMoveAssessment(
+            move: move,
+            isLegal: true,
+            resolvesRequiredDanger: true,
+            opponentIssues: [],
+            opponentActivities: [],
+            checkResolution: nil,
+            checkingPiece: nil,
+            dangerResolutionFacts: [CoachingDangerResolutionFact(
+                targetSquare: target,
+                attackerSquare: attacker,
+                resolution: authoredResolution
+            )],
+            concepts: [.pieceNeedsHelp],
+            isTacticallyAcceptable: true
+        )
+        let advice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .safe,
+            assessment: assessment
+        )
+        let question = CoachingQuestionID.complete(move: move, origin: .safe)
+
+        let context = try XCTUnwrap(CoachingPresentationProjector().context(
+            learner: .white,
+            derived: derived(
+                .complete(move: move, origin: .safe, concepts: [.pieceNeedsHelp]),
+                questionID: question
+            ),
+            episode: episode(
+                tentativeAdvice: advice,
+                evidence: evidence(
+                    safeTarget: target,
+                    safeAttacker: attacker,
+                    tentativeOrigin: .safe
+                ),
+                progress: progress(questionID: question),
+                selectedSquare: move.to,
+                tentativeMove: move,
+                positionRevision: advice.evaluation.request.positionRevision
+            )
+        ))
+
+        XCTAssertEqual(
+            context.prompt,
+            .complete(origin: .safe, idea: .resolvesDanger(authoredResolution))
+        )
+    }
+
     func testProjectionIgnoresTentativeAdviceWhenNoMatchingMoveIsStaged() throws {
         let target = CoachingTestFixtures.whiteQueen
         let attacker = CoachingTestFixtures.blackBishop

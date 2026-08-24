@@ -4,16 +4,12 @@ import XCTest
 final class CoachingSessionTests: XCTestCase {
     private let advisor = LocalCoachingAdvisor()
 
-    func testAwaitingAdviceKeepsOnlyCloseHelpReachable() {
+    func testInitialAwaitingAdviceDoesNotExposeAnIncompletePresentation() {
         let session = session()
 
         XCTAssertEqual(session.stage, .awaitingAdvice(origin: nil))
-        XCTAssertEqual(session.presentation?.primaryMessage, "I'm checking the board.")
-        XCTAssertNil(session.presentation?.instruction)
-        XCTAssertNil(session.presentation?.observation)
-        XCTAssertEqual(session.presentation?.actions.map(\.action), [.stop])
-        XCTAssertEqual(session.presentation?.boardTask, CoachingBoardTask.none)
-        XCTAssertEqual(session.presentation?.focus, .empty)
+        XCTAssertNil(session.presentation)
+        XCTAssertEqual(session.authoritativeBoardTask, .none)
     }
 
     func testStartingPositionSkipsEmptyScansAndAsksConcreteOpeningQuestion() {
@@ -909,7 +905,7 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
-    func testNonCaptureMateDoesNotOpenTheSafeCaptureQuestion() {
+    func testNonCaptureMateOpensFirstClassMateQuestion() {
         let mate = Move(
             from: CoachingTestFixtures.whiteQueen,
             to: Square(file: .h, rank: 4)
@@ -923,8 +919,16 @@ final class CoachingSessionTests: XCTestCase {
 
         session.receive(advice)
 
-        XCTAssertEqual(session.stage, .fallbackChooseMove)
-        XCTAssertEqual(session.presentation?.routine, [])
+        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Can you find checkmate in one move?"
+        )
+        XCTAssertEqual(session.presentation?.instruction, "Make the checkmating move.")
+        XCTAssertEqual(
+            session.presentation?.routine,
+            [.safeCleared, .takeCurrent, .wakePending]
+        )
     }
 
     func testTakeRejectsZeroGainCaptureOutsideActiveSafeCaptureOpportunities() {
@@ -3124,6 +3128,7 @@ final class CoachingSessionTests: XCTestCase {
 
     func testStaleStartAdviceCannotReplaceTheCurrentSnapshot() {
         var session = openingSession()
+        let lastCompletePresentation = session.presentation
 
         XCTAssertEqual(
             session.handle(.interactionChanged(snapshot(revision: 8))),
@@ -3135,8 +3140,7 @@ final class CoachingSessionTests: XCTestCase {
         ).isEmpty)
 
         XCTAssertEqual(session.stage, .awaitingAdvice(origin: nil))
-        XCTAssertEqual(session.presentation?.primaryMessage, "I'm checking the board.")
-        XCTAssertEqual(session.presentation?.actions.map(\.action), [.stop])
+        XCTAssertEqual(session.presentation, lastCompletePresentation)
     }
 
     func testTentativeAdviceCannotUseRetainedPositionAdviceFromDifferentRevision() {
@@ -3162,6 +3166,7 @@ final class CoachingSessionTests: XCTestCase {
             )
         ).replacingRequest(with: request)
         var session = openingSession()
+        let lastCompletePresentation = session.presentation
 
         XCTAssertEqual(
             session.handle(.interactionChanged(interaction)),
@@ -3170,8 +3175,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertTrue(session.receive(advice, interaction: interaction).isEmpty)
 
         XCTAssertEqual(session.stage, .awaitingAdvice(origin: .wake))
-        XCTAssertEqual(session.presentation?.primaryMessage, "I'm checking the board.")
-        XCTAssertEqual(session.presentation?.actions.map(\.action), [.stop])
+        XCTAssertEqual(session.presentation, lastCompletePresentation)
     }
 
     func testActionsOnlyApplyWhenExposedByTheDerivedQuestion() {

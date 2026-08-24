@@ -4,13 +4,13 @@ import XCTest
 final class LocalCoachingAdvisorTests: XCTestCase {
     private let advisor = LocalCoachingAdvisor()
 
-    func testLocalAdviceIsAvailableImmediately() async throws {
+    func testLocalAdviceIsDeterministicAcrossAsyncCalls() async throws {
         let request = request(for: GameState.startingPosition())
 
-        let immediate = try advisor.immediateAdvice(for: request)
-        let asynchronous = try await advisor.advice(for: request)
+        let first = try await advisor.advice(for: request)
+        let second = try await advisor.advice(for: request)
 
-        XCTAssertEqual(immediate, asynchronous)
+        XCTAssertEqual(first, second)
     }
 
     func testStartingKnightMovesHavePreferredAndAcceptableGrades() async throws {
@@ -891,7 +891,7 @@ final class LocalCoachingAdvisorTests: XCTestCase {
         })
     }
 
-    func testNonCaptureMateIsAcceptedButNotOfferedAsASafeCapture() async throws {
+    func testNonCaptureMateIsAFirstClassTakeWithoutCaptureEvidence() async throws {
         let matingMove = Move(
             from: Square(file: .g, rank: 6),
             to: Square(file: .g, rank: 7)
@@ -907,9 +907,10 @@ final class LocalCoachingAdvisorTests: XCTestCase {
 
         let advice = try await advisor.advice(for: request(for: state))
         let assessment = try XCTUnwrap(advice.moveAssessments[matingMove])
-        XCTAssertFalse(advice.takeOpportunities.contains {
+        XCTAssertTrue(advice.takeOpportunities.contains {
             $0.concept == .mateInOne && $0.moves == [matingMove]
         })
+        XCTAssertFalse(advice.evaluation.learnerHasAnyLegalCapture)
         XCTAssertTrue(assessment.concepts.contains(.mateInOne))
         XCTAssertTrue(assessment.isTacticallyAcceptable)
     }

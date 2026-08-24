@@ -158,7 +158,8 @@ struct CoachingReconciler: Sendable {
         let confirmedAbsenceIsValid = evidence.confirmedTakeAbsence
             && advice.takeOpportunities.isEmpty
         guard !confirmedAbsenceIsValid else { return false }
-        return advice.evaluation.learnerHasAnyLegalCapture
+        return !advice.evaluation.mateInOneMoves.isEmpty
+            || advice.evaluation.learnerHasAnyLegalCapture
             || evidence.confirmedSafeAbsence
     }
 
@@ -565,11 +566,12 @@ struct CoachingReconciler: Sendable {
         let hasPositiveCurrentEstimate = tentativeAdvice.evaluation
             .learnerCaptureEstimates
             .contains { $0.move == move && $0.netGainForMover > 0 }
+        let isMate = assessment.concepts.contains(.mateInOne)
         let hasRevisionIssue = assessment.opponentIssues.contains {
             $0.severity == .reviseMove
         }
         return isActiveOpportunity
-            && hasPositiveCurrentEstimate
+            && (hasPositiveCurrentEstimate || isMate)
             && assessment.isLegal
             && assessment.resolvesRequiredDanger
             && !hasRevisionIssue

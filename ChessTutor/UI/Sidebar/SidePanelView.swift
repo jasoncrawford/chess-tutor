@@ -74,7 +74,8 @@ struct SidePanelView: View {
         layout: SidebarColumnLayout,
         secondaryActions: [GameControlsPresentation.SecondaryAction]
     ) -> some View {
-        if let coaching = session.coachingPresentation {
+        if session.isCoachingPanelVisible,
+           let coaching = session.coachingPresentation {
             coachingSegmentStack(
                 coaching,
                 layout: layout,

@@ -119,6 +119,12 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 instruction: "Make the capture, or choose No safe capture.",
                 observation: nil
             )
+        case .mateChooseMove:
+            return AuthoredTurn(
+                primaryMessage: "Can you find checkmate in one move?",
+                instruction: "Make the checkmating move.",
+                observation: nil
+            )
         case let .wakeChoosePiece(purpose):
             return authoredWakePieceCopy(for: purpose)
         case let .wakeChooseMove(piece, purpose):
@@ -560,6 +566,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "One of your pieces does need help."
         case .takeChooseMove:
             return "There is a safe capture to find."
+        case .mateChooseMove:
+            return "There is a checkmating move to find."
         case let .opponentReply(opponent, _):
             return "\(colorName(opponent)) can check your king or win a piece."
         default:

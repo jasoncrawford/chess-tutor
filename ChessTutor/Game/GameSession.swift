@@ -30,6 +30,7 @@ final class GameSession {
     private struct PendingCoachingRequest: Equatable, Sendable {
         let id: Int
         let request: CoachingRequest
+        let mismatchRetryCount: Int
     }
 
     private var committedState: GameState
@@ -93,6 +94,14 @@ final class GameSession {
 
     var isCoachingActive: Bool {
         coachingSession != nil
+    }
+
+    var isCoachingPanelVisible: Bool {
+        coachingSession != nil && coachingPresentation != nil
+    }
+
+    var authoritativeCoachingBoardTask: CoachingBoardTask {
+        coachingSession?.authoritativeBoardTask ?? .none
     }
 
     var pendingCoachingRequestID: Int? {
@@ -663,7 +672,7 @@ final class GameSession {
             let advice = try await coachingAdvisor.advice(for: pending.request)
             receiveCoachingAdvice(advice, for: pending)
         } catch is CancellationError {
-            return
+            receiveUnsupportedCoachingPosition(for: pending)
         } catch {
             receiveUnsupportedCoachingPosition(for: pending)
         }
@@ -683,7 +692,7 @@ final class GameSession {
         _ square: Square,
         intent: CoachingSquareInteractionIntent
     ) -> Bool {
-        guard case let .identify(allowsMoveRevision) = coachingPresentation?.boardTask else {
+        guard case let .identify(allowsMoveRevision) = authoritativeCoachingBoardTask else {
             return false
         }
 
@@ -718,7 +727,10 @@ final class GameSession {
         pendingCoachingRequest = nil
     }
 
-    private func queueCoachingRequest(context: CoachingRequest.Context) {
+    private func queueCoachingRequest(
+        context: CoachingRequest.Context,
+        mismatchRetryCount: Int = 0
+    ) {
         guard coachingSession != nil else { return }
         let requestedTentativeMove: Move?
         switch context {
@@ -736,21 +748,10 @@ final class GameSession {
                 learner: committedState.sideToMove,
                 positionRevision: coachingPositionRevision,
                 context: context
-            )
+            ),
+            mismatchRetryCount: mismatchRetryCount
         )
         pendingCoachingRequest = pending
-
-        guard let immediateAdvisor = coachingAdvisor as? any ImmediateCoachingAdvising else {
-            return
-        }
-        do {
-            let advice = try immediateAdvisor.immediateAdvice(for: pending.request)
-            receiveCoachingAdvice(advice, for: pending)
-        } catch is CancellationError {
-            return
-        } catch {
-            receiveUnsupportedCoachingPosition(for: pending)
-        }
     }
 
     private func receiveCoachingAdvice(
@@ -759,8 +760,15 @@ final class GameSession {
     ) {
         guard pendingCoachingRequestIsApplicable(pending) else { return }
         guard advice.evaluation.request == pending.request else {
-            pendingCoachingRequest = nil
-            queueCoachingRequest(context: pending.request.context)
+            if pending.mismatchRetryCount == 0 {
+                pendingCoachingRequest = nil
+                queueCoachingRequest(
+                    context: pending.request.context,
+                    mismatchRetryCount: 1
+                )
+            } else {
+                receiveUnsupportedCoachingPosition(for: pending)
+            }
             return
         }
         pendingCoachingRequest = nil

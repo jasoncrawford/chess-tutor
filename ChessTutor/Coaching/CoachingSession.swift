@@ -8,6 +8,15 @@ struct CoachingSession: Sendable {
     private(set) var stage: CoachingStage
     private(set) var presentation: CoachingPresentation?
 
+    var authoritativeBoardTask: CoachingBoardTask {
+        let derived = reconciler.derive(learner: learner, episode: episode)
+        return projector.context(
+            learner: learner,
+            derived: derived,
+            episode: episode
+        )?.boardTask ?? .none
+    }
+
     var hintLevel: Int { episode.progress.hintLevel }
     var missesAtCurrentLevel: Int { episode.progress.missesAtCurrentLevel }
 
@@ -419,6 +428,7 @@ struct CoachingSession: Sendable {
 
     private mutating func publish(_ derived: CoachingDerivedState) {
         stage = derived.stage
+        guard !derived.stage.isAwaitingAdvice else { return }
         let context = projector.context(
             learner: learner,
             derived: derived,
@@ -582,6 +592,13 @@ struct CoachingSession: Sendable {
 
     private func isCompletion(_ stage: CoachingStage) -> Bool {
         if case .complete = stage { return true }
+        return false
+    }
+}
+
+private extension CoachingStage {
+    var isAwaitingAdvice: Bool {
+        if case .awaitingAdvice = self { return true }
         return false
     }
 }
