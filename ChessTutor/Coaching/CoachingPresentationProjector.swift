@@ -323,8 +323,10 @@ struct CoachingPresentationProjector: Sendable {
     ) -> CoachingFeedback? {
         guard stage == .takeChooseMove,
               hint == .candidatePieces,
-              let move = advice?.activeTakeMoves.first,
-              let fact = advice?.exchangeFact(for: move) else {
+              let advice,
+              !advice.isMateSpecificTake,
+              let move = advice.activeTakeMoves.first,
+              let fact = advice.exchangeFact(for: move) else {
             return nil
         }
         return .safeCaptureHint(piece: fact.mover)
@@ -848,6 +850,11 @@ struct CoachingPresentationProjector: Sendable {
                 move: move,
                 piece: pieceKind(at: move.from, advice: advice) ?? .pawn
             )
+        }
+        if origin == .take,
+           episode.knowledge.positionAdvice?.isMateSpecificTake == true,
+           concepts.contains(.mateInOne) {
+            return .mate
         }
         for concept in concepts {
             switch concept {

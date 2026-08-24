@@ -183,6 +183,83 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.authoritativeCoachingBoardTask, .none)
     }
 
+    func testMatingCaptureKeepsMateSemanticsForHintsAndCompletion() async throws {
+        let matingCapture = Move(
+            from: Square(file: .f, rank: 7),
+            to: Square(file: .g, rank: 7)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .e, rank: 4): Piece(kind: .king, color: .white),
+                matingCapture.from: Piece(kind: .queen, color: .white),
+                Square(file: .c, rank: 3): Piece(kind: .bishop, color: .white),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                matingCapture.to: Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let advisor = LocalCoachingAdvisor()
+        let positionAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 0,
+            context: .start
+        ))
+
+        XCTAssertEqual(positionAdvice.dangerProblems, [])
+        XCTAssertEqual(positionAdvice.evaluation.mateInOneMoves, [matingCapture])
+        XCTAssertTrue(positionAdvice.evaluation.learnerCaptureEstimates.contains {
+            $0.move == matingCapture && $0.netGainForMover > 0
+        })
+        XCTAssertEqual(positionAdvice.activeTakeMoves, [matingCapture])
+        let assessment = try XCTUnwrap(positionAdvice.moveAssessments[matingCapture])
+        XCTAssertTrue(assessment.concepts.contains(.profitableCapture))
+        XCTAssertTrue(assessment.concepts.contains(.mateInOne))
+
+        let session = GameSession(state: state, coachingAdvisor: advisor)
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "Can you find checkmate in one move?"
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Make the checkmating move."
+        )
+
+        XCTAssertNil(session.chooseCoachingAction(.hint))
+        XCTAssertEqual(session.coachingPresentation?.hint, .candidatePieces)
+        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [matingCapture.from])
+        XCTAssertEqual(session.coachingPresentation?.focus.paths, [])
+        XCTAssertNil(session.coachingPresentation?.observation)
+
+        XCTAssertNil(session.chooseCoachingAction(.hint))
+        XCTAssertEqual(session.coachingPresentation?.hint, .candidateMoves)
+        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [matingCapture.to])
+        XCTAssertEqual(session.coachingPresentation?.focus.paths, [
+            CoachFocusPath(
+                source: matingCapture.from,
+                destination: matingCapture.to,
+                role: .candidate
+            )
+        ])
+        XCTAssertNil(session.coachingPresentation?.observation)
+
+        stage(matingCapture, in: session)
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "You found checkmate.")
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Play it, or try another move."
+        )
+        XCTAssertNil(session.coachingPresentation?.observation)
+        XCTAssertEqual(session.authoritativeCoachingBoardTask, .none)
+    }
+
     func testInitialPendingAdviceCanCloseHelpAndStaleCompletionCannotReopenIt() async {
         let advisor = ControllableCoachingAdvisor()
         let session = GameSession(coachingAdvisor: advisor)
