@@ -192,12 +192,20 @@ struct CoachFocusOverlay: View {
 
     private func pathOrder(_ lhs: CoachFocusPath, _ rhs: CoachFocusPath) -> Bool {
         if lhs.role != rhs.role {
-            return lhs.role == .candidate
+            return pathRoleOrder(lhs.role) < pathRoleOrder(rhs.role)
         }
         if squareSortKey(lhs.source) != squareSortKey(rhs.source) {
             return squareSortKey(lhs.source) < squareSortKey(rhs.source)
         }
         return squareSortKey(lhs.destination) < squareSortKey(rhs.destination)
+    }
+
+    private func pathRoleOrder(_ role: CoachFocusPath.Role) -> Int {
+        switch role {
+        case .candidate: 0
+        case .defender: 1
+        case .attacker: 2
+        }
     }
 
     private func squareSortKey(_ square: Square) -> Int {

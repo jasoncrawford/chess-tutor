@@ -391,6 +391,16 @@ enum CoachingDangerResolution: Equatable, Sendable {
     case addedDefender(defender: Piece.Kind, target: Piece.Kind, attacker: Piece.Kind)
 }
 
+struct CoachingProtectedPieceFact: Equatable, Sendable {
+    let targetSquare: Square
+    let target: Piece.Kind
+    let attackerSquare: Square
+    let attacker: Piece.Kind
+    let defenderSquare: Square
+    let defender: Piece.Kind
+    let noPieceNeedsHelp: Bool
+}
+
 enum CoachingFeedback: Equatable, Sendable {
     case safePiece(piece: Piece.Kind)
     case lowerPriorityDanger(
@@ -399,12 +409,7 @@ enum CoachingFeedback: Equatable, Sendable {
         primary: Piece.Kind,
         primaryLoss: Int
     )
-    case attackedButProtected(
-        target: Piece.Kind,
-        attacker: Piece.Kind,
-        defender: Piece.Kind,
-        noPieceNeedsHelp: Bool
-    )
+    case attackedButProtected(CoachingProtectedPieceFact)
     case expectedLearnerPiece
     case notCheckingPiece(piece: Piece.Kind?)
     case notAttacker(piece: Piece.Kind, target: Piece.Kind)
@@ -436,7 +441,7 @@ enum CoachingRoutineState: Equatable, Sendable {
 }
 
 struct CoachFocusPath: Equatable, Hashable, Sendable {
-    enum Role: Equatable, Hashable, Sendable { case attacker, candidate }
+    enum Role: Equatable, Hashable, Sendable { case attacker, defender, candidate }
     let source: Square
     let destination: Square
     let role: Role

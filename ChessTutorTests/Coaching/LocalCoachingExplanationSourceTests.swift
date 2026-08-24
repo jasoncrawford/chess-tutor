@@ -218,12 +218,12 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .wakeChoosePiece(purpose: .addsDefender),
-                "Which piece could add a defender?",
+                "Which piece would you like to move?",
                 "Tap the piece you want to move."
             ),
             (
                 .wakeChoosePiece(purpose: .createsThreat),
-                "Which piece could create a safe threat?",
+                "Which piece would you like to move?",
                 "Tap the piece you want to move."
             ),
             (
@@ -270,25 +270,31 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         }
     }
 
-    func testLegacyWakePurposeCopyUsesConcreteSemanticNames() {
+    func testLegacyPurposeOnlyTurnsStayNeutralWithoutConcreteTargetEvidence() {
         let cases: [(CoachingPrompt, CoachingFeedback?, String, String?)] = [
             (
                 .wakeChooseMove(piece: .bishop, purpose: .addsDefender),
                 nil,
-                "This bishop can add a defender.",
+                "Where would you like to move your bishop?",
                 nil
             ),
             (
                 .wakeChooseMove(piece: .rook, purpose: .createsThreat),
                 nil,
-                "This rook can create a safe threat.",
+                "Where would you like to move your rook?",
                 nil
             ),
             (
                 .wakeChoosePiece(purpose: .addsDefender),
                 .noRecognizedPurpose(purpose: .addsDefender),
-                "Which piece could add a defender?",
-                "That move does not add a defender."
+                "Which piece would you like to move?",
+                "Try another idea."
+            ),
+            (
+                .wakeChoosePiece(purpose: .createsThreat),
+                .noRecognizedPurpose(purpose: .createsThreat),
+                "Which piece would you like to move?",
+                "Try another idea."
             ),
             (
                 .fallbackChooseMove,
@@ -310,6 +316,49 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             )
             XCTAssertEqual(presentation.primaryMessage, headline)
             XCTAssertEqual(presentation.observation, response)
+        }
+    }
+
+    func testConcreteProtectionAndThreatTasksNameTheirExactTargets() {
+        let move = Move(from: sq("b1"), to: sq("c3"))
+        let candidate = CoachingCandidateMove(
+            move: move,
+            grade: .preferred,
+            resultingMobility: nil,
+            centralityComparison: nil
+        )
+        let cases: [(CoachingWakeTask, String, String)] = [
+            (
+                .protect(
+                    source: sq("b1"),
+                    sourcePiece: .knight,
+                    target: sq("e4"),
+                    targetPiece: .pawn,
+                    candidates: [candidate]
+                ),
+                "Your knight can protect your pawn.",
+                "Move the knight to protect the pawn."
+            ),
+            (
+                .createThreat(
+                    source: sq("b1"),
+                    sourcePiece: .knight,
+                    target: sq("d4"),
+                    targetPiece: .rook,
+                    candidates: [candidate]
+                ),
+                "Your knight can attack Black's rook.",
+                "Move the knight to attack the rook."
+            ),
+        ]
+
+        for (task, primaryMessage, instruction) in cases {
+            let presentation = source.presentation(for: context(
+                prompt: .wake(task: task, selectedPiece: nil)
+            ))
+
+            XCTAssertEqual(presentation.primaryMessage, primaryMessage)
+            XCTAssertEqual(presentation.instruction, instruction)
         }
     }
 
@@ -716,13 +765,16 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             ),
             (
                 .safeLocate,
-                .attackedButProtected(
+                .attackedButProtected(CoachingProtectedPieceFact(
+                    targetSquare: sq("g4"),
                     target: .pawn,
+                    attackerSquare: sq("f6"),
                     attacker: .knight,
+                    defenderSquare: sq("h3"),
                     defender: .pawn,
                     noPieceNeedsHelp: true
-                ),
-                "The knight attacks your pawn, but your pawn protects it."
+                )),
+                "The knight attacks your pawn, but another pawn protects it."
             ),
             (.safeLocate, .expectedLearnerPiece, "That is not one of your pieces."),
             (
@@ -831,11 +883,11 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (.castles, "Castling helps keep your king safe."),
             (
                 .addsDefender(piece: .bishop),
-                "Your bishop adds a defender."
+                "That move seems safe."
             ),
             (
                 .createsThreat(piece: .rook),
-                "Your rook creates a threat."
+                "That move seems safe."
             ),
             (
                 .centralizes(piece: .queen),
@@ -1084,12 +1136,15 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
                 primary: .knight,
                 primaryLoss: 3
             ),
-            .attackedButProtected(
+            .attackedButProtected(CoachingProtectedPieceFact(
+                targetSquare: sq("g4"),
                 target: .pawn,
+                attackerSquare: sq("f6"),
                 attacker: .knight,
+                defenderSquare: sq("h3"),
                 defender: .pawn,
                 noPieceNeedsHelp: true
-            ),
+            )),
             .expectedLearnerPiece,
             .notCheckingPiece(piece: nil),
             .notCheckingPiece(piece: .bishop),
@@ -1141,31 +1196,125 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             + presentation.actions.flatMap { [$0.title, $0.accessibilityLabel] }
         }
 
-        let feedbackCopy = prompts.flatMap { prompt in
+        let feedbackPresentations = prompts.flatMap { prompt in
             feedback.map { item in
-                let presentation = source.presentation(
+                source.presentation(
                     for: context(
                         prompt: prompt,
                         feedback: item,
                         actions: [.noAnswer, .looksSafe, .hint, .stop, .done, .keepLooking]
                     )
                 )
-                return childFacingCopy(presentation).joined(separator: " ")
             }
-        }.joined(separator: " ")
+        }
+        let feedbackCopy = feedbackPresentations
+            .flatMap(childFacingCopy)
+            .joined(separator: " ")
         let hints: [CoachingHint] = [
             .checkMarker, .dangerMarker, .replyMarkers, .candidatePieces,
             .attackerRelationship, .safeResponseIdeas, .movementMarkers,
             .candidateMoves,
         ]
-        let hintCopy = prompts.flatMap { prompt in
+        let hintPresentations = prompts.flatMap { prompt in
             hints.map { hint in
-                childFacingCopy(source.presentation(
+                source.presentation(
                     for: context(prompt: prompt, hint: hint, actions: [.hint])
-                )).joined(separator: " ")
+                )
             }
-        }.joined(separator: " ")
+        }
+        let hintCopy = hintPresentations
+            .flatMap(childFacingCopy)
+            .joined(separator: " ")
         let copy = "\(feedbackCopy) \(hintCopy)".lowercased()
+
+        func reachablePrompt(for item: CoachingFeedback?) -> CoachingPrompt {
+            switch item {
+            case nil, .safePiece, .lowerPriorityDanger, .attackedButProtected,
+                 .expectedLearnerPiece, .missedExistingAnswer(.noPieceNeedsHelp):
+                return .safeLocate
+            case .notCheckingPiece:
+                return .checkLocate
+            case .notAttacker, .expectedAttacker:
+                return .safeIdentifyAttacker(piece: .knight)
+            case .blockedWakePiece:
+                return .wakeChoosePiece(purpose: .openingDevelopment(firstMove: true))
+            case let .notWakeCandidate(_, purpose):
+                return .wakeChoosePiece(purpose: purpose)
+            case .notReplyIssue, .benignOpponentActivity, .missedOpponentReply,
+                 .missedOpponentIssue, .opponentReplyLooksSafe, .harmlessCheckFound,
+                 .checkFoundOtherDangerRemains:
+                return .opponentReply(opponent: .black, threatenedPiece: nil)
+            case .correctAbsence(.noPieceNeedsHelp):
+                return .takeChooseMove
+            case .correctAbsence(.noSafeCapture):
+                return .fallbackChooseMove
+            case .missedExistingAnswer(.noSafeCapture), .noSafeCaptureForPiece,
+                 .safeCaptureHint, .unsafeCapture:
+                return .takeChooseMove
+            case let .opponentIssue(fact):
+                return .opponentIssueRevise(
+                    kind: fact.issue.kind,
+                    affectedPiece: fact.affectedPiece
+                )
+            case let .concreteFlaw(kind, affectedPiece):
+                return .opponentIssueRevise(
+                    kind: kind,
+                    affectedPiece: affectedPiece
+                )
+            case .dangerStillPresent:
+                return .safeResolve(target: .queen, attacker: .rook)
+            case let .noRecognizedPurpose(purpose):
+                return purpose.map {
+                    .wakeChooseMove(piece: .knight, purpose: $0)
+                } ?? .fallbackChooseMove
+            }
+        }
+
+        func reachablePrompt(for hint: CoachingHint) -> CoachingPrompt {
+            switch hint {
+            case .checkMarker:
+                return .checkLocate
+            case .dangerMarker:
+                return .safeLocate
+            case .replyMarkers:
+                return .opponentReply(opponent: .black, threatenedPiece: nil)
+            case .candidatePieces:
+                return .wakeChoosePiece(
+                    purpose: .openingDevelopment(firstMove: true)
+                )
+            case .attackerRelationship:
+                return .safeIdentifyAttacker(piece: .knight)
+            case .safeResponseIdeas:
+                return .safeResolve(target: .knight, attacker: .pawn)
+            case .movementMarkers:
+                return .wakeChooseMove(
+                    piece: .knight,
+                    purpose: .openingDevelopment(firstMove: true)
+                )
+            case .candidateMoves:
+                return .wake(task: wakeTasks[3], selectedPiece: .knight)
+            }
+        }
+
+        let reachablePresentations = prompts.map {
+            source.presentation(for: context(prompt: $0))
+        } + feedback.map { item in
+            source.presentation(for: context(
+                prompt: reachablePrompt(for: item),
+                feedback: item,
+                actions: [.noAnswer, .looksSafe, .hint, .stop, .done, .keepLooking]
+            ))
+        } + hints.map { hint in
+            source.presentation(for: context(
+                prompt: reachablePrompt(for: hint),
+                hint: hint,
+                actions: [.hint]
+            ))
+        }
+
+        for presentation in reachablePresentations {
+            assertCompactAndNonduplicative(presentation)
+        }
 
         XCTAssertFalse(copy.contains("best"))
         XCTAssertFalse(copy.contains("wrong move"))
@@ -1202,6 +1351,17 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertNotEqual(copy.trimmingCharacters(in: .whitespacesAndNewlines), "Yes.")
     }
 
+    func testRevisionPromptDoesNotRepeatTryAnotherMoveAcrossFields() {
+        let presentation = source.presentation(for: context(prompt: .reviseMove))
+
+        XCTAssertEqual(presentation.primaryMessage, "Try another move.")
+        XCTAssertEqual(presentation.instruction, "Move a piece.")
+        XCTAssertFalse(hasContainedMeaning(
+            presentation.primaryMessage,
+            presentation.instruction
+        ))
+    }
+
     func testMaterialLossWithoutAffectedPieceUsesBoundedCaptureCopy() {
         let presentation = source.presentation(for: context(
             prompt: .opponentIssueRevise(
@@ -1222,6 +1382,75 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         XCTAssertEqual(
             presentation.instruction,
             "Try a different move."
+        )
+    }
+
+    private func normalizedText(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }
+        guard !words.isEmpty else { return nil }
+        return words.joined(separator: " ")
+    }
+
+    private func hasContainedMeaning(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs = normalizedText(lhs),
+              let rhs = normalizedText(rhs),
+              min(lhs.split(separator: " ").count, rhs.split(separator: " ").count) >= 3
+        else {
+            return false
+        }
+        return lhs.contains(rhs) || rhs.contains(lhs)
+    }
+
+    private func wordCount(_ text: String) -> Int {
+        text.split(whereSeparator: \.isWhitespace).count
+    }
+
+    private func sentenceCount(_ text: String) -> Int {
+        text.filter { ".!?".contains($0) }.count
+    }
+
+    private func assertCompactAndNonduplicative(
+        _ presentation: CoachingPresentation,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let mandatedOpeningCompletion =
+            "That move seems safe, but a center pawn or knight is a simpler start."
+        XCTAssertLessThanOrEqual(
+            wordCount(presentation.primaryMessage),
+            presentation.primaryMessage == mandatedOpeningCompletion ? 14 : 12,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            sentenceCount(presentation.primaryMessage),
+            1,
+            file: file,
+            line: line
+        )
+        if let instruction = presentation.instruction {
+            XCTAssertLessThanOrEqual(wordCount(instruction), 16, file: file, line: line)
+            XCTAssertLessThanOrEqual(sentenceCount(instruction), 1, file: file, line: line)
+        }
+        if let observation = presentation.observation {
+            XCTAssertLessThanOrEqual(wordCount(observation), 18, file: file, line: line)
+            XCTAssertLessThanOrEqual(sentenceCount(observation), 1, file: file, line: line)
+        }
+        XCTAssertFalse(
+            hasContainedMeaning(presentation.primaryMessage, presentation.instruction),
+            file: file,
+            line: line
+        )
+        XCTAssertFalse(
+            hasContainedMeaning(presentation.primaryMessage, presentation.observation),
+            file: file,
+            line: line
+        )
+        XCTAssertFalse(
+            hasContainedMeaning(presentation.instruction, presentation.observation),
+            file: file,
+            line: line
         )
     }
 

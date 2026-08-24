@@ -537,6 +537,7 @@ enum CoachingTestFixtures {
         danger: [CoachingDangerProblem] = [],
         take: [CoachingOpportunity] = [],
         wake: [CoachingOpportunity] = [],
+        wakeTasks: [CoachingWakeTask] = [],
         assessments: [CoachingMoveAssessment] = [],
         opening: Bool = false,
         confidence: CoachingConfidence = .high
@@ -568,6 +569,7 @@ enum CoachingTestFixtures {
             dangerProblems: danger,
             takeOpportunities: take,
             wakeOpportunities: wake,
+            wakeTasks: wakeTasks,
             moveAssessments: assessmentMap,
             openingDevelopmentIsRelevant: opening,
             confidence: confidence

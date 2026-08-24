@@ -109,13 +109,22 @@ struct CoachingGoldenTurn: Equatable {
     let observation: String?
     let primaryMessage: String
     let instruction: String?
-    let actions: [CoachingAction]
-    let actionTitles: [String]
+    let hint: CoachingHint?
+    let actionPresentations: [CoachingActionPresentation]
     let boardTask: CoachingBoardTask
     let routine: [CoachingRoutineState]
     let emphasizedSquares: Set<Square>
     let candidateSquares: Set<Square>
     let paths: Set<CoachFocusPath>
+    let pulseID: Int
+
+    var actions: [CoachingAction] {
+        actionPresentations.map(\.action)
+    }
+
+    var actionTitles: [String] {
+        actionPresentations.map(\.title)
+    }
 }
 
 func sq(_ algebraic: String) -> Square {

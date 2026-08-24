@@ -217,13 +217,13 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             )
         case .addsDefender:
             return AuthoredTurn(
-                primaryMessage: "Which piece could add a defender?",
+                primaryMessage: "Which piece would you like to move?",
                 instruction: "Tap the piece you want to move.",
                 observation: nil
             )
         case .createsThreat:
             return AuthoredTurn(
-                primaryMessage: "Which piece could create a safe threat?",
+                primaryMessage: "Which piece would you like to move?",
                 instruction: "Tap the piece you want to move.",
                 observation: nil
             )
@@ -325,10 +325,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             primaryMessage = piece == .pawn
                 ? "This pawn can help in the center."
                 : "Moving this \(piece.rawValue) is called developing it."
-        case .addsDefender:
-            primaryMessage = "This \(piece.rawValue) can add a defender."
-        case .createsThreat:
-            primaryMessage = "This \(piece.rawValue) can create a safe threat."
+        case .addsDefender, .createsThreat:
+            primaryMessage = "Where would you like to move your \(piece.rawValue)?"
         case .centralActivity:
             primaryMessage = "This \(piece.rawValue) can move closer to the center."
         case .castle:
@@ -452,13 +450,11 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "That \(piece.rawValue) is safe."
         case let .lowerPriorityDanger(chosen, _, primary, _):
             return "You found a threatened \(chosen.rawValue), but losing the \(primary.rawValue) would cost more."
-        case let .attackedButProtected(
-            target,
-            attacker,
-            defender,
-            _
-        ):
-            return "The \(attacker.rawValue) attacks your \(target.rawValue), but your \(defender.rawValue) protects it."
+        case let .attackedButProtected(fact):
+            let defender = fact.target == fact.defender
+                ? "another \(fact.defender.rawValue)"
+                : "your \(fact.defender.rawValue)"
+            return "The \(fact.attacker.rawValue) attacks your \(fact.target.rawValue), but \(defender) protects it."
         case .expectedLearnerPiece:
             return "That is not one of your pieces."
         case let .notCheckingPiece(piece):
@@ -473,6 +469,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .blockedWakePiece(piece, blocker):
             return "Your \(blocker.rawValue) blocks that \(piece.rawValue)."
         case let .notWakeCandidate(piece, purpose):
+            if purpose == .addsDefender || purpose == .createsThreat {
+                return "Try another piece."
+            }
             if piece == .pawn,
                case .wake(
                    task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
@@ -531,6 +530,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             }
             return "Your \(target.rawValue) would still need help after that move."
         case let .noRecognizedPurpose(purpose):
+            if purpose == .addsDefender || purpose == .createsThreat {
+                return "Try another idea."
+            }
             if purpose == .castle,
                case .wake(task: .castle, selectedPiece: .king) = prompt {
                 return "Castling moves your king two squares toward the rook."
@@ -563,10 +565,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch purpose {
         case .openingDevelopment:
             return "move a knight or bishop off its starting square"
-        case .addsDefender:
-            return "add a defender"
-        case .createsThreat:
-            return "create a safe threat"
+        case .addsDefender, .createsThreat:
+            return "fit this idea"
         case .centralActivity:
             return "move closer to the center"
         case .castle:
@@ -654,10 +654,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             concept = "Your pawn helps control the center."
         case .castles:
             concept = "Castling helps keep your king safe."
-        case let .addsDefender(piece):
-            concept = "Your \(piece.rawValue) adds a defender."
-        case let .createsThreat(piece):
-            concept = "Your \(piece.rawValue) creates a threat."
+        case .addsDefender, .createsThreat:
+            concept = "That move seems safe."
         case let .centralizes(piece):
             concept = "Your \(piece.rawValue) moved closer to the center."
         case let .constructive(task, move, piece):
@@ -703,7 +701,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "You developed your \(piece.rawValue)."
 
         case .castle:
-            return "You castled, moving your king toward safety and your rook toward the center."
+            return "You castled, moving your king toward safety and activating your rook."
 
         case let .protect(_, sourcePiece, _, targetPiece, _):
             return "Your \(sourcePiece.rawValue) now protects the \(targetPiece.rawValue)."

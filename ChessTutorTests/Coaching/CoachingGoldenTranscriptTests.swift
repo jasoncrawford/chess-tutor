@@ -331,7 +331,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t5ProtectedTap.observation,
-            "The knight attacks your pawn, but your pawn protects it."
+            "The knight attacks your pawn, but another pawn protects it."
         )
         XCTAssertEqual(
             t8AddsDefender.primaryMessage,
@@ -440,7 +440,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t2Castle.primaryMessage,
-            "You castled, moving your king toward safety and your rook toward the center."
+            "You castled, moving your king toward safety and activating your rook."
         )
         XCTAssertEqual(
             t9Entry.primaryMessage,
@@ -797,6 +797,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: openingAsk,
                 instruction: openingInstruction,
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .move,
                 routine: wakeRoutine
             )
@@ -806,6 +807,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: openingAsk,
                 instruction: openingInstruction,
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .move,
                 routine: wakeRoutine
             )
@@ -813,10 +815,12 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             return expected(
                 primaryMessage: "Here are the four pieces you can try.",
                 instruction: "Tap a highlighted piece.",
+                hint: .candidatePieces,
                 actions: [.hint, .stop],
                 boardTask: .move,
                 routine: wakeRoutine,
-                candidates: ["b1", "d2", "e2", "g1"]
+                candidates: ["b1", "d2", "e2", "g1"],
+                pulseID: 1
             )
         case .t1KnightSelected:
             return expected(
@@ -867,7 +871,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t2Castle:
             return completion(
                 observation: immediateBoundary,
-                primaryMessage: "You castled, moving your king toward safety and your rook toward the center."
+                primaryMessage: "You castled, moving your king toward safety and activating your rook."
             )
 
         case .t3Entry:
@@ -884,6 +888,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: safeAsk,
                 instruction: safeInstruction,
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: false),
                 routine: safeRoutine
             )
@@ -902,6 +907,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: "What black piece is attacking your knight?",
                 instruction: "Tap the black piece.",
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: false),
                 routine: safeRoutine,
                 emphasized: ["f3"]
@@ -936,6 +942,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: "Which piece should you help first?",
                 instruction: safeInstruction,
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: false),
                 routine: safeRoutine
             )
@@ -963,13 +970,18 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t5ProtectedTap:
             return expected(
-                observation: "The knight attacks your pawn, but your pawn protects it.",
+                observation: "The knight attacks your pawn, but another pawn protects it.",
                 primaryMessage: takeAsk,
                 instruction: "Make the capture, or choose No safe capture.",
                 actions: [.noAnswer, .stop],
                 noAnswerTitle: "No safe capture",
                 boardTask: .move,
-                routine: takeRoutine
+                routine: takeRoutine,
+                emphasized: ["f6", "g4", "h3"],
+                paths: [
+                    ("f6", "g4", .attacker),
+                    ("h3", "g4", .defender),
+                ]
             )
         case .t5ProtectedAbsence:
             return expected(
@@ -989,6 +1001,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 instruction: "Try another piece, or choose No safe capture.",
                 actions: [.noAnswer, .hint, .stop],
                 noAnswerTitle: "No safe capture",
+                hintIsPrimary: true,
                 boardTask: .move,
                 routine: takeRoutine
             )
@@ -997,10 +1010,12 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 observation: "Your bishop has a safe capture.",
                 primaryMessage: takeAsk,
                 instruction: "Tap the highlighted white piece.",
+                hint: .candidatePieces,
                 actions: [.hint, .stop],
                 boardTask: .move,
                 routine: takeRoutine,
-                candidates: ["c4"]
+                candidates: ["c4"],
+                pulseID: 1
             )
         case .t6Capture:
             return completion(
@@ -1044,6 +1059,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             return expected(
                 primaryMessage: "Both highlighted squares let the knight attack the rook.",
                 instruction: "Move the knight to one of the highlighted squares.",
+                hint: .candidateMoves,
                 actions: [.stop],
                 boardTask: .move,
                 routine: wakeRoutine,
@@ -1052,7 +1068,8 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 paths: [
                     ("a1", "b3", .candidate),
                     ("a1", "c2", .candidate),
-                ]
+                ],
+                pulseID: 1
             )
         case .t9Completed:
             return completion(
@@ -1095,6 +1112,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: "What could Black do next?",
                 instruction: "Tap the black rook, or choose Hint.",
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t11HarmlessCheck:
@@ -1118,6 +1136,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: "What piece is checking your king?",
                 instruction: "Tap the checking piece.",
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: false)
             )
         case .t12Capture:
@@ -1130,6 +1149,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: "What could Black do next?",
                 instruction: "Tap the black rook, or choose Hint.",
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t12KingMove:
@@ -1138,6 +1158,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 primaryMessage: "What could Black do next?",
                 instruction: "Tap the black rook, or choose Hint.",
                 actions: [.hint, .stop],
+                hintIsPrimary: true,
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t12UnsupportedEntry:
@@ -1186,21 +1207,28 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         observation: String? = nil,
         primaryMessage: String,
         instruction: String? = nil,
+        hint: CoachingHint? = nil,
         actions: [CoachingAction],
         noAnswerTitle: String = "No piece needs help",
+        hintIsPrimary: Bool = false,
         boardTask: CoachingBoardTask = .none,
         routine: [CoachingRoutineState] = [],
         emphasized: [String] = [],
         candidates: [String] = [],
-        paths: [(String, String, CoachFocusPath.Role)] = []
+        paths: [(String, String, CoachFocusPath.Role)] = [],
+        pulseID: Int = 0
     ) -> CoachingGoldenTurn {
         CoachingGoldenTurn(
             observation: observation,
             primaryMessage: primaryMessage,
             instruction: instruction,
-            actions: actions,
-            actionTitles: actions.map { action in
-                action == .noAnswer ? noAnswerTitle : actionTitle(action)
+            hint: hint,
+            actionPresentations: actions.map { action in
+                expectedActionPresentation(
+                    action,
+                    noAnswerTitle: noAnswerTitle,
+                    hintIsPrimary: hintIsPrimary
+                )
             },
             boardTask: boardTask,
             routine: routine,
@@ -1212,18 +1240,59 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                     destination: sq(destination),
                     role: role
                 )
-            })
+            }),
+            pulseID: pulseID
         )
     }
 
-    private func actionTitle(_ action: CoachingAction) -> String {
+    private func expectedActionPresentation(
+        _ action: CoachingAction,
+        noAnswerTitle: String,
+        hintIsPrimary: Bool
+    ) -> CoachingActionPresentation {
         switch action {
-        case .noAnswer: "No piece needs help"
-        case .looksSafe: "Looks safe"
-        case .hint: "Hint"
-        case .stop: "Close help"
-        case .done: "Play this move"
-        case .keepLooking: "Try another move"
+        case .noAnswer:
+            return CoachingActionPresentation(
+                action: action,
+                title: noAnswerTitle,
+                accessibilityLabel: noAnswerTitle,
+                prominence: .primary
+            )
+        case .looksSafe:
+            return CoachingActionPresentation(
+                action: action,
+                title: "Looks safe",
+                accessibilityLabel: "Looks safe",
+                prominence: .primary
+            )
+        case .hint:
+            return CoachingActionPresentation(
+                action: action,
+                title: "Hint",
+                accessibilityLabel: "Show a hint",
+                prominence: hintIsPrimary ? .primary : .secondary
+            )
+        case .stop:
+            return CoachingActionPresentation(
+                action: action,
+                title: "Close help",
+                accessibilityLabel: "Close coaching help",
+                prominence: .quiet
+            )
+        case .done:
+            return CoachingActionPresentation(
+                action: action,
+                title: "Play this move",
+                accessibilityLabel: "Play this move",
+                prominence: .primary
+            )
+        case .keepLooking:
+            return CoachingActionPresentation(
+                action: action,
+                title: "Try another move",
+                accessibilityLabel: "Try another move",
+                prominence: .secondary
+            )
         }
     }
 
@@ -1553,13 +1622,14 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             observation: presentation.observation,
             primaryMessage: presentation.primaryMessage,
             instruction: presentation.instruction,
-            actions: presentation.actions.map(\.action),
-            actionTitles: presentation.actions.map(\.title),
+            hint: presentation.hint,
+            actionPresentations: presentation.actions,
             boardTask: presentation.boardTask,
             routine: presentation.routine,
             emphasizedSquares: presentation.focus.emphasizedSquares,
             candidateSquares: presentation.focus.candidateSquares,
-            paths: presentation.focus.paths
+            paths: presentation.focus.paths,
+            pulseID: presentation.focus.pulseID
         )
     }
 
@@ -1623,6 +1693,23 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             .filter { !$0.isEmpty })
     }
 
+    private func normalizedText(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }
+        guard !words.isEmpty else { return nil }
+        return words.joined(separator: " ")
+    }
+
+    private func hasContainedMeaning(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs = normalizedText(lhs),
+              let rhs = normalizedText(rhs),
+              min(lhs.split(separator: " ").count, rhs.split(separator: " ").count) >= 3
+        else {
+            return false
+        }
+        return lhs.contains(rhs) || rhs.contains(lhs)
+    }
+
     private func wordCount(_ text: String) -> Int {
         text.split(whereSeparator: \.isWhitespace).count
     }
@@ -1636,9 +1723,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
+        let mandatedOpeningCompletion =
+            "That move seems safe, but a center pawn or knight is a simpler start."
         XCTAssertLessThanOrEqual(
             wordCount(presentation.primaryMessage),
-            18,
+            presentation.primaryMessage == mandatedOpeningCompletion ? 14 : 12,
             file: file,
             line: line
         )
@@ -1671,6 +1760,21 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         XCTAssertTrue(
             normalizedClauses(presentation.instruction)
                 .isDisjoint(with: normalizedClauses(presentation.observation)),
+            file: file,
+            line: line
+        )
+        XCTAssertFalse(
+            hasContainedMeaning(presentation.primaryMessage, presentation.instruction),
+            file: file,
+            line: line
+        )
+        XCTAssertFalse(
+            hasContainedMeaning(presentation.primaryMessage, presentation.observation),
+            file: file,
+            line: line
+        )
+        XCTAssertFalse(
+            hasContainedMeaning(presentation.instruction, presentation.observation),
             file: file,
             line: line
         )
@@ -1821,15 +1925,16 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        XCTAssertEqual(mirrored.actions, original.actions, file: file, line: line)
         XCTAssertEqual(
-            mirrored.actionTitles,
-            original.actionTitles,
+            mirrored.actionPresentations,
+            original.actionPresentations,
             file: file,
             line: line
         )
+        XCTAssertEqual(mirrored.hint, original.hint, file: file, line: line)
         XCTAssertEqual(mirrored.boardTask, original.boardTask, file: file, line: line)
         XCTAssertEqual(mirrored.routine, original.routine, file: file, line: line)
+        XCTAssertEqual(mirrored.pulseID, original.pulseID, file: file, line: line)
         assertMirroredFocus(original, mirrored, file: file, line: line)
     }
 

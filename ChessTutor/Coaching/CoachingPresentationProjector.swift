@@ -384,6 +384,29 @@ struct CoachingPresentationProjector: Sendable {
         episode: CoachingEpisodeState,
         advice: CoachingAdvice?
     ) -> CoachFocusPresentation {
+        if case let .attackedButProtected(fact) = episode.progress.feedback {
+            return CoachFocusPresentation(
+                emphasizedSquares: [
+                    fact.targetSquare,
+                    fact.attackerSquare,
+                    fact.defenderSquare,
+                ],
+                candidateSquares: [],
+                paths: [
+                    CoachFocusPath(
+                        source: fact.attackerSquare,
+                        destination: fact.targetSquare,
+                        role: .attacker
+                    ),
+                    CoachFocusPath(
+                        source: fact.defenderSquare,
+                        destination: fact.targetSquare,
+                        role: .defender
+                    ),
+                ],
+                pulseID: episode.progress.pulseID
+            )
+        }
         if case let .opponentCheck(move, origin) = stage,
            episode.progress.questionID == .opponentReply(move: move, origin: origin),
            case let .benignOpponentActivity(activity) = episode.progress.feedback {

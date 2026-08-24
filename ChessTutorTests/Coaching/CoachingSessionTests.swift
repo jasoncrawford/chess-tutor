@@ -281,7 +281,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .takeChooseMove)
         XCTAssertEqual(
             session.presentation?.observation,
-            "The knight attacks your pawn, but your pawn protects it."
+            "The knight attacks your pawn, but another pawn protects it."
         )
         XCTAssertEqual(
             session.presentation?.primaryMessage,
@@ -325,8 +325,24 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .safeLocate)
         XCTAssertEqual(
             session.presentation?.observation,
-            "The knight attacks your pawn, but your pawn protects it."
+            "The knight attacks your pawn, but another pawn protects it."
         )
+        XCTAssertEqual(
+            session.presentation?.focus.emphasizedSquares,
+            [sq("f6"), protectedPawn, sq("h3")]
+        )
+        XCTAssertEqual(session.presentation?.focus.paths, [
+            CoachFocusPath(
+                source: sq("f6"),
+                destination: protectedPawn,
+                role: .attacker
+            ),
+            CoachFocusPath(
+                source: sq("h3"),
+                destination: protectedPawn,
+                role: .defender
+            ),
+        ])
         XCTAssertEqual(session.presentation?.instruction, "Tap your piece.")
         XCTAssertEqual(session.presentation?.actions.map(\.action), [.hint, .stop])
     }
@@ -1785,6 +1801,125 @@ final class CoachingSessionTests: XCTestCase {
                 purpose: .addsDefender
             )
         )
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Where would you like to move your queen?"
+        )
+        XCTAssertEqual(session.presentation?.instruction, "Move the queen.")
+    }
+
+    func testLegacyThreatPurposeStaysNeutralWithoutConcreteTaskPayload() {
+        let move = CoachingTestFixtures.safeMove
+        let advice = CoachingTestFixtures.advice(
+            opponentHasCapture: false,
+            learnerHasCapture: false,
+            wake: [CoachingTestFixtures.opportunity(
+                concept: .createsSafeImmediateThreat,
+                subjects: [move.from],
+                moves: [move],
+                evidence: .threat(
+                    source: move.from,
+                    target: CoachingTestFixtures.blackRook
+                )
+            )],
+            assessments: [CoachingTestFixtures.acceptableAssessment(
+                move,
+                concepts: [.createsSafeImmediateThreat]
+            )]
+        )
+        var session = session()
+
+        session.receive(advice)
+
+        XCTAssertEqual(
+            session.stage,
+            .wakeChoosePiece(purpose: .createsThreat)
+        )
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Which piece would you like to move?"
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Tap the piece you want to move."
+        )
+
+        session.handle(.interactionChanged(snapshot(selected: move.from)))
+
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Where would you like to move your queen?"
+        )
+        XCTAssertEqual(session.presentation?.instruction, "Move the queen.")
+    }
+
+    func testConcreteProtectionAndThreatTasksNameAndFocusTheirTargets() {
+        let move = CoachingTestFixtures.safeMove
+        let candidate = CoachingCandidateMove(
+            move: move,
+            grade: .preferred,
+            resultingMobility: nil,
+            centralityComparison: nil
+        )
+        let cases: [(CoachingWakeTask, String, String, Square)] = [
+            (
+                .protect(
+                    source: move.from,
+                    sourcePiece: .queen,
+                    target: CoachingTestFixtures.whiteRook,
+                    targetPiece: .rook,
+                    candidates: [candidate]
+                ),
+                "Your queen can protect your rook.",
+                "Move the queen to protect the rook.",
+                CoachingTestFixtures.whiteRook
+            ),
+            (
+                .createThreat(
+                    source: move.from,
+                    sourcePiece: .queen,
+                    target: CoachingTestFixtures.blackRook,
+                    targetPiece: .rook,
+                    candidates: [candidate]
+                ),
+                "Your queen can attack Black's rook.",
+                "Move the queen to attack the rook.",
+                CoachingTestFixtures.blackRook
+            ),
+        ]
+
+        for (task, primaryMessage, instruction, target) in cases {
+            let advice = CoachingTestFixtures.advice(
+                opponentHasCapture: false,
+                learnerHasCapture: false,
+                wakeTasks: [task],
+                assessments: [CoachingTestFixtures.acceptableAssessment(move)]
+            )
+            var session = session()
+
+            session.receive(advice)
+
+            XCTAssertEqual(session.presentation?.primaryMessage, primaryMessage)
+            XCTAssertEqual(session.presentation?.instruction, instruction)
+            XCTAssertEqual(
+                session.presentation?.focus.emphasizedSquares,
+                [move.from, target]
+            )
+
+            session.handle(.actionChosen(.hint))
+
+            XCTAssertEqual(session.presentation?.hint, .candidateMoves)
+            XCTAssertEqual(session.presentation?.focus.candidateSquares, [move.to])
+            XCTAssertEqual(
+                session.presentation?.focus.emphasizedSquares,
+                [move.from, target]
+            )
+            XCTAssertEqual(session.presentation?.focus.paths, [CoachFocusPath(
+                source: move.from,
+                destination: move.to,
+                role: .candidate
+            )])
+        }
     }
 
     func testReviseIssueAcceptsOnlyOpponentSourceAndNeverSelectsIt() {

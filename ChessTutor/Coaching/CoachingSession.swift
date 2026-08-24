@@ -551,12 +551,15 @@ struct CoachingSession: Sendable {
            let recapture = attack.immediateRecapture,
            let attacker = board[attack.move.from],
            let defender = board[recapture.from] {
-            return .attackedButProtected(
+            return .attackedButProtected(CoachingProtectedPieceFact(
+                targetSquare: square,
                 target: piece.kind,
+                attackerSquare: attack.move.from,
                 attacker: attacker.kind,
+                defenderSquare: recapture.from,
                 defender: defender.kind,
                 noPieceNeedsHelp: advice.dangerProblems.isEmpty
-            )
+            ))
         }
 
         return .safePiece(piece: piece.kind)
