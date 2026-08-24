@@ -48,7 +48,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 let observation = presentation.observation?.lowercased() ?? ""
                 let establishedAnswers: [String]
                 switch presentation.primaryMessage {
-                case "One of your pieces is in danger. Which one?":
+                case "Which of your pieces is in danger?":
                     establishedAnswers = [
                         "one of your pieces does need help",
                         "no piece needs help right now",
@@ -67,6 +67,13 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                     "Current absence action survived an established answer for \(branch.rawValue)"
                 )
             }
+        }
+    }
+
+    func testEveryGoldenPresentationUsesCompactNonduplicativeCopy() async throws {
+        for branch in CoachingGoldenCase.allCases {
+            let presentation = try await goldenPresentation(branch)
+            assertCompact(presentation)
         }
     }
 
@@ -245,7 +252,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     }
 
     func testUnsafeBishopAsksForOpponentReplyBeforePurpose() async throws {
-        let session = try await tentativeSession(
+        var session = try await tentativeSession(
             state: CoachingGoldenPosition.openingBishopCanBeTaken.state,
             move: CoachingGoldenMoves.bishopToA6,
             learner: .white
@@ -255,6 +262,24 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             session.stage,
             .opponentCheck(move: CoachingGoldenMoves.bishopToA6, origin: .fallback)
         )
+        XCTAssertEqual(session.presentation?.primaryMessage, "What could Black do next?")
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Tap the black piece that could win your bishop."
+        )
+        XCTAssertNil(session.presentation?.observation)
+
+        session.handle(.identificationTapped(sq("b7")))
+
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Black's pawn could take your bishop."
+        )
+        XCTAssertEqual(
+            session.presentation?.instruction,
+            "Try a different bishop move."
+        )
+        XCTAssertNil(session.presentation?.observation)
     }
 
     func testBenignOpponentActivityTapKeepsQuestionAndShowsFact() async throws {
@@ -290,11 +315,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(
             t3Entry.primaryMessage,
-            "One of your pieces is in danger. Which one?"
+            "Which of your pieces is in danger?"
         )
         XCTAssertEqual(
             t4LowerPriorityPawn.observation,
-            "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more."
+            "You found a threatened pawn, but losing the knight would cost more."
         )
         XCTAssertEqual(
             t4LowerPriorityPawn.primaryMessage,
@@ -302,15 +327,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t5PawnResolved.primaryMessage,
-            "Your pawn moved out of the bishop’s path. It is safe now."
+            "Your pawn is out of the bishop's path and safe."
         )
         XCTAssertEqual(
             t5ProtectedTap.observation,
-            "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now."
+            "The knight attacks your pawn, but your pawn protects it."
         )
         XCTAssertEqual(
             t8AddsDefender.primaryMessage,
-            "Your other pawn now protects the threatened pawn. If the knight takes it, your pawn can take the knight back."
+            "Your pawn now protects the pawn from the attacking knight."
         )
     }
 
@@ -334,15 +359,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t7UnsafeCapture.observation,
-            "Black’s king could take your bishop. You would lose a bishop to take one pawn."
+            "Black's king could take your bishop, so you would lose it for a pawn."
         )
         XCTAssertEqual(
             t7NoSafeCapture.observation,
-            "Right—there is no safe capture here."
+            "There is no safe capture here."
         )
         XCTAssertEqual(
             t7NoSafeCapture.primaryMessage,
-            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+            "What move would you like to try?"
         )
     }
 
@@ -367,33 +392,33 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(
             t1Entry.primaryMessage,
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         )
         XCTAssertEqual(
             t1BlockedRook.observation,
-            "Your pawn is blocking that rook. Choose a center pawn or knight."
+            "Your pawn blocks that rook."
         )
         XCTAssertEqual(
             t1FlankPawn.observation,
-            "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
+            "That pawn is outside the center."
         )
         XCTAssertEqual(t1Hint.primaryMessage, "Here are the four pieces you can try.")
         XCTAssertEqual(t1Hint.instruction, "Tap a highlighted piece.")
         XCTAssertEqual(
             t1KnightSelected.primaryMessage,
-            "You chose a knight. Moving it off its starting square is called developing it."
+            "Moving this knight is called developing it."
         )
         XCTAssertEqual(
             t1PreferredKnight.primaryMessage,
-            "You developed your knight toward the center. From there it can reach more squares."
+            "You developed your knight toward the center."
         )
         XCTAssertEqual(
             t1EdgeKnight.primaryMessage,
-            "You developed your knight. A square closer to the center would usually give it more choices."
+            "You developed your knight away from the center, giving it fewer moves."
         )
         XCTAssertEqual(
             t1CenterPawn.primaryMessage,
-            "Your center pawn moved forward and now helps control the center."
+            "Your center pawn moved forward and helps control the center."
         )
         XCTAssertEqual(t2Entry.primaryMessage, "Your king is ready to castle.")
         XCTAssertEqual(
@@ -403,23 +428,23 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         XCTAssertNil(t2OneSquareKingMove.observation)
         XCTAssertEqual(
             t2OneSquareKingMove.primaryMessage,
-            "What could Black do after your move?"
+            "What could Black do next?"
         )
         XCTAssertEqual(
             t2KnightSwitch.primaryMessage,
-            "That knight can also be developed."
+            "This knight can be developed."
         )
         XCTAssertEqual(
             t2KnightSwitch.instruction,
-            "Move the knight off its starting square."
+            "Move the knight."
         )
         XCTAssertEqual(
             t2Castle.primaryMessage,
-            "You castled. Your king moved toward safety, and your rook moved toward the center."
+            "You castled, moving your king toward safety and your rook toward the center."
         )
         XCTAssertEqual(
             t9Entry.primaryMessage,
-            "Your knight can move to a square where it attacks Black’s rook. Can you find the square?"
+            "Your knight can attack Black's rook."
         )
         XCTAssertEqual(
             t9Hint.primaryMessage,
@@ -431,7 +456,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         )
         XCTAssertEqual(
             t9Completed.primaryMessage,
-            "Your knight now attacks the rook. Black may need to move or protect it."
+            "Your knight now attacks Black's rook."
         )
         XCTAssertEqual(t9Completed.emphasizedSquares, [sq("b3"), sq("d4")])
         XCTAssertEqual(t9Completed.candidateSquares, [])
@@ -444,11 +469,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         ])
         XCTAssertEqual(
             t10Entry.primaryMessage,
-            "Your knight has very few choices in the corner. Can you move it closer to the center?"
+            "Your knight has only two moves in this corner."
         )
         XCTAssertEqual(
             t10Completed.primaryMessage,
-            "From there your knight can reach six squares instead of two. That is why knights are often stronger near the center."
+            "Your knight can now reach six squares instead of two."
         )
     }
 
@@ -459,7 +484,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             learner: .white
         )
 
-        XCTAssertEqual(turn.primaryMessage, "What could Black do after your move?")
+        XCTAssertEqual(turn.primaryMessage, "What could Black do next?")
         XCTAssertEqual(
             turn.instruction,
             "Tap the black piece that could win your queen."
@@ -470,9 +495,9 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         let queenLoss = try await goldenTurn(.t11QueenLoss)
         let harmlessCheck = try await goldenTurn(.t11HarmlessCheck)
 
-        XCTAssertEqual(queenLoss.observation, "Black’s rook could take your queen.")
-        XCTAssertEqual(queenLoss.primaryMessage, "How can you change your move so the queen is safe?")
-        XCTAssertEqual(queenLoss.instruction, "Change your move so the queen is safe.")
+        XCTAssertNil(queenLoss.observation)
+        XCTAssertEqual(queenLoss.primaryMessage, "Black's rook could take your queen.")
+        XCTAssertEqual(queenLoss.instruction, "Try a different queen move.")
         XCTAssertEqual(queenLoss.actions, [.hint, .stop])
         XCTAssertEqual(queenLoss.actionTitles, ["Hint", "Close help"])
         XCTAssertEqual(queenLoss.boardTask, .move)
@@ -493,11 +518,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         ])
         XCTAssertEqual(
             harmlessCheck.observation,
-            "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works."
+            "That rook could check along your back row, but your knight move still works."
         )
         XCTAssertEqual(
             harmlessCheck.primaryMessage,
-            "That works. Your knight moved closer to the center."
+            "Your knight moved closer to the center."
         )
     }
 
@@ -516,11 +541,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         XCTAssertNil(presentation.observation)
         XCTAssertEqual(
             presentation.primaryMessage,
-            "How can you change your move so the queen is safe?"
+            "Black could take your queen."
         )
         XCTAssertEqual(
             presentation.instruction,
-            "Change your move so the queen is safe."
+            "Try a different queen move."
         )
         XCTAssertEqual(presentation.actions.map(\.action), [.stop])
         XCTAssertEqual(presentation.focus.pulseID, initialPulseID + 1)
@@ -544,7 +569,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
     func testIncorrectLooksSafeNamesIssueAndRemovesInvalidAbsenceAction() async throws {
         let turn = try await goldenTurn(.t11IncorrectLooksSafe)
 
-        XCTAssertEqual(turn.observation, "Black’s rook could take your queen.")
+        XCTAssertEqual(turn.observation, "Black's rook could take your queen.")
         XCTAssertEqual(turn.actions, [.hint, .stop])
         XCTAssertEqual(turn.actionTitles, ["Hint", "Close help"])
         XCTAssertEqual(
@@ -582,8 +607,9 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         XCTAssertNil(turn.observation)
         XCTAssertEqual(
             turn.primaryMessage,
-            "You developed your knight toward the center. From there it can reach more squares."
+            "You developed your knight toward the center."
         )
+        XCTAssertEqual(turn.instruction, "Play it, or try another move.")
     }
 
     func testForcedCheckMovesWithRemainingActivityAskForOpponentReply() async throws {
@@ -593,15 +619,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(
             capture.primaryMessage,
-            "Your bishop took the checking rook. Your king is safe."
+            "Your bishop took the checking rook, so your king is safe."
         )
         XCTAssertEqual(
             block.primaryMessage,
-            "What could Black do after your move?"
+            "What could Black do next?"
         )
         XCTAssertEqual(
             kingMove.primaryMessage,
-            "What could Black do after your move?"
+            "What could Black do next?"
         )
     }
 
@@ -610,11 +636,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(
             turn.primaryMessage,
-            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+            "What move would you like to try?"
         )
         XCTAssertEqual(
             turn.instruction,
-            "Choose a move you are considering, and I will check it with you."
+            "Move a piece."
         )
         XCTAssertEqual(turn.actions, [.stop])
         XCTAssertEqual(turn.routine, [])
@@ -631,7 +657,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             turn.primaryMessage,
             "That move seems safe."
         )
-        XCTAssertEqual(turn.instruction, nil)
+        XCTAssertEqual(turn.instruction, "Play it, or try another move.")
         XCTAssertEqual(turn.actions, [.done, .keepLooking, .stop])
         XCTAssertEqual(
             turn.actionTitles,
@@ -675,11 +701,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(
             originalT3.primaryMessage,
-            "You found the knight. What black piece is attacking it?"
+            "What black piece is attacking your knight?"
         )
         XCTAssertEqual(
             blackT3.primaryMessage,
-            "You found the knight. What white piece is attacking it?"
+            "What white piece is attacking your knight?"
         )
         XCTAssertNil(originalT3.observation)
         XCTAssertNil(blackT3.observation)
@@ -700,23 +726,23 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             answer: colorMirror(CoachingGoldenMoves.rookTakesQueen.from)
         )
 
-        XCTAssertEqual(originalT11.observation, "Black’s rook could take your queen.")
-        XCTAssertEqual(blackT11.observation, "White’s rook could take your queen.")
+        XCTAssertNil(originalT11.observation)
+        XCTAssertNil(blackT11.observation)
         XCTAssertEqual(
             originalT11.primaryMessage,
-            "How can you change your move so the queen is safe?"
+            "Black's rook could take your queen."
         )
         XCTAssertEqual(
             blackT11.primaryMessage,
-            "How can you change your move so the queen is safe?"
+            "White's rook could take your queen."
         )
         XCTAssertEqual(
             originalT11.instruction,
-            "Change your move so the queen is safe."
+            "Try a different queen move."
         )
         XCTAssertEqual(
             blackT11.instruction,
-            "Change your move so the queen is safe."
+            "Try a different queen move."
         )
         assertMatchingStructureAndMirroredFocus(originalT11, blackT11)
     }
@@ -726,7 +752,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         XCTAssertEqual(
             session.presentation?.primaryMessage,
-            "One of your pieces is in danger. Which one?"
+            "Which of your pieces is in danger?"
         )
 
         session.handle(.actionChosen(.noAnswer))
@@ -747,12 +773,12 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
     private func expectedTurn(_ branch: CoachingGoldenCase) -> CoachingGoldenTurn {
         let immediateBoundary =
-            "Black cannot immediately check your king or win one of your pieces after this move."
+            "Black cannot check your king or win a piece next."
         let openingAsk =
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         let openingInstruction =
-            "Tap one of your two center pawns or one of your knights."
-        let safeAsk = "One of your pieces is in danger. Which one?"
+            "Tap a center pawn or knight."
+        let safeAsk = "Which of your pieces is in danger?"
         let safeInstruction = "Tap your piece."
         let takeAsk = "Can one of your pieces safely take a black piece?"
 
@@ -767,7 +793,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t1BlockedRook:
             return expected(
-                observation: "Your pawn is blocking that rook. Choose a center pawn or knight.",
+                observation: "Your pawn blocks that rook.",
                 primaryMessage: openingAsk,
                 instruction: openingInstruction,
                 actions: [.hint, .stop],
@@ -776,7 +802,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t1FlankPawn:
             return expected(
-                observation: "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight.",
+                observation: "That pawn is outside the center.",
                 primaryMessage: openingAsk,
                 instruction: openingInstruction,
                 actions: [.hint, .stop],
@@ -794,7 +820,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t1KnightSelected:
             return expected(
-                primaryMessage: "You chose a knight. Moving it off its starting square is called developing it.",
+                primaryMessage: "Moving this knight is called developing it.",
                 instruction: "Move the knight.",
                 actions: [.hint, .stop],
                 boardTask: .move,
@@ -802,20 +828,20 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t1PreferredKnight:
             return completion(
-                primaryMessage: "You developed your knight toward the center. From there it can reach more squares."
+                primaryMessage: "You developed your knight toward the center."
             )
         case .t1EdgeKnight:
             return completion(
-                primaryMessage: "You developed your knight. A square closer to the center would usually give it more choices."
+                primaryMessage: "You developed your knight away from the center, giving it fewer moves."
             )
         case .t1CenterPawn:
             return completion(
-                primaryMessage: "Your center pawn moved forward and now helps control the center."
+                primaryMessage: "Your center pawn moved forward and helps control the center."
             )
 
         case .t2Entry:
             return expected(
-                observation: "Right—there is no safe capture here.",
+                observation: "There is no safe capture here.",
                 primaryMessage: "Your king is ready to castle.",
                 instruction: "Move your king two squares toward the rook.",
                 actions: [.hint, .stop],
@@ -825,15 +851,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t2OneSquareKingMove:
             return expected(
-                primaryMessage: "What could Black do after your move?",
+                primaryMessage: "What could Black do next?",
                 instruction: "Tap a black piece that could check your king or win one of your pieces.",
                 actions: [.looksSafe, .stop],
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t2KnightSwitch:
             return expected(
-                primaryMessage: "That knight can also be developed.",
-                instruction: "Move the knight off its starting square.",
+                primaryMessage: "This knight can be developed.",
+                instruction: "Move the knight.",
                 actions: [.hint, .stop],
                 boardTask: .move,
                 routine: wakeRoutine
@@ -841,7 +867,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t2Castle:
             return completion(
                 observation: immediateBoundary,
-                primaryMessage: "You castled. Your king moved toward safety, and your rook moved toward the center."
+                primaryMessage: "You castled, moving your king toward safety and your rook toward the center."
             )
 
         case .t3Entry:
@@ -854,7 +880,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t3WrongOwnPiece:
             return expected(
-                observation: "That king is safe right now.",
+                observation: "That king is safe.",
                 primaryMessage: safeAsk,
                 instruction: safeInstruction,
                 actions: [.hint, .stop],
@@ -863,7 +889,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t3Target:
             return expected(
-                primaryMessage: "You found the knight. What black piece is attacking it?",
+                primaryMessage: "What black piece is attacking your knight?",
                 instruction: "Tap the black piece.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: false),
@@ -873,7 +899,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t3WrongAttacker:
             return expected(
                 observation: "That king isn’t attacking your knight.",
-                primaryMessage: "You found the knight. What black piece is attacking it?",
+                primaryMessage: "What black piece is attacking your knight?",
                 instruction: "Tap the black piece.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: false),
@@ -882,8 +908,8 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t3Attacker:
             return expected(
-                primaryMessage: "Yes—that pawn is attacking your knight. How could you help your knight?",
-                instruction: "Make a move that gets it safe.",
+                primaryMessage: "The pawn attacks your knight.",
+                instruction: "Move, protect, or trade your knight.",
                 actions: [.hint, .stop],
                 boardTask: .move,
                 routine: safeRoutine,
@@ -893,20 +919,20 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t3UnresolvedMove:
             return expected(
                 observation: "The pawn could still take your knight after that move.",
-                primaryMessage: "Yes—that pawn is attacking your knight. How could you help your knight?",
-                instruction: "Make a move that gets it safe.",
+                primaryMessage: "The pawn attacks your knight.",
+                instruction: "Move, protect, or trade your knight.",
                 actions: [.stop],
                 boardTask: .move,
                 routine: safeRoutine
             )
         case .t3ResolvedMove:
             return completion(
-                primaryMessage: "Your knight is out of the pawn's attack. It is safe now."
+                primaryMessage: "Your knight is out of the pawn's attack and safe."
             )
 
         case .t4LowerPriorityPawn:
             return expected(
-                observation: "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more.",
+                observation: "You found a threatened pawn, but losing the knight would cost more.",
                 primaryMessage: "Which piece should you help first?",
                 instruction: safeInstruction,
                 actions: [.hint, .stop],
@@ -915,7 +941,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t4PrimaryKnight:
             return expected(
-                primaryMessage: "You found the knight. What black piece is attacking it?",
+                primaryMessage: "What black piece is attacking your knight?",
                 instruction: "Tap the black piece.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: false),
@@ -933,11 +959,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t5PawnResolved:
             return completion(
-                primaryMessage: "Your pawn moved out of the bishop’s path. It is safe now."
+                primaryMessage: "Your pawn is out of the bishop's path and safe."
             )
         case .t5ProtectedTap:
             return expected(
-                observation: "The pawn is attacked, but your other pawn protects it. If the knight takes it, your pawn can take the knight back. No piece needs help right now.",
+                observation: "The knight attacks your pawn, but your pawn protects it.",
                 primaryMessage: takeAsk,
                 instruction: "Make the capture, or choose No safe capture.",
                 actions: [.noAnswer, .stop],
@@ -947,7 +973,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t5ProtectedAbsence:
             return expected(
-                observation: "Right—no piece needs help right now.",
+                observation: "No piece needs help right now.",
                 primaryMessage: takeAsk,
                 instruction: "Make the capture, or choose No safe capture.",
                 actions: [.noAnswer, .stop],
@@ -982,7 +1008,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t7UnsafeCapture:
             return expected(
-                observation: "Black’s king could take your bishop. You would lose a bishop to take one pawn.",
+                observation: "Black's king could take your bishop, so you would lose it for a pawn.",
                 primaryMessage: takeAsk,
                 instruction: "Change your move, or choose No safe capture.",
                 actions: [.noAnswer, .stop],
@@ -992,9 +1018,9 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t7NoSafeCapture:
             return expected(
-                observation: "Right—there is no safe capture here.",
-                primaryMessage: "I can check immediate dangers, but I do not have a confident plan for this position yet.",
-                instruction: "Choose a move you are considering, and I will check it with you.",
+                observation: "There is no safe capture here.",
+                primaryMessage: "What move would you like to try?",
+                instruction: "Move a piece.",
                 actions: [.stop],
                 boardTask: .move
             )
@@ -1002,13 +1028,13 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t8AddsDefender:
             return completion(
                 observation: immediateBoundary,
-                primaryMessage: "Your other pawn now protects the threatened pawn. If the knight takes it, your pawn can take the knight back."
+                primaryMessage: "Your pawn now protects the pawn from the attacking knight."
             )
 
         case .t9Entry:
             return expected(
-                primaryMessage: "Your knight can move to a square where it attacks Black’s rook. Can you find the square?",
-                instruction: "Move the knight so it attacks the rook.",
+                primaryMessage: "Your knight can attack Black's rook.",
+                instruction: "Move the knight to attack the rook.",
                 actions: [.hint, .stop],
                 boardTask: .move,
                 routine: wakeRoutine,
@@ -1030,16 +1056,16 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t9Completed:
             return completion(
-                observation: "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works.",
-                primaryMessage: "Your knight now attacks the rook. Black may need to move or protect it.",
+                observation: "That rook could check along your back row, but your knight move still works.",
+                primaryMessage: "Your knight now attacks Black's rook.",
                 emphasized: ["b3", "d4"],
                 paths: [("b3", "d4", .attacker)]
             )
 
         case .t10Entry:
             return expected(
-                primaryMessage: "Your knight has very few choices in the corner. Can you move it closer to the center?",
-                instruction: "Move the knight.",
+                primaryMessage: "Your knight has only two moves in this corner.",
+                instruction: "Move it closer to the center.",
                 actions: [.hint, .stop],
                 boardTask: .move,
                 routine: wakeRoutine,
@@ -1047,18 +1073,17 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t10Completed:
             return completion(
-                primaryMessage: "From there your knight can reach six squares instead of two. That is why knights are often stronger near the center."
+                primaryMessage: "Your knight can now reach six squares instead of two."
             )
 
         case .t11Safe:
             return completion(
-                primaryMessage: "You developed your knight toward the center. From there it can reach more squares."
+                primaryMessage: "You developed your knight toward the center."
             )
         case .t11QueenLoss:
             return expected(
-                observation: "Black’s rook could take your queen.",
-                primaryMessage: "How can you change your move so the queen is safe?",
-                instruction: "Change your move so the queen is safe.",
+                primaryMessage: "Black's rook could take your queen.",
+                instruction: "Try a different queen move.",
                 actions: [.hint, .stop],
                 boardTask: .move,
                 emphasized: ["d4", "d8"],
@@ -1066,59 +1091,59 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t11IncorrectLooksSafe:
             return expected(
-                observation: "Black’s rook could take your queen.",
-                primaryMessage: "What could Black do after your move?",
+                observation: "Black's rook could take your queen.",
+                primaryMessage: "What could Black do next?",
                 instruction: "Tap the black rook, or choose Hint.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t11HarmlessCheck:
             return completion(
-                observation: "That rook could move down to your back row and check your king. You could answer the check, so your knight move still works.",
-                primaryMessage: "That works. Your knight moved closer to the center.",
+                observation: "That rook could check along your back row, but your knight move still works.",
+                primaryMessage: "Your knight moved closer to the center.",
                 emphasized: ["a8", "g1"],
                 paths: [("a8", "a1", .attacker)]
             )
 
         case .t12CheckLocate:
             return expected(
-                primaryMessage: "Your king is in check. What is giving check?",
-                instruction: "Tap the piece giving check.",
+                primaryMessage: "What piece is checking your king?",
+                instruction: "Tap the checking piece.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: false)
             )
         case .t12WrongChecker:
             return expected(
                 observation: "That king isn’t giving check.",
-                primaryMessage: "Your king is in check. What is giving check?",
-                instruction: "Tap the piece giving check.",
+                primaryMessage: "What piece is checking your king?",
+                instruction: "Tap the checking piece.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: false)
             )
         case .t12Capture:
             return completion(
-                primaryMessage: "Your bishop took the checking rook. Your king is safe."
+                primaryMessage: "Your bishop took the checking rook, so your king is safe."
             )
         case .t12Block:
             return expected(
-                observation: "That rook could check your king. You could answer the check, so your bishop move still works.",
-                primaryMessage: "What could Black do after your move?",
+                observation: "That rook could check your king, but your bishop move still works.",
+                primaryMessage: "What could Black do next?",
                 instruction: "Tap the black rook, or choose Hint.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t12KingMove:
             return expected(
-                observation: "That rook could move down to your back row and check your king. You could answer the check, so your king move still works.",
-                primaryMessage: "What could Black do after your move?",
+                observation: "That rook could check along your back row, but your king move still works.",
+                primaryMessage: "What could Black do next?",
                 instruction: "Tap the black rook, or choose Hint.",
                 actions: [.hint, .stop],
                 boardTask: .identify(allowsMoveRevision: true)
             )
         case .t12UnsupportedEntry:
             return expected(
-                primaryMessage: "I can check immediate dangers, but I do not have a confident plan for this position yet.",
-                instruction: "Choose a move you are considering, and I will check it with you.",
+                primaryMessage: "What move would you like to try?",
+                instruction: "Move a piece.",
                 actions: [.stop],
                 boardTask: .move
             )
@@ -1150,6 +1175,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         expected(
             observation: observation,
             primaryMessage: primaryMessage,
+            instruction: "Play it, or try another move.",
             actions: [.done, .keepLooking, .stop],
             emphasized: emphasized,
             paths: paths
@@ -1283,7 +1309,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
             XCTAssertEqual(
                 session.presentation?.primaryMessage,
-                "What could Black do after your move?"
+                "What could Black do next?"
             )
             session.handle(.actionChosen(.looksSafe))
 
@@ -1567,16 +1593,6 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
                 line: line
             )
         }
-        if presentation.observation?.contains("attacks") == true
-            || presentation.primaryMessage.contains("attacks") {
-            XCTAssertFalse(
-                presentation.focus.emphasizedSquares.isEmpty
-                    && presentation.focus.paths.isEmpty,
-                "Attack copy has no focus for \(branch.rawValue)",
-                file: file,
-                line: line
-            )
-        }
         let namedActions: [(phrase: String, action: CoachingAction)] = [
             ("No piece needs help", .noAnswer),
             ("No safe capture", .noAnswer),
@@ -1599,6 +1615,67 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         }
     }
 
+    private func normalizedClauses(_ text: String?) -> Set<String> {
+        guard let text else { return [] }
+        return Set(text
+            .split(whereSeparator: { ".!?;".contains($0) })
+            .map { $0.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty })
+    }
+
+    private func wordCount(_ text: String) -> Int {
+        text.split(whereSeparator: \.isWhitespace).count
+    }
+
+    private func sentenceCount(_ text: String) -> Int {
+        text.filter { ".!?".contains($0) }.count
+    }
+
+    private func assertCompact(
+        _ presentation: CoachingPresentation,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertLessThanOrEqual(
+            wordCount(presentation.primaryMessage),
+            18,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            sentenceCount(presentation.primaryMessage),
+            1,
+            file: file,
+            line: line
+        )
+        if let instruction = presentation.instruction {
+            XCTAssertLessThanOrEqual(wordCount(instruction), 16, file: file, line: line)
+            XCTAssertLessThanOrEqual(sentenceCount(instruction), 1, file: file, line: line)
+        }
+        if let observation = presentation.observation {
+            XCTAssertLessThanOrEqual(wordCount(observation), 18, file: file, line: line)
+            XCTAssertLessThanOrEqual(sentenceCount(observation), 1, file: file, line: line)
+        }
+        XCTAssertTrue(
+            normalizedClauses(presentation.primaryMessage)
+                .isDisjoint(with: normalizedClauses(presentation.instruction)),
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            normalizedClauses(presentation.primaryMessage)
+                .isDisjoint(with: normalizedClauses(presentation.observation)),
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            normalizedClauses(presentation.instruction)
+                .isDisjoint(with: normalizedClauses(presentation.observation)),
+            file: file,
+            line: line
+        )
+    }
+
     private func assertNoProhibitedChildFacingCopy(
         _ values: [String],
         source: String,
@@ -1609,7 +1686,11 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             "part of this problem", "big danger", "job", "tap the problem",
             "nothing urgent stands out", "clear plan", "reply to notice",
             "win some material", "come into the game", "attack something",
-            "protect another piece", "more useful place",
+            "protect another piece", "more useful place", "verified purpose",
+            "qualifying issue", "immediate-response scan", "material",
+            "cannot name a purpose", "bring a new piece into the game",
+            "i can check immediate dangers", "i do not have a confident plan",
+            "i do not see an immediate",
         ]
         let copy = values.joined(separator: " ").lowercased()
         XCTAssertEqual(

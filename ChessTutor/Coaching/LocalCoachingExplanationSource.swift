@@ -1,10 +1,16 @@
 struct LocalCoachingExplanationSource: CoachingExplaining {
+    private struct AuthoredTurn {
+        let primaryMessage: String
+        let instruction: String?
+        let observation: String?
+    }
+
     func presentation(for context: CoachingPresentationContext) -> CoachingPresentation {
-        let base = baseCopy(for: context.prompt, learner: context.learner)
+        let turn = authoredTurn(for: context)
         return CoachingPresentation(
-            primaryMessage: headline(for: context, base: base.headline),
-            instruction: instruction(for: context, base: base.instruction),
-            observation: responseCopy(for: context),
+            primaryMessage: turn.primaryMessage,
+            instruction: turn.instruction,
+            observation: turn.observation,
             hint: context.hint,
             routine: context.routine,
             actions: context.actions.map { actionPresentation(for: $0, context: context) },
@@ -13,61 +19,106 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         )
     }
 
-    private func responseCopy(for context: CoachingPresentationContext) -> String? {
-        guard let feedback = context.feedback else { return nil }
-        if context.hint != nil,
-           case .missedOpponentIssue = feedback {
-            return nil
+    private func authoredTurn(for context: CoachingPresentationContext) -> AuthoredTurn {
+        var current = currentTaskCopy(for: context)
+
+        if case .lowerPriorityDanger = context.feedback {
+            current = AuthoredTurn(
+                primaryMessage: "Which piece should you help first?",
+                instruction: current.instruction,
+                observation: nil
+            )
         }
-        return feedbackHeadline(
-            for: feedback,
-            opponent: opponentColor(for: context),
-            prompt: context.prompt
+        if context.hint == .candidatePieces,
+           context.prompt == .wakeChoosePiece(
+               purpose: .openingDevelopment(firstMove: true)
+           ) {
+            current = AuthoredTurn(
+                primaryMessage: "Here are the four pieces you can try.",
+                instruction: "Tap a highlighted piece.",
+                observation: nil
+            )
+        }
+        if context.hint == .candidatePieces,
+           case .wake(
+               task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
+               selectedPiece: nil
+           ) = context.prompt {
+            current = AuthoredTurn(
+                primaryMessage: "Here are the four pieces you can try.",
+                instruction: "Tap a highlighted piece.",
+                observation: nil
+            )
+        }
+        if context.hint == .candidateMoves,
+           case let .wake(
+               task: .createThreat(_, sourcePiece, _, targetPiece, candidates),
+               selectedPiece: _
+           ) = context.prompt,
+           candidates.count == 2 {
+            current = AuthoredTurn(
+                primaryMessage:
+                    "Both highlighted squares let the \(sourcePiece.rawValue) attack the \(targetPiece.rawValue).",
+                instruction:
+                    "Move the \(sourcePiece.rawValue) to one of the highlighted squares.",
+                observation: nil
+            )
+        }
+
+        return AuthoredTurn(
+            primaryMessage: current.primaryMessage,
+            instruction: contextualInstruction(for: context, base: current.instruction),
+            observation: observationCopy(for: context)
         )
     }
 
-    private func baseCopy(
-        for prompt: CoachingPrompt,
-        learner: PieceColor
-    ) -> (headline: String, instruction: String?) {
-        switch prompt {
+    private func currentTaskCopy(for context: CoachingPresentationContext) -> AuthoredTurn {
+        let learner = context.learner
+        switch context.prompt {
         case .checkLocate:
-            return (
-                "Your king is in check. What is giving check?",
-                "Tap the piece giving check."
+            return AuthoredTurn(
+                primaryMessage: "What piece is checking your king?",
+                instruction: "Tap the checking piece.",
+                observation: nil
             )
         case .checkResolve:
-            return (
-                "Make a move that gets your king safe.",
-                "Move a piece on the board."
+            return AuthoredTurn(
+                primaryMessage: "Get your king out of check.",
+                instruction: "Move your king, block the check, or take the checking piece.",
+                observation: nil
             )
         case .safeLocate:
-            return (
-                "One of your pieces is in danger. Which one?",
-                "Tap your piece, or choose No piece needs help."
+            return AuthoredTurn(
+                primaryMessage: "Which of your pieces is in danger?",
+                instruction: "Tap your piece, or choose No piece needs help.",
+                observation: nil
             )
         case let .safeIdentifyAttacker(piece):
-            let opponent = colorName(learner.opposite)
-            return (
-                "You found the \(piece.rawValue). What \(opponent.lowercased()) piece is attacking it?",
-                "Tap the \(opponent.lowercased()) piece."
+            let opponent = colorName(learner.opposite).lowercased()
+            return AuthoredTurn(
+                primaryMessage: "What \(opponent) piece is attacking your \(piece.rawValue)?",
+                instruction: "Tap the \(opponent) piece.",
+                observation: nil
             )
         case let .safeResolve(target, attacker):
-            return (
-                "Yes—that \(attacker.rawValue) is attacking your \(target.rawValue). How could you help your \(target.rawValue)?",
-                "Make a move that gets it safe."
+            return AuthoredTurn(
+                primaryMessage: "The \(attacker.rawValue) attacks your \(target.rawValue).",
+                instruction: "Move, protect, or trade your \(target.rawValue).",
+                observation: nil
             )
         case .takeChooseMove:
-            return (
-                "Can one of your pieces safely take a \(colorName(learner.opposite).lowercased()) piece?",
-                "Make the capture, or choose No safe capture."
+            return AuthoredTurn(
+                primaryMessage:
+                    "Can one of your pieces safely take a \(colorName(learner.opposite).lowercased()) piece?",
+                instruction: "Make the capture, or choose No safe capture.",
+                observation: nil
             )
         case let .wakeChoosePiece(purpose):
-            return wakePieceCopy(for: purpose)
+            return authoredWakePieceCopy(for: purpose)
         case let .wakeChooseMove(piece, purpose):
-            return wakeMoveCopy(for: piece, purpose: purpose)
+            return authoredWakeMoveCopy(for: piece, purpose: purpose)
         case let .wake(task, selectedPiece):
-            return wakeTaskCopy(
+            return authoredWakeTaskCopy(
                 for: task,
                 selectedPiece: selectedPiece,
                 learner: learner
@@ -77,208 +128,238 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             let instruction = threatenedPiece.map {
                 "Tap the \(opponentName.lowercased()) piece that could win your \($0.rawValue)."
             } ?? "Tap a \(opponentName.lowercased()) piece that could check your king or win one of your pieces."
-            return (
-                "What could \(opponentName) do after your move?",
-                instruction
+            return AuthoredTurn(
+                primaryMessage: "What could \(opponentName) do next?",
+                instruction: instruction,
+                observation: nil
             )
-        case .fallbackChooseMove:
-            return (
-                "Choose a move you are considering, and I will check it with you.",
-                "Make a move on the board."
-            )
-        case .unsupportedFallbackChooseMove:
-            return (
-                "I can check immediate dangers, but I do not have a confident plan for this position yet.",
-                "Choose a move you are considering, and I will check it with you."
+        case .fallbackChooseMove, .unsupportedFallbackChooseMove:
+            return AuthoredTurn(
+                primaryMessage: "What move would you like to try?",
+                instruction: "Move a piece.",
+                observation: nil
             )
         case let .opponentIssueRevise(kind, affectedPiece):
-            return opponentIssueReviseCopy(
+            return authoredOpponentIssueRevision(
                 kind: kind,
-                affectedPiece: affectedPiece
+                affectedPiece: affectedPiece,
+                context: context
             )
         case .reviseMove:
-            return (
-                "Try another move.",
-                "Move a piece on the board."
+            return AuthoredTurn(
+                primaryMessage: "Try another move.",
+                instruction: "Move a piece.",
+                observation: nil
             )
         case .illegalKingSafety:
-            return (
-                "This move leaves your king in check. Try another move.",
-                "Move a piece on the board."
+            return AuthoredTurn(
+                primaryMessage: "That move leaves your king in check.",
+                instruction: "Try another move.",
+                observation: nil
             )
         case let .complete(_, idea):
-            return (
-                completionHeadline(for: idea, opponent: learner.opposite),
-                nil
+            return AuthoredTurn(
+                primaryMessage: completionCopy(for: idea, opponent: learner.opposite),
+                instruction: "Play it, or try another move.",
+                observation: nil
             )
         }
     }
 
-    private func opponentIssueReviseCopy(
+    private func authoredOpponentIssueRevision(
         kind: CoachingOpponentIssueKind,
-        affectedPiece: Piece.Kind?
-    ) -> (headline: String, instruction: String) {
+        affectedPiece: Piece.Kind?,
+        context: CoachingPresentationContext
+    ) -> AuthoredTurn {
+        let primaryMessage: String
+        if case let .opponentIssue(fact) = context.feedback {
+            primaryMessage = opponentIssueCopy(
+                fact,
+                opponent: opponentColor(for: context)
+            )
+        } else {
+            primaryMessage = concreteFlawCopy(
+                kind: kind,
+                affectedPiece: affectedPiece,
+                opponent: opponentColor(for: context)
+            )
+        }
+
+        let instruction: String
         switch (kind, affectedPiece) {
         case (.materialLoss, let piece?):
-            return (
-                "How can you change your move so the \(piece.rawValue) is safe?",
-                "Change your move so the \(piece.rawValue) is safe."
-            )
+            instruction = "Try a different \(piece.rawValue) move."
         case (.check, _), (.mateInOne, _):
-            return (
-                "How can you change your move so your king is safe?",
-                "Change your move so your king is safe."
-            )
+            instruction = "Try a move that keeps your king safe."
         case (.materialLoss, nil):
-            return (
-                "How can you change your move to keep your pieces safe?",
-                "Change your move to keep your pieces safe."
-            )
+            instruction = "Try a different move."
         }
+        return AuthoredTurn(
+            primaryMessage: primaryMessage,
+            instruction: instruction,
+            observation: nil
+        )
     }
 
-    private func wakePieceCopy(
-        for purpose: CoachingWakePurpose
-    ) -> (headline: String, instruction: String) {
+    private func authoredWakePieceCopy(for purpose: CoachingWakePurpose) -> AuthoredTurn {
         switch purpose {
         case .openingDevelopment(firstMove: true):
-            return (
-                "A center pawn or knight is a simple way to start. Which would you like to move?",
-                "Tap one of your two center pawns or one of your knights."
+            return AuthoredTurn(
+                primaryMessage: "A center pawn or knight is a simple way to start.",
+                instruction: "Tap a center pawn or knight.",
+                observation: nil
             )
         case .openingDevelopment(firstMove: false):
-            return (
-                "Could you bring out a knight or bishop, move a center pawn, or castle?",
-                "Tap the piece you want to move."
+            return AuthoredTurn(
+                primaryMessage: "Could you develop a piece or castle?",
+                instruction: "Tap the piece you want to move.",
+                observation: nil
             )
         case .addsDefender:
-            return ("Which piece could add a defender?", "Tap the piece you want to move.")
+            return AuthoredTurn(
+                primaryMessage: "Which piece could add a defender?",
+                instruction: "Tap the piece you want to move.",
+                observation: nil
+            )
         case .createsThreat:
-            return ("Which piece could create a safe threat?", "Tap the piece you want to move.")
+            return AuthoredTurn(
+                primaryMessage: "Which piece could create a safe threat?",
+                instruction: "Tap the piece you want to move.",
+                observation: nil
+            )
         case .centralActivity:
-            return ("Which piece could move closer to the center?", "Tap the piece you want to move.")
+            return AuthoredTurn(
+                primaryMessage: "Which piece could move closer to the center?",
+                instruction: "Tap the piece you want to move.",
+                observation: nil
+            )
         case .castle:
-            return ("Which piece would you move to castle?", "Tap your king.")
+            return AuthoredTurn(
+                primaryMessage: "Your king can castle.",
+                instruction: "Tap your king.",
+                observation: nil
+            )
         }
     }
 
-    private func wakeTaskCopy(
+    private func authoredWakeTaskCopy(
         for task: CoachingWakeTask,
         selectedPiece: Piece.Kind?,
         learner: PieceColor
-    ) -> (headline: String, instruction: String) {
+    ) -> AuthoredTurn {
         switch task {
         case let .opening(firstMove, castleIsAlternative, _):
             if let selectedPiece {
                 if !firstMove, castleIsAlternative, selectedPiece == .knight {
-                    return (
-                        "That knight can also be developed.",
-                        "Move the knight off its starting square."
+                    return AuthoredTurn(
+                        primaryMessage: "This knight can be developed.",
+                        instruction: "Move the knight.",
+                        observation: nil
                     )
                 }
                 if selectedPiece == .pawn {
-                    return (
-                        "That center pawn can help control the middle of the board.",
-                        "Move the pawn one or two squares."
+                    return AuthoredTurn(
+                        primaryMessage: "This center pawn can help control the center.",
+                        instruction: "Move the pawn one or two squares.",
+                        observation: nil
                     )
                 }
                 if selectedPiece == .knight || selectedPiece == .bishop {
-                    return (
-                        "You chose a \(selectedPiece.rawValue). Moving it off its starting square is called developing it.",
-                        "Move the \(selectedPiece.rawValue)."
+                    return AuthoredTurn(
+                        primaryMessage:
+                            "Moving this \(selectedPiece.rawValue) is called developing it.",
+                        instruction: "Move the \(selectedPiece.rawValue).",
+                        observation: nil
                     )
                 }
             }
-            return wakePieceCopy(for: .openingDevelopment(firstMove: firstMove))
-
+            return authoredWakePieceCopy(
+                for: .openingDevelopment(firstMove: firstMove)
+            )
         case .castle:
-            return (
-                "Your king is ready to castle.",
-                "Move your king two squares toward the rook."
+            return AuthoredTurn(
+                primaryMessage: "Your king is ready to castle.",
+                instruction: "Move your king two squares toward the rook.",
+                observation: nil
             )
-
         case let .protect(_, sourcePiece, _, targetPiece, _):
-            return (
-                "Your \(sourcePiece.rawValue) can help protect your \(targetPiece.rawValue).",
-                "Move the \(sourcePiece.rawValue) so it protects the \(targetPiece.rawValue)."
+            return AuthoredTurn(
+                primaryMessage:
+                    "Your \(sourcePiece.rawValue) can protect your \(targetPiece.rawValue).",
+                instruction:
+                    "Move the \(sourcePiece.rawValue) to protect the \(targetPiece.rawValue).",
+                observation: nil
             )
-
         case let .createThreat(_, sourcePiece, _, targetPiece, _):
-            let opponent = colorName(learner.opposite)
-            return (
-                "Your \(sourcePiece.rawValue) can move to a square where it attacks \(opponent)’s \(targetPiece.rawValue). Can you find the square?",
-                "Move the \(sourcePiece.rawValue) so it attacks the \(targetPiece.rawValue)."
+            return AuthoredTurn(
+                primaryMessage:
+                    "Your \(sourcePiece.rawValue) can attack \(colorName(learner.opposite))'s \(targetPiece.rawValue).",
+                instruction:
+                    "Move the \(sourcePiece.rawValue) to attack the \(targetPiece.rawValue).",
+                observation: nil
             )
-
-        case let .improveMobility(_, piece, sourceIsCorner, _, _):
+        case let .improveMobility(_, piece, sourceIsCorner, before, _):
             guard sourceIsCorner else {
-                return (
-                    "Your \(piece.rawValue) can move to a square where it has more choices. Can you find the move?",
-                    "Move the \(piece.rawValue)."
+                return AuthoredTurn(
+                    primaryMessage: "Your \(piece.rawValue) can reach more squares.",
+                    instruction: "Move the \(piece.rawValue).",
+                    observation: nil
                 )
             }
-            return (
-                "Your \(piece.rawValue) has very few choices in the corner. Can you move it closer to the center?",
-                "Move the \(piece.rawValue)."
+            return AuthoredTurn(
+                primaryMessage:
+                    "Your \(piece.rawValue) has only \(countName(before)) moves in this corner.",
+                instruction: "Move it closer to the center.",
+                observation: nil
             )
         }
     }
 
-    private func headline(for context: CoachingPresentationContext, base: String) -> String {
-        if case .lowerPriorityDanger = context.feedback {
-            return "Which piece should you help first?"
-        }
-        if context.hint == .candidatePieces,
-           context.prompt == .wakeChoosePiece(
-               purpose: .openingDevelopment(firstMove: true)
-           ) {
-            return "Here are the four pieces you can try."
-        }
-        if context.hint == .candidatePieces,
-           case .wake(
-               task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
-               selectedPiece: nil
-           )
-            = context.prompt {
-            return "Here are the four pieces you can try."
-        }
-        if context.hint == .candidateMoves,
-           case let .wake(
-               task: .createThreat(_, sourcePiece, _, targetPiece, candidates),
-               selectedPiece: _
-           ) = context.prompt,
-           candidates.count == 2 {
-            return "Both highlighted squares let the \(sourcePiece.rawValue) attack the \(targetPiece.rawValue)."
-        }
-        return base
-    }
-
-    private func wakeMoveCopy(
+    private func authoredWakeMoveCopy(
         for piece: Piece.Kind,
         purpose: CoachingWakePurpose
-    ) -> (headline: String, instruction: String) {
-        let headline: String
+    ) -> AuthoredTurn {
+        let primaryMessage: String
         switch purpose {
         case .openingDevelopment:
-            headline = piece == .pawn
+            primaryMessage = piece == .pawn
                 ? "This pawn can help in the center."
-                : "You can develop this \(piece.rawValue)."
+                : "Moving this \(piece.rawValue) is called developing it."
         case .addsDefender:
-            headline = "This \(piece.rawValue) can add a defender."
+            primaryMessage = "This \(piece.rawValue) can add a defender."
         case .createsThreat:
-            headline = "This \(piece.rawValue) can create a safe threat."
+            primaryMessage = "This \(piece.rawValue) can create a safe threat."
         case .centralActivity:
-            headline = "This \(piece.rawValue) can move closer to the center."
+            primaryMessage = "This \(piece.rawValue) can move closer to the center."
         case .castle:
-            headline = "Your king can castle."
+            primaryMessage = "Your king can castle."
         }
-        let instruction = purpose == .castle
-            ? "Move it two squares toward a rook."
-            : "Move it on the board."
-        return (headline, instruction)
+        return AuthoredTurn(
+            primaryMessage: primaryMessage,
+            instruction: purpose == .castle
+                ? "Move it two squares toward a rook."
+                : "Move the \(piece.rawValue).",
+            observation: nil
+        )
     }
 
-    private func instruction(
+    private func observationCopy(for context: CoachingPresentationContext) -> String? {
+        guard let feedback = context.feedback else { return nil }
+        if context.hint != nil,
+           case .missedOpponentIssue = feedback {
+            return nil
+        }
+        if case .opponentIssueRevise = context.prompt {
+            return nil
+        }
+        return feedbackObservation(
+            for: feedback,
+            opponent: opponentColor(for: context),
+            prompt: context.prompt
+        )
+    }
+
+    private func contextualInstruction(
         for context: CoachingPresentationContext,
         base: String?
     ) -> String? {
@@ -361,37 +442,25 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         }
     }
 
-    private func feedbackHeadline(
+    private func feedbackObservation(
         for feedback: CoachingFeedback,
         opponent: PieceColor,
         prompt: CoachingPrompt
     ) -> String {
         switch feedback {
         case let .safePiece(piece):
-            return "That \(piece.rawValue) is safe right now."
-        case let .lowerPriorityDanger(chosen, chosenLoss, primary, primaryLoss):
-            if chosen == .pawn,
-               primary == .knight,
-               chosenLoss == 1,
-               primaryLoss == 3 {
-                return "You found a threatened pawn. A knight is worth about three pawns, so losing the knight would cost more."
-            }
-            if primaryLoss > chosenLoss {
-                return "You found a threatened \(chosen.rawValue). Losing the \(primary.rawValue) would cost more."
-            }
-            return "You found a threatened \(chosen.rawValue). Your \(primary.rawValue) is worth more, so help it first."
+            return "That \(piece.rawValue) is safe."
+        case let .lowerPriorityDanger(chosen, _, primary, _):
+            return "You found a threatened \(chosen.rawValue), but losing the \(primary.rawValue) would cost more."
         case let .attackedButProtected(
             target,
             attacker,
             defender,
-            noPieceNeedsHelp
+            _
         ):
-            let localFact = "The \(target.rawValue) is attacked, but your other \(defender.rawValue) protects it. If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back."
-            return noPieceNeedsHelp
-                ? "\(localFact) No piece needs help right now."
-                : localFact
+            return "The \(attacker.rawValue) attacks your \(target.rawValue), but your \(defender.rawValue) protects it."
         case .expectedLearnerPiece:
-            return "Tap one of your pieces."
+            return "That is not one of your pieces."
         case let .notCheckingPiece(piece):
             if let piece {
                 return "That \(piece.rawValue) isn’t giving check."
@@ -400,21 +469,9 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .notAttacker(piece, target):
             return "That \(piece.rawValue) isn’t attacking your \(target.rawValue)."
         case let .expectedAttacker(target):
-            return "Tap a \(colorName(opponent).lowercased()) piece attacking your \(target.rawValue)."
+            return "That piece is not attacking your \(target.rawValue)."
         case let .blockedWakePiece(piece, blocker):
-            if case .wake(
-                task: .opening(firstMove: true, castleIsAlternative: _, candidates: _),
-                selectedPiece: nil
-            )
-                = prompt {
-                return "Your \(blocker.rawValue) is blocking that \(piece.rawValue). Choose a center pawn or knight."
-            }
-            if prompt == .wakeChoosePiece(
-                purpose: .openingDevelopment(firstMove: true)
-            ) {
-                return "Your \(blocker.rawValue) is blocking that \(piece.rawValue). Choose a center pawn or knight."
-            }
-            return "Your \(blocker.rawValue) is blocking that \(piece.rawValue)."
+            return "Your \(blocker.rawValue) blocks that \(piece.rawValue)."
         case let .notWakeCandidate(piece, purpose):
             if piece == .pawn,
                case .wake(
@@ -422,26 +479,26 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                    selectedPiece: nil
                )
                 = prompt {
-                return "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
+                return "That pawn is outside the center."
             }
-            return "That \(piece.rawValue) can move, but it doesn’t \(wakePurposeVerb(for: purpose))."
+            return "That \(piece.rawValue) does not \(wakePurposeVerb(for: purpose))."
         case .notReplyIssue:
-            return "That piece cannot immediately check your king or win one of your pieces."
+            return "That piece cannot check or win a piece here."
         case let .benignOpponentActivity(activity):
             if let capturedPiece = activity.capturedPiece,
                activity.immediateRecapture != nil {
                 return "That \(activity.opponentPiece.rawValue) attacks your \(capturedPiece.rawValue), but the \(capturedPiece.rawValue) is protected."
             }
             if let capturedPiece = activity.capturedPiece {
-                return "That \(activity.opponentPiece.rawValue) can take your \(capturedPiece.rawValue), but it does not win the piece."
+                return "That \(activity.opponentPiece.rawValue) attacks your \(capturedPiece.rawValue), but it does not win the piece."
             }
-            return "That \(activity.opponentPiece.rawValue) does not cause immediate trouble here."
+            return "That \(activity.opponentPiece.rawValue) cannot win a piece here."
         case let .correctAbsence(kind):
             switch kind {
             case .noPieceNeedsHelp:
-                return "Right—no piece needs help right now."
+                return "No piece needs help right now."
             case .noSafeCapture:
-                return "Right—there is no safe capture here."
+                return "There is no safe capture here."
             }
         case let .missedExistingAnswer(kind):
             switch kind {
@@ -455,7 +512,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .missedOpponentIssue(fact), let .opponentIssue(fact):
             return opponentIssueCopy(fact, opponent: opponent)
         case .opponentReplyLooksSafe:
-            return "\(colorName(opponent)) cannot immediately check your king or win one of your pieces after this move."
+            return "\(colorName(opponent)) cannot check your king or win a piece next."
         case .noSafeCaptureForPiece:
             return "That piece has no safe capture here."
         case let .safeCaptureHint(piece):
@@ -463,7 +520,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .unsafeCapture(fact):
             return unsafeCaptureCopy(fact, opponent: opponent)
         case let .concreteFlaw(kind, affectedPiece):
-            return concreteFlawHeadline(
+            return concreteFlawCopy(
                 kind: kind,
                 affectedPiece: affectedPiece,
                 opponent: opponent
@@ -476,16 +533,16 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .noRecognizedPurpose(purpose):
             if purpose == .castle,
                case .wake(task: .castle, selectedPiece: .king) = prompt {
-                return "That is a king move, but it is not castling. Castling moves the king two squares toward the rook."
+                return "Castling moves your king two squares toward the rook."
             }
             if let purpose {
-                return "That move is safe, but it doesn’t \(wakePurposeVerb(for: purpose))."
+                return "That move does not \(wakePurposeVerb(for: purpose))."
             }
             return "That move seems safe."
         case .harmlessCheckFound:
-            return "You found it. \(colorName(opponent)) could check your king, but your move still works."
+            return "\(colorName(opponent)) could check your king, but your move still works."
         case .checkFoundOtherDangerRemains:
-            return "You found the check. There is still another danger after this move."
+            return "You found the check, but another danger remains."
         }
     }
 
@@ -496,7 +553,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .takeChooseMove:
             return "There is a safe capture to find."
         case let .opponentReply(opponent, _):
-            return "\(colorName(opponent)) could still check your king or win one of your pieces."
+            return "\(colorName(opponent)) can check your king or win a piece."
         default:
             return "There is something to find."
         }
@@ -517,7 +574,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         }
     }
 
-    private func concreteFlawHeadline(
+    private func concreteFlawCopy(
         kind: CoachingOpponentIssueKind,
         affectedPiece: Piece.Kind?,
         opponent: PieceColor
@@ -543,55 +600,36 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         let opponentName = colorName(opponent)
         switch fact.issue.kind {
         case .mateInOne:
-            return "\(opponentName)’s \(fact.opponentPiece.rawValue) could checkmate your king."
+            return "\(opponentName)'s \(fact.opponentPiece.rawValue) could checkmate your king."
         case .materialLoss:
             if let affectedPiece = fact.affectedPiece {
-                return "\(opponentName)’s \(fact.opponentPiece.rawValue) could take your \(affectedPiece.rawValue)."
+                return "\(opponentName)'s \(fact.opponentPiece.rawValue) could take your \(affectedPiece.rawValue)."
             }
-            return "\(opponentName)’s \(fact.opponentPiece.rawValue) could take one of your pieces."
+            return "\(opponentName)'s \(fact.opponentPiece.rawValue) could take one of your pieces."
         case .check:
             guard fact.issue.severity == .notice else {
-                return "\(opponentName)’s \(fact.opponentPiece.rawValue) could check your king."
+                return "\(opponentName)'s \(fact.opponentPiece.rawValue) could check your king."
             }
-            let moveDescription: String
             let learnerBackRank = opponent == .black ? 1 : 8
+            let checkDescription: String
             if fact.opponentPiece == .rook,
                fact.issue.reply.to.rank == learnerBackRank {
-                let direction = opponent == .black ? "down" : "up"
-                moveDescription = "That rook could move \(direction) to your back row and check your king."
+                checkDescription = "That rook could check along your back row"
             } else {
-                moveDescription = "That \(fact.opponentPiece.rawValue) could check your king."
+                checkDescription = "That \(fact.opponentPiece.rawValue) could check your king"
             }
             let learnerMove = fact.learnerPiece.map {
                 "your \($0.rawValue) move still works"
             } ?? "your move still works"
-            return "\(moveDescription) You could answer the check, so \(learnerMove)."
+            return "\(checkDescription), but \(learnerMove)."
         }
     }
 
-    private func completionHeadline(
+    private func completionCopy(
         for idea: CoachingCompletionIdea,
         opponent: PieceColor
     ) -> String {
-        if case .resolvesDanger = idea {
-            return completionPurpose(for: idea, opponent: opponent)
-        }
-        if case .safeCapture = idea {
-            return completionPurpose(for: idea, opponent: opponent)
-        }
-        if case .constructive = idea {
-            return completionPurpose(for: idea, opponent: opponent)
-        }
-        if case .resolvesCheck = idea {
-            return completionPurpose(for: idea, opponent: opponent)
-        }
-        if case .verifiedSafe = idea {
-            return completionPurpose(for: idea, opponent: opponent)
-        }
-        if case .seemsSafe = idea {
-            return completionPurpose(for: idea, opponent: opponent)
-        }
-        return "That works. \(completionPurpose(for: idea, opponent: opponent))"
+        completionPurpose(for: idea, opponent: opponent)
     }
 
     private func completionPurpose(
@@ -630,7 +668,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
                 opponent: opponent
             )
         case .verifiedSafe:
-            concept = "I do not see an immediate check or lost piece after this move."
+            concept = "That move seems safe."
         case let .seemsSafe(suggestion):
             if suggestion == .openingDevelopment(firstMove: true) {
                 return "That move seems safe, but a center pawn or knight is a simpler start."
@@ -649,35 +687,35 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch task {
         case let .opening(_, _, candidates):
             if piece == .pawn {
-                return "Your center pawn moved forward and now helps control the center."
+                return "Your center pawn moved forward and helps control the center."
             }
             let comparison = candidates.first(where: { $0.move == move })?
                 .centralityComparison
             if piece == .knight,
                case .closerWithMoreMobility = comparison {
-                return "You developed your knight toward the center. From there it can reach more squares."
+                return "You developed your knight toward the center."
             }
             if piece == .knight,
                case .fartherWithLessMobility = comparison {
-                return "You developed your knight. A square closer to the center would usually give it more choices."
+                return "You developed your knight away from the center, giving it fewer moves."
             }
             if piece == .knight { return "You developed your knight." }
             return "You developed your \(piece.rawValue)."
 
         case .castle:
-            return "You castled. Your king moved toward safety, and your rook moved toward the center."
+            return "You castled, moving your king toward safety and your rook toward the center."
 
         case let .protect(_, sourcePiece, _, targetPiece, _):
             return "Your \(sourcePiece.rawValue) now protects the \(targetPiece.rawValue)."
 
         case let .createThreat(_, sourcePiece, _, targetPiece, _):
-            return "Your \(sourcePiece.rawValue) now attacks the \(targetPiece.rawValue). \(colorName(opponent)) may need to move or protect it."
+            return "Your \(sourcePiece.rawValue) now attacks \(colorName(opponent))'s \(targetPiece.rawValue)."
 
         case let .improveMobility(_, piece, _, before, candidates):
             guard let after = candidates.first(where: { $0.move == move })?.resultingMobility else {
-                return "Your \(piece.rawValue) can reach more squares from there."
+                return "Your \(piece.rawValue) can reach more squares now."
             }
-            return "From there your \(piece.rawValue) can reach \(countName(after)) squares instead of \(countName(before)). That is why \(piece.rawValue)s are often stronger near the center."
+            return "Your \(piece.rawValue) can now reach \(countName(after)) squares instead of \(countName(before))."
         }
     }
 
@@ -695,7 +733,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
     ) -> String {
         let opponentName = colorName(opponent)
         if let recapturer = fact.immediateRecapturer {
-            return "Your \(fact.mover.rawValue) took a \(fact.captured.rawValue). \(opponentName)’s \(recapturer.rawValue) could take the \(fact.mover.rawValue) back, so you would trade a \(fact.mover.rawValue) for a \(fact.captured.rawValue)."
+            return "Your \(fact.mover.rawValue) wins a \(fact.captured.rawValue) even if \(opponentName)'s \(recapturer.rawValue) takes it back."
         }
         return "Your \(fact.mover.rawValue) took a \(fact.captured.rawValue), and \(opponentName) cannot take the \(fact.mover.rawValue) back."
     }
@@ -707,7 +745,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         guard let recapturer = fact.immediateRecapturer else {
             return "That piece has no safe capture here."
         }
-        return "\(colorName(opponent))’s \(recapturer.rawValue) could take your \(fact.mover.rawValue). You would lose a \(fact.mover.rawValue) to take one \(fact.captured.rawValue)."
+        return "\(colorName(opponent))'s \(recapturer.rawValue) could take your \(fact.mover.rawValue), so you would lose it for a \(fact.captured.rawValue)."
     }
 
     private func dangerResolutionCopy(_ resolution: CoachingDangerResolution) -> String {
@@ -715,17 +753,17 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case let .movedTarget(target, attacker):
             switch attacker {
             case .bishop, .rook, .queen:
-                return "Your \(target.rawValue) moved out of the \(attacker.rawValue)’s path. It is safe now."
+                return "Your \(target.rawValue) is out of the \(attacker.rawValue)'s path and safe."
             case .pawn, .knight, .king:
-                return "Your \(target.rawValue) is out of the \(attacker.rawValue)'s attack. It is safe now."
+                return "Your \(target.rawValue) is out of the \(attacker.rawValue)'s attack and safe."
             }
         case let .capturedAttacker(capturer, target, attacker):
             if capturer == target {
-                return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue). It is safe now."
+                return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue) and is safe."
             }
-            return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue). Your \(target.rawValue) is safe now."
+            return "Your \(capturer.rawValue) took the attacking \(attacker.rawValue), so your \(target.rawValue) is safe."
         case let .addedDefender(defender, target, attacker):
-            return "Your other \(defender.rawValue) now protects the threatened \(target.rawValue). If the \(attacker.rawValue) takes it, your \(defender.rawValue) can take the \(attacker.rawValue) back."
+            return "Your \(defender.rawValue) now protects the \(target.rawValue) from the attacking \(attacker.rawValue)."
         }
     }
 
@@ -736,13 +774,13 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         switch resolution {
         case .movedKing:
             if let checker {
-                return "Your king moved out of the \(checker.rawValue)’s line. It is safe."
+                return "Your king moved out of the \(checker.rawValue)'s line and is safe."
             }
-            return "Your king moved out of check. It is safe."
+            return "Your king moved out of check and is safe."
         case let .blocked(attacker, blocker):
-            return "Your \(blocker.rawValue) blocked the \(attacker.rawValue)’s path. Your king is safe."
+            return "Your \(blocker.rawValue) blocked the \(attacker.rawValue)'s path, so your king is safe."
         case let .capturedChecker(checker, capturer):
-            return "Your \(capturer.rawValue) took the checking \(checker.rawValue). Your king is safe."
+            return "Your \(capturer.rawValue) took the checking \(checker.rawValue), so your king is safe."
         }
     }
 

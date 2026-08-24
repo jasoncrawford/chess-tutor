@@ -144,15 +144,15 @@ final class CoachingPanelLayoutTests: XCTestCase {
         XCTAssertEqual(compositions, [.tall, .wide])
         XCTAssertEqual(
             presentation.observation,
-            "Your pawn is blocking that rook. Choose a center pawn or knight."
+            "Your pawn blocks that rook."
         )
         XCTAssertEqual(
             presentation.primaryMessage,
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         )
         XCTAssertEqual(
             presentation.instruction,
-            "Tap one of your two center pawns or one of your knights."
+            "Tap a center pawn or knight."
         )
     }
 

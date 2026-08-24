@@ -76,7 +76,8 @@ final class GameSessionCoachingTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
 
         XCTAssertEqual(session.coachingPresentation?.boardTask, .move)
-        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "This move leaves your king in check. Try another move.")
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "That move leaves your king in check.")
+        XCTAssertEqual(session.coachingPresentation?.instruction, "Try another move.")
         XCTAssertEqual(session.state.board[move.to], Piece(kind: .rook, color: .white))
     }
 
@@ -172,7 +173,7 @@ final class GameSessionCoachingTests: XCTestCase {
         await session.resolvePendingCoachingAdvice()
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "Black’s king could take your bishop. You would lose a bishop to take one pawn."
+            "Black's king could take your bishop, so you would lose it for a pawn."
         )
         XCTAssertEqual(
             session.coachingPresentation?.actions.map(\.action),
@@ -186,11 +187,11 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertFalse(session.canFinishTurn)
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "Right—there is no safe capture here."
+            "There is no safe capture here."
         )
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "I can check immediate dangers, but I do not have a confident plan for this position yet."
+            "What move would you like to try?"
         )
         XCTAssertEqual(
             session.coachingPresentation?.actions.map(\.action),
@@ -506,15 +507,15 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.selectedSquare, blockedRook)
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "Your pawn is blocking that rook. Choose a center pawn or knight."
+            "Your pawn blocks that rook."
         )
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         )
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
-            "Tap one of your two center pawns or one of your knights."
+            "Tap a center pawn or knight."
         )
         XCTAssertNil(session.pendingCoachingRequestID)
     }
@@ -529,7 +530,7 @@ final class GameSessionCoachingTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "Your pawn is blocking that rook. Choose a center pawn or knight."
+            "Your pawn blocks that rook."
         )
 
         _ = session.chooseCoachingAction(.hint)
@@ -565,7 +566,7 @@ final class GameSessionCoachingTests: XCTestCase {
 
         session.select(Square(file: .a, rank: 7))
 
-        XCTAssertEqual(session.coachingPresentation?.observation, "Tap one of your pieces.")
+        XCTAssertEqual(session.coachingPresentation?.observation, "That is not one of your pieces.")
     }
 
     func testOpeningBlockedRookPresentationDoesNotDependOnPriorKnightSelection() async {
@@ -645,17 +646,17 @@ final class GameSessionCoachingTests: XCTestCase {
         session.select(Square(file: .a, rank: 2))
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "That pawn can move, but it is not a center pawn. Choose a pawn in front of your king or queen, or choose a knight."
+            "That pawn is outside the center."
         )
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         )
 
         session.select(Square(file: .a, rank: 1))
         XCTAssertEqual(
             session.coachingPresentation?.observation,
-            "Your pawn is blocking that rook. Choose a center pawn or knight."
+            "Your pawn blocks that rook."
         )
 
         session.select(Square(file: .e, rank: 4))
@@ -663,19 +664,19 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNil(session.coachingPresentation?.observation)
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         )
 
         session.select(Square(file: .a, rank: 7))
         XCTAssertEqual(session.selectedSquare, Square(file: .a, rank: 7))
-        XCTAssertEqual(session.coachingPresentation?.observation, "Tap one of your pieces.")
+        XCTAssertEqual(session.coachingPresentation?.observation, "That is not one of your pieces.")
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "A center pawn or knight is a simple way to start. Which would you like to move?"
+            "A center pawn or knight is a simple way to start."
         )
         XCTAssertEqual(
             session.coachingPresentation?.instruction,
-            "Tap one of your two center pawns or one of your knights."
+            "Tap a center pawn or knight."
         )
         XCTAssertNil(session.pendingCoachingRequestID)
     }
@@ -688,13 +689,13 @@ final class GameSessionCoachingTests: XCTestCase {
         )] = [
             (
                 .createRookThreat,
-                "Your knight can move to a square where it attacks Black’s rook. Can you find the square?",
-                "Move the knight so it attacks the rook."
+                "Your knight can attack Black's rook.",
+                "Move the knight to attack the rook."
             ),
             (
                 .cornerKnight,
-                "Your knight has very few choices in the corner. Can you move it closer to the center?",
-                "Move the knight."
+                "Your knight has only two moves in this corner.",
+                "Move it closer to the center."
             ),
         ]
 
@@ -721,7 +722,7 @@ final class GameSessionCoachingTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "One of your pieces is in danger. Which one?"
+            "Which of your pieces is in danger?"
         )
 
         _ = session.chooseCoachingAction(.noAnswer)
@@ -846,7 +847,7 @@ final class GameSessionCoachingTests: XCTestCase {
         await replacementSession.resolvePendingCoachingAdvice()
         XCTAssertEqual(
             replacementSession.coachingPresentation?.instruction,
-            "Tap one of your two center pawns or one of your knights."
+            "Tap a center pawn or knight."
         )
 
         let promotionFrom = Square(file: .e, rank: 7)
