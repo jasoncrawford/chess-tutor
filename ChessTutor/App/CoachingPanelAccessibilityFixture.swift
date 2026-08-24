@@ -239,18 +239,21 @@ struct CoachingContinuityUITestFixture: View {
                 alignment: .top
             )
 
-            Button("Stage knight move for continuity test") {
-                let move = Move(
-                    from: Square(file: .g, rank: 1),
-                    to: Square(file: .f, rank: 3)
-                )
-                session.select(move.from)
-                _ = session.moveSelectedPiece(to: move.to)
+            VStack {
+                Button("Start coaching for continuity test") {
+                    session.startCoaching()
+                }
+
+                Button("Stage knight move for continuity test") {
+                    let move = Move(
+                        from: Square(file: .g, rank: 1),
+                        to: Square(file: .f, rank: 3)
+                    )
+                    session.select(move.from)
+                    _ = session.moveSelectedPiece(to: move.to)
+                }
             }
             .padding()
-        }
-        .task {
-            session.startCoaching()
         }
         .task(id: session.pendingCoachingRequestID) {
             await session.resolvePendingCoachingAdvice()

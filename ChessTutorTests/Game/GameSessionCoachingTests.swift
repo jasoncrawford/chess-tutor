@@ -8,7 +8,9 @@ final class GameSessionCoachingTests: XCTestCase {
         session.startCoaching()
 
         XCTAssertNotNil(session.pendingCoachingRequestID)
+        XCTAssertTrue(session.isCoachingPanelVisible)
         XCTAssertNil(session.coachingPresentation)
+        XCTAssertEqual(session.authoritativeCoachingBoardTask, .none)
 
         await session.resolvePendingCoachingAdvice()
         let opening = session.coachingPresentation
@@ -95,6 +97,92 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNotEqual(session.coachingPresentation, replacementSelectionTurn)
     }
 
+    func testMatePromptRestrictsHintsAndAcceptanceToMateWhenProfitableCaptureCoexists() async throws {
+        let matingMove = Move(
+            from: Square(file: .g, rank: 6),
+            to: Square(file: .g, rank: 7)
+        )
+        let profitableNonmate = Move(
+            from: Square(file: .b, rank: 1),
+            to: Square(file: .c, rank: 3)
+        )
+        let state = CoachingTestFixtures.state(
+            sideToMove: .white,
+            pieces: [
+                Square(file: .f, rank: 6): Piece(kind: .king, color: .white),
+                matingMove.from: Piece(kind: .queen, color: .white),
+                profitableNonmate.from: Piece(kind: .knight, color: .white),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                profitableNonmate.to: Piece(kind: .rook, color: .black),
+            ]
+        )
+        let advisor = LocalCoachingAdvisor()
+        let positionAdvice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 0,
+            context: .start
+        ))
+
+        XCTAssertEqual(positionAdvice.evaluation.mateInOneMoves, [matingMove])
+        XCTAssertEqual(
+            positionAdvice.evaluation.learnerCaptureEstimates
+                .filter { $0.netGainForMover > 0 }
+                .map(\.move),
+            [profitableNonmate]
+        )
+
+        let session = GameSession(state: state, coachingAdvisor: advisor)
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "Can you find checkmate in one move?"
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.instruction,
+            "Make the checkmating move."
+        )
+
+        XCTAssertNil(session.chooseCoachingAction(.hint))
+        XCTAssertEqual(session.coachingPresentation?.hint, .candidatePieces)
+        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [matingMove.from])
+        XCTAssertEqual(session.coachingPresentation?.focus.paths, [])
+
+        XCTAssertNil(session.chooseCoachingAction(.hint))
+        XCTAssertEqual(session.coachingPresentation?.hint, .candidateMoves)
+        XCTAssertEqual(session.coachingPresentation?.focus.candidateSquares, [matingMove.to])
+        XCTAssertEqual(session.coachingPresentation?.focus.paths, [
+            CoachFocusPath(
+                source: matingMove.from,
+                destination: matingMove.to,
+                role: .candidate
+            )
+        ])
+
+        stage(profitableNonmate, in: session)
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(
+            session.coachingPresentation?.primaryMessage,
+            "Can you find checkmate in one move?"
+        )
+        XCTAssertEqual(
+            session.coachingPresentation?.observation,
+            "That move does not make checkmate."
+        )
+        XCTAssertEqual(session.authoritativeCoachingBoardTask, .move)
+
+        stage(matingMove, in: session)
+        await session.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "You found checkmate.")
+        XCTAssertNil(session.coachingPresentation?.observation)
+        XCTAssertEqual(session.authoritativeCoachingBoardTask, .none)
+    }
+
     func testInitialPendingAdviceCanCloseHelpAndStaleCompletionCannotReopenIt() async {
         let advisor = ControllableCoachingAdvisor()
         let session = GameSession(coachingAdvisor: advisor)
@@ -103,10 +191,19 @@ final class GameSessionCoachingTests: XCTestCase {
         let task = Task { await session.resolvePendingCoachingAdvice() }
         let request = await waitForOnlyPendingRequest(advisor)
 
+        XCTAssertTrue(session.isCoachingPanelVisible)
         XCTAssertNil(session.coachingPresentation)
+        XCTAssertEqual(session.authoritativeCoachingBoardTask, .none)
+
+        let initialPendingID = session.pendingCoachingRequestID
+        XCTAssertNil(session.chooseCoachingAction(.hint))
+        XCTAssertEqual(session.pendingCoachingRequestID, initialPendingID)
+        XCTAssertFalse(session.handleCoachingSquareTap(CoachingTestFixtures.openingKnight))
+        XCTAssertEqual(session.pendingCoachingRequestID, initialPendingID)
 
         XCTAssertNil(session.chooseCoachingAction(.stop))
         XCTAssertFalse(session.isCoachingActive)
+        XCTAssertFalse(session.isCoachingPanelVisible)
         XCTAssertNil(session.coachingPresentation)
 
         await advisor.resolve(

@@ -118,7 +118,7 @@ struct CoachingPresentationProjector: Sendable {
                 ).flatMap { pieceKind(at: $0, advice: advice) } ?? .pawn
             )
         case .takeChooseMove:
-            return advice?.evaluation.mateInOneMoves.isEmpty == false
+            return advice?.isMateSpecificTake == true
                 ? .mateChooseMove
                 : .takeChooseMove
         case let .wakeChoosePiece(purpose):
@@ -207,7 +207,7 @@ struct CoachingPresentationProjector: Sendable {
                 && !positiveAnswerWasRevealed
             return (absenceIsValid ? [.noAnswer] : []) + hintActions + [.stop]
         case .takeChooseMove:
-            if advice?.evaluation.mateInOneMoves.isEmpty == false {
+            if advice?.isMateSpecificTake == true {
                 return hintActions + [.stop]
             }
             return (positiveAnswerWasRevealed ? [] : [.noAnswer]) + hintActions + [.stop]
@@ -323,7 +323,7 @@ struct CoachingPresentationProjector: Sendable {
     ) -> CoachingFeedback? {
         guard stage == .takeChooseMove,
               hint == .candidatePieces,
-              let move = advice?.takeOpportunities.first?.moves.first,
+              let move = advice?.activeTakeMoves.first,
               let fact = advice?.exchangeFact(for: move) else {
             return nil
         }
@@ -717,7 +717,7 @@ struct CoachingPresentationProjector: Sendable {
                 .filter { $0.isLegal && $0.resolvesRequiredDanger }
                 .map(\.move)
         case .takeChooseMove:
-            return advice.takeOpportunities.flatMap(\.moves)
+            return advice.activeTakeMoves
         case let .wakeChoosePiece(purpose):
             if let task = wakeTask(for: stage, advice: advice) {
                 return wakeMoves(in: task)

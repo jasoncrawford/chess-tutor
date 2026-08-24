@@ -145,7 +145,7 @@ struct CoachingPanelView: View {
     @ScaledMetric(relativeTo: .body) private var actionMinimumHeight: CGFloat = 44
 
     @Bindable var session: GameSession
-    let presentation: CoachingPresentation
+    let presentation: CoachingPresentation?
     let layout: CoachingPanelLayout
     let readableRotationDegrees: Double
     let onCommittedMove: (Move) -> Void
@@ -173,7 +173,7 @@ struct CoachingPanelView: View {
         switch layout.composition {
         case .tall:
             VStack(spacing: 10) {
-                if !presentation.routine.isEmpty {
+                if !routine.isEmpty {
                     routineHeader(axis: .horizontal)
                 }
 
@@ -184,7 +184,7 @@ struct CoachingPanelView: View {
             }
         case .wide:
             VStack(spacing: 10) {
-                if !presentation.routine.isEmpty {
+                if !routine.isEmpty {
                     routineHeader(axis: .horizontal)
                     panelDivider
                 }
@@ -205,7 +205,7 @@ struct CoachingPanelView: View {
             accessibleConversation
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            if !presentation.routine.isEmpty {
+            if !routine.isEmpty {
                 routineHeader(axis: .horizontal)
             }
 
@@ -247,35 +247,37 @@ struct CoachingPanelView: View {
 
     private var accessibilityConversationCopy: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(presentation.primaryMessage)
-                .font(titleFont)
-                .lineLimit(1)
-                .accessibilitySortPriority(
-                    CoachingConversationAccessibilityElement.primaryMessage.sortPriority
-                )
-
-            if let instruction = presentation.instruction {
-                Text(instruction)
-                    .font(bodyFont)
+            if let presentation {
+                Text(presentation.primaryMessage)
+                    .font(titleFont)
                     .lineLimit(1)
                     .accessibilitySortPriority(
-                        CoachingConversationAccessibilityElement.instruction.sortPriority
+                        CoachingConversationAccessibilityElement.primaryMessage.sortPriority
                     )
-            }
 
-            if let observation = presentation.observation {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(observation)
+                if let instruction = presentation.instruction {
+                    Text(instruction)
                         .font(bodyFont)
                         .lineLimit(1)
-                        .accessibilityHidden(true)
+                        .accessibilitySortPriority(
+                            CoachingConversationAccessibilityElement.instruction.sortPriority
+                        )
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(observation)
-                .accessibilityIdentifier("coaching-response-note")
-                .accessibilitySortPriority(
-                    CoachingConversationAccessibilityElement.observation.sortPriority
-                )
+
+                if let observation = presentation.observation {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(observation)
+                            .font(bodyFont)
+                            .lineLimit(1)
+                            .accessibilityHidden(true)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(observation)
+                    .accessibilityIdentifier("coaching-response-note")
+                    .accessibilitySortPriority(
+                        CoachingConversationAccessibilityElement.observation.sortPriority
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -283,29 +285,31 @@ struct CoachingPanelView: View {
 
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(presentation.primaryMessage)
-                .font(titleFont)
-                .foregroundStyle(AppTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilitySortPriority(
-                    CoachingConversationAccessibilityElement.primaryMessage.sortPriority
-                )
-
-            if let instruction = presentation.instruction {
-                Text(instruction)
-                    .font(bodyFont)
-                    .foregroundStyle(AppTheme.ink.opacity(0.78))
+            if let presentation {
+                Text(presentation.primaryMessage)
+                    .font(titleFont)
+                    .foregroundStyle(AppTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
-                        CoachingConversationAccessibilityElement.instruction.sortPriority
+                        CoachingConversationAccessibilityElement.primaryMessage.sortPriority
                     )
-            }
 
-            if let observation = presentation.observation {
-                CoachingResponseNote(text: observation, font: bodyFont)
-                    .accessibilitySortPriority(
-                        CoachingConversationAccessibilityElement.observation.sortPriority
-                    )
+                if let instruction = presentation.instruction {
+                    Text(instruction)
+                        .font(bodyFont)
+                        .foregroundStyle(AppTheme.ink.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilitySortPriority(
+                            CoachingConversationAccessibilityElement.instruction.sortPriority
+                        )
+                }
+
+                if let observation = presentation.observation {
+                    CoachingResponseNote(text: observation, font: bodyFont)
+                        .accessibilitySortPriority(
+                            CoachingConversationAccessibilityElement.observation.sortPriority
+                        )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -332,7 +336,7 @@ struct CoachingPanelView: View {
 
     @ViewBuilder
     private var routineTokens: some View {
-        ForEach(Array(presentation.routine.enumerated()), id: \.offset) { _, state in
+        ForEach(Array(routine.enumerated()), id: \.offset) { _, state in
             CoachingRoutineToken(state: state)
         }
     }
@@ -359,7 +363,7 @@ struct CoachingPanelView: View {
 
     @ViewBuilder
     private var actionButtons: some View {
-        ForEach(presentation.actions, id: \.action) { action in
+        ForEach(actions, id: \.action) { action in
             Button {
                 choose(action.action)
             } label: {
@@ -404,6 +408,21 @@ struct CoachingPanelView: View {
 
     private var actionFont: Font {
         AppTheme.coachingActionFont(size: min(coachingActionSize, 23))
+    }
+
+    private var routine: [CoachingRoutineState] {
+        presentation?.routine ?? []
+    }
+
+    private var actions: [CoachingActionPresentation] {
+        presentation?.actions ?? [
+            CoachingActionPresentation(
+                action: .stop,
+                title: "Close help",
+                accessibilityLabel: "Close coaching help",
+                prominence: .quiet
+            )
+        ]
     }
 }
 

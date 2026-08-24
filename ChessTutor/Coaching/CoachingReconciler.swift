@@ -175,7 +175,7 @@ struct CoachingReconciler: Sendable {
         guard let selectedSquare = interaction.selectedSquare else {
             return takeDerivation()
         }
-        let safeCaptureSources = Set(advice.takeOpportunities.flatMap(\.moves).map(\.from))
+        let safeCaptureSources = Set(advice.activeTakeMoves.map(\.from))
         guard !safeCaptureSources.contains(selectedSquare) else {
             return takeDerivation()
         }
@@ -560,9 +560,7 @@ struct CoachingReconciler: Sendable {
         tentativeAdvice: CoachingAdvice,
         positionAdvice: CoachingAdvice?
     ) -> Bool {
-        let isActiveOpportunity = positionAdvice?.takeOpportunities.contains(where: {
-            $0.moves.contains(move)
-        }) == true
+        let isActiveOpportunity = positionAdvice?.activeTakeMoves.contains(move) == true
         let hasPositiveCurrentEstimate = tentativeAdvice.evaluation
             .learnerCaptureEstimates
             .contains { $0.move == move && $0.netGainForMover > 0 }
@@ -570,8 +568,11 @@ struct CoachingReconciler: Sendable {
         let hasRevisionIssue = assessment.opponentIssues.contains {
             $0.severity == .reviseMove
         }
+        let answerMatchesPrompt = positionAdvice?.isMateSpecificTake == true
+            ? isMate
+            : (hasPositiveCurrentEstimate || isMate)
         return isActiveOpportunity
-            && (hasPositiveCurrentEstimate || isMate)
+            && answerMatchesPrompt
             && assessment.isLegal
             && assessment.resolvesRequiredDanger
             && !hasRevisionIssue
@@ -724,6 +725,9 @@ struct CoachingReconciler: Sendable {
         advice: CoachingAdvice,
         positionAdvice: CoachingAdvice?
     ) -> CoachingFeedback {
+        if positionAdvice?.isMateSpecificTake == true {
+            return .notCheckmatingMove
+        }
         if let fact = advice.exchangeFact(for: move)
             ?? positionAdvice?.exchangeFact(for: move) {
             return .unsafeCapture(fact)

@@ -526,6 +526,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             return "\(colorName(opponent)) cannot check your king or win a piece next."
         case .noSafeCaptureForPiece:
             return "That piece has no safe capture here."
+        case .notCheckmatingMove:
+            return "That move does not make checkmate."
         case let .safeCaptureHint(piece):
             return "Your \(piece.rawValue) has a safe capture."
         case let .unsafeCapture(fact):

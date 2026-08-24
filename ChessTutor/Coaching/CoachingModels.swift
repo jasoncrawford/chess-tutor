@@ -319,6 +319,19 @@ struct CoachingAdvice: Equatable, Sendable {
 
     var checkingPieces: Set<Square> { evaluation.checkingPieces }
 
+    var isMateSpecificTake: Bool {
+        !evaluation.mateInOneMoves.isEmpty
+    }
+
+    var activeTakeMoves: [Move] {
+        let offeredMoves = takeOpportunities.flatMap(\.moves)
+        let scopedMoves = isMateSpecificTake
+            ? offeredMoves.filter(evaluation.mateInOneMoves.contains)
+            : offeredMoves
+        var seen: Set<Move> = []
+        return scopedMoves.filter { seen.insert($0).inserted }
+    }
+
     var exchangeFact: CoachingExchangeFact? {
         evaluation.request.tentativeMove.flatMap { evaluation.exchangeFacts[$0] }
     }
@@ -468,6 +481,7 @@ enum CoachingFeedback: Equatable, Sendable {
     case opponentIssue(CoachingOpponentReplyFact)
     case opponentReplyLooksSafe
     case noSafeCaptureForPiece
+    case notCheckmatingMove
     case safeCaptureHint(piece: Piece.Kind)
     case unsafeCapture(CoachingExchangeFact)
     case concreteFlaw(kind: CoachingOpponentIssueKind, affectedPiece: Piece.Kind?)

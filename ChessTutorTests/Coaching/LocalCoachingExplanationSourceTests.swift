@@ -1171,6 +1171,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             .opponentIssue(replyFact),
             .opponentReplyLooksSafe,
             .noSafeCaptureForPiece,
+            .notCheckmatingMove,
             .safeCaptureHint(piece: .bishop),
             .unsafeCapture(exchange),
             .concreteFlaw(kind: .mateInOne, affectedPiece: nil),
@@ -1255,6 +1256,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             case .missedExistingAnswer(.noSafeCapture), .noSafeCaptureForPiece,
                  .safeCaptureHint, .unsafeCapture:
                 return .takeChooseMove
+            case .notCheckmatingMove:
+                return .mateChooseMove
             case let .opponentIssue(fact):
                 return .opponentIssueRevise(
                     kind: fact.issue.kind,

@@ -97,7 +97,7 @@ final class GameSession {
     }
 
     var isCoachingPanelVisible: Bool {
-        coachingSession != nil && coachingPresentation != nil
+        coachingSession != nil
     }
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
