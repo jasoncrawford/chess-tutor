@@ -476,10 +476,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertEqual(session.state, originalState)
         XCTAssertNil(session.selectedSquare)
         XCTAssertFalse(session.canFinishTurn)
-        XCTAssertEqual(
-            session.coachingPresentation?.observation,
-            "There is no safe capture here."
-        )
+        XCTAssertNil(session.coachingPresentation?.observation)
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
             "What move would you like to try?"

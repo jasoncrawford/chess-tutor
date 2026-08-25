@@ -439,10 +439,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             t5PawnResolved.primaryMessage,
             "Your pawn is out of the bishop's path and safe."
         )
-        XCTAssertEqual(
-            t5ProtectedTap.observation,
-            "The knight attacks your pawn, but another pawn protects it."
-        )
+        XCTAssertNil(t5ProtectedTap.observation)
         XCTAssertEqual(
             t8AddsDefender.primaryMessage,
             "Your pawn now protects the pawn from the attacking knight."
@@ -471,10 +468,7 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             t7UnsafeCapture.observation,
             "Black's king could take your bishop, so you would lose it for a pawn."
         )
-        XCTAssertEqual(
-            t7NoSafeCapture.observation,
-            "There is no safe capture here."
-        )
+        XCTAssertNil(t7NoSafeCapture.observation)
         XCTAssertEqual(
             t7NoSafeCapture.primaryMessage,
             "What move would you like to try?"
@@ -959,7 +953,6 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
 
         case .t2Entry:
             return expected(
-                observation: "There is no safe capture here.",
                 primaryMessage: "Your king is ready to castle.",
                 instruction: "Move your king two squares toward the rook.",
                 actions: [.hint, .stop],
@@ -1084,22 +1077,15 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t5ProtectedTap:
             return expected(
-                observation: "The knight attacks your pawn, but another pawn protects it.",
                 primaryMessage: takeAsk,
                 instruction: "Make the capture, or choose No safe capture.",
                 actions: [.noAnswer, .stop],
                 noAnswerTitle: "No safe capture",
                 boardTask: .move,
-                routine: takeRoutine,
-                emphasized: ["f6", "g4", "h3"],
-                paths: [
-                    ("f6", "g4", .attacker),
-                    ("h3", "g4", .defender),
-                ]
+                routine: takeRoutine
             )
         case .t5ProtectedAbsence:
             return expected(
-                observation: "No piece needs help right now.",
                 primaryMessage: takeAsk,
                 instruction: "Make the capture, or choose No safe capture.",
                 actions: [.noAnswer, .stop],
@@ -1147,7 +1133,6 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
             )
         case .t7NoSafeCapture:
             return expected(
-                observation: "There is no safe capture here.",
                 primaryMessage: "What move would you like to try?",
                 instruction: "Move a piece.",
                 actions: [.stop],

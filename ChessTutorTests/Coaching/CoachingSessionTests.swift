@@ -272,7 +272,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.presentation?.primaryMessage, "Which piece should you help first?")
     }
 
-    func testProtectedAttackAdvancesWithConcreteRecaptureFact() async throws {
+    func testProtectedAttackAdvancesWithoutKeepingSafeFeedback() async throws {
         let state = CoachingGoldenPosition.protectedPawn.state
         let advice = try await advisor.advice(for: CoachingRequest(
             committedState: state,
@@ -287,10 +287,8 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.identificationTapped(sq("g4")))
 
         XCTAssertEqual(session.stage, .takeChooseMove)
-        XCTAssertEqual(
-            session.presentation?.observation,
-            "The knight attacks your pawn, but another pawn protects it."
-        )
+        XCTAssertNil(session.presentation?.observation)
+        XCTAssertEqual(session.presentation?.focus, .empty)
         XCTAssertEqual(
             session.presentation?.primaryMessage,
             "Can one of your pieces safely take a black piece?"
@@ -300,6 +298,101 @@ final class CoachingSessionTests: XCTestCase {
             "Make the capture, or choose No safe capture."
         )
         XCTAssertEqual(session.presentation?.actions.map(\.action), [.noAnswer, .stop])
+    }
+
+    func testProtectedPawnTapDoesNotLeakSafeFeedbackIntoTake() async throws {
+        let state = CoachingTestFixtures.state(
+            sideToMove: .black,
+            pieces: [
+                sq("e1"): Piece(kind: .king, color: .white),
+                sq("f3"): Piece(kind: .queen, color: .white),
+                sq("e8"): Piece(kind: .king, color: .black),
+                sq("f7"): Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .black,
+            positionRevision: 7,
+            context: .start
+        ))
+        XCTAssertTrue(advice.dangerProblems.isEmpty)
+        XCTAssertTrue(advice.evaluation.opponentCaptureEstimates.contains {
+            $0.move == Move(from: sq("f3"), to: sq("f7"))
+                && $0.immediateRecapture?.from == sq("e8")
+        })
+        var session = session(learner: .black)
+        session.receive(advice)
+        XCTAssertEqual(session.stage, .safeLocate)
+
+        session.handle(.identificationTapped(sq("f7")))
+
+        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Can one of your pieces safely take a white piece?"
+        )
+        XCTAssertNil(session.presentation?.observation)
+        XCTAssertEqual(session.presentation?.focus, .empty)
+    }
+
+    func testNoPieceNeedsHelpDoesNotLeakSafeFeedbackIntoTake() async throws {
+        let state = CoachingTestFixtures.state(
+            sideToMove: .black,
+            pieces: [
+                sq("e1"): Piece(kind: .king, color: .white),
+                sq("f3"): Piece(kind: .queen, color: .white),
+                sq("e8"): Piece(kind: .king, color: .black),
+                sq("f7"): Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .black,
+            positionRevision: 7,
+            context: .start
+        ))
+        var session = session(learner: .black)
+        session.receive(advice)
+        XCTAssertEqual(session.stage, .safeLocate)
+
+        session.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(
+            session.presentation?.primaryMessage,
+            "Can one of your pieces safely take a white piece?"
+        )
+        XCTAssertNil(session.presentation?.observation)
+        XCTAssertEqual(session.presentation?.focus, .empty)
+    }
+
+    func testNoSafeCaptureDoesNotLeakTakeFeedbackIntoWake() async throws {
+        let state = CoachingGoldenPosition.readyToCastle.state
+        let advice = try await advisor.advice(for: CoachingRequest(
+            committedState: state,
+            tentativeMove: nil,
+            learner: .white,
+            positionRevision: 7,
+            context: .start
+        ))
+        var session = session()
+        session.receive(advice)
+        XCTAssertEqual(session.stage, .safeLocate)
+        session.handle(.actionChosen(.noAnswer))
+        XCTAssertEqual(session.stage, .takeChooseMove)
+
+        session.handle(.actionChosen(.noAnswer))
+
+        XCTAssertEqual(
+            session.stage,
+            .wakeChoosePiece(purpose: .castle)
+        )
+        XCTAssertEqual(session.presentation?.primaryMessage, "Your king is ready to castle.")
+        XCTAssertNil(session.presentation?.observation)
+        XCTAssertEqual(session.presentation?.focus.emphasizedSquares, [sq("e1")])
     }
 
     func testProtectedPieceFeedbackStaysLocalWhenAnotherPieceNeedsHelp() async throws {
@@ -749,10 +842,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(clearSession.stage, .safeLocate)
         clearSession.handle(.actionChosen(.noAnswer))
         XCTAssertEqual(clearSession.stage, .takeChooseMove)
-        XCTAssertEqual(
-            clearSession.presentation?.observation,
-            "No piece needs help right now."
-        )
+        XCTAssertNil(clearSession.presentation?.observation)
         XCTAssertEqual(
             clearSession.presentation?.primaryMessage,
             "Can one of your pieces safely take a black piece?"
@@ -822,10 +912,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(emptySession.stage, .takeChooseMove)
         emptySession.handle(.actionChosen(.noAnswer))
         XCTAssertEqual(emptySession.stage, .fallbackChooseMove)
-        XCTAssertEqual(
-            emptySession.presentation?.observation,
-            "There is no safe capture here."
-        )
+        XCTAssertNil(emptySession.presentation?.observation)
         XCTAssertEqual(
             emptySession.presentation?.primaryMessage,
             "What move would you like to try?"
@@ -880,10 +967,7 @@ final class CoachingSessionTests: XCTestCase {
             session.stage,
             .wakeChoosePiece(purpose: .centralActivity)
         )
-        XCTAssertEqual(
-            session.presentation?.observation,
-            "There is no safe capture here."
-        )
+        XCTAssertNil(session.presentation?.observation)
         XCTAssertEqual(
             session.presentation?.primaryMessage,
             "Your knight has only two moves in this corner."
@@ -893,16 +977,14 @@ final class CoachingSessionTests: XCTestCase {
         ])
     }
 
-    func testTakeAbsenceUsesCaptureSpecificResponse() {
+    func testTakeAbsenceDoesNotKeepTakeResponseInFallback() {
         var session = session()
         session.receive(CoachingTestFixtures.nontrivialTakeClearAdvice)
 
         session.handle(.actionChosen(.noAnswer))
 
-        XCTAssertEqual(
-            session.presentation?.observation,
-            "There is no safe capture here."
-        )
+        XCTAssertEqual(session.stage, .fallbackChooseMove)
+        XCTAssertNil(session.presentation?.observation)
     }
 
     func testNonCaptureMateOpensFirstClassMateQuestion() {
@@ -1077,7 +1159,7 @@ final class CoachingSessionTests: XCTestCase {
         session.handle(.interactionChanged(initial))
         session.handle(.actionChosen(.noAnswer))
 
-        XCTAssertEqual(session.presentation?.observation, "There is no safe capture here.")
+        XCTAssertNil(session.presentation?.observation)
         XCTAssertEqual(session.stage, .fallbackChooseMove)
         XCTAssertEqual(
             session.presentation?.primaryMessage,

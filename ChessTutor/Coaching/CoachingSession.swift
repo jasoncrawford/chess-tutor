@@ -186,12 +186,10 @@ struct CoachingSession: Sendable {
                         if advice.dangerProblems.isEmpty {
                             episode.evidence.confirmedSafeAbsence = true
                         }
-                        let directives = reconcile()
-                        recordFeedback(
+                        return recordFeedback(
                             feedback,
                             anchor: .identification(square: square)
                         )
-                        return directives
                     }
                     miss = feedback
                 }
@@ -308,12 +306,10 @@ struct CoachingSession: Sendable {
             case .safeLocate:
                 if advice.dangerProblems.isEmpty {
                     episode.evidence.confirmedSafeAbsence = true
-                    let directives = reconcile()
-                    recordFeedback(
+                    return recordFeedback(
                         .correctAbsence(.noPieceNeedsHelp),
                         anchor: .action(.noAnswer)
                     )
-                    return directives
                 }
             case .takeChooseMove:
                 if advice.takeOpportunities.isEmpty {
@@ -326,8 +322,7 @@ struct CoachingSession: Sendable {
                         ))
                     }
                     episode.evidence.confirmedTakeAbsence = true
-                    let directives = reconcile()
-                    recordFeedback(
+                    let directives = recordFeedback(
                         .correctAbsence(.noSafeCapture),
                         anchor: .action(.noAnswer)
                     )
@@ -464,10 +459,10 @@ struct CoachingSession: Sendable {
     private mutating func recordFeedback(
         _ feedback: CoachingFeedback,
         anchor: CoachingFeedbackAnchor
-    ) {
+    ) -> [CoachingDirective] {
         episode.progress.feedback = feedback
         episode.progress.feedbackAnchor = anchor
-        publish(reconciler.derive(learner: learner, episode: episode))
+        return reconcile()
     }
 
     private mutating func resetProgressPreservingPulse() {
