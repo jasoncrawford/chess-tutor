@@ -3,8 +3,10 @@ import SwiftUI
 struct CoachFocusStyle: Equatable {
     static let current = CoachFocusStyle(
         emphasizedRingScale: 0.76,
-        candidateRingScale: 0.60,
+        candidateRingScale: 0.80,
         ringLineWidthInCells: 0.026,
+        candidateRingLineWidthInCells: 0.036,
+        candidateRingKeylineWidthInCells: 0.072,
         pathLineWidthInCells: 0.020,
         candidatePathDashInCells: [0.08, 0.07]
     )
@@ -12,6 +14,8 @@ struct CoachFocusStyle: Equatable {
     let emphasizedRingScale: CGFloat
     let candidateRingScale: CGFloat
     let ringLineWidthInCells: CGFloat
+    let candidateRingLineWidthInCells: CGFloat
+    let candidateRingKeylineWidthInCells: CGFloat
     let pathLineWidthInCells: CGFloat
     let candidatePathDashInCells: [CGFloat]
 
@@ -127,11 +131,21 @@ struct CoachFocusOverlay: View {
                 center: geometry.center(of: square),
                 diameter: geometry.cellSize * style.candidateRingScale * pulseScale
             )
+            let ring = Path(ellipseIn: rect)
             context.stroke(
-                Path(ellipseIn: rect),
+                ring,
+                with: .color(AppTheme.coachCandidateKeyline),
+                style: StrokeStyle(
+                    lineWidth: geometry.cellSize * style.candidateRingKeylineWidthInCells,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+            context.stroke(
+                ring,
                 with: .color(AppTheme.coachCandidateRing),
                 style: StrokeStyle(
-                    lineWidth: geometry.cellSize * style.ringLineWidthInCells,
+                    lineWidth: geometry.cellSize * style.candidateRingLineWidthInCells,
                     lineCap: .round,
                     dash: style.candidatePathDashInCells.map { $0 * geometry.cellSize }
                 )

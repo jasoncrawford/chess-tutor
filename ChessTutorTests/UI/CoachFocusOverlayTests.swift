@@ -78,10 +78,16 @@ final class CoachFocusOverlayTests: XCTestCase {
         XCTAssertGreaterThan(CoachFocusMotionPolicy(reducesMotion: false).pulseScale, 1)
     }
 
-    func testFocusStyleMakesCandidatesQuieterAndCandidatePathsDashed() {
+    func testCandidateHintUsesLargeContrastingKeylinedRing() {
         let style = CoachFocusStyle.current
 
-        XCTAssertLessThan(style.candidateRingScale, style.emphasizedRingScale)
+        XCTAssertEqual(style.candidateRingScale, 0.80, accuracy: 0.001)
+        XCTAssertEqual(style.candidateRingLineWidthInCells, 0.036, accuracy: 0.001)
+        XCTAssertEqual(style.candidateRingKeylineWidthInCells, 0.072, accuracy: 0.001)
+        XCTAssertGreaterThan(
+            style.candidateRingKeylineWidthInCells,
+            style.candidateRingLineWidthInCells
+        )
         XCTAssertTrue(style.pathDash(for: .attacker).isEmpty)
         XCTAssertFalse(style.pathDash(for: .candidate).isEmpty)
         XCTAssertLessThan(style.pathLineWidthInCells, BoardGuidanceStyle.current.pathLineWidthInCells)
