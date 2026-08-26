@@ -160,7 +160,7 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         case .reviseMove:
             return AuthoredTurn(
                 primaryMessage: "Try another move.",
-                instruction: "Move a piece.",
+                instruction: "Change your move.",
                 observation: nil
             )
         case .illegalKingSafety:
@@ -376,9 +376,13 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
         guard let base else { return nil }
         switch context.feedback {
         case .unsafeCapture:
-            return "Change your move, or choose No safe capture."
+            return context.actions.contains(.noAnswer)
+                ? "Change your move, or choose No safe capture."
+                : "Change your move."
         case .noSafeCaptureForPiece:
-            return "Try another piece, or choose No safe capture."
+            return context.actions.contains(.noAnswer)
+                ? "Try another piece, or choose No safe capture."
+                : "Change your move."
         case .safeCaptureHint:
             return "Tap the highlighted \(colorName(context.learner).lowercased()) piece."
         case let .missedOpponentIssue(fact):

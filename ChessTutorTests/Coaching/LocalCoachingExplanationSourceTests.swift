@@ -256,7 +256,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
             (
                 .reviseMove,
                 "Try another move.",
-                "Move a piece."
+                "Change your move."
             ),
             (
                 .illegalKingSafety,
@@ -591,7 +591,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         )
         XCTAssertEqual(
             presentation.instruction,
-            "Change your move, or choose No safe capture."
+            "Change your move."
         )
     }
 
@@ -651,7 +651,8 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
     func testWrongTakeSourceUsesCaptureSpecificMissCopy() {
         let presentation = source.presentation(for: context(
             prompt: .takeChooseMove,
-            feedback: .noSafeCaptureForPiece
+            feedback: .noSafeCaptureForPiece,
+            actions: [.noAnswer]
         ))
 
         XCTAssertEqual(presentation.observation, "That piece has no safe capture here.")
@@ -1362,7 +1363,7 @@ final class LocalCoachingExplanationSourceTests: XCTestCase {
         let presentation = source.presentation(for: context(prompt: .reviseMove))
 
         XCTAssertEqual(presentation.primaryMessage, "Try another move.")
-        XCTAssertEqual(presentation.instruction, "Move a piece.")
+        XCTAssertEqual(presentation.instruction, "Change your move.")
         XCTAssertFalse(hasContainedMeaning(
             presentation.primaryMessage,
             presentation.instruction

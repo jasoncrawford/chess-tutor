@@ -167,11 +167,14 @@ final class GameSessionCoachingTests: XCTestCase {
 
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "Can you find checkmate in one move?"
+            "Try another move."
         )
         XCTAssertEqual(
             session.coachingPresentation?.observation,
             "That move does not make checkmate."
+        )
+        XCTAssertFalse(
+            session.coachingPresentation?.actions.map(\.action).contains(.noAnswer) == true
         )
         XCTAssertEqual(session.authoritativeCoachingBoardTask, .move)
 
@@ -451,7 +454,7 @@ final class GameSessionCoachingTests: XCTestCase {
         XCTAssertNotEqual(session.coachingPresentation?.routine, originalRoutine)
     }
 
-    func testTruthfulNoSafeCaptureAfterUnsafeCandidateClearsCandidateAndAdvances() async {
+    func testUnsafeCaptureFromTakeStaysStagedAsMoveSpecificRevision() async {
         let originalState = CoachingGoldenPosition.losingCapture.state
         let move = CoachingGoldenMoves.bishopTakesPawn
         let session = GameSession(
@@ -468,18 +471,23 @@ final class GameSessionCoachingTests: XCTestCase {
         )
         XCTAssertEqual(
             session.coachingPresentation?.actions.map(\.action),
-            [.noAnswer, .stop]
+            [.stop]
         )
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "Try another move.")
+        XCTAssertEqual(session.state.board[move.to]?.kind, .bishop)
+        XCTAssertNil(session.state.board[move.from])
+        XCTAssertEqual(session.selectedSquare, move.to)
+        XCTAssertTrue(session.canFinishTurn)
 
         _ = session.chooseCoachingAction(.noAnswer)
 
-        XCTAssertEqual(session.state, originalState)
-        XCTAssertNil(session.selectedSquare)
-        XCTAssertFalse(session.canFinishTurn)
-        XCTAssertNil(session.coachingPresentation?.observation)
+        XCTAssertNotEqual(session.state, originalState)
+        XCTAssertEqual(session.state.board[move.to]?.kind, .bishop)
+        XCTAssertEqual(session.selectedSquare, move.to)
+        XCTAssertTrue(session.canFinishTurn)
         XCTAssertEqual(
             session.coachingPresentation?.primaryMessage,
-            "What move would you like to try?"
+            "Try another move."
         )
         XCTAssertEqual(
             session.coachingPresentation?.actions.map(\.action),
@@ -1676,6 +1684,44 @@ final class GameSessionCoachingTests: XCTestCase {
             )
         )
         XCTAssertFalse(session.isAwaitingPromotionChoice)
+    }
+
+    func testQuietMoveFromTakeIsReviewedLikeTheSamePreexistingMove() async {
+        let state = CoachingGoldenPosition.losingCapture.state
+        let move = Move(from: sq("g1"), to: sq("h1"))
+        let guided = GameSession(
+            state: state,
+            coachingAdvisor: LocalCoachingAdvisor()
+        )
+        guided.startCoaching()
+        await guided.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(
+            guided.coachingPresentation?.primaryMessage,
+            "Can one of your pieces safely take a black piece?"
+        )
+        XCTAssertTrue(guided.coachingPresentation?.actions.map(\.action).contains(.noAnswer) == true)
+
+        stage(move, in: guided)
+        await guided.resolvePendingCoachingAdvice()
+
+        XCTAssertFalse(guided.coachingPresentation?.actions.map(\.action).contains(.noAnswer) == true)
+        XCTAssertTrue(guided.canFinishTurn)
+        XCTAssertEqual(guided.state.board[sq("h1")]?.kind, .king)
+        XCTAssertNil(guided.state.board[sq("g1")])
+
+        let direct = GameSession(
+            state: state,
+            coachingAdvisor: LocalCoachingAdvisor()
+        )
+        stage(move, in: direct)
+        direct.startCoaching()
+        await direct.resolvePendingCoachingAdvice()
+
+        XCTAssertEqual(guided.coachingPresentation, direct.coachingPresentation)
+        XCTAssertEqual(guided.coachingPresentation?.focus, direct.coachingPresentation?.focus)
+        XCTAssertEqual(guided.state.board, direct.state.board)
+        XCTAssertTrue(direct.canFinishTurn)
     }
 
     private func waitForOnlyPendingRequest(

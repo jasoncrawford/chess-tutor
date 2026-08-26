@@ -1032,11 +1032,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t3UnresolvedMove:
             return expected(
                 observation: "The pawn could still take your knight after that move.",
-                primaryMessage: "The pawn attacks your knight.",
-                instruction: "Move, protect, or trade your knight.",
+                primaryMessage: "Try another move.",
+                instruction: "Change your move.",
                 actions: [.stop],
-                boardTask: .move,
-                routine: safeRoutine
+                boardTask: .move
             )
         case .t3ResolvedMove:
             return completion(
@@ -1124,12 +1123,10 @@ final class CoachingGoldenTranscriptTests: XCTestCase {
         case .t7UnsafeCapture:
             return expected(
                 observation: "Black's king could take your bishop, so you would lose it for a pawn.",
-                primaryMessage: takeAsk,
-                instruction: "Change your move, or choose No safe capture.",
-                actions: [.noAnswer, .stop],
-                noAnswerTitle: "No safe capture",
-                boardTask: .move,
-                routine: takeRoutine
+                primaryMessage: "Try another move.",
+                instruction: "Change your move.",
+                actions: [.stop],
+                boardTask: .move
             )
         case .t7NoSafeCapture:
             return expected(

@@ -638,14 +638,14 @@ final class CoachingSessionTests: XCTestCase {
 
         session.receive(moveAdvice)
 
-        XCTAssertEqual(session.stage, .safeResolve(target: queen))
+        XCTAssertEqual(session.stage, .reviseMove(origin: .safe))
         XCTAssertEqual(
             session.presentation?.observation,
             "The rook could still take your rook after that move."
         )
         XCTAssertEqual(
             session.presentation?.primaryMessage,
-            "The bishop attacks your queen."
+            "Try another move."
         )
         XCTAssertNil(session.presentation?.hint)
         XCTAssertTrue(session.presentation?.focus.emphasizedSquares.isEmpty == true)
@@ -660,9 +660,9 @@ final class CoachingSessionTests: XCTestCase {
             session.presentation?.primaryMessage,
             "The bishop attacks your queen."
         )
-        XCTAssertEqual(session.presentation?.hint, .candidateMoves)
+        XCTAssertNil(session.presentation?.hint)
         XCTAssertEqual(session.presentation?.focus.emphasizedSquares, [queen, queenAttacker])
-        XCTAssertFalse(session.presentation?.focus.candidateSquares.isEmpty == true)
+        XCTAssertTrue(session.presentation?.focus.candidateSquares.isEmpty == true)
         XCTAssertTrue(session.presentation?.focus.paths.contains(CoachFocusPath(
             source: queenAttacker,
             destination: queen,
@@ -726,7 +726,7 @@ final class CoachingSessionTests: XCTestCase {
 
         session.receive(moveAdvice)
 
-        XCTAssertEqual(session.stage, .safeResolve(target: target))
+        XCTAssertEqual(session.stage, .reviseMove(origin: .safe))
         XCTAssertEqual(
             session.presentation?.observation,
             "The rook could still take your pawn after that move."
@@ -895,15 +895,12 @@ final class CoachingSessionTests: XCTestCase {
             danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         ))
 
-        XCTAssertEqual(session.stage, .safeResolve(target: CoachingTestFixtures.whiteQueen))
+        XCTAssertEqual(session.stage, .reviseMove(origin: .safe))
         XCTAssertEqual(
             session.presentation?.observation,
             "The bishop could still take your queen after that move."
         )
-        XCTAssertEqual(
-            session.presentation?.primaryMessage,
-            "The bishop attacks your queen."
-        )
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.noAnswer) == true)
     }
 
     func testTakeRequiresCorrectAbsenceAndStagesCapturesForAdvice() {
@@ -930,6 +927,30 @@ final class CoachingSessionTests: XCTestCase {
             stage(CoachingTestFixtures.profitableCapture, in: &takeSession),
             [.requestAdvice(context: .tentativeMove(origin: .take))]
         )
+    }
+
+    func testQuietMoveFromTakeSupersedesAbsenceQuestion() {
+        let move = CoachingTestFixtures.fallbackMove
+        var session = session()
+        session.receive(CoachingTestFixtures.nontrivialTakeClearAdvice)
+        XCTAssertEqual(session.stage, .takeChooseMove)
+
+        stage(move, in: &session)
+        session.receive(CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .take,
+            assessment: CoachingTestFixtures.acceptableAssessment(move)
+        ))
+
+        XCTAssertEqual(
+            session.stage,
+            .complete(move: move, origin: .take, concepts: [])
+        )
+        XCTAssertEqual(
+            session.presentation?.actions.map(\.action),
+            [.done, .keepLooking, .stop]
+        )
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.noAnswer) == true)
     }
 
     func testNoSafeCaptureFallsThroughToVerifiedNonCastleWakeTask() async throws {
@@ -1042,18 +1063,15 @@ final class CoachingSessionTests: XCTestCase {
             learnerCaptures: [estimate]
         ))
 
-        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(session.stage, .reviseMove(origin: .take))
         XCTAssertEqual(
             session.presentation?.observation,
             "Black's king could take your rook, so you would lose it for a rook."
         )
-        XCTAssertEqual(
-            session.presentation?.primaryMessage,
-            "Can one of your pieces safely take a black piece?"
-        )
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.noAnswer) == true)
     }
 
-    func testTakeRejectsNonCaptureMateOutsideActiveSafeCaptureOpportunities() {
+    func testTakeFollowsNonCaptureMateMoveToCompletion() {
         let mate = CoachingTestFixtures.safeMove
         var session = preparedSession(for: .take)
         stage(mate, in: &session)
@@ -1067,18 +1085,22 @@ final class CoachingSessionTests: XCTestCase {
             )
         ))
 
-        XCTAssertEqual(session.stage, .takeChooseMove)
         XCTAssertEqual(
-            session.presentation?.observation,
-            "That piece has no safe capture here."
+            session.stage,
+            .complete(move: mate, origin: .take, concepts: [.mateInOne])
         )
+        XCTAssertNil(session.presentation?.observation)
         XCTAssertEqual(
             session.presentation?.primaryMessage,
-            "Can one of your pieces safely take a black piece?"
+            "You found checkmate."
+        )
+        XCTAssertEqual(
+            session.presentation?.actions.map(\.action),
+            [.done, .keepLooking, .stop]
         )
     }
 
-    func testUnprofitableCaptureExplainsImmediateRecaptureAndReturnsToTake() {
+    func testUnprofitableCaptureExplainsImmediateRecaptureAsMoveRevision() {
         let capture = CoachingTestFixtures.profitableCapture
         let recapture = Move(from: CoachingTestFixtures.blackKing, to: capture.to)
         let estimate = CoachingTestFixtures.capture(
@@ -1104,15 +1126,12 @@ final class CoachingSessionTests: XCTestCase {
             learnerCaptures: [estimate]
         ))
 
-        XCTAssertEqual(session.stage, .takeChooseMove)
+        XCTAssertEqual(session.stage, .reviseMove(origin: .take))
         XCTAssertEqual(
             session.presentation?.observation,
             "Black's king could take your queen, so you would lose it for a rook."
         )
-        XCTAssertEqual(
-            session.presentation?.primaryMessage,
-            "Can one of your pieces safely take a black piece?"
-        )
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.noAnswer) == true)
     }
 
     func testRealLosingCaptureExplainsKingRecaptureThenUsesHonestFallback() async throws {
@@ -1155,8 +1174,13 @@ final class CoachingSessionTests: XCTestCase {
             session.presentation?.observation,
             "Black's king could take your bishop, so you would lose it for a pawn."
         )
+        XCTAssertEqual(session.stage, .reviseMove(origin: .take))
+        XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.noAnswer) == true)
+        XCTAssertTrue(session.handle(.actionChosen(.noAnswer)).isEmpty)
+        XCTAssertEqual(session.stage, .reviseMove(origin: .take))
 
         session.handle(.interactionChanged(initial))
+        XCTAssertEqual(session.stage, .takeChooseMove)
         session.handle(.actionChosen(.noAnswer))
 
         XCTAssertNil(session.presentation?.observation)
@@ -1225,7 +1249,7 @@ final class CoachingSessionTests: XCTestCase {
         )
     }
 
-    func testRepeatedUnprofitableCapturesPreserveHintLevelAtAvailableFocusCap() {
+    func testRepeatedUnprofitableCapturesStartFreshMoveRevisionProgress() {
         let move = CoachingTestFixtures.profitableCapture
         let estimate = CoachingTestFixtures.capture(
             move: move,
@@ -1248,13 +1272,13 @@ final class CoachingSessionTests: XCTestCase {
         session.receive(CoachingTestFixtures.takeAdvice)
         session.handle(.actionChosen(.hint))
 
-        for expectedMisses in 1...2 {
+        for attempt in 1...2 {
             stage(move, in: &session)
             session.receive(advice)
-            XCTAssertEqual(session.stage, .takeChooseMove)
-            XCTAssertEqual(session.hintLevel, 1)
-            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
-            if expectedMisses < 2 {
+            XCTAssertEqual(session.stage, .reviseMove(origin: .take))
+            XCTAssertEqual(session.hintLevel, 0)
+            XCTAssertEqual(session.missesAtCurrentLevel, 1)
+            if attempt < 2 {
                 session.handle(.interactionChanged(snapshot()))
             }
         }
@@ -2486,17 +2510,14 @@ final class CoachingSessionTests: XCTestCase {
             danger: CoachingTestFixtures.multipleDangerAdvice.dangerProblems
         ))
 
-        XCTAssertEqual(
-            session.stage,
-            .safeResolve(target: CoachingTestFixtures.whiteQueen)
-        )
+        XCTAssertEqual(session.stage, .reviseMove(origin: .safe))
         XCTAssertEqual(
             session.presentation?.observation,
             "The bishop could still take your queen after that move."
         )
         XCTAssertEqual(
             session.presentation?.primaryMessage,
-            "The bishop attacks your queen."
+            "Try another move."
         )
     }
 
@@ -2680,7 +2701,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.stage, .complete(move: move, origin: .check, concepts: []))
     }
 
-    func testRepeatedUnresolvedSafeMovesPreserveHintLevelAtAvailableFocusCap() {
+    func testRepeatedUnresolvedSafeMovesStartFreshMoveRevisionProgress() {
         let move = CoachingTestFixtures.safeMove
         let advice = CoachingTestFixtures.adviceForTentativeMove(
             move,
@@ -2695,16 +2716,13 @@ final class CoachingSessionTests: XCTestCase {
         var session = preparedSession(for: .safe)
         session.handle(.actionChosen(.hint))
 
-        for expectedMisses in 1...2 {
+        for attempt in 1...2 {
             stage(move, in: &session)
             session.receive(advice)
-            XCTAssertEqual(
-                session.stage,
-                .safeResolve(target: CoachingTestFixtures.whiteQueen)
-            )
-            XCTAssertEqual(session.hintLevel, 1)
-            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
-            if expectedMisses < 2 {
+            XCTAssertEqual(session.stage, .reviseMove(origin: .safe))
+            XCTAssertEqual(session.hintLevel, 0)
+            XCTAssertEqual(session.missesAtCurrentLevel, 1)
+            if attempt < 2 {
                 session.handle(.interactionChanged(snapshot(
                     selected: move.from
                 )))
@@ -2802,7 +2820,7 @@ final class CoachingSessionTests: XCTestCase {
         XCTAssertFalse(session.presentation?.actions.map(\.action).contains(.hint) == true)
     }
 
-    func testIllegalMoveReturnsToEveryOriginSpecificMoveStage() {
+    func testIllegalMoveAlwaysDerivesMoveSpecificRevision() {
         let move = CoachingTestFixtures.safeMove
         let illegal = CoachingMoveAssessment(
             move: move,
@@ -2814,16 +2832,9 @@ final class CoachingSessionTests: XCTestCase {
             isTacticallyAcceptable: false
         )
 
-        let expected: [(CoachingMoveOrigin, CoachingStage)] = [
-            (.preexisting, .reviseMove(origin: .preexisting)),
-            (.check, .checkResolve),
-            (.safe, .safeResolve(target: CoachingTestFixtures.whiteQueen)),
-            (.take, .takeChooseMove),
-            (.wake, .fallbackChooseMove),
-            (.fallback, .fallbackChooseMove),
-        ]
-
-        for (origin, expectedStage) in expected {
+        for origin in [
+            CoachingMoveOrigin.preexisting, .check, .safe, .take, .wake, .fallback,
+        ] {
             var session = preparedSession(for: origin)
             stage(move, in: &session)
             session.receive(CoachingTestFixtures.adviceForTentativeMove(
@@ -2831,7 +2842,11 @@ final class CoachingSessionTests: XCTestCase {
                 origin: origin,
                 assessment: illegal
             ))
-            XCTAssertEqual(session.stage, expectedStage, "Wrong return stage for \(origin)")
+            XCTAssertEqual(
+                session.stage,
+                .reviseMove(origin: origin),
+                "Wrong revision stage for \(origin)"
+            )
             XCTAssertEqual(
                 session.presentation?.primaryMessage,
                 "That move leaves your king in check."
@@ -2840,7 +2855,7 @@ final class CoachingSessionTests: XCTestCase {
         }
     }
 
-    func testRepeatedIllegalFallbackMovesPreserveZeroHintLevelAndCountMisses() {
+    func testRepeatedIllegalFallbackMovesStartFreshMoveRevisionProgress() {
         let move = CoachingTestFixtures.fallbackMove
         let illegal = CoachingMoveAssessment(
             move: move,
@@ -2860,13 +2875,13 @@ final class CoachingSessionTests: XCTestCase {
         var session = preparedSession(for: .fallback)
         session.handle(.actionChosen(.hint))
 
-        for expectedMisses in 1...2 {
+        for attempt in 1...2 {
             stage(move, in: &session)
             session.receive(advice)
-            XCTAssertEqual(session.stage, .fallbackChooseMove)
+            XCTAssertEqual(session.stage, .reviseMove(origin: .fallback))
             XCTAssertEqual(session.hintLevel, 0)
-            XCTAssertEqual(session.missesAtCurrentLevel, expectedMisses)
-            if expectedMisses < 2 {
+            XCTAssertEqual(session.missesAtCurrentLevel, 1)
+            if attempt < 2 {
                 session.handle(.interactionChanged(snapshot()))
             }
         }

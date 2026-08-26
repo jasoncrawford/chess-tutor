@@ -312,7 +312,11 @@ final class CoachingAcceptanceTests: XCTestCase {
         )
         XCTAssertEqual(
             badSession.coachingPresentation?.primaryMessage,
-            "Can one of your pieces safely take a black piece?"
+            "Try another move."
+        )
+        XCTAssertEqual(badSession.coachingPresentation?.instruction, "Change your move.")
+        XCTAssertFalse(
+            badSession.coachingPresentation?.actions.map(\.action).contains(.noAnswer) == true
         )
         XCTAssertEqual(badSession.coachingPresentation?.boardTask, .move)
 

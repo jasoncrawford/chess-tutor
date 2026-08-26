@@ -280,7 +280,31 @@ final class CoachingReconcilerTests: XCTestCase {
         XCTAssertEqual(result.requestedAdvice, .tentativeMove(origin: .wake))
     }
 
-    func testIllegalTentativeMoveReturnsToItsDerivedWakeQuestion() {
+    func testTentativeMoveNeverReturnsToPositionLevelQuestion() {
+        let move = CoachingTestFixtures.fallbackMove
+        var episode = episode(
+            advice: CoachingTestFixtures.nontrivialTakeClearAdvice,
+            selectedSquare: move.to,
+            tentativeMove: move
+        )
+        episode.evidence.tentativeOrigin = .take
+        episode.knowledge.tentativeAdvice = CoachingTestFixtures.adviceForTentativeMove(
+            move,
+            origin: .take,
+            assessment: CoachingTestFixtures.acceptableAssessment(move)
+        )
+
+        let result = CoachingReconciler().derive(learner: .white, episode: episode)
+
+        XCTAssertEqual(
+            result.stage,
+            .complete(move: move, origin: .take, concepts: [])
+        )
+        XCTAssertEqual(result.questionID, .complete(move: move, origin: .take))
+        XCTAssertNil(result.derivedFeedback)
+    }
+
+    func testIllegalTentativeMoveDerivesMoveSpecificRevision() {
         let move = CoachingTestFixtures.openingKnightMove
         let illegal = CoachingMoveAssessment(
             move: move,
@@ -303,15 +327,14 @@ final class CoachingReconcilerTests: XCTestCase {
             assessment: illegal
         )
 
-        let purpose = CoachingWakePurpose.openingDevelopment(firstMove: true)
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(result.stage, .wakeChooseMove(piece: move.from, purpose: purpose))
-        XCTAssertEqual(result.questionID, .wakeMove(source: move.from, purpose: purpose))
+        XCTAssertEqual(result.stage, .reviseMove(origin: .wake))
+        XCTAssertEqual(result.questionID, .revise(move: move, origin: .wake))
         XCTAssertEqual(result.promptOverride, .illegalKingSafety)
         XCTAssertNil(result.derivedFeedback)
     }
 
-    func testUnresolvedSafeMoveReturnsToValidatedTargetAndAttacker() {
+    func testUnresolvedSafeMoveDerivesMoveSpecificRevision() {
         let move = CoachingTestFixtures.safeMove
         var episode = episode(
             advice: CoachingTestFixtures.multipleDangerAdvice,
@@ -333,17 +356,8 @@ final class CoachingReconcilerTests: XCTestCase {
         )
 
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(
-            result.stage,
-            .safeResolve(target: CoachingTestFixtures.whiteQueen)
-        )
-        XCTAssertEqual(
-            result.questionID,
-            .safeResolve(
-                target: CoachingTestFixtures.whiteQueen,
-                attacker: CoachingTestFixtures.blackBishop
-            )
-        )
+        XCTAssertEqual(result.stage, .reviseMove(origin: .safe))
+        XCTAssertEqual(result.questionID, .revise(move: move, origin: .safe))
         XCTAssertEqual(
             result.derivedFeedback,
             .dangerStillPresent(attacker: .bishop, target: .queen)
@@ -372,8 +386,8 @@ final class CoachingReconcilerTests: XCTestCase {
         )
 
         let result = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(result.stage, .safeLocate)
-        XCTAssertEqual(result.questionID, .safeLocate)
+        XCTAssertEqual(result.stage, .reviseMove(origin: .safe))
+        XCTAssertEqual(result.questionID, .revise(move: move, origin: .safe))
         XCTAssertEqual(
             result.derivedFeedback,
             .dangerStillPresent(attacker: nil, target: .queen)
@@ -381,8 +395,8 @@ final class CoachingReconcilerTests: XCTestCase {
 
         episode.evidence.safeTarget = CoachingTestFixtures.openingKnight
         let invalidTarget = CoachingReconciler().derive(learner: .white, episode: episode)
-        XCTAssertEqual(invalidTarget.stage, .safeLocate)
-        XCTAssertEqual(invalidTarget.questionID, .safeLocate)
+        XCTAssertEqual(invalidTarget.stage, .reviseMove(origin: .safe))
+        XCTAssertEqual(invalidTarget.questionID, .revise(move: move, origin: .safe))
         XCTAssertEqual(
             invalidTarget.derivedFeedback,
             .dangerStillPresent(attacker: nil, target: .queen)

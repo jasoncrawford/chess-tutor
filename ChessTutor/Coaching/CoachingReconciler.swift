@@ -280,25 +280,23 @@ struct CoachingReconciler: Sendable {
             episode: episode
         )
         if !assessment.isLegal {
-            return originDerivation(
-                origin,
+            return revisionDerivation(
+                origin: origin,
                 move: move,
-                episode: episode,
-                positionAdvice: positionAdvice,
                 promptOverride: .illegalKingSafety
             )
         }
-        if origin == .take && !isActiveSafeCapture(
-            move,
-            assessment: assessment,
-            tentativeAdvice: advice,
-            positionAdvice: positionAdvice
-        ) {
-            return originDerivation(
-                origin,
+        if origin == .take,
+           isCapture(move, advice: advice),
+           !isActiveSafeCapture(
+               move,
+               assessment: assessment,
+               tentativeAdvice: advice,
+               positionAdvice: positionAdvice
+           ) {
+            return revisionDerivation(
+                origin: origin,
                 move: move,
-                episode: episode,
-                positionAdvice: positionAdvice,
                 feedback: unprofitableCaptureFeedback(
                     for: move,
                     advice: advice,
@@ -307,11 +305,9 @@ struct CoachingReconciler: Sendable {
             )
         }
         if origin == .safe && !assessment.resolvesRequiredDanger {
-            return originDerivation(
-                origin,
+            return revisionDerivation(
+                origin: origin,
                 move: move,
-                episode: episode,
-                positionAdvice: positionAdvice,
                 feedback: unresolvedDangerFeedback(
                     for: assessment,
                     tentativeAdvice: advice,
@@ -440,57 +436,15 @@ struct CoachingReconciler: Sendable {
         }
     }
 
-    private func originDerivation(
-        _ origin: CoachingMoveOrigin,
+    private func revisionDerivation(
+        origin: CoachingMoveOrigin,
         move: Move,
-        episode: CoachingEpisodeState,
-        positionAdvice: CoachingAdvice?,
         promptOverride: CoachingPrompt? = nil,
         feedback: CoachingFeedback? = nil
     ) -> CoachingDerivedState {
-        let base: CoachingDerivedState
-        switch origin {
-        case .preexisting:
-            base = derived(
-                stage: .reviseMove(origin: origin),
-                questionID: .revise(move: move, origin: origin)
-            )
-        case .check:
-            base = positionAdvice.map {
-                deriveCheck(advice: $0, evidence: episode.evidence)
-            } ?? derived(
-                stage: .reviseMove(origin: origin),
-                questionID: .revise(move: move, origin: origin)
-            )
-        case .safe:
-            base = positionAdvice.map {
-                deriveSafe(advice: $0, evidence: episode.evidence)
-            } ?? derived(
-                stage: .reviseMove(origin: origin),
-                questionID: .revise(move: move, origin: origin)
-            )
-        case .take:
-            base = takeDerivation()
-        case .wake:
-            guard let purpose = wakePurpose(
-                for: move.from,
-                positionAdvice: positionAdvice,
-                assessment: nil,
-                tentativeAdvice: episode.knowledge.tentativeAdvice
-            ) else {
-                base = fallbackDerivation()
-                break
-            }
-            base = derived(
-                stage: .wakeChooseMove(piece: move.from, purpose: purpose),
-                questionID: .wakeMove(source: move.from, purpose: purpose)
-            )
-        case .fallback:
-            base = fallbackDerivation()
-        }
         return derived(
-            stage: base.stage,
-            questionID: base.questionID,
+            stage: .reviseMove(origin: origin),
+            questionID: .revise(move: move, origin: origin),
             promptOverride: promptOverride,
             feedback: feedback
         )
@@ -576,6 +530,16 @@ struct CoachingReconciler: Sendable {
             && assessment.isLegal
             && assessment.resolvesRequiredDanger
             && !hasRevisionIssue
+    }
+
+    private func isCapture(
+        _ move: Move,
+        advice: CoachingAdvice
+    ) -> Bool {
+        LegalMoveGenerator.capture(
+            for: move,
+            in: advice.evaluation.request.committedState
+        ) != nil
     }
 
     private func initialWakePurpose(in advice: CoachingAdvice) -> CoachingWakePurpose? {
