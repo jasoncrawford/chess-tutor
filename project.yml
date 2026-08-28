@@ -112,6 +112,9 @@ schemes:
         CHESSTUTOR_REMOTE_INVITES: cloudkit
     test:
       config: Debug
+      environmentVariables:
+        COACHING_EVAL_OUTPUT_DIR: $(COACHING_EVAL_OUTPUT_DIR)
+        COACHING_EVAL_SOURCE_SHA: $(COACHING_EVAL_SOURCE_SHA)
       targets:
         - ChessTutorTests
         - ChessTutorUITests
