@@ -748,21 +748,27 @@ enum ModelCoachingEvaluationCorpus {
             )
 
         case .t7NoSafeCapture:
-            let snapshot = snapshot(
+            let move = Move(from: sq("c4"), to: sq("d3"))
+            let snapshot = stagedSnapshot(
                 .losingCapture,
-                steps: [step(.helpOpened), actionStep(.noSafeCapture)],
-                operations: chooseMoveOperations
+                move: move,
+                prefix: [
+                    step(.helpOpened),
+                    actionStep(.noSafeCapture),
+                    tutorStep("no-safe-capture answer accepted"),
+                ],
+                operations: tentativeOperations
             )
             return build(
                 goldenCase,
                 snapshot: snapshot,
                 oracle: oracle(
-                    intents: [.scanCapture, .chooseMove],
+                    intents: [.chooseMove, .evaluateMove],
                     success: (
-                        "The tutor accepts that the apparent bishop capture is not a safe material win.",
-                        "The tutor advances to choosing an ordinary legal move instead of repeating the capture question."
+                        "The tutor accepts the earlier no-safe-capture answer and follows the learner's ordinary c4-d3 move.",
+                        "The tutor evaluates the current staged move instead of repeating the resolved capture scan."
                     ),
-                    severe: "The turn insists that the learner must play c4-f7 after the no-safe-capture answer."
+                    severe: "The turn ignores c4-d3 and returns to the obsolete capture question after the learner moved ahead."
                 )
             )
 
@@ -813,8 +819,9 @@ enum ModelCoachingEvaluationCorpus {
             )
 
         case .t9Hint:
+            let matingMove = Move(from: sq("g6"), to: sq("g7"))
             let snapshot = snapshot(
-                .createRookThreat,
+                state: mateInOneState(),
                 steps: [step(.helpOpened), actionStep(.hint)],
                 operations: chooseMoveOperations
             )
@@ -822,12 +829,13 @@ enum ModelCoachingEvaluationCorpus {
                 goldenCase,
                 snapshot: snapshot,
                 oracle: oracle(
-                    intents: [.chooseMove],
+                    requiredEvidence: ["fact:mate-in-one:\(ModelCoachingPositionEncoder.moveID(matingMove))"],
+                    intents: [.findMate],
                     success: (
-                        "The tutor answers Hint with a legal a1-b3 or a1-c2 knight route toward attacking d4.",
-                        "The tutor names the d4 rook as the concrete target of the move."
+                        "The tutor answers Hint with the supplied noncapturing g6-g7 checkmate move.",
+                        "The tutor gives one concrete board task for finding mate without describing the move as a capture."
                     ),
-                    severe: "The hint recommends a knight move that is absent from the exhaustive legal-move list."
+                    severe: "The hint ignores the supplied mate-in-one fact or invents a capture that is absent from the position."
                 )
             )
 
@@ -894,10 +902,20 @@ enum ModelCoachingEvaluationCorpus {
             )
 
         case .t11Safe:
-            let snapshot = stagedSnapshot(
+            let replacedMove = CoachingGoldenMoves.openingKnightToF3
+            let snapshot = snapshot(
                 .starting,
-                move: CoachingGoldenMoves.openingKnightToF3,
-                completed: true,
+                selected: "g1",
+                tentativeMove: replacedMove,
+                steps: [
+                    step(.helpOpened),
+                    step(.moveStaged, [ModelCoachingPositionEncoder.moveID(CoachingGoldenMoves.outsidePawn)]),
+                    tutorStep(
+                        "staged outside-pawn move considered",
+                        [ModelCoachingPositionEncoder.moveID(CoachingGoldenMoves.outsidePawn)]
+                    ),
+                    step(.moveReplaced, [ModelCoachingPositionEncoder.moveID(replacedMove)]),
+                ],
                 operations: completionOperations
             )
             return build(
@@ -907,10 +925,10 @@ enum ModelCoachingEvaluationCorpus {
                     intents: [.evaluateMove, .confirmMove],
                     requiredActions: ["playMove"],
                     success: (
-                        "The tutor treats g1-f3 as a legal move with no encoded severe opponent reply.",
-                        "The tutor avoids manufacturing an opponent quiz and offers commit or revision."
+                        "The tutor follows the learner's replacement g1-f3 move instead of continuing to discuss h2-h4.",
+                        "The tutor treats the replacement as legal with no encoded severe opponent reply and offers commit or revision."
                     ),
-                    severe: "The turn invents a checking or material-winning opponent reply to g1-f3."
+                    severe: "The turn keeps teaching the superseded h2-h4 move or invents a severe reply to g1-f3."
                 )
             )
 
@@ -1011,11 +1029,17 @@ enum ModelCoachingEvaluationCorpus {
         case .t11UnsafeBishopFound:
             let move = CoachingGoldenMoves.bishopToA6
             let state = openingBishopStateWithHistory()
-            let snapshot = stagedSnapshot(
+            let snapshot = snapshot(
                 state: state,
-                move: move,
-                trailing: [pieceStep(.squareInspected, state: state, square: "b7")],
-                operations: [.inspectSquare, .replaceMove, .removeMove, .tryAnotherMove, .closeHelp]
+                selected: "f1",
+                steps: [
+                    step(.helpOpened),
+                    step(.moveStaged, [ModelCoachingPositionEncoder.moveID(move)]),
+                    tutorStep("opponent reply requested", [ModelCoachingPositionEncoder.moveID(move)]),
+                    pieceStep(.squareInspected, state: state, square: "b7"),
+                    step(.moveRemoved, [ModelCoachingPositionEncoder.moveID(move)]),
+                ],
+                operations: chooseMoveOperations
             )
             return build(
                 goldenCase,
@@ -1023,13 +1047,12 @@ enum ModelCoachingEvaluationCorpus {
                 oracle: replyOracle(
                     after: move,
                     replyMove: Move(from: sq("b7"), to: sq("a6")),
-                    intents: [.evaluateMove, .reviseMove],
-                    requiredActions: ["tryAnotherMove"],
+                    intents: [.reviseMove, .chooseMove],
                     success: (
-                        "The tutor acknowledges that the learner found the b7 pawn's capture of the bishop.",
-                        "The tutor advances to revising f1-a6 instead of asking for the opponent again."
+                        "The tutor acknowledges that the learner found b7-a6 and then removed the unsafe bishop move.",
+                        "The tutor follows the empty current tentative state and invites a new legal choice without asking for the opponent again."
                     ),
-                    severe: "The turn ignores the correct b7 tap or continues to call f1-a6 safe."
+                    severe: "The turn treats the removed f1-a6 move as current or offers to commit it."
                 )
             )
 
@@ -1193,7 +1216,13 @@ enum ModelCoachingEvaluationCorpus {
         case .t12UnsupportedEntry:
             let snapshot = snapshot(
                 .unsupportedEndgame,
-                steps: [step(.helpOpened)],
+                steps: [
+                    step(.helpOpened),
+                    tutorStep("quiet-position guidance displayed"),
+                    step(.helpClosed),
+                    supersededStep("help panel closed"),
+                    step(.helpReopened),
+                ],
                 operations: [.selectBoardPiece, .stageMove, .closeHelp]
             )
             return build(
@@ -1203,10 +1232,10 @@ enum ModelCoachingEvaluationCorpus {
                     intents: [.chooseMove, .other],
                     forbiddenActions: ["noPieceNeedsHelp", "noSafeCapture", "looksSafe"],
                     success: (
-                        "The tutor stays honest in the quiet king-only position and uses only supplied legal moves.",
-                        "The tutor offers a simple actionable move-selection instruction without inventing a tactical purpose."
+                        "The tutor recalculates the quiet king-only position after Help is closed and reopened.",
+                        "The tutor offers a simple current move-selection instruction without resurrecting prior copy or inventing a tactical purpose."
                     ),
-                    severe: "The turn invents a capture, threat, check, defender, or strategic certainty in the king-only position."
+                    severe: "The turn repeats superseded guidance as an established stage or invents a board fact in the king-only position."
                 )
             )
 
@@ -1256,7 +1285,7 @@ enum ModelCoachingEvaluationCorpus {
         learner: PieceColor? = nil,
         selected: String? = nil,
         tentativeMove: Move? = nil,
-        steps: [LearnerStep],
+        steps: [CorpusHistoryStep],
         operations: [ModelCoachingOperation]
     ) -> ModelCoachingSnapshot {
         snapshot(
@@ -1274,10 +1303,13 @@ enum ModelCoachingEvaluationCorpus {
         learner: PieceColor? = nil,
         selected: String? = nil,
         tentativeMove: Move? = nil,
-        steps: [LearnerStep],
+        steps: [CorpusHistoryStep],
         operations: [ModelCoachingOperation]
     ) -> ModelCoachingSnapshot {
         precondition(!steps.isEmpty)
+        guard let latestEventKind = steps.last?.learnerEventKind else {
+            preconditionFailure("The final corpus history step must be a learner event")
+        }
         let revision = steps.count
         let selectedSquare = selected.map(sq)
         let interaction = CoachingInteractionSnapshot(
@@ -1295,12 +1327,15 @@ enum ModelCoachingEvaluationCorpus {
                 context: tentativeMove.map { _ in .tentativeMove(origin: .fallback) } ?? .start
             ),
             interaction: interaction,
-            latestEvent: ModelCoachingLearnerEvent(kind: latest.kind, referencedIDs: latest.referencedIDs),
+            latestEvent: ModelCoachingLearnerEvent(
+                kind: latestEventKind,
+                referencedIDs: latest.referencedIDs
+            ),
             currentTurnHistory: steps.enumerated().map { index, event in
                 ModelCoachingHistoryEntry(
                     sequence: index + 1,
-                    kind: .learnerEvent,
-                    summary: "learner event: \(event.kind.rawValue)",
+                    kind: event.historyKind,
+                    summary: event.summary,
                     referencedIDs: event.referencedIDs
                 )
             },
@@ -1312,8 +1347,8 @@ enum ModelCoachingEvaluationCorpus {
         _ position: CoachingGoldenPosition,
         move: Move,
         learner: PieceColor? = nil,
-        prefix: [LearnerStep] = [step(.helpOpened)],
-        trailing: [LearnerStep] = [],
+        prefix: [CorpusHistoryStep] = [step(.helpOpened)],
+        trailing: [CorpusHistoryStep] = [],
         completed: Bool = false,
         operations: [ModelCoachingOperation]
     ) -> ModelCoachingSnapshot {
@@ -1332,8 +1367,8 @@ enum ModelCoachingEvaluationCorpus {
         state: GameState,
         move: Move,
         learner: PieceColor? = nil,
-        prefix: [LearnerStep] = [step(.helpOpened)],
-        trailing: [LearnerStep] = [],
+        prefix: [CorpusHistoryStep] = [step(.helpOpened)],
+        trailing: [CorpusHistoryStep] = [],
         completed: Bool = false,
         operations: [ModelCoachingOperation]
     ) -> ModelCoachingSnapshot {
@@ -1344,10 +1379,21 @@ enum ModelCoachingEvaluationCorpus {
         return snapshot(
             state: state,
             learner: learner,
-            selected: ModelCoachingPositionEncoder.squareName(move.to),
+            selected: ModelCoachingPositionEncoder.squareName(move.from),
             tentativeMove: move,
             steps: steps,
             operations: operations
+        )
+    }
+
+    private static func mateInOneState() -> GameState {
+        GameState(
+            board: Board(pieces: [
+                sq("f6"): Piece(kind: .king, color: .white),
+                sq("g6"): Piece(kind: .queen, color: .white),
+                sq("h8"): Piece(kind: .king, color: .black),
+            ]),
+            sideToMove: .white
         )
     }
 
@@ -1477,15 +1523,20 @@ enum ModelCoachingEvaluationCorpus {
     private static func step(
         _ kind: ModelCoachingLearnerEventKind,
         _ referencedIDs: [String] = []
-    ) -> LearnerStep {
-        LearnerStep(kind: kind, referencedIDs: referencedIDs)
+    ) -> CorpusHistoryStep {
+        CorpusHistoryStep(
+            historyKind: .learnerEvent,
+            learnerEventKind: kind,
+            summary: "learner event: \(kind.rawValue)",
+            referencedIDs: referencedIDs
+        )
     }
 
     private static func pieceStep(
         _ kind: ModelCoachingLearnerEventKind,
         _ position: CoachingGoldenPosition,
         _ square: String
-    ) -> LearnerStep {
+    ) -> CorpusHistoryStep {
         step(kind, [pieceID(position, square)])
     }
 
@@ -1493,16 +1544,42 @@ enum ModelCoachingEvaluationCorpus {
         _ kind: ModelCoachingLearnerEventKind,
         state: GameState,
         square: String
-    ) -> LearnerStep {
+    ) -> CorpusHistoryStep {
         step(kind, [pieceID(state: state, square: square)])
     }
 
-    private static func actionStep(_ operation: ModelCoachingOperation) -> LearnerStep {
+    private static func actionStep(_ operation: ModelCoachingOperation) -> CorpusHistoryStep {
         step(.actionChosen, ["action:\(operation.rawValue)"])
+    }
+
+    private static func tutorStep(
+        _ summary: String,
+        _ referencedIDs: [String] = []
+    ) -> CorpusHistoryStep {
+        CorpusHistoryStep(
+            historyKind: .tutorTurn,
+            learnerEventKind: nil,
+            summary: "tutor turn: \(summary)",
+            referencedIDs: referencedIDs
+        )
+    }
+
+    private static func supersededStep(
+        _ summary: String,
+        _ referencedIDs: [String] = []
+    ) -> CorpusHistoryStep {
+        CorpusHistoryStep(
+            historyKind: .supersededRequest,
+            learnerEventKind: nil,
+            summary: "superseded request: \(summary)",
+            referencedIDs: referencedIDs
+        )
     }
 }
 
-private struct LearnerStep {
-    let kind: ModelCoachingLearnerEventKind
+private struct CorpusHistoryStep {
+    let historyKind: ModelCoachingHistoryKind
+    let learnerEventKind: ModelCoachingLearnerEventKind?
+    let summary: String
     let referencedIDs: [String]
 }

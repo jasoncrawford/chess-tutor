@@ -91,6 +91,112 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
         }
     }
 
+    func testCorpusContainsRequiredInteractionStressKinds() throws {
+        let casesByID = Dictionary(
+            uniqueKeysWithValues: ModelCoachingEvaluationCorpus.allCases.map { ($0.id, $0) }
+        )
+
+        let replacement = try XCTUnwrap(casesByID["t11Safe"])
+        XCTAssertEqual(replacement.split, .visible)
+        XCTAssertEqual(replacement.request.currentInteraction.latestEvent.kind, .moveReplaced)
+        XCTAssertEqual(replacement.request.currentInteraction.latestEvent.referencedIDs, ["move:g1-f3"])
+
+        let removal = try XCTUnwrap(casesByID["t11UnsafeBishopFound"])
+        XCTAssertEqual(removal.request.currentInteraction.latestEvent.kind, .moveRemoved)
+        XCTAssertEqual(removal.request.currentInteraction.latestEvent.referencedIDs, ["move:f1-a6"])
+        XCTAssertNil(removal.request.currentInteraction.tentativeMoveReference)
+
+        let reopened = try XCTUnwrap(casesByID["t12UnsupportedEntry"])
+        XCTAssertEqual(reopened.request.currentInteraction.latestEvent.kind, .helpReopened)
+        XCTAssertEqual(
+            reopened.request.currentTurnCoachingHistory.map(\.kind),
+            [.learnerEvent, .tutorTurn, .learnerEvent, .supersededRequest, .learnerEvent]
+        )
+        XCTAssertEqual(
+            reopened.request.currentTurnCoachingHistory.map(\.summary),
+            [
+                "learner event: helpOpened",
+                "tutor turn: quiet-position guidance displayed",
+                "learner event: helpClosed",
+                "superseded request: help panel closed",
+                "learner event: helpReopened",
+            ]
+        )
+
+        XCTAssertEqual(
+            Set(ModelCoachingEvaluationCorpus.allCases.flatMap(\.request.currentTurnCoachingHistory).map(\.kind)),
+            [.learnerEvent, .tutorTurn, .supersededRequest]
+        )
+    }
+
+    func testVisibleCorpusProvidesReplacementAndMateInOneExampleInputs() {
+        let visibleCases = ModelCoachingEvaluationCorpus.visibleCases
+        XCTAssertEqual(
+            visibleCases.filter { $0.request.currentInteraction.latestEvent.kind == .moveReplaced }.map(\.id),
+            ["t11Safe"]
+        )
+        XCTAssertEqual(
+            visibleCases.filter {
+                $0.request.chessEvidence.tacticalFacts.contains { $0.kind == .mateInOne }
+            }.map(\.id),
+            ["t9Hint"]
+        )
+        XCTAssertTrue(
+            visibleCases.first { $0.id == "t9Hint" }?.request.chessEvidence.tacticalFacts.contains {
+                $0.id == "fact:mate-in-one:move:g6-g7"
+                    && $0.subjectReferences == ["move:g6-g7"]
+            } == true
+        )
+    }
+
+    func testNoSafeCaptureCaseFollowsLearnerOrdinaryStagedMoveAhead() throws {
+        let evaluationCase = try XCTUnwrap(
+            ModelCoachingEvaluationCorpus.visibleCases.first { $0.id == "t7NoSafeCapture" }
+        )
+        let request = evaluationCase.request
+
+        XCTAssertEqual(request.currentInteraction.latestEvent.kind, .moveStaged)
+        XCTAssertEqual(request.currentInteraction.latestEvent.referencedIDs, ["move:c4-d3"])
+        XCTAssertEqual(request.currentInteraction.tentativeMoveReference, "move:c4-d3")
+        XCTAssertEqual(request.currentInteraction.selectedPieceReference, "piece:white:bishop:c4")
+        XCTAssertEqual(
+            request.currentTurnCoachingHistory.map(\.kind),
+            [.learnerEvent, .learnerEvent, .tutorTurn, .learnerEvent]
+        )
+        XCTAssertEqual(
+            request.currentTurnCoachingHistory.map(\.referencedIDs),
+            [[], ["action:noSafeCapture"], [], ["move:c4-d3"]]
+        )
+    }
+
+    func testEveryStagedCaptureSelectsTentativeMoverAtItsCommittedSource() throws {
+        var captureCaseIDs: Set<String> = []
+
+        for evaluationCase in ModelCoachingEvaluationCorpus.allCases {
+            let request = evaluationCase.request
+            guard let tentativeID = request.currentInteraction.tentativeMoveReference,
+                  let move = request.chessEvidence.legalMoves.first(where: { $0.id == tentativeID }),
+                  move.capturePieceReference != nil else {
+                continue
+            }
+            captureCaseIDs.insert(evaluationCase.id)
+
+            let selectedID = try XCTUnwrap(
+                request.currentInteraction.selectedPieceReference,
+                "\(evaluationCase.id) omitted the staged capture's mover selection"
+            )
+            let selectedPiece = try XCTUnwrap(
+                request.chessEvidence.pieces.first { $0.id == selectedID },
+                "\(evaluationCase.id) selected an undeclared piece"
+            )
+            XCTAssertEqual(selectedID, move.sourcePieceReference, evaluationCase.id)
+            XCTAssertEqual(selectedPiece.square, String(move.canonicalMove.prefix(2)), evaluationCase.id)
+            XCTAssertEqual(selectedPiece.color, request.currentPosition.sideToMove, evaluationCase.id)
+        }
+
+        XCTAssertEqual(captureCaseIDs, ["t6Capture", "t7UnsafeCapture", "t12Capture"])
+    }
+
     func testEveryRequestHasClosedPermittedSetsAndCoherentOracleReferences() {
         for evaluationCase in ModelCoachingEvaluationCorpus.allCases {
             let request = evaluationCase.request

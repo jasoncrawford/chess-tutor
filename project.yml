@@ -110,11 +110,10 @@ schemes:
       config: Debug
       environmentVariables:
         CHESSTUTOR_REMOTE_INVITES: cloudkit
-    test:
-      config: Debug
-      environmentVariables:
         COACHING_EVAL_OUTPUT_DIR: $(COACHING_EVAL_OUTPUT_DIR)
         COACHING_EVAL_SOURCE_SHA: $(COACHING_EVAL_SOURCE_SHA)
+    test:
+      config: Debug
       targets:
         - ChessTutorTests
         - ChessTutorUITests
