@@ -124,13 +124,15 @@ enum GameLibraryEntry: Identifiable, Sendable {
             return GameCardPresentation(
                 title: "Local game",
                 status: game.moves.count.isMultiple(of: 2) ? "White’s turn" : "Black’s turn",
-                moves: game.moves
+                moves: game.moves,
+                lastActivityAt: game.lastMovedAt
             )
         case .pendingRemote(let board):
             return GameCardPresentation(
                 title: board.listTitle,
                 status: board.listStatus,
-                moves: []
+                moves: [],
+                lastActivityAt: board.lastUpdatedAt
             )
         case .remote(let game):
             let descriptor = game.snapshot.descriptor
@@ -140,7 +142,8 @@ enum GameLibraryEntry: Identifiable, Sendable {
             return GameCardPresentation(
                 title: opponent.displayName,
                 status: descriptor.status == .ended ? "Finished" : "Remote game",
-                moves: game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) }
+                moves: game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) },
+                lastActivityAt: game.lastMovedAt
             )
         }
     }
@@ -150,12 +153,14 @@ struct GameCardPresentation: Equatable, Sendable {
     let title: String
     let status: String
     let moves: [Move]
+    let lastActivityAt: Date
     let boardState: GameState
 
-    init(title: String, status: String, moves: [Move]) {
+    init(title: String, status: String, moves: [Move], lastActivityAt: Date) {
         self.title = title
         self.status = status
         self.moves = moves
+        self.lastActivityAt = lastActivityAt
         self.boardState = moves.reduce(into: .startingPosition()) { state, move in
             state.apply(move)
         }

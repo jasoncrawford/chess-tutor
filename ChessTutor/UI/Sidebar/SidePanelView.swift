@@ -11,6 +11,7 @@ struct SidePanelView: View {
     let onPlayRemotely: () -> Void
     let onNewGame: () -> Void
     let onGames: () -> Void
+    let isInvitationPending: Bool
     let remoteNewGameOpponentName: String?
     let remotePresence: RemotePresenceUpdate?
     let onInviteRemoteNewGame: () -> Void
@@ -123,6 +124,8 @@ struct SidePanelView: View {
                     session: session,
                     remotePlayFlow: remotePlayFlow,
                     onPlayRemotely: onPlayRemotely,
+                    isInvitationPending: isInvitationPending,
+                    onGames: onGames,
                     onNewGame: requestNewGame,
                     onCommittedMove: onCommittedMove,
                     remoteOpponentName: remoteNewGameOpponentName,
@@ -134,6 +137,8 @@ struct SidePanelView: View {
                     session: session,
                     remotePlayFlow: remotePlayFlow,
                     onPlayRemotely: onPlayRemotely,
+                    isInvitationPending: isInvitationPending,
+                    onGames: onGames,
                     onNewGame: requestNewGame,
                     onCommittedMove: onCommittedMove,
                     remoteOpponentName: remoteNewGameOpponentName,

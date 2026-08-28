@@ -2,9 +2,9 @@ import SwiftUI
 
 struct GameControlsPresentation: Equatable {
     enum PrimaryAction: Equatable {
-        case playRemotely
         case done
         case newGame
+        case games
     }
 
     enum SecondaryAction: Equatable {
@@ -15,13 +15,24 @@ struct GameControlsPresentation: Equatable {
     let primaryAction: PrimaryAction
     let secondaryActions: [SecondaryAction]
 
-    init(result: GameResult, isRemoteGameEnded: Bool = false, isRemotePlayAvailable: Bool = false) {
+    init(
+        result: GameResult,
+        isRemoteGameEnded: Bool = false,
+        isInvitationPending: Bool = false,
+        isRemotePlayAvailable: Bool = false
+    ) {
+        if isInvitationPending {
+            primaryAction = .games
+            secondaryActions = [.about]
+            return
+        }
+
         switch (isRemoteGameEnded, result) {
         case (true, _):
             primaryAction = .newGame
             secondaryActions = [.about]
         case (false, .ongoing):
-            primaryAction = isRemotePlayAvailable ? .playRemotely : .done
+            primaryAction = .done
             secondaryActions = [.newGame, .about]
         case (false, .checkmate), (false, .stalemate):
             primaryAction = .newGame
@@ -33,20 +44,23 @@ struct GameControlsPresentation: Equatable {
 struct GameControlsView: View {
     @Bindable var session: GameSession
     let isRemotePlayAvailable: Bool
-    let onPlayRemotely: () -> Void
+    let isInvitationPending: Bool
+    let onGames: () -> Void
     let onNewGame: () -> Void
     let onCommittedMove: (Move) -> Void
 
     init(
         session: GameSession,
         isRemotePlayAvailable: Bool = false,
-        onPlayRemotely: @escaping () -> Void = {},
+        isInvitationPending: Bool = false,
+        onGames: @escaping () -> Void = {},
         onNewGame: @escaping () -> Void = {},
         onCommittedMove: @escaping (Move) -> Void = { _ in }
     ) {
         self.session = session
         self.isRemotePlayAvailable = isRemotePlayAvailable
-        self.onPlayRemotely = onPlayRemotely
+        self.isInvitationPending = isInvitationPending
+        self.onGames = onGames
         self.onNewGame = onNewGame
         self.onCommittedMove = onCommittedMove
     }
@@ -55,6 +69,7 @@ struct GameControlsView: View {
         let presentation = GameControlsPresentation(
             result: session.state.result,
             isRemoteGameEnded: session.isRemoteGameEnded,
+            isInvitationPending: isInvitationPending,
             isRemotePlayAvailable: isRemotePlayAvailable
         )
 
@@ -71,18 +86,18 @@ struct GameControlsView: View {
     @ViewBuilder
     private func primaryButton(for action: GameControlsPresentation.PrimaryAction) -> some View {
         switch action {
-        case .playRemotely:
-            playRemotelyButton
         case .done:
             doneButton
         case .newGame:
             primaryNewGameButton
+        case .games:
+            gamesButton
         }
     }
 
-    private var playRemotelyButton: some View {
-        Button(action: onPlayRemotely) {
-            Label("Play Remotely", systemImage: "person.2")
+    private var gamesButton: some View {
+        Button(action: onGames) {
+            Label("Games", systemImage: "square.stack.3d.up")
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
         }

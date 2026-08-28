@@ -4,6 +4,8 @@ struct TurnStatusPanelView: View {
     @Bindable var session: GameSession
     let remotePlayFlow: RemotePlayFlow?
     let onPlayRemotely: () -> Void
+    let isInvitationPending: Bool
+    let onGames: () -> Void
     let onNewGame: () -> Void
     let onCommittedMove: (Move) -> Void
     let remoteOpponentName: String?
@@ -15,6 +17,8 @@ struct TurnStatusPanelView: View {
         session: GameSession,
         remotePlayFlow: RemotePlayFlow? = nil,
         onPlayRemotely: @escaping () -> Void = {},
+        isInvitationPending: Bool = false,
+        onGames: @escaping () -> Void = {},
         onNewGame: @escaping () -> Void = {},
         onCommittedMove: @escaping (Move) -> Void = { _ in },
         remoteOpponentName: String? = nil,
@@ -24,6 +28,8 @@ struct TurnStatusPanelView: View {
         self.session = session
         self.remotePlayFlow = remotePlayFlow
         self.onPlayRemotely = onPlayRemotely
+        self.isInvitationPending = isInvitationPending
+        self.onGames = onGames
         self.onNewGame = onNewGame
         self.onCommittedMove = onCommittedMove
         self.remoteOpponentName = remoteOpponentName
@@ -59,7 +65,8 @@ struct TurnStatusPanelView: View {
             GameControlsView(
                 session: session,
                 isRemotePlayAvailable: remotePlayFlow?.canShowEntryPoint(for: session) ?? false,
-                onPlayRemotely: onPlayRemotely,
+                isInvitationPending: isInvitationPending,
+                onGames: onGames,
                 onNewGame: onNewGame,
                 onCommittedMove: onCommittedMove
             )

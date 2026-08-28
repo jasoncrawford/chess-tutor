@@ -382,6 +382,7 @@ struct ContentView: View {
             },
             onNewGame: startNewGame,
             onGames: showGames,
+            isInvitationPending: isViewingPendingRemoteBoard,
             remoteNewGameOpponentName: remoteLifecycle.activeRemoteGameOpponent?.displayName,
             remotePresence: remoteLifecycle.remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
@@ -405,6 +406,7 @@ struct ContentView: View {
             },
             onNewGame: startNewGame,
             onGames: showGames,
+            isInvitationPending: isViewingPendingRemoteBoard,
             remoteNewGameOpponentName: remoteLifecycle.activeRemoteGameOpponent?.displayName,
             remotePresence: remoteLifecycle.remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
@@ -416,6 +418,13 @@ struct ContentView: View {
 
     private func startNewGame() {
         isShowingGameTypeChooser = true
+    }
+
+    private var isViewingPendingRemoteBoard: Bool {
+        guard case let .board(id) = gameLibrary.route else {
+            return false
+        }
+        return gameLibrary.pendingRemoteBoard(id: id) != nil
     }
 
     private func startLocalGame() {
@@ -2176,10 +2185,17 @@ private struct StartGameRackCard: View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(AppTheme.captureBoxFelt)
+                    .fill(AppTheme.panel)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(
+                                AppTheme.captureBoxFelt.opacity(0.68),
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [7, 7])
+                            )
+                    }
                 Image(systemName: "plus")
                     .font(.system(size: 40, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.lightSquare)
+                    .foregroundStyle(AppTheme.captureBoxFelt)
             }
             .aspectRatio(1, contentMode: .fit)
 
@@ -2212,6 +2228,10 @@ private struct GameRackCard: View {
             Text(presentation.status)
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.mutedInk)
+                .lineLimit(1)
+            Text(presentation.lastActivityAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.footnote)
+                .foregroundStyle(AppTheme.mutedInk.opacity(0.78))
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2319,23 +2339,14 @@ private struct IncomingInviteNoticeView: View {
     let onLater: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Invitation from \(inviterName)")
-                .font(.system(.title3, design: .rounded).weight(.bold))
-            Text("There’s a new game ready when you are.")
-                .foregroundStyle(.secondary)
-            HStack {
-                Button("Not now", action: onLater)
-                    .buttonStyle(.bordered)
-                Spacer()
-                Button("View invitation", action: onView)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(24)
-        .frame(width: 390)
-        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
+        GameOverlayCard(
+            title: "Invitation from \(inviterName)",
+            message: "There’s a new board ready when you are.",
+            secondaryTitle: "Not now",
+            onSecondary: onLater,
+            primaryTitle: "View invitation",
+            onPrimary: onView
+        )
     }
 }
 
@@ -2344,25 +2355,83 @@ private struct InvitationSentNoticeView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Invitation sent")
-                .font(.system(.title3, design: .rounded).weight(.bold))
-            Text("This board will open when the invitation is accepted.")
-                .foregroundStyle(.secondary)
-            HStack {
-                Button("Cancel invite", action: onCancel)
-                    .buttonStyle(.bordered)
-                Spacer()
-                Button("Keep looking", action: onKeepLooking)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(24)
-        .frame(width: 390)
-        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
+        GameOverlayCard(
+            title: "Invitation sent",
+            message: "This board will be ready when the invitation is accepted.",
+            secondaryTitle: "Cancel invite",
+            onSecondary: onCancel,
+            primaryTitle: "Keep looking",
+            onPrimary: onKeepLooking
+        )
     }
 }
+
+private struct GameOverlayCard: View {
+    let title: String
+    let message: String
+    let secondaryTitle: String
+    let onSecondary: () -> Void
+    let primaryTitle: String
+    let onPrimary: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(title)
+                .font(AppTheme.panelTitleFont)
+                .foregroundStyle(AppTheme.ink)
+            Text(message)
+                .font(AppTheme.panelBodyFont)
+                .foregroundStyle(AppTheme.mutedInk)
+            HStack(spacing: 12) {
+                Button(action: onSecondary) {
+                    Text(secondaryTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GameOverlayButtonStyle(isPrimary: false))
+
+                Button(action: onPrimary) {
+                    Text(primaryTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GameOverlayButtonStyle(isPrimary: true))
+            }
+        }
+        .padding(26)
+        .frame(width: 430)
+        .background {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(AppTheme.panel)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(AppTheme.boardFrame, lineWidth: 8)
+                }
+        }
+        .shadow(color: AppTheme.captureBoxShadow, radius: 22, y: 12)
+    }
+}
+
+private struct GameOverlayButtonStyle: ButtonStyle {
+    let isPrimary: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .rounded).weight(.semibold))
+            .foregroundStyle(isPrimary ? AppTheme.whitePiece : AppTheme.ink)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isPrimary ? AppTheme.captureBoxFelt : AppTheme.panelWarmth)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppTheme.panelStroke, lineWidth: 1)
+            }
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.spring(response: 0.20, dampingFraction: 0.86), value: configuration.isPressed)
+        }
+    }
 
 private struct GameThumbnail: View {
     let state: GameState

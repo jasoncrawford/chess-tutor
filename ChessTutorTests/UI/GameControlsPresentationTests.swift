@@ -2,13 +2,13 @@ import XCTest
 @testable import ChessTutor
 
 final class GameControlsPresentationTests: XCTestCase {
-    func testPresentationPromotesRemotePlayBeforePlayBegins() {
+    func testPresentationUsesDoneBeforeAnyLocalMoves() {
         let presentation = GameControlsPresentation(
             result: .ongoing,
             isRemotePlayAvailable: true
         )
 
-        XCTAssertEqual(presentation.primaryAction, .playRemotely)
+        XCTAssertEqual(presentation.primaryAction, .done)
         XCTAssertEqual(presentation.secondaryActions, [.newGame, .about])
     }
 
@@ -40,6 +40,17 @@ final class GameControlsPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.primaryAction, .newGame)
+        XCTAssertEqual(presentation.secondaryActions, [.about])
+    }
+
+    func testPresentationUsesGamesForPendingInvitationBoard() {
+        let presentation = GameControlsPresentation(
+            result: .ongoing,
+            isRemoteGameEnded: true,
+            isInvitationPending: true
+        )
+
+        XCTAssertEqual(presentation.primaryAction, .games)
         XCTAssertEqual(presentation.secondaryActions, [.about])
     }
 }
