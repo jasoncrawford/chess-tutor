@@ -78,3 +78,7 @@ Last observed result: 56 tests, 0 failures.
 ## Workflow Recommendation
 
 Use a fresh thread and isolated worktree per feature or bug. Start each new thread by reading this handoff plus the relevant spec/plan docs in `docs/superpowers/`, then run the baseline test suite before changing code.
+
+## Collaboration Preference
+
+- The product owner prefers browser mockups by default for UI and product-design discussions. Use them without the standard opt-in warning unless there is a concrete reason not to.
