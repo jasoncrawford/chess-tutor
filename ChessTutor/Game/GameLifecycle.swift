@@ -77,6 +77,12 @@ final class GameLibrary {
         self.now = now
     }
 
+    init(snapshot: GameLibrarySnapshot, now: @escaping () -> Date = Date.init) {
+        self.now = now
+        self.games = snapshot.games
+        self.route = snapshot.route
+    }
+
     @discardableResult
     func createLocalGame(at date: Date? = nil) -> ManagedLocalGame {
         let game = ManagedLocalGame(id: ManagedGameID(), createdAt: date ?? now())

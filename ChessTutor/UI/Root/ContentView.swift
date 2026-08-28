@@ -9,6 +9,7 @@ private enum RemoteSyncMessage {
 
 struct ContentView: View {
     @State private var session = GameSession()
+    @State private var gameLibrary: GameLibrary
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
     @State private var remotePlayFlow: RemotePlayFlow
@@ -30,6 +31,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     private let remoteIdentityStore: RemoteIdentityStore
     private let activeRemoteGameStore: ActiveRemoteGameStore
+    private let gameLibraryStore: GameLibraryStore
     private let remoteInviteTransport: any RemoteInviteTransport
     private let remoteGameTransport: any RemoteGameTransport
     private let remotePlayRuntimeMode: RemotePlayRuntimeMode
@@ -41,6 +43,13 @@ struct ContentView: View {
     @Namespace private var captureNamespace
 
     init() {
+        let gameLibraryStore = GameLibraryStore()
+        self.gameLibraryStore = gameLibraryStore
+        let gameLibrary = GameLibrary(
+            snapshot: (try? gameLibraryStore.load())
+                ?? GameLibrarySnapshot(games: [], route: .games)
+        )
+        _gameLibrary = State(initialValue: gameLibrary)
         let remoteIdentityStore = RemoteIdentityStore()
         self.remoteIdentityStore = remoteIdentityStore
         let activeRemoteGameStore = ActiveRemoteGameStore()
@@ -63,7 +72,11 @@ struct ContentView: View {
 
         let initialSession: GameSession
         let initialActiveRemoteGameController: RemoteGameSessionController?
-        if let snapshot = try? activeRemoteGameStore.load(),
+        if case let .board(id) = gameLibrary.route,
+           let savedGame = gameLibrary.game(id: id) {
+            initialSession = GameSession(replayingCommittedMoves: savedGame.moves)
+            initialActiveRemoteGameController = nil
+        } else if let snapshot = try? activeRemoteGameStore.load(),
            let restoredSession = try? Self.restoredSession(from: snapshot),
            let restoredController = try? RemoteGameSessionController(
                 snapshot: snapshot,
@@ -91,6 +104,14 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
+            if case .games = gameLibrary.route {
+                GamesListView(
+                    games: gameLibrary.games,
+                    onStartLocalGame: startLocalGame,
+                    onOpenGame: openLocalGame
+                )
+            } else {
         GeometryReader { proxy in
             let layout = PlaySurfaceLayout.make(for: proxy.size)
 
@@ -129,6 +150,8 @@ struct ContentView: View {
             }
             .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteStartAnnouncement)
             .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteInviteConfirmation)
+        }
+            }
         }
         .onAppear {
             syncToCurrentInterfaceOrientation(animated: false)
@@ -305,6 +328,7 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
+            onGames: showGames,
             remoteNewGameOpponentName: remoteLifecycle.activeRemoteGameOpponent?.displayName,
             remotePresence: remoteLifecycle.remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
@@ -327,6 +351,7 @@ struct ContentView: View {
                 remotePlayFlow.open()
             },
             onNewGame: startNewGame,
+            onGames: showGames,
             remoteNewGameOpponentName: remoteLifecycle.activeRemoteGameOpponent?.displayName,
             remotePresence: remoteLifecycle.remoteOpponentPresence,
             onInviteRemoteNewGame: inviteActiveRemoteOpponentAgain,
@@ -337,17 +362,42 @@ struct ContentView: View {
     }
 
     private func startNewGame() {
+        startLocalGame()
+    }
+
+    private func startLocalGame() {
         publishRemoteGameEndedIfNeeded()
         cancelRemoteGameSync(clearSavedGame: true)
-        #if DEBUG
-        GameLifecycle.startNewGame(
+        let game = gameLibrary.createLocalGame()
+        session = GameSession()
+        gameLibrary.showBoard(game.id)
+        remoteLifecycle = RemoteGameLifecycleController(
             session: session,
             remotePlayFlow: remotePlayFlow,
-            fakeRemoteLab: activeFakeRemoteLab
+            remoteGameTransport: remoteGameTransport
         )
-        #else
-        GameLifecycle.startNewGame(session: session, remotePlayFlow: remotePlayFlow)
-        #endif
+        persistGameLibrary()
+    }
+
+    private func openLocalGame(_ game: ManagedLocalGame) {
+        cancelRemoteGameSync(clearSavedGame: true)
+        session = GameSession(replayingCommittedMoves: game.moves)
+        gameLibrary.showBoard(game.id)
+        remoteLifecycle = RemoteGameLifecycleController(
+            session: session,
+            remotePlayFlow: remotePlayFlow,
+            remoteGameTransport: remoteGameTransport
+        )
+        persistGameLibrary()
+    }
+
+    private func persistGameLibrary() {
+        try? gameLibraryStore.save(gameLibrary.snapshot)
+    }
+
+    private func showGames() {
+        gameLibrary.showGames()
+        persistGameLibrary()
     }
 
     private func inviteActiveRemoteOpponentAgain() {
@@ -922,6 +972,10 @@ struct ContentView: View {
     }
 
     private func handleCommittedMove(_ move: Move) {
+        if case let .board(id) = gameLibrary.route {
+            gameLibrary.recordCommittedMove(move, in: id)
+            persistGameLibrary()
+        }
         stopRemotePresenceHeartbeat()
         remoteLifecycle.remoteOpponentPresence = nil
 
@@ -1880,6 +1934,77 @@ private struct PendingPromotion: Identifiable {
         self.testingSquare = testingSquare
     }
     #endif
+}
+
+private struct GamesListView: View {
+    let games: [ManagedLocalGame]
+    let onStartLocalGame: () -> Void
+    let onOpenGame: (ManagedLocalGame) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button(action: onStartLocalGame) {
+                        Label("Start a Game", systemImage: "plus.circle.fill")
+                    }
+                }
+
+                if games.isEmpty {
+                    ContentUnavailableView(
+                        "Your boards will live here",
+                        systemImage: "checkerboard.rectangle",
+                        description: Text("Start a game on this iPad or invite someone to play.")
+                    )
+                } else {
+                    Section {
+                        ForEach(games) { game in
+                            Button {
+                                onOpenGame(game)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    GameThumbnail(moves: game.moves)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("Local game")
+                                            .font(.headline)
+                                        Text(game.moves.isEmpty ? "White’s turn" : "Last played \(game.lastMovedAt.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Games")
+        }
+    }
+}
+
+private struct GameThumbnail: View {
+    let moves: [Move]
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4), spacing: 0) {
+            ForEach(0..<16, id: \.self) { index in
+                Rectangle()
+                    .fill((index + index / 4).isMultiple(of: 2) ? AppTheme.lightSquare : AppTheme.darkSquare)
+                    .aspectRatio(1, contentMode: .fit)
+            }
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(AppTheme.panelStroke, lineWidth: 1)
+        }
+        .accessibilityLabel("Chess board after \(moves.count) moves")
+    }
 }
 
 private struct InviteLinkRequest: Equatable {

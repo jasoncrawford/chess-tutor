@@ -10,6 +10,7 @@ struct SidePanelView: View {
     let onAbout: () -> Void
     let onPlayRemotely: () -> Void
     let onNewGame: () -> Void
+    let onGames: () -> Void
     let remoteNewGameOpponentName: String?
     let remotePresence: RemotePresenceUpdate?
     let onInviteRemoteNewGame: () -> Void
@@ -88,7 +89,7 @@ struct SidePanelView: View {
     private func utilityStrip(_ actions: [GameControlsPresentation.SecondaryAction], layout: SidebarColumnLayout) -> some View {
         SidePanelUtilityStrip(
             actions: actions,
-            onNewGame: requestNewGame,
+            onGames: onGames,
             onAbout: onAbout
         )
         .frame(height: layout.utilityStripHeight)
@@ -159,7 +160,7 @@ struct SidePanelView: View {
                 ) {
                     SidePanelUtilityStrip(
                         actions: secondaryActions,
-                        onNewGame: requestNewGame,
+                        onGames: onGames,
                         onAbout: onAbout
                     )
                 }
@@ -176,7 +177,7 @@ struct SidePanelView: View {
 
 private struct SidePanelUtilityStrip: View {
     let actions: [GameControlsPresentation.SecondaryAction]
-    let onNewGame: () -> Void
+    let onGames: () -> Void
     let onAbout: () -> Void
 
     var body: some View {
@@ -184,8 +185,8 @@ private struct SidePanelUtilityStrip: View {
             ForEach(actions, id: \.self) { action in
                 switch action {
                 case .newGame:
-                    Button(action: onNewGame) {
-                        Label("New Game...", systemImage: "arrow.counterclockwise")
+                    Button(action: onGames) {
+                        Label("Games", systemImage: "square.stack.3d.up")
                     }
                 case .about:
                     Button(action: onAbout) {
