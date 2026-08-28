@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 struct ManagedGameID: Codable, Equatable, Hashable, Sendable, Identifiable {
     let rawValue: UUID
@@ -224,6 +225,7 @@ final class GameLibraryStore {
 }
 
 @MainActor
+@Observable
 final class GameLibrary {
     private let now: () -> Date
     private(set) var games: [ManagedLocalGame] = []

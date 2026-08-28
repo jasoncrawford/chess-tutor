@@ -270,8 +270,9 @@ struct ContentView: View {
                     remotePlayFlow.open()
                 }
             )
-            .presentationDetents([.height(260)])
+            .presentationDetents([.height(350)])
             .presentationDragIndicator(.visible)
+            .presentationBackground(AppTheme.table)
         }
         .sheet(isPresented: remotePlaySheetBinding) {
             #if DEBUG
@@ -2243,21 +2244,72 @@ private struct StartGameTypeChooserView: View {
     let onStartRemote: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
             Text("Start a Game")
-                .font(.system(.title2, design: .rounded).weight(.bold))
-            Button(action: onStartLocal) {
-                Label("On this iPad", systemImage: "person.2.fill")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .font(AppTheme.panelTitleFont)
+                .foregroundStyle(AppTheme.ink)
+            Text("Choose who will be at the board.")
+                .font(AppTheme.panelBodyFont)
+                .foregroundStyle(AppTheme.mutedInk)
+
+            VStack(spacing: 12) {
+                Button(action: onStartLocal) {
+                    StartGameChoiceCard(
+                        title: "On this iPad",
+                        subtitle: "Take turns around one board",
+                        symbol: "person.2.fill",
+                        isPrimary: true
+                    )
+                }
+                .buttonStyle(GameRackButtonStyle())
+
+                Button(action: onStartRemote) {
+                    StartGameChoiceCard(
+                        title: "With someone else",
+                        subtitle: "Invite a player to their own board",
+                        symbol: "network",
+                        isPrimary: false
+                    )
+                }
+                .buttonStyle(GameRackButtonStyle())
             }
-            .buttonStyle(.borderedProminent)
-            Button(action: onStartRemote) {
-                Label("With someone else", systemImage: "network")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.bordered)
         }
         .padding(24)
+    }
+}
+
+private struct StartGameChoiceCard: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let isPrimary: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: symbol)
+                .font(.system(size: 23, weight: .semibold, design: .rounded))
+                .foregroundStyle(isPrimary ? AppTheme.lightSquare : AppTheme.captureBoxFelt)
+                .frame(width: 48, height: 48)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(isPrimary ? AppTheme.captureBoxFelt : AppTheme.panelWarmth)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(.headline, design: .serif).weight(.semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.mutedInk)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -1,4 +1,5 @@
 import XCTest
+import Observation
 @testable import ChessTutor
 
 final class GameSessionTests: XCTestCase {
@@ -37,6 +38,24 @@ final class GameSessionTests: XCTestCase {
 
         XCTAssertEqual(restored.games, library.snapshot.games)
         XCTAssertEqual(restored.route, .board(game.id))
+    }
+
+    @MainActor
+    func testGameLibraryRouteChangesAreObservable() async {
+        let library = GameLibrary()
+        let game = library.createLocalGame()
+        library.showBoard(game.id)
+        let routeChanged = expectation(description: "route change is observed")
+
+        withObservationTracking {
+            _ = library.route
+        } onChange: {
+            routeChanged.fulfill()
+        }
+
+        library.showGames()
+
+        await fulfillment(of: [routeChanged], timeout: 0.1)
     }
 
     @MainActor
