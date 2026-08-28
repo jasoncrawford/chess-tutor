@@ -58,7 +58,8 @@ enum ModelCoachingRequestBuilder {
                 scope: ModelCoachingEvidenceScope(
                     legalMoves: .exhaustive,
                     relationships: .exhaustive,
-                    immediateReplies: .bounded
+                    immediateReplies: .bounded,
+                    immediateRepliesDescription: "one legal opponent ply after each legal or staged learner move"
                 ),
                 pieces: pieces,
                 legalMoves: moves,
@@ -77,7 +78,7 @@ enum ModelCoachingRequestBuilder {
     }
 
     private static func pieceReferences(in state: GameState) -> [ModelCoachingPieceReference] {
-        ModelCoachingPositionEncoder.orderedSquares(state.board.pieces.keys).compactMap { square in
+        state.board.pieces.keys.compactMap { square in
             guard let piece = state.board[square] else { return nil }
             return ModelCoachingPieceReference(
                 id: ModelCoachingPositionEncoder.pieceID(piece, at: square),
@@ -85,7 +86,7 @@ enum ModelCoachingRequestBuilder {
                 kind: piece.kind.rawValue,
                 square: ModelCoachingPositionEncoder.squareName(square)
             )
-        }
+        }.sorted { $0.id < $1.id }
     }
 
     private static func moveReferences(
@@ -175,10 +176,14 @@ enum ModelCoachingRequestBuilder {
                 let afterReply = afterMove.applyingUnchecked(reply)
                 let checkingPieces = ModelCoachingPositionEncoder.orderedSquares(
                     LegalMoveGenerator.checkingPieceSquares(against: learner, in: afterReply.board)
-                ).compactMap { square -> String? in
-                    guard let piece = afterReply.board[square] else { return nil }
-                    return ModelCoachingPositionEncoder.pieceID(piece, at: square)
-                }
+                ).compactMap { checkerSquare -> String? in
+                    if checkerSquare == reply.to {
+                        guard let sourcePiece = afterMove.board[reply.from] else { return nil }
+                        return ModelCoachingPositionEncoder.pieceID(sourcePiece, at: reply.from)
+                    }
+                    guard let checkerPiece = afterMove.board[checkerSquare] else { return nil }
+                    return ModelCoachingPositionEncoder.pieceID(checkerPiece, at: checkerSquare)
+                }.sorted()
                 let estimate = evaluator.captureEstimate(for: reply, in: afterMove)
                 let capturedPieceReference = estimate.map {
                     ModelCoachingPositionEncoder.pieceID($0.capturedPiece, at: $0.capturedSquare)
@@ -204,7 +209,7 @@ enum ModelCoachingRequestBuilder {
         var facts: [ModelCoachingTacticalFact] = []
         let checkingPieces = ModelCoachingPositionEncoder.orderedSquares(evaluation.checkingPieces).compactMap {
             pieceIDsBySquare[ModelCoachingPositionEncoder.squareName($0)]
-        }
+        }.sorted()
         if !checkingPieces.isEmpty {
             facts.append(ModelCoachingTacticalFact(
                 id: "fact:in-check",

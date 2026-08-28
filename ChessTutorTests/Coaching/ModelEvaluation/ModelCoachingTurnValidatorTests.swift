@@ -161,7 +161,8 @@ final class ModelCoachingTurnValidatorTests: XCTestCase {
                 scope: ModelCoachingEvidenceScope(
                     legalMoves: .exhaustive,
                     relationships: .exhaustive,
-                    immediateReplies: .exhaustive
+                    immediateReplies: .exhaustive,
+                    immediateRepliesDescription: "all legal opponent replies"
                 ),
                 pieces: [],
                 legalMoves: [],

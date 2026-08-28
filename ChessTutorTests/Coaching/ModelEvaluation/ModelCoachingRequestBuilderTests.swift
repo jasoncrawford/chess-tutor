@@ -53,6 +53,37 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         XCTAssertEqual(MoveHistoryFormatter.notation(for: moves), ["e4", "e5"])
     }
 
+    func testFenDerivesHalfmoveClockFromCommittedHistoryAndResetsIt() {
+        var quietMoves = GameState.startingPosition()
+        [
+            Move(from: square("g1"), to: square("f3")),
+            Move(from: square("g8"), to: square("f6")),
+            Move(from: square("f3"), to: square("g1")),
+            Move(from: square("f6"), to: square("g8")),
+        ].forEach { quietMoves.apply($0) }
+
+        XCTAssertEqual(fenField(4, for: quietMoves), "4")
+
+        var pawnMove = GameState.startingPosition()
+        [
+            Move(from: square("g1"), to: square("f3")),
+            Move(from: square("g8"), to: square("f6")),
+            Move(from: square("e2"), to: square("e4")),
+            Move(from: square("f6"), to: square("g8")),
+        ].forEach { pawnMove.apply($0) }
+
+        XCTAssertEqual(fenField(4, for: pawnMove), "1")
+
+        var capture = GameState.startingPosition()
+        [
+            Move(from: square("e2"), to: square("e4")),
+            Move(from: square("d7"), to: square("d5")),
+            Move(from: square("e4"), to: square("d5")),
+        ].forEach { capture.apply($0) }
+
+        XCTAssertEqual(fenField(4, for: capture), "0")
+    }
+
     func testControlledSquaresIncludeMechanicalPieceTargets() {
         let state = GameState(
             board: Board(pieces: [
@@ -98,6 +129,29 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         XCTAssertEqual(request.chessEvidence.scope.legalMoves, .exhaustive)
         XCTAssertEqual(request.chessEvidence.scope.relationships, .exhaustive)
         XCTAssertEqual(request.chessEvidence.scope.immediateReplies, .bounded)
+        XCTAssertEqual(
+            request.chessEvidence.scope.immediateRepliesDescription,
+            "one legal opponent ply after each legal or staged learner move"
+        )
+        XCTAssertEqual(
+            request.chessEvidence.pieces.map(\.id),
+            request.chessEvidence.pieces.map(\.id).sorted()
+        )
+        XCTAssertEqual(
+            request.chessEvidence.relationships.map(\.id),
+            request.chessEvidence.relationships.map(\.id).sorted()
+        )
+        XCTAssertEqual(
+            request.chessEvidence.immediateReplies.map(\.id),
+            request.chessEvidence.immediateReplies.map(\.id).sorted()
+        )
+        XCTAssertEqual(
+            request.chessEvidence.tacticalFacts.map(\.id),
+            request.chessEvidence.tacticalFacts.map(\.id).sorted()
+        )
+        XCTAssertEqual(request.permittedReferences.boardFocus, request.permittedReferences.boardFocus.sorted())
+        XCTAssertEqual(request.permittedReferences.relationships, request.permittedReferences.relationships.sorted())
+        XCTAssertEqual(request.permittedReferences.evidence, request.permittedReferences.evidence.sorted())
         XCTAssertTrue(request.chessEvidence.relationships.contains {
             $0.id == "relationship:defend:piece:white:king:e1->piece:white:pawn:d2"
         })
@@ -237,6 +291,33 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         XCTAssertTrue(mateRequest.chessEvidence.tacticalFacts.contains { $0.kind == .mateInOne })
     }
 
+    func testReplyCheckersResolveToDeclaredCommittedPieceReferences() throws {
+        let state = state(
+            sideToMove: .white,
+            pieces: [
+                square("e1"): Piece(kind: .king, color: .white),
+                square("g1"): Piece(kind: .knight, color: .white),
+                square("h8"): Piece(kind: .king, color: .black),
+                square("a8"): Piece(kind: .rook, color: .black),
+            ]
+        )
+        let request = ModelCoachingRequestBuilder.build(
+            snapshot: makeSnapshot(state: state),
+            requestID: "request-reply-check",
+            promptVersion: "prompt.v1"
+        )
+        let declaredPieceIDs = Set(request.chessEvidence.pieces.map(\.id))
+        let checkingReply = try XCTUnwrap(request.chessEvidence.immediateReplies.first {
+            $0.afterMoveReference == "move:g1-f3" && $0.replyMoveReference == "move:a8-e8"
+        })
+
+        XCTAssertEqual(checkingReply.checkingPieceReferences, ["piece:black:rook:a8"])
+        XCTAssertTrue(
+            request.chessEvidence.immediateReplies.flatMap(\.checkingPieceReferences)
+                .allSatisfy(declaredPieceIDs.contains)
+        )
+    }
+
     func testHistoryOperationsAndJSONAreDeterministicAndPolicyFree() {
         var state = GameState.startingPosition()
         state.apply(Move(from: square("e2"), to: square("e4")))
@@ -322,6 +403,10 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return String(data: try! encoder.encode(request), encoding: .utf8)!
+    }
+
+    private func fenField(_ index: Int, for state: GameState) -> String {
+        String(ModelCoachingPositionEncoder.fen(for: state).split(separator: " ")[index])
     }
 
     private func square(_ algebraic: String) -> Square {

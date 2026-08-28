@@ -26,9 +26,10 @@ enum ModelCoachingPositionEncoder {
         let sideToMove = state.sideToMove == .white ? "w" : "b"
         let castling = castlingRights(for: state.castlingRights)
         let enPassant = state.enPassantTarget.map(squareName) ?? "-"
+        let halfmove = halfmoveClock(for: state.moveHistory)
         let fullmove = (state.moveHistory.count / 2) + 1
 
-        return "\(board) \(sideToMove) \(castling) \(enPassant) 0 \(fullmove)"
+        return "\(board) \(sideToMove) \(castling) \(enPassant) \(halfmove) \(fullmove)"
     }
 
     static func moveID(_ move: Move) -> String {
@@ -104,6 +105,25 @@ enum ModelCoachingPositionEncoder {
             rights.blackQueenside ? "q" : nil,
         ].compactMap { $0 }.joined()
         return tokens.isEmpty ? "-" : tokens
+    }
+
+    private static func halfmoveClock(for moves: [Move]) -> Int {
+        guard !moves.isEmpty else { return 0 }
+
+        var replay = GameState.startingPosition()
+        var clock = 0
+        for move in moves {
+            guard let movingPiece = replay.board[move.from] else {
+                return 0
+            }
+            if movingPiece.kind == .pawn || LegalMoveGenerator.capture(for: move, in: replay) != nil {
+                clock = 0
+            } else {
+                clock += 1
+            }
+            replay = replay.applyingUnchecked(move)
+        }
+        return clock
     }
 
     private static func fileName(_ file: Square.File) -> String {

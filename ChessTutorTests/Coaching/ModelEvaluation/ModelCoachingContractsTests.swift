@@ -93,6 +93,20 @@ final class ModelCoachingContractsTests: XCTestCase {
         )
     }
 
+    func testEvidenceScopeIncludesDeterministicReplyDescription() {
+        let scope = ModelCoachingEvidenceScope(
+            legalMoves: .exhaustive,
+            relationships: .exhaustive,
+            immediateReplies: .bounded,
+            immediateRepliesDescription: "one legal opponent ply after each legal or staged learner move"
+        )
+
+        XCTAssertEqual(
+            scope.immediateRepliesDescription,
+            "one legal opponent ply after each legal or staged learner move"
+        )
+    }
+
     private func makeRequest() -> ModelCoachingRequest {
         ModelCoachingRequest(
             schemaVersion: "model-coaching-request.v1",
@@ -128,7 +142,8 @@ final class ModelCoachingContractsTests: XCTestCase {
                 scope: ModelCoachingEvidenceScope(
                     legalMoves: .exhaustive,
                     relationships: .bounded,
-                    immediateReplies: .bounded
+                    immediateReplies: .bounded,
+                    immediateRepliesDescription: "one legal opponent ply after each legal or staged learner move"
                 ),
                 pieces: [
                     ModelCoachingPieceReference(

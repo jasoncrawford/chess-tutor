@@ -69,6 +69,7 @@ struct ModelCoachingEvidenceScope: Codable, Equatable, Sendable {
     let legalMoves: ModelCoachingEvidenceScopeKind
     let relationships: ModelCoachingEvidenceScopeKind
     let immediateReplies: ModelCoachingEvidenceScopeKind
+    let immediateRepliesDescription: String
 }
 
 struct ModelCoachingPieceReference: Codable, Equatable, Sendable {
