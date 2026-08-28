@@ -14,6 +14,10 @@ struct MoveHistoryRow: Equatable, Identifiable, Sendable {
 }
 
 enum MoveHistoryFormatter {
+    static func notation(for moves: [Move]) -> [String] {
+        notationByMove(for: moves)
+    }
+
     static func rows(for moves: [Move]) -> [MoveHistoryRow] {
         let notation = notationByMove(for: moves)
 

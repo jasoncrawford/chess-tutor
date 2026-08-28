@@ -90,6 +90,13 @@ enum LegalMoveGenerator {
         return controlledSquares(from: square, piece: piece, board: state.board)
     }
 
+    static func controlledSquares(from square: Square, in state: GameState) -> Set<Square> {
+        guard let piece = state.board[square] else {
+            return []
+        }
+        return controlledSquares(from: square, piece: piece, board: state.board)
+    }
+
     static func legalSupportTargets(
         for square: Square,
         by color: PieceColor,
