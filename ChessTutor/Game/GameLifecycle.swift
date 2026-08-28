@@ -116,6 +116,39 @@ enum GameLibraryEntry: Identifiable, Sendable {
         case .remote(let game): game.lastMovedAt
         }
     }
+
+    var cardPresentation: GameCardPresentation {
+        switch self {
+        case .local(let game):
+            return GameCardPresentation(
+                title: "Local game",
+                status: game.moves.count.isMultiple(of: 2) ? "White’s turn" : "Black’s turn",
+                moves: game.moves
+            )
+        case .pendingRemote(let board):
+            return GameCardPresentation(
+                title: board.listTitle,
+                status: board.listStatus,
+                moves: []
+            )
+        case .remote(let game):
+            let descriptor = game.snapshot.descriptor
+            let opponent = descriptor.localPlayerID == descriptor.whitePlayer.id
+                ? descriptor.blackPlayer
+                : descriptor.whitePlayer
+            return GameCardPresentation(
+                title: opponent.displayName,
+                status: descriptor.status == .ended ? "Finished" : "Remote game",
+                moves: game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) }
+            )
+        }
+    }
+}
+
+struct GameCardPresentation: Equatable, Sendable {
+    let title: String
+    let status: String
+    let moves: [Move]
 }
 
 struct GameLibrarySnapshot: Codable, Equatable, Sendable {
