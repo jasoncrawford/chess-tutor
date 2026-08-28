@@ -40,15 +40,15 @@
     },
     "primaryMessage": {
       "type": "string",
-      "pattern": "^\\s*(?:\\S+\\s*){0,18}$"
+      "pattern": "^[ \\t\\r\\n]*([^ \\t\\r\\n]+([ \\t\\r\\n]+[^ \\t\\r\\n]+){0,17})?[ \\t\\r\\n]*$"
     },
     "instruction": {
       "type": ["string", "null"],
-      "pattern": "^\\s*(?:\\S+\\s*){0,14}$"
+      "pattern": "^[ \\t\\r\\n]*([^ \\t\\r\\n]+([ \\t\\r\\n]+[^ \\t\\r\\n]+){0,13})?[ \\t\\r\\n]*$"
     },
     "responseToLatestAction": {
       "type": ["string", "null"],
-      "pattern": "^\\s*(?:\\S+\\s*){0,16}$"
+      "pattern": "^[ \\t\\r\\n]*([^ \\t\\r\\n]+([ \\t\\r\\n]+[^ \\t\\r\\n]+){0,15})?[ \\t\\r\\n]*$"
     },
     "actionReferences": {
       "type": "array",

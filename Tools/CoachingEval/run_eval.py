@@ -15,12 +15,17 @@ from pathlib import Path
 
 import llama_server
 import model_store
+import runtime_provenance as provenance
 import validate_turn
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = TOOLS_DIR.parents[1]
 ARTIFACT_ROOT = REPOSITORY_ROOT / ".coaching-eval"
+THINKING_BLOCK = re.compile(
+    r"<\s*think\b[^>]*>.*?<\s*/\s*think\s*>", re.IGNORECASE | re.DOTALL
+)
+THINKING_MARKER = re.compile(r"<\s*/?\s*think\b", re.IGNORECASE)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -45,8 +50,32 @@ class ReferenceConfiguration:
         return cls(values[0], values[1], values[2], keys)
 
 
+@dataclasses.dataclass(frozen=True)
+class PromptBundle:
+    version: str
+    system_prompt: str
+    examples: list
+    prompt_path: Path
+    examples_path: Path
+    prompt_sha256: str
+    examples_sha256: str
+
+
 def canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _without_thinking_traces(text, *, discard_prefix_before_json=False):
+    had_block = THINKING_BLOCK.search(text) is not None
+    text = THINKING_BLOCK.sub("", text)
+    if THINKING_MARKER.search(text):
+        return ""
+    text = text.strip()
+    if had_block and discard_prefix_before_json:
+        json_start = text.find("{")
+        if json_start >= 0:
+            text = text[json_start:]
+    return text
 
 
 def _final_content(provider_response):
@@ -57,13 +86,7 @@ def _final_content(provider_response):
     content = message.get("content")
     if not isinstance(content, str):
         raise ValueError("provider response has no final string content")
-    stripped = content.lstrip()
-    if stripped.startswith("<think>"):
-        closing = stripped.find("</think>")
-        if closing < 0:
-            return ""
-        return stripped[closing + len("</think>"):].lstrip()
-    return content
+    return _without_thinking_traces(content, discard_prefix_before_json=True)
 
 
 def _validation(raw_content, request):
@@ -118,6 +141,8 @@ class EvaluationRunner:
         temperature,
         top_p,
         request_timeout=120,
+        evaluator_prompt_version="test-prompt",
+        runtime_provenance_record=None,
     ):
         self.client = client
         self.model_id = model_id
@@ -131,6 +156,8 @@ class EvaluationRunner:
         self.temperature = temperature
         self.top_p = top_p
         self.request_timeout = request_timeout
+        self.evaluator_prompt_version = evaluator_prompt_version
+        self.runtime_provenance_record = dict(runtime_provenance_record or {})
 
     def evaluate_case(self, evaluation_case, *, mode, seed):
         request = evaluation_case["request"]
@@ -160,6 +187,8 @@ class EvaluationRunner:
             "positionRevision": request.get("positionRevision"),
             "modelArtifactSHA256": self.model_artifact_sha256,
             "llamaCppVersion": self.llama_cpp_version,
+            "runtimeProvenance": self.runtime_provenance_record,
+            "evaluatorPromptVersion": self.evaluator_prompt_version,
             "promptVersion": request.get("promptVersion"),
             "requestUTF8Bytes": len(request_bytes),
             "requestSHA256": hashlib.sha256(request_bytes).hexdigest(),
@@ -229,7 +258,9 @@ class EvaluationRunner:
                 record["repairValidation"] = repair_validation
                 self._add_metrics(record, repaired_response)
         except (llama_server.LlamaServerError, OSError, ValueError) as error:
-            message = str(error)
+            message = _without_thinking_traces(str(error))
+            if not message:
+                message = "Provider error omitted because it contained an unresolved reasoning trace"
             category = "contextOverflow" if re.search(r"context|token.*(limit|exceed|size)", message, re.I) else "generationError"
             record["errors"].append({"kind": category, "message": message})
             record["preflight"]["serverOutcome"] = category
@@ -262,6 +293,26 @@ def _file_sha256(path):
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _load_prompt_bundle(version, prompt_root=None):
+    if re.fullmatch(r"tutor-v[1-9][0-9]*", version or "") is None:
+        raise ValueError("Prompt version must be an immutable tutor-v<number> identifier")
+    prompt_root = Path(prompt_root or TOOLS_DIR / "prompts")
+    suffix = version.removeprefix("tutor-")
+    prompt_path = prompt_root / f"{version}.md"
+    examples_path = prompt_root / f"examples-{suffix}.json"
+    if not prompt_path.is_file() or not examples_path.is_file():
+        raise ValueError(f"Prompt bundle {version} is incomplete under {prompt_root}")
+    return PromptBundle(
+        version=version,
+        system_prompt=prompt_path.read_text(encoding="utf-8"),
+        examples=_load_json(examples_path),
+        prompt_path=prompt_path,
+        examples_path=examples_path,
+        prompt_sha256=_file_sha256(prompt_path),
+        examples_sha256=_file_sha256(examples_path),
+    )
 
 
 def _load_cases(path, case_id=None):
@@ -390,25 +441,30 @@ def _selected_modes(candidate, requested_mode):
     return [requested_mode]
 
 
-def _runner(client, model_id, artifact_hash, version):
+def _runner(client, model_id, artifact_hash, version, prompt_bundle, runtime_record):
     runtime = _load_json(TOOLS_DIR / "runtime.json")
     return EvaluationRunner(
         client=client,
         model_id=model_id,
         model_artifact_sha256=artifact_hash,
         llama_cpp_version=version,
-        system_prompt=(TOOLS_DIR / "prompts" / "tutor-v1.md").read_text(encoding="utf-8"),
-        examples=_load_json(TOOLS_DIR / "prompts" / "examples-v1.json"),
+        system_prompt=prompt_bundle.system_prompt,
+        examples=prompt_bundle.examples,
         schema=_load_json(TOOLS_DIR / "coaching-turn.schema.json"),
         context_tokens=runtime["mac"]["contextTokens"],
         maximum_output_tokens=runtime["generation"]["maximumOutputTokens"],
         temperature=runtime["generation"]["temperature"],
         top_p=runtime["generation"]["topP"],
+        evaluator_prompt_version=prompt_bundle.version,
+        runtime_provenance_record=runtime_record,
     )
 
 
 def _execute(arguments):
     runtime = _load_json(TOOLS_DIR / "runtime.json")
+    prompt_bundle = _load_prompt_bundle(
+        getattr(arguments, "prompt_version", None) or runtime["evaluation"]["promptVersion"]
+    )
     corpus_path = Path(arguments.corpus or ARTIFACT_ROOT / "corpus" / "v1" / f"{arguments.split}.jsonl")
     cases = _load_cases(corpus_path, arguments.case)
     repetitions = (
@@ -438,6 +494,11 @@ def _execute(arguments):
             )
             artifact_hash = hashlib.sha256(b"fake-test-model").hexdigest()
             version = runtime["llamaCppTag"] + "-fake"
+            runtime_record = {
+                "kind": "fake-test-only",
+                "sourceTag": version,
+                "binarySHA256": _file_sha256(__file__),
+            }
             modes = [arguments.mode or "off"]
         else:
             candidate = _candidate(arguments.model)
@@ -449,8 +510,11 @@ def _execute(arguments):
             )
             artifact_path = model_store.DEFAULT_STORE_ROOT / candidate["id"] / artifact_manifest["filename"]
             executable = ARTIFACT_ROOT / "runtime" / runtime["llamaCppTag"] / "bin" / "llama-server"
-            if not executable.is_file():
-                raise ValueError(f"Pinned llama-server is missing: {executable}")
+            runtime_record = provenance.verify_runtime(
+                executable,
+                TOOLS_DIR / "runtime.json",
+                executable.parents[1] / "runtime-manifest.json",
+            )
             server = llama_server.LlamaServer(
                 executable,
                 artifact_path,
@@ -469,9 +533,10 @@ def _execute(arguments):
         model_id = "reference-" + re.sub(r"[^A-Za-z0-9._-]+", "-", reference.model)
         artifact_hash = "online-reference"
         version = "online-reference"
+        runtime_record = {"kind": "online-reference"}
         modes = [arguments.mode or "off"]
 
-    runner = _runner(client, model_id, artifact_hash, version)
+    runner = _runner(client, model_id, artifact_hash, version, prompt_bundle, runtime_record)
     records = []
     try:
         if server is not None:
@@ -495,14 +560,17 @@ def _execute(arguments):
         "split": arguments.split,
         "corpusPath": str(corpus_path.resolve()),
         "corpusSHA256": _file_sha256(corpus_path),
-        "promptVersion": "tutor-v1",
-        "promptSHA256": _file_sha256(TOOLS_DIR / "prompts" / "tutor-v1.md"),
-        "examplesSHA256": _file_sha256(TOOLS_DIR / "prompts" / "examples-v1.json"),
+        "promptVersion": prompt_bundle.version,
+        "promptPath": str(prompt_bundle.prompt_path.resolve()),
+        "promptSHA256": prompt_bundle.prompt_sha256,
+        "examplesPath": str(prompt_bundle.examples_path.resolve()),
+        "examplesSHA256": prompt_bundle.examples_sha256,
         "schemaVersion": "model-coaching-turn.v1",
         "schemaSHA256": _file_sha256(TOOLS_DIR / "coaching-turn.schema.json"),
         "runtimeSHA256": _file_sha256(TOOLS_DIR / "runtime.json"),
         "modelArtifactSHA256": artifact_hash,
         "llamaCppVersion": version,
+        "runtimeProvenance": runtime_record,
         "contextTokens": runtime["mac"]["contextTokens"],
         "maximumOutputTokens": runtime["generation"]["maximumOutputTokens"],
         "temperature": runtime["generation"]["temperature"],
@@ -531,10 +599,16 @@ def main(argv=None):
         subparser.add_argument("--repetitions", type=int)
         subparser.add_argument("--mode", choices=("off", "bounded"))
         subparser.add_argument("--corpus")
+        subparser.add_argument("--prompt-version")
     arguments = parser.parse_args(argv)
     try:
         return _execute(arguments)
-    except (ValueError, OSError, model_store.ModelStoreError) as error:
+    except (
+        ValueError,
+        OSError,
+        model_store.ModelStoreError,
+        provenance.RuntimeProvenanceError,
+    ) as error:
         print(str(error), file=sys.stderr)
         return 1
 

@@ -1,5 +1,6 @@
 {
   "llamaCppTag": "b10516",
+  "llamaCppCommit": "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9",
   "mac": {
     "contextTokens": 8192
   },
@@ -9,6 +10,7 @@
     "topP": 0.9
   },
   "evaluation": {
+    "promptVersion": "tutor-v1",
     "repetitions": 3,
     "seeds": [1103, 2207, 3301],
     "reviewSeed": 20260828

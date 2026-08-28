@@ -96,7 +96,6 @@ enum ModelCoachingEvaluationCorpus {
                 snapshot: snapshot,
                 oracle: oracle(
                     intents: [.orient, .chooseMove],
-                    requiredActions: ["noPieceNeedsHelp"],
                     prohibited: ["safety quiz on White's first move", "Is any White piece unsafe?"],
                     success: (
                         "The tutor recognizes that White is choosing an opening move from the starting position.",

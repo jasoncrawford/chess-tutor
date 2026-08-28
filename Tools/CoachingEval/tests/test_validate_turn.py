@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -67,6 +68,23 @@ def valid_turn():
 
 
 class ValidateTurnTests(unittest.TestCase):
+    def test_shared_python_swift_validation_fixture_contract(self):
+        fixture = json.loads(
+            (TOOLS_DIR / "fixtures" / "model-coaching-turn-validation-v1.json").read_text()
+        )
+        request = fixture["request"]
+
+        outcomes = {
+            case["id"]: not validate_turn.validate_turn(case["turn"], request)
+            for case in fixture["cases"]
+        }
+
+        self.assertEqual(
+            {case["id"]: case["expectedValid"] for case in fixture["cases"]},
+            outcomes,
+        )
+        self.assertFalse(outcomes["additional-property"])
+
     def test_schema_has_strict_shape_enums_and_swift_optional_fields(self):
         schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
         self.assertFalse(schema["additionalProperties"])
@@ -87,6 +105,19 @@ class ValidateTurnTests(unittest.TestCase):
         self.assertEqual(validate_turn.TEACHING_INTENTS, schema["properties"]["teachingIntent"]["enum"])
         for optional in ("instruction", "responseToLatestAction", "boardTaskReference"):
             self.assertEqual({"string", "null"}, set(schema["properties"][optional]["type"]))
+
+    def test_schema_word_patterns_enforce_the_swift_word_limits_without_regex_shorthands(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
+        limits = {
+            "primaryMessage": 18,
+            "instruction": 14,
+            "responseToLatestAction": 16,
+        }
+        for field, limit in limits.items():
+            pattern = schema["properties"][field]["pattern"]
+            self.assertIsNotNone(re.fullmatch(pattern, "word " * (limit - 1) + "word"))
+            self.assertIsNone(re.fullmatch(pattern, "word " * limit + "word"))
+            self.assertIsNotNone(re.fullmatch(pattern, "\tword\nword\r"))
 
     def test_accepts_same_valid_turn_with_optional_fields_absent_or_null(self):
         request = valid_request()

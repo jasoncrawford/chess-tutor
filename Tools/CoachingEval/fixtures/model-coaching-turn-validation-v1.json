@@ -1,0 +1,168 @@
+{
+  "version": "model-coaching-turn-validation.v1",
+  "request": {
+    "schemaVersion": "model-coaching-request.v1",
+    "promptVersion": "tutor-v1",
+    "requestID": "request-1",
+    "positionRevision": 7,
+    "currentPosition": {
+      "fen": "8/8/8/8/3K4/8/8/7k w - - 0 1",
+      "sideToMove": "white",
+      "status": "active"
+    },
+    "fullGameHistory": [],
+    "currentInteraction": {
+      "selectedPieceReference": null,
+      "tentativeMoveReference": null,
+      "latestEvent": {"kind": "helpOpened", "referencedIDs": []},
+      "availableOperationReferences": ["selectBoardPiece", "closeHelp"]
+    },
+    "currentTurnCoachingHistory": [],
+    "chessEvidence": {
+      "scope": {
+        "legalMoves": "exhaustive",
+        "relationships": "exhaustive",
+        "immediateReplies": "bounded",
+        "immediateRepliesDescription": "one legal opponent ply after each legal or staged learner move"
+      },
+      "pieces": [
+        {"id": "piece:white:king:d4", "color": "white", "kind": "king", "square": "d4"}
+      ],
+      "legalMoves": [],
+      "relationships": [],
+      "immediateReplies": [],
+      "tacticalFacts": [
+        {"id": "fact:position", "kind": "stalemate", "subjectReferences": [], "integerValue": null}
+      ]
+    },
+    "permittedReferences": {
+      "actions": [
+        {"id": "action:closeHelp", "kind": "closeHelp", "title": "Close help"}
+      ],
+      "boardTasks": [
+        {"id": "task:selectBoardPiece", "kind": "identifyPiece"}
+      ],
+      "boardFocus": ["piece:white:king:d4"],
+      "relationships": [],
+      "evidence": ["fact:position"]
+    }
+  },
+  "cases": [
+    {
+      "id": "valid",
+      "expectedValid": true,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-1",
+        "teachingIntent": "chooseMove",
+        "primaryMessage": "Choose a square for your king.",
+        "instruction": "Tap your king, then move it.",
+        "responseToLatestAction": null,
+        "actionReferences": ["action:closeHelp"],
+        "boardTaskReference": "task:selectBoardPiece",
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"]
+      }
+    },
+    {
+      "id": "optional-fields-absent",
+      "expectedValid": true,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-1",
+        "teachingIntent": "chooseMove",
+        "primaryMessage": "Choose a square for your king.",
+        "actionReferences": ["action:closeHelp"],
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"]
+      }
+    },
+    {
+      "id": "optional-fields-null",
+      "expectedValid": true,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-1",
+        "teachingIntent": "chooseMove",
+        "primaryMessage": "Choose a square for your king.",
+        "instruction": null,
+        "responseToLatestAction": null,
+        "actionReferences": ["action:closeHelp"],
+        "boardTaskReference": null,
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"]
+      }
+    },
+    {
+      "id": "additional-property",
+      "expectedValid": false,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-1",
+        "teachingIntent": "chooseMove",
+        "primaryMessage": "Choose a square for your king.",
+        "instruction": null,
+        "responseToLatestAction": null,
+        "actionReferences": ["action:closeHelp"],
+        "boardTaskReference": null,
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"],
+        "unexpected": true
+      }
+    },
+    {
+      "id": "wrong-request-id",
+      "expectedValid": false,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-2",
+        "teachingIntent": "chooseMove",
+        "primaryMessage": "Choose a square for your king.",
+        "instruction": null,
+        "responseToLatestAction": null,
+        "actionReferences": ["action:closeHelp"],
+        "boardTaskReference": null,
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"]
+      }
+    },
+    {
+      "id": "unknown-action-reference",
+      "expectedValid": false,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-1",
+        "teachingIntent": "chooseMove",
+        "primaryMessage": "Choose a square for your king.",
+        "instruction": null,
+        "responseToLatestAction": null,
+        "actionReferences": ["action:invented"],
+        "boardTaskReference": null,
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"]
+      }
+    },
+    {
+      "id": "missing-required-field",
+      "expectedValid": false,
+      "turn": {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "request-1",
+        "teachingIntent": "chooseMove",
+        "instruction": null,
+        "responseToLatestAction": null,
+        "actionReferences": ["action:closeHelp"],
+        "boardTaskReference": null,
+        "boardFocusReferences": ["piece:white:king:d4"],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["fact:position"]
+      }
+    }
+  ]
+}

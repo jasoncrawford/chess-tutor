@@ -6,9 +6,15 @@ import hashlib
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from http_security import (
+    SameOriginAuthorizationRedirectHandler,
+    is_https_origin,
+)
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -25,21 +31,7 @@ class ModelAccessError(ModelStoreError):
     pass
 
 
-class SafeAuthorizationRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Keep an HF token on huggingface.co and nowhere a redirect can point."""
-
-    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
-        redirected = super().redirect_request(
-            request, file_pointer, code, message, headers, new_url
-        )
-        if redirected is None:
-            return None
-        authorization = request.headers.get("Authorization")
-        if urllib.parse.urlparse(new_url).hostname == "huggingface.co" and authorization:
-            redirected.add_unredirected_header("Authorization", authorization)
-        else:
-            redirected.remove_header("Authorization")
-        return redirected
+SafeAuthorizationRedirectHandler = SameOriginAuthorizationRedirectHandler
 
 
 def load_models(path=TOOLS_DIR / "models.json"):
@@ -67,14 +59,16 @@ class ModelStore:
 
     def fetch(self, candidate):
         if candidate.get("requiresToken") and not self.environment.get("HF_TOKEN"):
-            raise ModelAccessError(
-                "This Gemma artifact requires accepting the Gemma Terms on Hugging Face "
-                "and supplying HF_TOKEN in the environment. No substitute will be downloaded."
-            )
+            raise ModelAccessError(self._access_guidance(candidate))
 
-        metadata = self._request_json(
-            f"{self.api_base}/api/models/{candidate['repository']}/revision/main"
-        )
+        try:
+            metadata = self._request_json(
+                f"{self.api_base}/api/models/{candidate['repository']}/revision/main"
+            )
+        except urllib.error.HTTPError as error:
+            if candidate.get("requiresToken") and error.code in (401, 403):
+                raise ModelAccessError(self._access_guidance(candidate)) from error
+            raise
         revision = metadata.get("sha")
         if not isinstance(revision, str) or not revision or revision == "main":
             raise ModelStoreError("Hugging Face did not resolve main to an immutable revision")
@@ -93,15 +87,20 @@ class ModelStore:
         digest = hashlib.sha256()
         size = 0
         try:
-            with self._open(url) as response, temporary.open("wb") as output:
-                while True:
-                    chunk = response.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    output.write(chunk)
-                    digest.update(chunk)
-                    size += len(chunk)
-            temporary.replace(target)
+            try:
+                with self._open(url) as response, temporary.open("wb") as output:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+                        digest.update(chunk)
+                        size += len(chunk)
+                temporary.replace(target)
+            except urllib.error.HTTPError as error:
+                if candidate.get("requiresToken") and error.code in (401, 403):
+                    raise ModelAccessError(self._access_guidance(candidate)) from error
+                raise
         finally:
             if temporary.exists():
                 temporary.unlink()
@@ -121,6 +120,32 @@ class ModelStore:
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         return target
+
+    def fetch_all(self, candidates):
+        outcomes = []
+        for candidate in candidates:
+            try:
+                target = self.fetch(candidate)
+                outcomes.append(
+                    {"modelID": candidate["id"], "status": "fetched", "path": str(target)}
+                )
+            except ModelAccessError as error:
+                outcomes.append(
+                    {"modelID": candidate["id"], "status": "accessError", "error": str(error)}
+                )
+            except (ModelStoreError, OSError, urllib.error.URLError) as error:
+                outcomes.append(
+                    {"modelID": candidate["id"], "status": "error", "error": str(error)}
+                )
+        return outcomes
+
+    @staticmethod
+    def _access_guidance(candidate):
+        return (
+            f"This {candidate['id']} artifact requires accepting the {candidate['license']} "
+            "on Hugging Face and supplying HF_TOKEN in the environment. "
+            "No substitute will be downloaded."
+        )
 
     def verify(self, candidate):
         target_dir = self.root / candidate["id"]
@@ -142,7 +167,7 @@ class ModelStore:
 
     def _open(self, url):
         headers = {"User-Agent": "ChessTutor-CoachingEval/1"}
-        if urllib.parse.urlparse(url).hostname == "huggingface.co":
+        if is_https_origin(url, "huggingface.co"):
             token = self.environment.get("HF_TOKEN")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
@@ -239,9 +264,10 @@ def main(argv=None):
             print(store.fetch(_candidate_by_id(arguments.model)))
             return 0
         if arguments.command == "fetch-all":
-            for candidate in load_models():
-                print(store.fetch(candidate))
-            return 0
+            outcomes = store.fetch_all(load_models())
+            for outcome in outcomes:
+                print(json.dumps(outcome, sort_keys=True))
+            return 1 if any(outcome["status"] != "fetched" for outcome in outcomes) else 0
         failures = []
         for candidate in load_models():
             verified = store.verify(candidate)

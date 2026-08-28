@@ -1,3 +1,5 @@
+import Foundation
+
 enum ModelCoachingValidationIssue: Equatable, Sendable {
     case unsupportedTurnSchemaVersion
     case requestIDMismatch
@@ -144,5 +146,60 @@ enum ModelCoachingTurnValidator {
 
     private static func wordCount(in text: String) -> Int {
         text.split(whereSeparator: { $0.isWhitespace }).count
+    }
+}
+
+enum ModelCoachingTurnDecodingError: Error, Equatable {
+    case invalidTopLevelObject
+    case additionalProperties([String])
+    case invalidTurnJSON
+    case validationFailed([ModelCoachingValidationIssue])
+}
+
+enum ModelCoachingTurnDecoder {
+    private static let allowedProperties: Set<String> = [
+        "schemaVersion",
+        "requestID",
+        "teachingIntent",
+        "primaryMessage",
+        "instruction",
+        "responseToLatestAction",
+        "actionReferences",
+        "boardTaskReference",
+        "boardFocusReferences",
+        "relationshipReferences",
+        "supportingEvidenceReferences",
+    ]
+
+    static func decodeAndValidate(
+        _ data: Data,
+        against request: ModelCoachingRequest,
+        limits: ModelCoachingLimits = .default
+    ) throws -> ModelCoachingTurn {
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw ModelCoachingTurnDecodingError.invalidTurnJSON
+        }
+        guard let dictionary = object as? [String: Any] else {
+            throw ModelCoachingTurnDecodingError.invalidTopLevelObject
+        }
+        let unknown = Set(dictionary.keys).subtracting(allowedProperties).sorted()
+        guard unknown.isEmpty else {
+            throw ModelCoachingTurnDecodingError.additionalProperties(unknown)
+        }
+
+        let turn: ModelCoachingTurn
+        do {
+            turn = try JSONDecoder().decode(ModelCoachingTurn.self, from: data)
+        } catch {
+            throw ModelCoachingTurnDecodingError.invalidTurnJSON
+        }
+        let issues = ModelCoachingTurnValidator.validate(turn, against: request, limits: limits)
+        guard issues.isEmpty else {
+            throw ModelCoachingTurnDecodingError.validationFailed(issues)
+        }
+        return turn
     }
 }

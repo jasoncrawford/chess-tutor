@@ -23,6 +23,31 @@ def _record_rows(run_root):
     return rows
 
 
+def _record_rows_from_key(key):
+    cache = {}
+    rows = []
+    seen = set()
+    for identity in key["entries"].values():
+        path = str(Path(identity["recordsPath"]).resolve())
+        line_number = identity["recordsLine"]
+        pointer = (path, line_number)
+        if pointer in seen:
+            continue
+        seen.add(pointer)
+        if path not in cache:
+            source = Path(path)
+            if not source.is_file():
+                raise ValueError(f"Review key points to an absent records file: {path}")
+            cache[path] = source.read_text(encoding="utf-8").splitlines()
+        lines = cache[path]
+        if not isinstance(line_number, int) or line_number < 1 or line_number > len(lines):
+            raise ValueError(f"Review key points to an absent record: {pointer}")
+        rows.append((path, line_number, json.loads(lines[line_number - 1])))
+    if not rows:
+        raise ValueError("Review key contains no evaluation record pointers")
+    return rows
+
+
 def _rubric_rows(run_root, key):
     rubric_path = Path(run_root) / "rubric.csv"
     if not rubric_path.is_file():
@@ -138,7 +163,7 @@ def summarize(run_root):
         raise ValueError(f"Missing review-key.json under {run_root}")
     key = json.loads(key_path.read_text(encoding="utf-8"))
     rubric = _rubric_rows(run_root, key)
-    source_rows = _record_rows(run_root)
+    source_rows = _record_rows_from_key(key)
     by_pointer = {(path, line): record for path, line, record in source_rows}
 
     reviewed = []

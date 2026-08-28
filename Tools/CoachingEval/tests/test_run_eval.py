@@ -14,6 +14,9 @@ TOOLS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS_DIR))
 
 import run_eval
+import example_validation
+import render_review
+import summarize_eval
 from Tools.CoachingEval.tests.test_validate_turn import valid_request, valid_turn
 
 
@@ -149,6 +152,40 @@ class RunEvalTests(unittest.TestCase):
         self.assertNotIn("private", json.dumps(record))
         self.assertFalse(record["repairValidation"]["valid"])
 
+    def test_discards_repeated_prefixed_case_variant_and_embedded_thinking_blocks(self):
+        raw = json.dumps(valid_turn())
+        traced = (
+            "provider prefix\n<THINK>first private trace</THINK>\n"
+            "<think data-kind=\"reasoning\">second private trace</think>\n"
+            + raw
+            + "<ThInK>embedded private trace</tHiNk>"
+        )
+        client = ScriptedClient([response(traced, reasoning="provider private trace")])
+
+        record = self.runner(client).evaluate_case(self.case(), mode="bounded", seed=2207)
+
+        self.assertEqual(raw, record["rawFinalContent"])
+        self.assertTrue(record["firstAttemptValidation"]["valid"])
+        serialized = json.dumps(record).lower()
+        self.assertNotIn("private trace", serialized)
+        self.assertNotIn("<think", serialized)
+        self.assertNotIn("reasoning_content", serialized)
+
+    def test_fails_closed_when_any_thinking_trace_marker_remains(self):
+        raw = json.dumps(valid_turn())
+        for traced in (
+            "<think>unfinished " + raw,
+            raw + " </THINK>",
+            "prefix < think>spaced marker " + raw,
+        ):
+            with self.subTest(traced=traced[:20]):
+                client = ScriptedClient([response(traced), response(traced)])
+                record = self.runner(client).evaluate_case(self.case(), mode="bounded", seed=2207)
+
+                self.assertEqual("", record["rawFinalContent"])
+                self.assertNotIn("unfinished", json.dumps(record))
+                self.assertNotIn("spaced marker", json.dumps(record))
+
     def test_repair_transport_failure_keeps_first_attempt_validation_separate(self):
         client = ScriptedClient(
             [response("not json"), run_eval.llama_server.LlamaServerError("repair endpoint failed")]
@@ -159,6 +196,20 @@ class RunEvalTests(unittest.TestCase):
         self.assertEqual("parse.invalidJSON", record["firstAttemptValidation"]["errors"][0].split(":")[0])
         self.assertEqual(["transport.generationError"], record["repairValidation"]["errors"])
         self.assertEqual("generationError", record["errors"][0]["kind"])
+
+    def test_provider_error_text_cannot_persist_thinking_trace_content(self):
+        client = FailingClient(
+            run_eval.llama_server.LlamaServerError(
+                "endpoint failed <THINK>private provider error reasoning</THINK>"
+            )
+        )
+
+        record = self.runner(client).evaluate_case(self.case(), mode="bounded", seed=2207)
+
+        serialized = json.dumps(record).lower()
+        self.assertNotIn("private provider error reasoning", serialized)
+        self.assertNotIn("<think", serialized)
+        self.assertIn("endpoint failed", record["errors"][0]["message"])
 
     def test_does_not_repair_mechanically_valid_shape_with_bad_identity_or_pedagogy(self):
         wrong_identity = valid_turn()
@@ -246,12 +297,63 @@ class RunEvalTests(unittest.TestCase):
         self.assertTrue(hidden_ids.isdisjoint(example["sourceCaseID"] for example in examples))
         self.assertTrue(all(identifier not in serialized for identifier in hidden_ids))
 
+    def test_every_prompt_example_satisfies_its_visible_semantic_contract(self):
+        examples = json.loads((TOOLS_DIR / "prompts" / "examples-v1.json").read_text())
+        contracts = json.loads(
+            (TOOLS_DIR / "fixtures" / "example-contracts-v1.json").read_text()
+        )
+
+        self.assertEqual([], example_validation.validate_examples(examples, contracts))
+
+    def test_prompt_examples_keep_feedback_separate_from_the_current_instruction(self):
+        examples = {
+            example["sourceCaseID"]: example
+            for example in json.loads((TOOLS_DIR / "prompts" / "examples-v1.json").read_text())
+        }
+
+        self.assertEqual([], examples["t1Entry"]["turn"]["actionReferences"])
+        staged = examples["t7NoSafeCapture"]["turn"]
+        self.assertIsNone(staged["responseToLatestAction"])
+        self.assertNotIn("you moved", staged["primaryMessage"].lower())
+        benign = examples["t11BenignCaptureTap"]["turn"]
+        self.assertEqual("Yes. That bishop could take the pawn.", benign["responseToLatestAction"])
+        self.assertNotIn("Yes.", benign["primaryMessage"])
+        self.assertIn("safe", benign["primaryMessage"].lower())
+        replacement = examples["t11Safe"]["turn"]
+        self.assertEqual(
+            "You switched to bringing out your knight.",
+            replacement["responseToLatestAction"],
+        )
+        self.assertNotIn("switched", replacement["primaryMessage"].lower())
+        block = examples["t12Block"]["turn"]
+        self.assertEqual(
+            "Your bishop blocks the rook's check.",
+            block["responseToLatestAction"],
+        )
+        self.assertNotIn("blocks", block["primaryMessage"].lower())
+
     def test_local_candidate_modes_are_limited_to_the_manifest(self):
         candidate = {"thinkingModes": ["off"]}
         self.assertEqual(["off"], run_eval._selected_modes(candidate, None))
         self.assertEqual(["off"], run_eval._selected_modes(candidate, "off"))
         with self.assertRaisesRegex(ValueError, "does not support thinking mode bounded"):
             run_eval._selected_modes(candidate, "bounded")
+
+    def test_prompt_bundle_selects_immutable_versioned_files_without_runner_edits(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            prompt_root = Path(temporary)
+            (prompt_root / "tutor-v2.md").write_text("Tutor prompt v2")
+            (prompt_root / "examples-v2.json").write_text("[]")
+
+            bundle = run_eval._load_prompt_bundle("tutor-v2", prompt_root)
+
+            self.assertEqual("tutor-v2", bundle.version)
+            self.assertEqual("Tutor prompt v2", bundle.system_prompt)
+            self.assertEqual([], bundle.examples)
+            self.assertEqual(64, len(bundle.prompt_sha256))
+            self.assertEqual(64, len(bundle.examples_sha256))
+            with self.assertRaisesRegex(ValueError, "immutable tutor-v<number>"):
+                run_eval._load_prompt_bundle("latest", prompt_root)
 
     def test_fake_model_requires_explicit_opt_in_and_uses_real_http_run_path(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -266,6 +368,7 @@ class RunEvalTests(unittest.TestCase):
                 repetitions=1,
                 mode="off",
                 corpus=str(corpus),
+                prompt_version="tutor-v1",
             )
             old_root = run_eval.ARTIFACT_ROOT
             old_opt_in = os.environ.pop("COACHING_EVAL_ALLOW_FAKE", None)
@@ -291,6 +394,8 @@ class RunEvalTests(unittest.TestCase):
             self.assertEqual(1, len(manifests))
             manifest = json.loads(manifests[0].read_text())
             self.assertEqual("openai-compatible-http", manifest["transport"])
+            self.assertEqual("tutor-v1", manifest["promptVersion"])
+            self.assertEqual("fake-test-only", manifest["runtimeProvenance"]["kind"])
             for field in (
                 "corpusSHA256",
                 "promptSHA256",
@@ -301,8 +406,24 @@ class RunEvalTests(unittest.TestCase):
                 self.assertEqual(64, len(manifest[field]))
             record_path = manifests[0].with_name("records.jsonl")
             record = json.loads(record_path.read_text())
+            self.assertEqual("tutor-v1", record["evaluatorPromptVersion"])
+            self.assertEqual("fake-test-only", record["runtimeProvenance"]["kind"])
             self.assertTrue(record["firstAttemptValidation"]["valid"])
             self.assertNotIn("test-only trace", json.dumps(record))
+
+            review = root / "artifacts" / "review"
+            render_review.render_review(
+                [root / "artifacts" / "runs" / "fake-test-model"],
+                review,
+                review_seed=20260828,
+            )
+            summarize_eval.summarize(review)
+            for output in review.iterdir():
+                if output.is_file():
+                    persisted = output.read_text(encoding="utf-8").lower()
+                    self.assertNotIn("test-only trace", persisted, output.name)
+                    self.assertNotIn("reasoning_content", persisted, output.name)
+                    self.assertNotIn("<think", persisted, output.name)
 
 
 if __name__ == "__main__":

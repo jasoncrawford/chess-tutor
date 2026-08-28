@@ -155,6 +155,39 @@ class LlamaServerTests(unittest.TestCase):
         finally:
             server.stop()
 
+    def test_reference_credentials_require_https_but_local_unauthenticated_http_is_allowed(self):
+        with self.assertRaisesRegex(ValueError, "credentials require an HTTPS endpoint"):
+            llama_server.OpenAIChatClient(
+                "http://provider.example/v1",
+                api_key="developer-secret",
+                model="reference-model",
+            )
+
+        client = llama_server.OpenAIChatClient("http://127.0.0.1:8080", api_key=None)
+        self.assertEqual("http://127.0.0.1:8080/v1/chat/completions", client.url)
+
+    def test_reference_payload_omits_llama_cpp_only_chat_template_arguments(self):
+        server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
+        try:
+            server.start(timeout=5)
+            client = llama_server.OpenAIChatClient(server.base_url, model="reference-model")
+            response = client.complete(
+                system_prompt="Tutor prompt",
+                request={"requestID": "request-1"},
+                schema={"type": "object"},
+                seed=1103,
+                maximum_output_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+                enable_thinking=False,
+                timeout=2,
+            )
+        finally:
+            server.stop()
+
+        self.assertNotIn("chat_template_kwargs", response["echo"])
+        self.assertEqual("reference-model", response["echo"]["model"])
+
 
 if __name__ == "__main__":
     unittest.main()

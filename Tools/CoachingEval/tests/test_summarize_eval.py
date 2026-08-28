@@ -105,6 +105,43 @@ class SummarizeEvalTests(unittest.TestCase):
         self.assertTrue((self.root / "aggregate.json").is_file())
         self.assertTrue((self.root / "summary.md").is_file())
 
+    def test_combined_output_follows_review_key_pointers_to_every_source_run(self):
+        second_root = Path(self.temporary.name) / "model-b"
+        second_child = second_root / "visible-one"
+        second_child.mkdir(parents=True)
+        second = review_record("case-b", "model-b")
+        second.update(
+            {
+                "firstAttemptValidation": {"valid": True, "errors": []},
+                "repairAttempted": False,
+                "repairValidation": None,
+                "latencyMilliseconds": 75.0,
+                "promptTokens": 8,
+                "outputTokens": 2,
+                "rawFinalContent": json.dumps(second["parsedTurn"]),
+            }
+        )
+        (second_child / "records.jsonl").write_text(json.dumps(second) + "\n")
+
+        combined = Path(self.temporary.name) / "combined-review"
+        render_review.render_review([self.root, second_root], combined, review_seed=19)
+        key = json.loads((combined / "review-key.json").read_text())
+        with (combined / "rubric.csv").open("w", newline="") as destination:
+            writer = csv.DictWriter(
+                destination,
+                fieldnames=["reviewID"] + render_review.RUBRIC_COLUMNS,
+            )
+            writer.writeheader()
+            writer.writerows(completed_row(identifier, 4) for identifier in key["entries"])
+
+        summary = summarize_eval.summarize(combined)
+
+        self.assertEqual(4, summary["recordCount"])
+        self.assertEqual(
+            {"model-a|off|visible", "model-b|off|visible"},
+            set(summary["byConfiguration"]),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,14 @@ import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingEvaluationCorpusTests: XCTestCase {
+    func testFirstMoveOracleDoesNotRequireNoPieceNeedsHelpAction() throws {
+        let firstMove = try XCTUnwrap(
+            ModelCoachingEvaluationCorpus.visibleCases.first { $0.id == "t1Entry" }
+        )
+
+        XCTAssertFalse(firstMove.oracle.requiredActionKinds.contains("noPieceNeedsHelp"))
+    }
+
     func testCorpusContainsEveryGoldenCaseExactlyOnceWithReservedHiddenSplit() throws {
         let cases = ModelCoachingEvaluationCorpus.allCases
         let expectedIDs = Set(CoachingGoldenCase.allCases.map(\.rawValue))

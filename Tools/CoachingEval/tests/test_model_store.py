@@ -1,12 +1,16 @@
+import contextlib
 import hashlib
+import io
 import json
 import sys
 import tempfile
 import threading
 import unittest
 import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
@@ -102,11 +106,16 @@ class ModelStoreTests(unittest.TestCase):
         self.assertEqual(EXPECTED_MODELS, model_store.load_models(TOOLS_DIR / "models.json"))
         runtime = json.loads((TOOLS_DIR / "runtime.json").read_text())
         self.assertEqual("b10516", runtime["llamaCppTag"])
+        self.assertEqual(
+            "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9",
+            runtime["llamaCppCommit"],
+        )
         self.assertEqual(8192, runtime["mac"]["contextTokens"])
         self.assertEqual(256, runtime["generation"]["maximumOutputTokens"])
         self.assertEqual(0.2, runtime["generation"]["temperature"])
         self.assertEqual(0.9, runtime["generation"]["topP"])
         self.assertEqual(3, runtime["evaluation"]["repetitions"])
+        self.assertEqual("tutor-v1", runtime["evaluation"]["promptVersion"])
         self.assertEqual([1103, 2207, 3301], runtime["evaluation"]["seeds"])
 
     def test_fetch_resolves_main_and_writes_verified_artifact_manifest(self):
@@ -194,7 +203,63 @@ class ModelStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(model_store.ModelAccessError, "Gemma Terms.*HF_TOKEN"):
                 store.fetch(candidate)
 
-    def test_authorization_is_stripped_from_redirects_off_huggingface(self):
+    def test_gated_unauthorized_response_still_reports_terms_and_token_guidance(self):
+        candidate = EXPECTED_MODELS[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            store = model_store.ModelStore(Path(temporary), environment={"HF_TOKEN": "invalid"})
+
+            def unauthorized(_url):
+                raise urllib.error.HTTPError(
+                    "https://huggingface.co/gated", 401, "Unauthorized", {}, io.BytesIO()
+                )
+
+            store._request_json = unauthorized
+            with self.assertRaisesRegex(model_store.ModelAccessError, "Gemma Terms.*HF_TOKEN"):
+                store.fetch(candidate)
+
+    def test_fetch_all_continues_in_manifest_order_after_gated_failure(self):
+        class ScriptedStore(model_store.ModelStore):
+            def __init__(self):
+                self.attempts = []
+
+            def fetch(self, candidate):
+                self.attempts.append(candidate["id"])
+                if candidate.get("requiresToken"):
+                    raise model_store.ModelAccessError("Gemma Terms require HF_TOKEN")
+                return Path("/models") / candidate["id"] / "model.gguf"
+
+        store = ScriptedStore()
+        outcomes = store.fetch_all(EXPECTED_MODELS)
+
+        self.assertEqual([candidate["id"] for candidate in EXPECTED_MODELS], store.attempts)
+        self.assertEqual([candidate["id"] for candidate in EXPECTED_MODELS], [row["modelID"] for row in outcomes])
+        self.assertEqual(["fetched", "accessError", "fetched", "fetched"], [row["status"] for row in outcomes])
+        self.assertIn("Gemma Terms", outcomes[1]["error"])
+
+    def test_fetch_all_cli_directly_reports_every_outcome_and_gated_guidance(self):
+        outcomes = [
+            {"modelID": "first", "status": "fetched", "path": "/models/first.gguf"},
+            {
+                "modelID": "gemma",
+                "status": "accessError",
+                "error": "Accept Gemma Terms and supply HF_TOKEN",
+            },
+            {"modelID": "last", "status": "fetched", "path": "/models/last.gguf"},
+        ]
+        store = mock.Mock()
+        store.fetch_all.return_value = outcomes
+        stdout = io.StringIO()
+        with mock.patch.object(model_store, "ModelStore", return_value=store), mock.patch.object(
+            model_store, "load_models", return_value=EXPECTED_MODELS
+        ), contextlib.redirect_stdout(stdout):
+            status = model_store.main(["fetch-all"])
+
+        self.assertEqual(1, status)
+        self.assertEqual(outcomes, [json.loads(line) for line in stdout.getvalue().splitlines()])
+        self.assertIn("Gemma Terms", stdout.getvalue())
+        self.assertIn("HF_TOKEN", stdout.getvalue())
+
+    def test_authorization_is_stripped_from_every_cross_origin_redirect(self):
         handler = model_store.SafeAuthorizationRedirectHandler()
         original = urllib.request.Request(
             "https://huggingface.co/example/repo/resolve/revision/model.gguf",
@@ -216,8 +281,26 @@ class ModelStoreTests(unittest.TestCase):
             {},
             "https://huggingface.co/redirected/model.gguf",
         )
-        self.assertNotIn("Authorization", redirected.headers)
-        self.assertEqual("Bearer secret", same_host.headers["Authorization"])
+        downgraded = handler.redirect_request(
+            original,
+            None,
+            302,
+            "Found",
+            {},
+            "http://huggingface.co/redirected/model.gguf",
+        )
+        other_port = handler.redirect_request(
+            original,
+            None,
+            302,
+            "Found",
+            {},
+            "https://huggingface.co:444/redirected/model.gguf",
+        )
+        self.assertIsNone(redirected.get_header("Authorization"))
+        self.assertEqual("Bearer secret", same_host.get_header("Authorization"))
+        self.assertIsNone(downgraded.get_header("Authorization"))
+        self.assertIsNone(other_port.get_header("Authorization"))
 
 
 if __name__ == "__main__":

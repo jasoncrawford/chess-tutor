@@ -2,6 +2,35 @@ import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingTurnValidatorTests: XCTestCase {
+    func testSharedPythonSwiftValidationFixtureContract() throws {
+        let fixtureURL = repositoryRoot.appendingPathComponent(
+            "Tools/CoachingEval/fixtures/model-coaching-turn-validation-v1.json"
+        )
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
+        let requestObject = try XCTUnwrap(root["request"] as? [String: Any])
+        let requestData = try JSONSerialization.data(withJSONObject: requestObject)
+        let request = try JSONDecoder().decode(ModelCoachingRequest.self, from: requestData)
+        let cases = try XCTUnwrap(root["cases"] as? [[String: Any]])
+
+        for fixtureCase in cases {
+            let identifier = try XCTUnwrap(fixtureCase["id"] as? String)
+            let expectedValid = try XCTUnwrap(fixtureCase["expectedValid"] as? Bool)
+            let turnObject = try XCTUnwrap(fixtureCase["turn"] as? [String: Any])
+            let turnData = try JSONSerialization.data(withJSONObject: turnObject)
+            let isValid: Bool
+            do {
+                _ = try ModelCoachingTurnDecoder.decodeAndValidate(turnData, against: request)
+                isValid = true
+            } catch {
+                isValid = false
+            }
+            XCTAssertEqual(isValid, expectedValid, "Fixture disagreement for \(identifier)")
+        }
+    }
+
     func testAcceptsValidTurn() {
         XCTAssertEqual(ModelCoachingTurnValidator.validate(makeTurn(), against: makeRequest()), [])
     }
@@ -216,5 +245,13 @@ final class ModelCoachingTurnValidatorTests: XCTestCase {
 
     private func words(count: Int) -> String {
         (1...count).map { "word\($0)" }.joined(separator: " ")
+    }
+
+    private var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

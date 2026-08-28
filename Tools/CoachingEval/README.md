@@ -8,7 +8,7 @@ All downloaded models, runtime builds, corpus exports, raw generations, hidden-s
 
 - Python 3.9 or newer; the harness uses only the standard library.
 - Xcode, XcodeGen, and the `iPad (A16)` simulator for corpus export.
-- llama.cpp tag `b10516`, with `llama-server` built at `.coaching-eval/runtime/b10516/bin/llama-server`.
+- llama.cpp tag `b10516` at source commit `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9`, with `llama-server` built at `.coaching-eval/runtime/b10516/bin/llama-server`.
 - Enough local disk space for the selected GGUF candidates.
 
 The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 256 output tokens, temperature 0.2, top-p 0.9, and seeds 1103, 2207, and 3301. Do not change that file during a comparison round.
@@ -42,13 +42,38 @@ python3 Tools/CoachingEval/model_store.py fetch qwen3-0.6b-q4_0
 python3 Tools/CoachingEval/model_store.py verify
 ```
 
-Or fetch all accessible candidates:
+Or attempt every candidate in manifest order:
 
 ```bash
 python3 Tools/CoachingEval/model_store.py fetch-all
 ```
 
-The resolver turns repository `main` into an immutable revision, chooses the exact configured quantization, streams the bytes, and writes an `artifact-manifest.json` with the revision, byte count, and SHA-256. An existing file is reused only when both its size and SHA-256 match. `HF_TOKEN` is read only for Hugging Face requests and is never written. Gemma requires prior acceptance of the Gemma Terms and `HF_TOKEN`; the tool reports an access error instead of substituting another model.
+The resolver turns repository `main` into an immutable revision, chooses the exact configured quantization, streams the bytes, and writes an `artifact-manifest.json` with the revision, byte count, and SHA-256. An existing file is reused only when both its size and SHA-256 match. `fetch-all` continues to later accessible models after an access failure, prints one structured outcome per candidate, and exits nonzero if any candidate failed. `HF_TOKEN` is read only for exact HTTPS requests to `huggingface.co` and is never written. Authorization is stripped on every redirect that changes scheme, host, or effective port. Gemma requires prior acceptance of the Gemma Terms and `HF_TOKEN`; missing and rejected credentials produce that direct guidance instead of substituting another model.
+
+## Pin and smoke-test the runtime
+
+After building the exact tag, record the binary's actual `--version` output and SHA-256:
+
+```bash
+python3 Tools/CoachingEval/runtime_provenance.py record \
+  --server .coaching-eval/runtime/b10516/bin/llama-server \
+  --manifest .coaching-eval/runtime/b10516/runtime-manifest.json
+python3 Tools/CoachingEval/runtime_provenance.py verify \
+  --server .coaching-eval/runtime/b10516/bin/llama-server \
+  --manifest .coaching-eval/runtime/b10516/runtime-manifest.json
+```
+
+The runner refuses a missing manifest, a source tag/commit mismatch, changed version output, or changed binary hash. First run the deterministic b10516 schema preflight, then prove that the pinned server accepts the exact schema through its HTTP grammar path:
+
+```bash
+python3 Tools/CoachingEval/schema_compat.py
+python3 Tools/CoachingEval/schema_compat.py \
+  --smoke-server .coaching-eval/runtime/b10516/bin/llama-server \
+  --smoke-model .coaching-eval/models/qwen3-0.6b-q4_0/Qwen3-0.6B-Q4_0.gguf \
+  --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json
+```
+
+The real pinned-server smoke is mandatory before Task 5 model comparisons. The unit suite exercises this hook with a fake server, but that is not evidence that a locally built b10516 converter compiled the schema.
 
 ## Run local models
 
@@ -68,9 +93,11 @@ python3 Tools/CoachingEval/run_eval.py local \
 
 Use `--mode off` or `--mode bounded` to select one supported thinking mode, `--case t1Entry` for a focused case, and `--repetitions 1` for a smoke test. Without those overrides, the evaluator runs every model-supported mode and all three pinned seeds. The server is bound to an ephemeral `127.0.0.1` port, must pass `/health`, and is stopped in `finally`; a request timeout terminates its process group.
 
+`runtime.json` selects the immutable `tutor-v1` prompt bundle by default. Use `--prompt-version tutor-v<number>` to select another committed `prompts/tutor-v<number>.md` plus matching `prompts/examples-v<number>.json` pair. The runner records the selected version, exact paths, and both hashes; aliases such as `latest` are rejected.
+
 Every record preserves the exact request, its UTF-8 byte count and SHA-256, the complete message-envelope byte count and SHA-256, the model artifact hash, runtime tag, generation settings, final response text, parsed turn, first-attempt validation, optional one-time repair validation, tokens, timings, split, and errors. The request is never truncated or compacted. Because several current real-pipeline requests are larger than an 8192-token context, the runner marks a conservative whole-envelope byte-based overflow warning and records an explicit context-overflow error if the server rejects the exact payload.
 
-Provider `reasoning_content` and leading `<think>…</think>` traces are discarded. Only final response content is persisted or scored. Repair is attempted at most once and only for invalid JSON or response shape—not for an identity/reference error or a pedagogically weak turn.
+Provider `reasoning_content` is ignored. Repeated, prefixed, case-variant, and embedded `<think>…</think>` blocks are removed before persistence; any unresolved trace marker fails closed to empty final content. Only sanitized final response content is persisted or scored. Repair is attempted at most once and only for invalid JSON or response shape—not for an identity/reference error or a pedagogically weak turn.
 
 ## Optional online reference
 
@@ -83,7 +110,7 @@ export COACHING_EVAL_REFERENCE_API_KEY='developer-secret'
 python3 Tools/CoachingEval/run_eval.py reference --split visible
 ```
 
-The online result is a comparison ceiling, not an automatic judge. Never place the key in the app, a tracked file, shell history, or a run artifact.
+Credentialed reference endpoints must be HTTPS, and Authorization is never forwarded across an origin-changing redirect. Reference payloads omit llama.cpp-only `chat_template_kwargs`. The online result is a comparison ceiling, not an automatic judge. Never place the key in the app, a tracked file, shell history, or a run artifact.
 
 ## Blinded review and scoring
 
@@ -96,6 +123,13 @@ python3 Tools/CoachingEval/render_review.py \
 
 For a combined comparison, repeat `--run` for each model and provide `--output <directory>`. The recorded review seed deterministically shuffles outputs. `review-packet.jsonl` shows the position, history, latest action, candidate turn, success criteria, and severe-failure criteria without model identity. Keep `review-key.json` private until scoring is complete.
 
+```bash
+python3 Tools/CoachingEval/render_review.py \
+  --run .coaching-eval/runs/qwen3-0.6b-q4_0 \
+  --run .coaching-eval/runs/qwen3-1.7b-q4_k_m \
+  --output .coaching-eval/reviews/combined-v1
+```
+
 Fill every score cell in `rubric.csv`:
 
 - `factualCorrectness`, `oneCoherentStep`, `responsiveToLatestAction`, `answerability`, `childClarity`, and `pedagogicalUsefulness`: integers 1–5;
@@ -106,7 +140,7 @@ Then summarize:
 
 ```bash
 python3 Tools/CoachingEval/summarize_eval.py \
-  --run .coaching-eval/runs/qwen3-0.6b-q4_0
+  --run .coaching-eval/reviews/combined-v1
 ```
 
 The summarizer refuses missing or incomplete scored rows. It writes `aggregate.json` and `summary.md` with every rubric dimension, first-attempt and repaired validity, severe errors, p50/p90 latency, tokens, configurations, and raw examples by case. It intentionally has no single combined score.
@@ -128,6 +162,10 @@ The fake renderer adds an explicitly labeled synthetic rubric row only so this a
 
 ```bash
 python3 -m unittest discover -s Tools/CoachingEval/tests -v
+xcodebuild test -project ChessTutor.xcodeproj -scheme ChessTutor \
+  -destination 'platform=iOS Simulator,name=iPad (A16)' \
+  -only-testing:ChessTutorTests/ModelCoachingTurnValidatorTests
+python3 Tools/CoachingEval/schema_compat.py
 git diff --check
 ```
 

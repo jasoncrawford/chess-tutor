@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from http_security import SameOriginAuthorizationRedirectHandler
+
 
 class LlamaServerError(RuntimeError):
     pass
@@ -33,6 +35,7 @@ def build_chat_payload(
     extra_messages=None,
     after_messages=None,
     model=None,
+    include_chat_template_kwargs=True,
 ):
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(extra_messages or [])
@@ -49,7 +52,6 @@ def build_chat_payload(
         "max_tokens": maximum_output_tokens,
         "temperature": temperature,
         "top_p": top_p,
-        "chat_template_kwargs": {"enable_thinking": bool(enable_thinking)},
         "response_format": {
             "type": "json_schema",
             "json_schema": {
@@ -59,6 +61,8 @@ def build_chat_payload(
             },
         },
     }
+    if include_chat_template_kwargs:
+        payload["chat_template_kwargs"] = {"enable_thinking": bool(enable_thinking)}
     if model is not None:
         payload["model"] = model
     return payload
@@ -67,6 +71,8 @@ def build_chat_payload(
 class OpenAIChatClient:
     def __init__(self, base_url, *, api_key=None, model=None):
         base_url = base_url.rstrip("/")
+        if api_key and not base_url.lower().startswith("https://"):
+            raise ValueError("Reference credentials require an HTTPS endpoint")
         if base_url.endswith("/chat/completions"):
             self.url = base_url
         elif base_url.endswith("/v1"):
@@ -75,9 +81,14 @@ class OpenAIChatClient:
             self.url = base_url + "/v1/chat/completions"
         self.api_key = api_key
         self.model = model
+        self.opener = urllib.request.build_opener(SameOriginAuthorizationRedirectHandler())
 
     def complete(self, *, timeout, **arguments):
-        payload = build_chat_payload(model=self.model, **arguments)
+        payload = build_chat_payload(
+            model=self.model,
+            include_chat_template_kwargs=False,
+            **arguments,
+        )
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -89,7 +100,7 @@ class OpenAIChatClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(http_request, timeout=timeout) as response:
+            with self.opener.open(http_request, timeout=timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
