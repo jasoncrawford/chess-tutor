@@ -1,4 +1,4 @@
-struct Piece: Equatable, Hashable, Sendable {
+struct Piece: Codable, Equatable, Hashable, Sendable {
     enum Kind: String, Equatable, Hashable, Codable, Sendable {
         case king
         case queen

@@ -1,5 +1,5 @@
-struct Square: Equatable, Hashable, Sendable {
-    enum File: Int, CaseIterable, Sendable {
+struct Square: Codable, Equatable, Hashable, Sendable {
+    enum File: Int, CaseIterable, Codable, Sendable {
         case a = 1, b, c, d, e, f, g, h
     }
 

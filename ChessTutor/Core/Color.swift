@@ -1,4 +1,4 @@
-enum PieceColor: String, Equatable, Hashable, Sendable {
+enum PieceColor: String, Codable, Equatable, Hashable, Sendable {
     case white
     case black
 

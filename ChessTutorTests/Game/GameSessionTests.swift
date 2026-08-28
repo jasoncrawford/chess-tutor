@@ -2,6 +2,43 @@ import XCTest
 @testable import ChessTutor
 
 final class GameSessionTests: XCTestCase {
+    @MainActor
+    func testGameLibraryCreatesSeparateLocalGamesAndKeepsNewestFirst() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let library = GameLibrary(now: { start })
+
+        let first = library.createLocalGame()
+        library.recordCommittedMove(
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+            in: first.id,
+            at: start.addingTimeInterval(10)
+        )
+        let second = library.createLocalGame(at: start.addingTimeInterval(20))
+
+        XCTAssertEqual(library.games.map(\.id), [second.id, first.id])
+        XCTAssertEqual(library.game(id: first.id)?.moves.count, 1)
+        XCTAssertTrue(library.game(id: second.id)?.moves.isEmpty == true)
+    }
+
+    @MainActor
+    func testGameLibraryStoreRestoresGamesAndLastVisibleBoard() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let store = GameLibraryStore(fileURL: directory.appendingPathComponent("games.json"))
+        let library = GameLibrary(now: { Date(timeIntervalSince1970: 1_000) })
+        let game = library.createLocalGame()
+        library.recordCommittedMove(
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+            in: game.id
+        )
+        library.showBoard(game.id)
+
+        try store.save(library.snapshot)
+        let restored = try XCTUnwrap(try store.load())
+
+        XCTAssertEqual(restored.games, library.snapshot.games)
+        XCTAssertEqual(restored.route, .board(game.id))
+    }
+
     func testSelectingCurrentPlayersPieceExposesLegalDestinations() {
         let session = GameSession()
 

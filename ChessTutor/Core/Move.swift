@@ -1,5 +1,5 @@
-struct Move: Equatable, Hashable, Sendable {
-    enum Special: Equatable, Hashable, Sendable {
+struct Move: Codable, Equatable, Hashable, Sendable {
+    enum Special: Codable, Equatable, Hashable, Sendable {
         case castleKingside
         case castleQueenside
         case enPassant
