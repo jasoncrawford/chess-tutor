@@ -92,6 +92,23 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(GameLibraryEntry.pendingRemote(pending).cardPresentation.status, "Invitation sent")
     }
 
+    @MainActor
+    func testGameLibraryEntryCardPresentationReplaysBoardThumbnailState() {
+        let library = GameLibrary()
+        let local = library.createLocalGame()
+        library.recordCommittedMove(
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+            in: local.id
+        )
+
+        let presentation = GameLibraryEntry.local(library.game(id: local.id)!).cardPresentation
+
+        XCTAssertEqual(
+            presentation.boardState.board[Square(file: .e, rank: 4)],
+            Piece(kind: .pawn, color: .white)
+        )
+    }
+
     func testSelectingCurrentPlayersPieceExposesLegalDestinations() {
         let session = GameSession()
 

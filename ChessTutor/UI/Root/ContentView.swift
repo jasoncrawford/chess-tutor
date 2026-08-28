@@ -91,7 +91,7 @@ struct ContentView: View {
             initialSession = restoredSession
             initialActiveRemoteGameController = restoredController
         } else if case let .board(id) = gameLibrary.route,
-                  let pendingBoard = gameLibrary.pendingRemoteBoard(id: id) {
+                  gameLibrary.pendingRemoteBoard(id: id) != nil {
             initialSession = GameSession()
             initialSession.lockBoard(message: "Waiting for this invitation to be accepted.", statusText: "Invitation pending")
             initialActiveRemoteGameController = nil
@@ -116,12 +116,10 @@ struct ContentView: View {
     var body: some View {
         Group {
             if case .games = gameLibrary.route {
-                GamesListView(
+                GamesRackView(
                     entries: gameLibrary.entries,
                     onStartGame: startNewGame,
-                    onOpenLocalGame: openLocalGame,
-                    onOpenPendingRemoteBoard: openPendingRemoteBoard,
-                    onOpenRemoteGame: openRemoteGame
+                    onOpenEntry: openGameEntry
                 )
             } else {
         GeometryReader { proxy in
@@ -442,6 +440,17 @@ struct ContentView: View {
             remoteGameTransport: remoteGameTransport
         )
         persistGameLibrary()
+    }
+
+    private func openGameEntry(_ entry: GameLibraryEntry) {
+        switch entry {
+        case .local(let game):
+            openLocalGame(game)
+        case .pendingRemote(let board):
+            openPendingRemoteBoard(board)
+        case .remote(let game):
+            openRemoteGame(game)
+        }
     }
 
     private func openPendingRemoteBoard(_ board: ManagedPendingRemoteBoard) {
@@ -2094,89 +2103,138 @@ private struct PendingPromotion: Identifiable {
     #endif
 }
 
-private struct GamesListView: View {
+private struct GamesRackView: View {
     let entries: [GameLibraryEntry]
     let onStartGame: () -> Void
-    let onOpenLocalGame: (ManagedLocalGame) -> Void
-    let onOpenPendingRemoteBoard: (ManagedPendingRemoteBoard) -> Void
-    let onOpenRemoteGame: (ManagedRemoteGame) -> Void
+    let onOpenEntry: (GameLibraryEntry) -> Void
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button(action: onStartGame) {
-                        Label("Start a Game", systemImage: "plus.circle.fill")
-                    }
-                }
+        GeometryReader { proxy in
+            let isWide = proxy.size.width > proxy.size.height
+            let columns = Array(
+                repeating: GridItem(.flexible(minimum: isWide ? 170 : 132, maximum: 260), spacing: 20),
+                count: isWide ? 3 : 2
+            )
 
-                if entries.isEmpty {
-                    ContentUnavailableView(
-                        "Your boards will live here",
-                        systemImage: "checkerboard.rectangle",
-                        description: Text("Start a game on this iPad or invite someone to play.")
-                    )
-                } else {
-                    Section {
-                        ForEach(entries) { entry in
-                            entryButton(entry)
+            ZStack {
+                AppTheme.table.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Games")
+                            .font(AppTheme.panelTitleFont)
+                            .foregroundStyle(AppTheme.ink)
+
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
+                            Button(action: onStartGame) {
+                                StartGameRackCard()
+                            }
+                            .buttonStyle(GameRackButtonStyle())
+                            .accessibilityIdentifier("games-start-card")
+
+                            ForEach(entries) { entry in
+                                Button {
+                                    onOpenEntry(entry)
+                                } label: {
+                                    GameRackCard(presentation: entry.cardPresentation)
+                                }
+                                .buttonStyle(GameRackButtonStyle())
+                                .accessibilityIdentifier("game-card-\(entry.id.rawValue.uuidString)")
+                            }
+                        }
+
+                        if entries.isEmpty {
+                            Text("Your boards will appear here.")
+                                .font(AppTheme.emptyPanelFont)
+                                .foregroundStyle(AppTheme.mutedInk)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.top, 4)
                         }
                     }
+                    .padding(isWide ? 30 : 24)
+                    .frame(maxWidth: 980, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
+                .background {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .fill(AppTheme.panel)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                                .stroke(AppTheme.boardFrame, lineWidth: 14)
+                        }
+                        .shadow(color: AppTheme.captureBoxShadow, radius: 22, y: 12)
+                }
+                .padding(isWide ? 42 : 24)
             }
-            .navigationTitle("Games")
-        }
-    }
-
-    @ViewBuilder
-    private func entryButton(_ entry: GameLibraryEntry) -> some View {
-        switch entry {
-        case .local(let game):
-            Button { onOpenLocalGame(game) } label: {
-                GameListRow(
-                    title: "Local game",
-                    subtitle: game.moves.isEmpty ? "White’s turn" : "Last played \(game.lastMovedAt.formatted(date: .abbreviated, time: .shortened))",
-                    moves: game.moves
-                )
-            }
-            .buttonStyle(.plain)
-        case .pendingRemote(let board):
-            Button { onOpenPendingRemoteBoard(board) } label: {
-                GameListRow(title: board.listTitle, subtitle: board.listStatus, moves: [])
-            }
-            .buttonStyle(.plain)
-        case .remote(let game):
-            Button { onOpenRemoteGame(game) } label: {
-                GameListRow(
-                    title: RemoteGameLifecycleController.opponent(from: game.snapshot.descriptor).displayName,
-                    subtitle: game.snapshot.descriptor.status == .ended ? "Finished" : "Remote game",
-                    moves: game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) }
-                )
-            }
-            .buttonStyle(.plain)
         }
     }
 }
 
-private struct GameListRow: View {
-    let title: String
-    let subtitle: String
-    let moves: [Move]
+private struct StartGameRackCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.captureBoxFelt)
+                Image(systemName: "plus")
+                    .font(.system(size: 40, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.lightSquare)
+            }
+            .aspectRatio(1, contentMode: .fit)
+
+            Text("Start a Game")
+                .font(.system(.title3, design: .serif).weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+            Text("On this iPad or remotely")
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.mutedInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(cardBackground)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct GameRackCard: View {
+    let presentation: GameCardPresentation
 
     var body: some View {
-        HStack(spacing: 12) {
-            GameThumbnail(moves: moves)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.headline)
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 12) {
+            GameThumbnail(state: presentation.boardState, moveCount: presentation.moves.count)
+                .aspectRatio(1, contentMode: .fit)
+
+            Text(presentation.title)
+                .font(.system(.title3, design: .serif).weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+            Text(presentation.status)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.mutedInk)
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(cardBackground)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private var cardBackground: some View {
+    RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(AppTheme.panelWarmth)
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppTheme.panelStroke, lineWidth: 1)
+        }
+}
+
+private struct GameRackButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.975 : 1)
+            .opacity(configuration.isPressed ? 0.80 : 1)
+            .animation(.spring(response: 0.20, dampingFraction: 0.86), value: configuration.isPressed)
     }
 }
 
@@ -2255,23 +2313,37 @@ private struct InvitationSentNoticeView: View {
 }
 
 private struct GameThumbnail: View {
-    let moves: [Move]
+    let state: GameState
+    let moveCount: Int
+
+    private let squares = (1...8).reversed().flatMap { rank in
+        Square.File.allCases.map { Square(file: $0, rank: rank) }
+    }
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4), spacing: 0) {
-            ForEach(0..<16, id: \.self) { index in
-                Rectangle()
-                    .fill((index + index / 4).isMultiple(of: 2) ? AppTheme.lightSquare : AppTheme.darkSquare)
+        GeometryReader { proxy in
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 8), spacing: 0) {
+                ForEach(squares, id: \.self) { square in
+                    ZStack {
+                        Rectangle()
+                            .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
+                        if let piece = state.board[square] {
+                            PieceIconView(piece: piece)
+                                .padding(1)
+                        }
+                    }
                     .aspectRatio(1, contentMode: .fit)
+                }
             }
+            .frame(width: proxy.size.width, height: proxy.size.width)
         }
-        .frame(width: 56, height: 56)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .aspectRatio(1, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(AppTheme.panelStroke, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(AppTheme.boardFrame.opacity(0.82), lineWidth: 4)
         }
-        .accessibilityLabel("Chess board after \(moves.count) moves")
+        .accessibilityLabel("Chess board after \(moveCount) moves")
     }
 }
 

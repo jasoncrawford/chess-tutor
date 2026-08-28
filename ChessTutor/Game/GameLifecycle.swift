@@ -149,6 +149,16 @@ struct GameCardPresentation: Equatable, Sendable {
     let title: String
     let status: String
     let moves: [Move]
+    let boardState: GameState
+
+    init(title: String, status: String, moves: [Move]) {
+        self.title = title
+        self.status = status
+        self.moves = moves
+        self.boardState = moves.reduce(into: .startingPosition()) { state, move in
+            state.apply(move)
+        }
+    }
 }
 
 struct GameLibrarySnapshot: Codable, Equatable, Sendable {
