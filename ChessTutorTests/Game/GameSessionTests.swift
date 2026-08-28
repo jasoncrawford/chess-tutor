@@ -39,6 +39,35 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(restored.route, .board(game.id))
     }
 
+    @MainActor
+    func testGameLibraryKeepsPendingRemoteBoardAlongsideLocalGames() {
+        let library = GameLibrary()
+        let local = library.createLocalGame()
+        let invite = RemotePendingInvite(
+            id: RemoteInviteID(rawValue: "invite"),
+            code: InviteCode(rawValue: "123456"),
+            token: RemoteInviteToken(rawValue: "token"),
+            inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "dad"), displayName: "Dad"),
+            inviteeDisplayName: "Maya",
+            whiteAssignment: .inviter,
+            status: .pending,
+            createdAt: .distantPast,
+            expiresAt: .distantFuture,
+            protocolVersion: 1
+        )
+
+        let pending = library.createPendingRemoteBoard(invite)
+
+        XCTAssertEqual(library.pendingRemoteBoards, [pending])
+        XCTAssertEqual(library.games.map(\.id), [local.id])
+
+        library.showBoard(pending.id)
+        library.removePendingRemoteBoard(inviteID: invite.id)
+
+        XCTAssertTrue(library.pendingRemoteBoards.isEmpty)
+        XCTAssertEqual(library.route, .games)
+    }
+
     func testSelectingCurrentPlayersPieceExposesLegalDestinations() {
         let session = GameSession()
 

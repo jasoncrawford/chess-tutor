@@ -29,14 +29,127 @@ struct ManagedLocalGame: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// A remote invitation has a board before it can be played.  Keeping that
+/// lightweight record in the library lets the UI treat it like every other
+/// game without pretending it is an active remote match yet.
+struct ManagedPendingRemoteBoard: Codable, Equatable, Sendable, Identifiable {
+    enum Role: String, Codable, Equatable, Sendable {
+        case inviter
+        case invitee
+    }
+
+    let id: ManagedGameID
+    let invite: RemotePendingInvite
+    let role: Role
+    let createdAt: Date
+    private(set) var lastUpdatedAt: Date
+
+    init(id: ManagedGameID, invite: RemotePendingInvite, role: Role, createdAt: Date) {
+        self.id = id
+        self.invite = invite
+        self.role = role
+        self.createdAt = createdAt
+        self.lastUpdatedAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, invite, role, createdAt, lastUpdatedAt }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(ManagedGameID.self, forKey: .id)
+        invite = try container.decode(RemotePendingInvite.self, forKey: .invite)
+        role = try container.decodeIfPresent(Role.self, forKey: .role) ?? .invitee
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        lastUpdatedAt = try container.decode(Date.self, forKey: .lastUpdatedAt)
+    }
+
+    var listTitle: String {
+        role == .inviter ? (invite.inviteeDisplayName ?? "New player") : invite.inviter.displayName
+    }
+
+    var listStatus: String {
+        role == .inviter ? "Invitation sent" : "Invitation pending"
+    }
+}
+
+struct ManagedRemoteGame: Codable, Equatable, Sendable, Identifiable {
+    let id: ManagedGameID
+    let createdAt: Date
+    private(set) var lastMovedAt: Date
+    private(set) var snapshot: ActiveRemoteGameSnapshot
+
+    init(id: ManagedGameID, createdAt: Date, snapshot: ActiveRemoteGameSnapshot) {
+        self.id = id
+        self.createdAt = createdAt
+        self.lastMovedAt = createdAt
+        self.snapshot = snapshot
+    }
+
+    mutating func update(snapshot: ActiveRemoteGameSnapshot, at date: Date) {
+        self.snapshot = snapshot
+        lastMovedAt = date
+    }
+}
+
 enum GameLibraryRoute: Codable, Equatable, Sendable {
     case games
     case board(ManagedGameID)
 }
 
+enum GameLibraryEntry: Identifiable, Sendable {
+    case local(ManagedLocalGame)
+    case pendingRemote(ManagedPendingRemoteBoard)
+    case remote(ManagedRemoteGame)
+
+    var id: ManagedGameID {
+        switch self {
+        case .local(let game): game.id
+        case .pendingRemote(let board): board.id
+        case .remote(let game): game.id
+        }
+    }
+
+    var lastActivityAt: Date {
+        switch self {
+        case .local(let game): game.lastMovedAt
+        case .pendingRemote(let board): board.lastUpdatedAt
+        case .remote(let game): game.lastMovedAt
+        }
+    }
+}
+
 struct GameLibrarySnapshot: Codable, Equatable, Sendable {
     let games: [ManagedLocalGame]
+    let pendingRemoteBoards: [ManagedPendingRemoteBoard]
+    let remoteGames: [ManagedRemoteGame]
     let route: GameLibraryRoute
+
+    init(
+        games: [ManagedLocalGame],
+        pendingRemoteBoards: [ManagedPendingRemoteBoard] = [],
+        remoteGames: [ManagedRemoteGame] = [],
+        route: GameLibraryRoute
+    ) {
+        self.games = games
+        self.pendingRemoteBoards = pendingRemoteBoards
+        self.remoteGames = remoteGames
+        self.route = route
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case games
+        case pendingRemoteBoards
+        case remoteGames
+        case route
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        games = try container.decode([ManagedLocalGame].self, forKey: .games)
+        pendingRemoteBoards = try container.decodeIfPresent([ManagedPendingRemoteBoard].self, forKey: .pendingRemoteBoards) ?? []
+        remoteGames = try container.decodeIfPresent([ManagedRemoteGame].self, forKey: .remoteGames) ?? []
+        route = try container.decode(GameLibraryRoute.self, forKey: .route)
+    }
 }
 
 final class GameLibraryStore {
@@ -71,6 +184,8 @@ final class GameLibraryStore {
 final class GameLibrary {
     private let now: () -> Date
     private(set) var games: [ManagedLocalGame] = []
+    private(set) var pendingRemoteBoards: [ManagedPendingRemoteBoard] = []
+    private(set) var remoteGames: [ManagedRemoteGame] = []
     private(set) var route: GameLibraryRoute = .games
 
     init(now: @escaping () -> Date = Date.init) {
@@ -80,6 +195,8 @@ final class GameLibrary {
     init(snapshot: GameLibrarySnapshot, now: @escaping () -> Date = Date.init) {
         self.now = now
         self.games = snapshot.games
+        self.pendingRemoteBoards = snapshot.pendingRemoteBoards
+        self.remoteGames = snapshot.remoteGames
         self.route = snapshot.route
     }
 
@@ -94,12 +211,79 @@ final class GameLibrary {
         games.first(where: { $0.id == id })
     }
 
+    func pendingRemoteBoard(id: ManagedGameID) -> ManagedPendingRemoteBoard? {
+        pendingRemoteBoards.first(where: { $0.id == id })
+    }
+
+    func pendingRemoteBoard(inviteID: RemoteInviteID) -> ManagedPendingRemoteBoard? {
+        pendingRemoteBoards.first(where: { $0.invite.id == inviteID })
+    }
+
+    func remoteGame(id: ManagedGameID) -> ManagedRemoteGame? {
+        remoteGames.first(where: { $0.id == id })
+    }
+
+    func remoteGame(inviteID: RemoteInviteID) -> ManagedRemoteGame? {
+        remoteGames.first(where: { $0.snapshot.descriptor.id.rawValue == inviteID.rawValue })
+    }
+
+    @discardableResult
+    func createPendingRemoteBoard(
+        _ invite: RemotePendingInvite,
+        role: ManagedPendingRemoteBoard.Role = .invitee,
+        at date: Date? = nil
+    ) -> ManagedPendingRemoteBoard {
+        if let existing = pendingRemoteBoard(inviteID: invite.id) {
+            return existing
+        }
+        let board = ManagedPendingRemoteBoard(id: ManagedGameID(), invite: invite, role: role, createdAt: date ?? now())
+        pendingRemoteBoards.insert(board, at: 0)
+        return board
+    }
+
+    @discardableResult
+    func activateRemoteBoard(
+        for inviteID: RemoteInviteID,
+        snapshot: ActiveRemoteGameSnapshot,
+        at date: Date? = nil
+    ) -> ManagedRemoteGame {
+        let timestamp = date ?? now()
+        let id = pendingRemoteBoard(inviteID: inviteID)?.id ?? ManagedGameID()
+        pendingRemoteBoards.removeAll(where: { $0.id == id })
+        let game = ManagedRemoteGame(id: id, createdAt: timestamp, snapshot: snapshot)
+        remoteGames.removeAll(where: { $0.id == id })
+        remoteGames.insert(game, at: 0)
+        return game
+    }
+
+    func updateRemoteGame(_ snapshot: ActiveRemoteGameSnapshot, in id: ManagedGameID, at date: Date? = nil) {
+        guard let index = remoteGames.firstIndex(where: { $0.id == id }) else { return }
+        remoteGames[index].update(snapshot: snapshot, at: date ?? now())
+        let updated = remoteGames.remove(at: index)
+        remoteGames.insert(updated, at: 0)
+    }
+
+    func removePendingRemoteBoard(inviteID: RemoteInviteID) {
+        pendingRemoteBoards.removeAll(where: { $0.invite.id == inviteID })
+        if case let .board(id) = route,
+           pendingRemoteBoard(id: id) == nil {
+            route = .games
+        }
+    }
+
     var snapshot: GameLibrarySnapshot {
-        GameLibrarySnapshot(games: games, route: route)
+        GameLibrarySnapshot(games: games, pendingRemoteBoards: pendingRemoteBoards, remoteGames: remoteGames, route: route)
+    }
+
+    var entries: [GameLibraryEntry] {
+        (games.map(GameLibraryEntry.local)
+            + pendingRemoteBoards.map(GameLibraryEntry.pendingRemote)
+            + remoteGames.map(GameLibraryEntry.remote))
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
     }
 
     func showBoard(_ id: ManagedGameID) {
-        guard game(id: id) != nil else { return }
+        guard game(id: id) != nil || pendingRemoteBoard(id: id) != nil || remoteGame(id: id) != nil else { return }
         route = .board(id)
     }
 

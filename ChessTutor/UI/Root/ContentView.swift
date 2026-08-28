@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var gameLibrary: GameLibrary
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
+    @State private var isShowingGameTypeChooser = false
     @State private var remotePlayFlow: RemotePlayFlow
     @State private var remoteLifecycle: RemoteGameLifecycleController
     @State private var remoteInviteAcceptanceTask: Task<Void, Never>?
@@ -24,6 +25,8 @@ struct ContentView: View {
     @State private var activeInviteLinkRequest: InviteLinkRequest?
     @State private var inviteLinkFetchTask: Task<Void, Never>?
     @State private var dismissedIncomingRemoteInviteIDs: Set<RemoteInviteID> = []
+    @State private var pendingOutboundAcceptanceFetchIDs: Set<RemoteInviteID> = []
+    @State private var foregroundIncomingInvite: ManagedPendingRemoteBoard?
     @State private var didLogAppLaunch = false
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
@@ -76,15 +79,21 @@ struct ContentView: View {
            let savedGame = gameLibrary.game(id: id) {
             initialSession = GameSession(replayingCommittedMoves: savedGame.moves)
             initialActiveRemoteGameController = nil
-        } else if let snapshot = try? activeRemoteGameStore.load(),
-           let restoredSession = try? Self.restoredSession(from: snapshot),
-           let restoredController = try? RemoteGameSessionController(
-                snapshot: snapshot,
-                transport: self.remoteGameTransport
-           ) {
-            RemoteGameLifecycleController.applyRemoteSeats(from: snapshot.descriptor, to: restoredSession)
+        } else if case let .board(id) = gameLibrary.route,
+                  let savedGame = gameLibrary.remoteGame(id: id),
+                  let restoredSession = try? Self.restoredSession(from: savedGame.snapshot),
+                  let restoredController = try? RemoteGameSessionController(
+                    snapshot: savedGame.snapshot,
+                    transport: self.remoteGameTransport
+                  ) {
+            RemoteGameLifecycleController.applyRemoteSeats(from: savedGame.snapshot.descriptor, to: restoredSession)
             initialSession = restoredSession
             initialActiveRemoteGameController = restoredController
+        } else if case let .board(id) = gameLibrary.route,
+                  let pendingBoard = gameLibrary.pendingRemoteBoard(id: id) {
+            initialSession = GameSession()
+            initialSession.lockBoard(message: "Waiting for this invitation to be accepted.", statusText: "Invitation pending")
+            initialActiveRemoteGameController = nil
         } else {
             if (try? activeRemoteGameStore.load()) != nil {
                 try? activeRemoteGameStore.clear()
@@ -107,9 +116,11 @@ struct ContentView: View {
         Group {
             if case .games = gameLibrary.route {
                 GamesListView(
-                    games: gameLibrary.games,
-                    onStartLocalGame: startLocalGame,
-                    onOpenGame: openLocalGame
+                    entries: gameLibrary.entries,
+                    onStartGame: startNewGame,
+                    onOpenLocalGame: openLocalGame,
+                    onOpenPendingRemoteBoard: openPendingRemoteBoard,
+                    onOpenRemoteGame: openRemoteGame
                 )
             } else {
         GeometryReader { proxy in
@@ -151,6 +162,22 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteStartAnnouncement)
             .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteInviteConfirmation)
         }
+            }
+        }
+        .overlay {
+            if let invite = foregroundIncomingInvite {
+                Color.black.opacity(0.24)
+                    .ignoresSafeArea()
+                IncomingInviteNoticeView(
+                    inviterName: invite.invite.inviter.displayName,
+                    onView: {
+                        foregroundIncomingInvite = nil
+                        openPendingRemoteBoard(invite)
+                    },
+                    onLater: {
+                        foregroundIncomingInvite = nil
+                    }
+                )
             }
         }
         .onAppear {
@@ -222,6 +249,20 @@ struct ContentView: View {
             AboutSheetView(diagnosticsLog: diagnosticsLog)
                 .presentationDetents([.height(380)])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingGameTypeChooser) {
+            StartGameTypeChooserView(
+                onStartLocal: {
+                    isShowingGameTypeChooser = false
+                    startLocalGame()
+                },
+                onStartRemote: {
+                    isShowingGameTypeChooser = false
+                    remotePlayFlow.open()
+                }
+            )
+            .presentationDetents([.height(260)])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: remotePlaySheetBinding) {
             #if DEBUG
@@ -362,11 +403,10 @@ struct ContentView: View {
     }
 
     private func startNewGame() {
-        startLocalGame()
+        isShowingGameTypeChooser = true
     }
 
     private func startLocalGame() {
-        publishRemoteGameEndedIfNeeded()
         cancelRemoteGameSync(clearSavedGame: true)
         let game = gameLibrary.createLocalGame()
         session = GameSession()
@@ -389,6 +429,47 @@ struct ContentView: View {
             remoteGameTransport: remoteGameTransport
         )
         persistGameLibrary()
+    }
+
+    private func openPendingRemoteBoard(_ board: ManagedPendingRemoteBoard) {
+        cancelRemoteGameSync(clearSavedGame: false)
+        session = GameSession()
+        session.lockBoard(message: "Waiting for this invitation to be accepted.", statusText: "Invitation pending")
+        gameLibrary.showBoard(board.id)
+        remoteLifecycle = RemoteGameLifecycleController(
+            session: session,
+            remotePlayFlow: remotePlayFlow,
+            remoteGameTransport: remoteGameTransport
+        )
+        if board.role == .invitee {
+            showRemoteInviteConfirmation(
+                RemoteInviteConfirmation(
+                    opponentName: board.invite.inviter.displayName,
+                    localPlayerColor: board.invite.whiteAssignment.localPlayerColorForJoiner
+                ),
+                invite: board.invite
+            )
+        }
+        persistGameLibrary()
+    }
+
+    private func openRemoteGame(_ game: ManagedRemoteGame) {
+        guard let restoredSession = try? Self.restoredSession(from: game.snapshot),
+              let controller = try? RemoteGameSessionController(snapshot: game.snapshot, transport: remoteGameTransport) else {
+            return
+        }
+        cancelRemoteGameSync(clearSavedGame: false)
+        RemoteGameLifecycleController.applyRemoteSeats(from: game.snapshot.descriptor, to: restoredSession)
+        session = restoredSession
+        gameLibrary.showBoard(game.id)
+        remoteLifecycle = RemoteGameLifecycleController(
+            session: session,
+            remotePlayFlow: remotePlayFlow,
+            remoteGameTransport: remoteGameTransport,
+            activeRemoteGameController: controller
+        )
+        persistGameLibrary()
+        resumeRemoteSyncIfNeeded()
     }
 
     private func persistGameLibrary() {
@@ -505,6 +586,16 @@ struct ContentView: View {
             )
         )
         try? await remoteInviteTransport.prepareAcceptanceNotification(for: invite)
+        let board = gameLibrary.createPendingRemoteBoard(invite, role: .inviter)
+        gameLibrary.showBoard(board.id)
+        session = GameSession()
+        session.lockBoard(message: "Waiting for someone to join this game.", statusText: "Invitation sent")
+        remoteLifecycle = RemoteGameLifecycleController(
+            session: session,
+            remotePlayFlow: remotePlayFlow,
+            remoteGameTransport: remoteGameTransport
+        )
+        persistGameLibrary()
         logDiagnostics(
             category: "remoteInvite",
             "createReadyToShare",
@@ -586,21 +677,27 @@ struct ContentView: View {
 
     private func fetchAcceptedInviteAfterPush(id: RemoteInviteID) {
         logDiagnostics(category: "remoteInvite", "acceptancePushReceived", fields: ["inviteID": id.rawValue])
-        guard case .waitingForInvitee(let pendingInvite) = remotePlayFlow.stage,
-              pendingInvite.remoteInviteID == id else {
+        guard let pendingBoard = gameLibrary.pendingRemoteBoard(inviteID: id),
+              pendingBoard.role == .inviter else {
             logDiagnostics(category: "remoteInvite", "acceptancePushIgnored", fields: ["inviteID": id.rawValue])
+            return
+        }
+        guard pendingOutboundAcceptanceFetchIDs.insert(id).inserted else {
             return
         }
 
         Task { @MainActor in
+            defer { pendingOutboundAcceptanceFetchIDs.remove(id) }
             do {
-                guard case .waitingForInvitee(let currentInvite) = remotePlayFlow.stage,
-                      currentInvite.remoteInviteID == id,
-                      let acceptedInvite = try await fetchAcceptedRemoteInvite(id: id) else {
+                guard let acceptedInvite = try await fetchAcceptedRemoteInvite(id: id) else {
                     return
                 }
                 remotePlayFlow.cancel()
-                startInviterRemoteGame(acceptedInvite)
+                if gameLibrary.route == .board(pendingBoard.id) {
+                    startInviterRemoteGame(acceptedInvite)
+                } else {
+                    storeAcceptedRemoteGame(acceptedInvite, role: .inviter)
+                }
             } catch {
                 if let terminalMessage = outboundTerminalInviteMessage(from: error) {
                     remotePlayFlow.showTerminalInviteMessage(terminalMessage)
@@ -689,6 +786,8 @@ struct ContentView: View {
         let inviteToDecline = remoteLifecycle.pendingRemoteInviteAcceptance
         if let inviteToDecline {
             dismissedIncomingRemoteInviteIDs.insert(inviteToDecline.id)
+            gameLibrary.removePendingRemoteBoard(inviteID: inviteToDecline.id)
+            persistGameLibrary()
         }
         remoteLifecycle.cancelRemoteInviteConfirmation()
         remoteInviteAcceptanceTask?.cancel()
@@ -782,13 +881,9 @@ struct ContentView: View {
                     return
                 }
                 remotePlayFlow.cancel()
-                showRemoteInviteConfirmation(
-                    RemoteInviteConfirmation(
-                        opponentName: invite.inviter.displayName,
-                        localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner
-                    ),
-                    invite: invite
-                )
+                let board = gameLibrary.createPendingRemoteBoard(invite)
+                persistGameLibrary()
+                openPendingRemoteBoard(board)
             } catch {
                 guard isCurrentInviteLinkRequest(request) else {
                     return
@@ -898,6 +993,8 @@ struct ContentView: View {
     }
 
     private func cancelRemoteInviteRecord(id inviteID: RemoteInviteID) {
+        gameLibrary.removePendingRemoteBoard(inviteID: inviteID)
+        persistGameLibrary()
         Task { @MainActor in
             do {
                 try await remoteInviteTransport.cancelInvite(id: inviteID)
@@ -934,7 +1031,7 @@ struct ContentView: View {
                 displayName: acceptedInvite.invite.inviter.displayName
             )
         )
-        startRemoteGame(context: .joiner(from: acceptedInvite), role: .joiner)
+        startRemoteGame(context: .joiner(from: acceptedInvite), role: .joiner, inviteID: acceptedInvite.invite.id)
     }
 
     private func startInviterRemoteGame(_ acceptedInvite: RemoteAcceptedInvite) {
@@ -944,10 +1041,34 @@ struct ContentView: View {
                 displayName: acceptedInvite.joiner.displayName
             )
         )
-        startRemoteGame(context: .inviter(from: acceptedInvite), role: .inviter)
+        startRemoteGame(context: .inviter(from: acceptedInvite), role: .inviter, inviteID: acceptedInvite.invite.id)
     }
 
-    private func startRemoteGame(context: RemoteGameStartContext, role: RemoteGameStartRole) {
+    private func storeAcceptedRemoteGame(_ acceptedInvite: RemoteAcceptedInvite, role: RemoteGameStartRole) {
+        let context: RemoteGameStartContext
+        switch role {
+        case .inviter:
+            context = .inviter(from: acceptedInvite)
+        case .joiner:
+            context = .joiner(from: acceptedInvite)
+        }
+        let controller = RemoteGameSessionController(
+            descriptor: context.descriptor,
+            transport: remoteGameTransport,
+            initialState: .startingPosition()
+        )
+        _ = gameLibrary.activateRemoteBoard(for: acceptedInvite.invite.id, snapshot: controller.snapshot)
+        persistGameLibrary()
+        prepareRemoteMoveNotification(for: context.descriptor)
+        prepareRemoteGameStatusNotification(for: context.descriptor.id)
+        requestRemoteNotificationAuthorizationIfNeeded()
+    }
+
+    private func startRemoteGame(
+        context: RemoteGameStartContext,
+        role: RemoteGameStartRole,
+        inviteID: RemoteInviteID? = nil
+    ) {
         logDiagnostics(
             category: "remoteGame",
             "start",
@@ -960,6 +1081,15 @@ struct ContentView: View {
             ]
         )
         let result = remoteLifecycle.startRemoteGame(context: context, role: role)
+        if let activeRemoteGameController = remoteLifecycle.activeRemoteGameController,
+           let inviteID {
+            let board = gameLibrary.activateRemoteBoard(
+                for: inviteID,
+                snapshot: activeRemoteGameController.snapshot
+            )
+            gameLibrary.showBoard(board.id)
+            persistGameLibrary()
+        }
         persistActiveRemoteGame()
         prepareRemoteMoveNotification(for: result.descriptor)
         prepareRemoteGameStatusNotification(for: result.descriptor.id)
@@ -1420,6 +1550,11 @@ struct ContentView: View {
             return
         }
         try? activeRemoteGameStore.save(activeRemoteGameController.snapshot)
+        if case let .board(id) = gameLibrary.route,
+           gameLibrary.remoteGame(id: id) != nil {
+            gameLibrary.updateRemoteGame(activeRemoteGameController.snapshot, in: id)
+            persistGameLibrary()
+        }
     }
 
     private func cancelRemoteGameSync(clearSavedGame: Bool) {
@@ -1461,6 +1596,7 @@ struct ContentView: View {
                 } else {
                     await validatePendingRemoteInviteConfirmationIfNeeded()
                 }
+                await fetchAcceptedPendingRemoteBoardsIfNeeded()
 
                 do {
                     try await Task.sleep(for: .seconds(3))
@@ -1487,6 +1623,8 @@ struct ContentView: View {
             guard let invite = try await remoteInviteTransport.fetchPendingInvite(for: profile.id, now: Date()) else {
                 return
             }
+            let board = gameLibrary.createPendingRemoteBoard(invite)
+            persistGameLibrary()
             guard remoteLifecycle.pendingRemoteInviteAcceptance?.id != invite.id,
                   remoteLifecycle.pendingRemoteInviteConfirmation == nil,
                   !dismissedIncomingRemoteInviteIDs.contains(invite.id) else {
@@ -1502,14 +1640,7 @@ struct ContentView: View {
                     "whiteAssignment": invite.whiteAssignment.rawValue
                 ]
             )
-            showRemoteInviteConfirmation(
-                RemoteInviteConfirmation(
-                    opponentName: invite.inviter.displayName,
-                    localPlayerColor: invite.whiteAssignment.localPlayerColorForJoiner,
-                    purpose: remoteInviteConfirmationPurpose(for: invite)
-                ),
-                invite: invite
-            )
+            foregroundIncomingInvite = board
         } catch {
             logDiagnostics(
                 category: "remoteInvite",
@@ -1518,6 +1649,15 @@ struct ContentView: View {
                     "error": String(describing: error)
                 ].merging(DiagnosticsLog.cloudKitFields(from: error)) { current, _ in current }
             )
+        }
+    }
+
+    private func fetchAcceptedPendingRemoteBoardsIfNeeded() async {
+        let outgoingInviteIDs = gameLibrary.pendingRemoteBoards
+            .filter { $0.role == .inviter }
+            .map { $0.invite.id }
+        for inviteID in outgoingInviteIDs {
+            fetchAcceptedInviteAfterPush(id: inviteID)
         }
     }
 
@@ -1937,20 +2077,22 @@ private struct PendingPromotion: Identifiable {
 }
 
 private struct GamesListView: View {
-    let games: [ManagedLocalGame]
-    let onStartLocalGame: () -> Void
-    let onOpenGame: (ManagedLocalGame) -> Void
+    let entries: [GameLibraryEntry]
+    let onStartGame: () -> Void
+    let onOpenLocalGame: (ManagedLocalGame) -> Void
+    let onOpenPendingRemoteBoard: (ManagedPendingRemoteBoard) -> Void
+    let onOpenRemoteGame: (ManagedRemoteGame) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Button(action: onStartLocalGame) {
+                    Button(action: onStartGame) {
                         Label("Start a Game", systemImage: "plus.circle.fill")
                     }
                 }
 
-                if games.isEmpty {
+                if entries.isEmpty {
                     ContentUnavailableView(
                         "Your boards will live here",
                         systemImage: "checkerboard.rectangle",
@@ -1958,31 +2100,114 @@ private struct GamesListView: View {
                     )
                 } else {
                     Section {
-                        ForEach(games) { game in
-                            Button {
-                                onOpenGame(game)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    GameThumbnail(moves: game.moves)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Local game")
-                                            .font(.headline)
-                                        Text(game.moves.isEmpty ? "White’s turn" : "Last played \(game.lastMovedAt.formatted(date: .abbreviated, time: .shortened))")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            .buttonStyle(.plain)
+                        ForEach(entries) { entry in
+                            entryButton(entry)
                         }
                     }
                 }
             }
             .navigationTitle("Games")
         }
+    }
+
+    @ViewBuilder
+    private func entryButton(_ entry: GameLibraryEntry) -> some View {
+        switch entry {
+        case .local(let game):
+            Button { onOpenLocalGame(game) } label: {
+                GameListRow(
+                    title: "Local game",
+                    subtitle: game.moves.isEmpty ? "White’s turn" : "Last played \(game.lastMovedAt.formatted(date: .abbreviated, time: .shortened))",
+                    moves: game.moves
+                )
+            }
+            .buttonStyle(.plain)
+        case .pendingRemote(let board):
+            Button { onOpenPendingRemoteBoard(board) } label: {
+                GameListRow(title: board.listTitle, subtitle: board.listStatus, moves: [])
+            }
+            .buttonStyle(.plain)
+        case .remote(let game):
+            Button { onOpenRemoteGame(game) } label: {
+                GameListRow(
+                    title: RemoteGameLifecycleController.opponent(from: game.snapshot.descriptor).displayName,
+                    subtitle: game.snapshot.descriptor.status == .ended ? "Finished" : "Remote game",
+                    moves: game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) }
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct GameListRow: View {
+    let title: String
+    let subtitle: String
+    let moves: [Move]
+
+    var body: some View {
+        HStack(spacing: 12) {
+            GameThumbnail(moves: moves)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+private struct StartGameTypeChooserView: View {
+    let onStartLocal: () -> Void
+    let onStartRemote: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Start a Game")
+                .font(.system(.title2, design: .rounded).weight(.bold))
+            Button(action: onStartLocal) {
+                Label("On this iPad", systemImage: "person.2.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+            Button(action: onStartRemote) {
+                Label("With someone else", systemImage: "network")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(24)
+    }
+}
+
+private struct IncomingInviteNoticeView: View {
+    let inviterName: String
+    let onView: () -> Void
+    let onLater: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Invitation from \(inviterName)")
+                .font(.system(.title3, design: .rounded).weight(.bold))
+            Text("There’s a new game ready when you are.")
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Not now", action: onLater)
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button("View invitation", action: onView)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(width: 390)
+        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
     }
 }
 

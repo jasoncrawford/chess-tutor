@@ -35,6 +35,7 @@ final class GameSession {
     var blackPlayer: PlayerSeat = .humanLocal
     var message: String?
     private var boardLockMessage: String?
+    private var boardLockStatusText: String?
 
     var state: GameState {
         guard let tentativeMove else {
@@ -153,7 +154,7 @@ final class GameSession {
 
     var statusText: String {
         if boardLockMessage != nil {
-            return "Game forfeit."
+            return boardLockStatusText ?? "Game forfeit."
         }
 
         switch committedState.result {
@@ -398,13 +399,19 @@ final class GameSession {
         actionableMovesForSelection = []
         isCoverageVisible = false
         boardLockMessage = nil
+        boardLockStatusText = nil
         message = nil
         refreshDisplayedAnalysis()
     }
 
     func endRemoteGame(message: String) {
+        lockBoard(message: message, statusText: "Game forfeit.")
+    }
+
+    func lockBoard(message: String, statusText: String) {
         let wasShowingTentativePosition = tentativeMove != nil
         boardLockMessage = message
+        boardLockStatusText = statusText
         tentativeMove = nil
         actionableMovesForSelection = []
         isCoverageVisible = false
