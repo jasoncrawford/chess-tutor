@@ -217,6 +217,38 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
         XCTAssertEqual(short.oracle, long.oracle)
     }
 
+    func testLongHistoryPairReturnsToCurrentPositionOnlyOnceWithoutThreefoldClaim() throws {
+        let casesByID = Dictionary(
+            uniqueKeysWithValues: ModelCoachingEvaluationCorpus.allCases.map { ($0.id, $0) }
+        )
+        let short = try XCTUnwrap(casesByID["t9Entry"])
+        let long = try XCTUnwrap(casesByID["t10Entry"])
+        let initialState = CoachingGoldenPosition.createRookThreat.state
+        let shortReplay = try replay(short.request.fullGameHistory, from: initialState)
+        let longReplay = try replay(long.request.fullGameHistory, from: initialState)
+        let currentPositionKey = repetitionKey(for: initialState)
+
+        XCTAssertEqual(shortReplay.repetitionCounts, [currentPositionKey: 1])
+        XCTAssertEqual(long.request.fullGameHistory.count, 8)
+        XCTAssertEqual(longReplay.repetitionCounts[currentPositionKey], 2)
+        XCTAssertEqual(longReplay.repetitionCounts.count, 8)
+        XCTAssertEqual(longReplay.repetitionCounts.values.max(), 2)
+        XCTAssertFalse(longReplay.repetitionCounts.values.contains { $0 >= 3 })
+
+        XCTAssertEqual(shortReplay.finalState.board, initialState.board)
+        XCTAssertEqual(longReplay.finalState.board, initialState.board)
+        XCTAssertEqual(shortReplay.finalState.sideToMove, initialState.sideToMove)
+        XCTAssertEqual(longReplay.finalState.sideToMove, initialState.sideToMove)
+        XCTAssertEqual(shortReplay.finalState.castlingRights, initialState.castlingRights)
+        XCTAssertEqual(longReplay.finalState.castlingRights, initialState.castlingRights)
+        XCTAssertEqual(shortReplay.finalState.enPassantTarget, initialState.enPassantTarget)
+        XCTAssertEqual(longReplay.finalState.enPassantTarget, initialState.enPassantTarget)
+        XCTAssertEqual(shortReplay.finalState.result, .ongoing)
+        XCTAssertEqual(longReplay.finalState.result, .ongoing)
+        XCTAssertEqual(short.request.currentPosition.status, "active")
+        XCTAssertEqual(long.request.currentPosition.status, "active")
+    }
+
     func testNoSafeCaptureCaseFollowsLearnerOrdinaryStagedMoveAhead() throws {
         let evaluationCase = try XCTUnwrap(
             ModelCoachingEvaluationCorpus.visibleCases.first { $0.id == "t7NoSafeCapture" }
@@ -503,4 +535,44 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
     private func authoritativeFENFields(_ fen: String) -> ArraySlice<Substring> {
         fen.split(separator: " ").prefix(4)
     }
+
+    private func replay(
+        _ history: [ModelCoachingHistoryMove],
+        from initialState: GameState
+    ) throws -> (finalState: GameState, repetitionCounts: [String: Int]) {
+        var state = initialState
+        var repetitionCounts = [repetitionKey(for: state): 1]
+
+        for entry in history {
+            let move = try ordinaryMove(from: entry.canonicalMove)
+            XCTAssertTrue(
+                LegalMoveGenerator.allLegalMoves(in: state).contains(move),
+                "Committed history contains illegal move \(entry.canonicalMove)"
+            )
+            state.apply(move)
+            repetitionCounts[repetitionKey(for: state), default: 0] += 1
+        }
+
+        return (state, repetitionCounts)
+    }
+
+    private func ordinaryMove(from canonicalMove: String) throws -> Move {
+        let characters = Array(canonicalMove)
+        guard characters.count == 4 else {
+            throw CorpusHistoryReplayError.nonOrdinaryMove(canonicalMove)
+        }
+        return Move(
+            from: sq(String(characters[0...1])),
+            to: sq(String(characters[2...3]))
+        )
+    }
+
+    private func repetitionKey(for state: GameState) -> String {
+        authoritativeFENFields(ModelCoachingPositionEncoder.fen(for: state))
+            .joined(separator: " ")
+    }
+}
+
+private enum CorpusHistoryReplayError: Error {
+    case nonOrdinaryMove(String)
 }

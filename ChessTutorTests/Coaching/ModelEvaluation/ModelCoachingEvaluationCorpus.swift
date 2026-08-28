@@ -1409,17 +1409,19 @@ enum ModelCoachingEvaluationCorpus {
     private static func longMobilityThreatState() -> GameState {
         let shortState = CoachingGoldenPosition.createRookThreat.state
         var longState = shortState
-        let cycle = [
+        let excursion = [
             Move(from: sq("g1"), to: sq("h1")),
             Move(from: sq("g8"), to: sq("h8")),
-            Move(from: sq("h1"), to: sq("g1")),
+            Move(from: sq("h1"), to: sq("h2")),
             Move(from: sq("h8"), to: sq("g8")),
+            Move(from: sq("h2"), to: sq("g2")),
+            Move(from: sq("g8"), to: sq("f8")),
+            Move(from: sq("g2"), to: sq("g1")),
+            Move(from: sq("f8"), to: sq("g8")),
         ]
-        for _ in 0..<2 {
-            cycle.forEach { move in
-                precondition(LegalMoveGenerator.allLegalMoves(in: longState).contains(move))
-                longState.apply(move)
-            }
+        excursion.forEach { move in
+            precondition(LegalMoveGenerator.allLegalMoves(in: longState).contains(move))
+            longState.apply(move)
         }
         precondition(longState.board == shortState.board)
         precondition(longState.sideToMove == shortState.sideToMove)
