@@ -149,6 +149,74 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
         )
     }
 
+    func testCorpusBindsMechanicallyDerivedDiscoveredAndCastlingCheckReplies() throws {
+        let casesByID = Dictionary(
+            uniqueKeysWithValues: ModelCoachingEvaluationCorpus.allCases.map { ($0.id, $0) }
+        )
+
+        let discovered = try XCTUnwrap(casesByID["t11HarmlessCheck"])
+        let discoveredReplyID = "reply:move:b1-c3->move:e7-c8"
+        let discoveredReply = try XCTUnwrap(
+            discovered.request.chessEvidence.immediateReplies.first { $0.id == discoveredReplyID }
+        )
+        XCTAssertEqual(discovered.split, .visible)
+        XCTAssertEqual(discoveredReply.checkingPieceReferences, ["piece:black:rook:e8"])
+        XCTAssertTrue(discovered.oracle.requiredEvidenceReferences.contains(discoveredReplyID))
+        let discoveredState = CoachingFENParser.parse(discovered.request.currentPosition.fen)
+            .applyingUnchecked(Move(from: sq("b1"), to: sq("c3")))
+            .applyingUnchecked(Move(from: sq("e7"), to: sq("c8")))
+        XCTAssertEqual(
+            LegalMoveGenerator.checkingPieceSquares(against: .white, in: discoveredState.board),
+            [sq("e8")]
+        )
+
+        let castling = try XCTUnwrap(casesByID["t2OneSquareKingMove"])
+        let castlingReplyID = "reply:move:e1-f1->move:e8-g8:castle-kingside"
+        let castlingReply = try XCTUnwrap(
+            castling.request.chessEvidence.immediateReplies.first { $0.id == castlingReplyID }
+        )
+        XCTAssertEqual(castling.split, .visible)
+        XCTAssertEqual(castlingReply.checkingPieceReferences, ["piece:black:rook:h8"])
+        XCTAssertTrue(castling.oracle.requiredEvidenceReferences.contains(castlingReplyID))
+        let castlingState = CoachingFENParser.parse(castling.request.currentPosition.fen)
+            .applyingUnchecked(Move(from: sq("e1"), to: sq("f1")))
+            .applyingUnchecked(Move(
+                from: sq("e8"),
+                to: sq("g8"),
+                special: .castleKingside
+            ))
+        XCTAssertEqual(
+            LegalMoveGenerator.checkingPieceSquares(against: .white, in: castlingState.board),
+            [sq("f8")]
+        )
+    }
+
+    func testLongAndShortHistoryPairSharesCurrentAdviceContract() throws {
+        let casesByID = Dictionary(
+            uniqueKeysWithValues: ModelCoachingEvaluationCorpus.allCases.map { ($0.id, $0) }
+        )
+        let short = try XCTUnwrap(casesByID["t9Entry"])
+        let long = try XCTUnwrap(casesByID["t10Entry"])
+
+        XCTAssertEqual(short.split, .visible)
+        XCTAssertEqual(long.split, .visible)
+        XCTAssertEqual(short.request.fullGameHistory.count, 0)
+        XCTAssertEqual(long.request.fullGameHistory.count, 8)
+        XCTAssertNotEqual(short.request.fullGameHistory, long.request.fullGameHistory)
+        XCTAssertEqual(
+            authoritativeFENFields(short.request.currentPosition.fen),
+            authoritativeFENFields(long.request.currentPosition.fen)
+        )
+        XCTAssertEqual(short.request.currentPosition.sideToMove, long.request.currentPosition.sideToMove)
+        XCTAssertEqual(short.request.currentPosition.status, long.request.currentPosition.status)
+        XCTAssertEqual(short.request.positionRevision, long.request.positionRevision)
+        XCTAssertEqual(short.request.currentInteraction, long.request.currentInteraction)
+        XCTAssertEqual(short.request.currentTurnCoachingHistory, long.request.currentTurnCoachingHistory)
+        XCTAssertEqual(short.request.chessEvidence, long.request.chessEvidence)
+        XCTAssertEqual(short.request.permittedReferences, long.request.permittedReferences)
+        XCTAssertEqual(short.oracle, long.oracle)
+    }
+
     func testNoSafeCaptureCaseFollowsLearnerOrdinaryStagedMoveAhead() throws {
         let evaluationCase = try XCTUnwrap(
             ModelCoachingEvaluationCorpus.visibleCases.first { $0.id == "t7NoSafeCapture" }
@@ -430,5 +498,9 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
             with: #""requestID":"normalized""#,
             options: .regularExpression
         )
+    }
+
+    private func authoritativeFENFields(_ fen: String) -> ArraySlice<Substring> {
+        fen.split(separator: " ").prefix(4)
     }
 }

@@ -298,8 +298,13 @@ enum ModelCoachingEvaluationCorpus {
 
         case .t2OneSquareKingMove:
             let move = Move(from: sq("e1"), to: sq("f1"))
+            let replyMove = Move(
+                from: sq("e8"),
+                to: sq("g8"),
+                special: .castleKingside
+            )
             let snapshot = stagedSnapshot(
-                .readyToCastle,
+                state: castlingCheckReplyState(),
                 move: move,
                 prefix: [step(.helpOpened), actionStep(.noPieceNeedsHelp), actionStep(.noSafeCapture)],
                 operations: tentativeOperations
@@ -307,13 +312,15 @@ enum ModelCoachingEvaluationCorpus {
             return build(
                 goldenCase,
                 snapshot: snapshot,
-                oracle: oracle(
+                oracle: replyOracle(
+                    after: move,
+                    replyMove: replyMove,
                     intents: [.evaluateMove, .reviseMove, .confirmMove],
                     success: (
-                        "The tutor addresses the legal e1-f1 king move that is currently staged.",
-                        "The tutor distinguishes that king move from kingside castling and gives a bounded next choice."
+                        "The tutor addresses the legal e1-f1 king move and the encoded black kingside-castling reply.",
+                        "The tutor recognizes the rook from h8 as the checker after castling and gives a bounded next choice."
                     ),
-                    severe: "The turn calls e1-f1 castling or describes the rook as moving with the king."
+                    severe: "The turn calls e1-f1 castling or misses the h8 rook's check after Black castles."
                 )
             )
 
@@ -808,14 +815,7 @@ enum ModelCoachingEvaluationCorpus {
             return build(
                 goldenCase,
                 snapshot: snapshot,
-                oracle: oracle(
-                    intents: [.chooseMove],
-                    success: (
-                        "The tutor focuses on finding a legal knight move that creates pressure on the d4 rook.",
-                        "The tutor gives one answerable board task using the a1 knight's legal moves."
-                    ),
-                    severe: "The turn claims the a1 knight already attacks d4 before it moves."
-                )
+                oracle: mobilityThreatOracle()
             )
 
         case .t9Hint:
@@ -863,21 +863,14 @@ enum ModelCoachingEvaluationCorpus {
 
         case .t10Entry:
             let snapshot = snapshot(
-                .cornerKnight,
+                state: longMobilityThreatState(),
                 steps: [step(.helpOpened)],
                 operations: chooseMoveOperations
             )
             return build(
                 goldenCase,
                 snapshot: snapshot,
-                oracle: oracle(
-                    intents: [.chooseMove],
-                    success: (
-                        "The tutor focuses on improving the a1 knight's mobility with a legal move.",
-                        "The tutor keeps the idea concrete without inventing a tactical target."
-                    ),
-                    severe: "The turn claims that the corner knight currently attacks a piece that is not on the board."
-                )
+                oracle: mobilityThreatOracle()
             )
 
         case .t10Completed:
@@ -983,10 +976,12 @@ enum ModelCoachingEvaluationCorpus {
 
         case .t11HarmlessCheck:
             let move = CoachingGoldenMoves.developsKnight
+            let state = discoveredCheckReplyState()
+            let replyMove = Move(from: sq("e7"), to: sq("c8"))
             let snapshot = stagedSnapshot(
-                .harmlessCheck,
+                state: state,
                 move: move,
-                trailing: [pieceStep(.squareInspected, .harmlessCheck, "a8")],
+                trailing: [pieceStep(.squareInspected, state: state, square: "e8")],
                 operations: tentativeOperations
             )
             return build(
@@ -994,13 +989,13 @@ enum ModelCoachingEvaluationCorpus {
                 snapshot: snapshot,
                 oracle: replyOracle(
                     after: move,
-                    replyMove: CoachingGoldenMoves.rookChecks,
+                    replyMove: replyMove,
                     intents: [.evaluateMove, .confirmMove],
                     success: (
-                        "The tutor recognizes the a8-a1 rook check found by the learner.",
-                        "The tutor distinguishes a check from a severe material-loss reply and keeps the next step bounded."
+                        "The tutor recognizes that e7-c8 uncovers the e8 rook's check after the staged knight move.",
+                        "The tutor identifies the stationary e8 rook as the checker and keeps the next step bounded."
                     ),
-                    severe: "The turn says the checking rook captures the king or proves the knight move illegal."
+                    severe: "The turn assigns the discovered check to the knight on c8 or proves the white knight move illegal."
                 )
             )
 
@@ -1311,7 +1306,7 @@ enum ModelCoachingEvaluationCorpus {
             preconditionFailure("The final corpus history step must be a learner event")
         }
         let revision = steps.count
-        let selectedSquare = selected.map(sq)
+        let selectedSquare = tentativeMove?.to ?? selected.map(sq)
         let interaction = CoachingInteractionSnapshot(
             selectedSquare: selectedSquare,
             tentativeMove: tentativeMove,
@@ -1379,11 +1374,58 @@ enum ModelCoachingEvaluationCorpus {
         return snapshot(
             state: state,
             learner: learner,
-            selected: ModelCoachingPositionEncoder.squareName(move.from),
+            selected: ModelCoachingPositionEncoder.squareName(move.to),
             tentativeMove: move,
             steps: steps,
             operations: operations
         )
+    }
+
+    private static func discoveredCheckReplyState() -> GameState {
+        GameState(
+            board: Board(pieces: [
+                sq("e1"): Piece(kind: .king, color: .white),
+                sq("b1"): Piece(kind: .knight, color: .white),
+                sq("h8"): Piece(kind: .king, color: .black),
+                sq("e8"): Piece(kind: .rook, color: .black),
+                sq("e7"): Piece(kind: .knight, color: .black),
+            ]),
+            sideToMove: .white
+        )
+    }
+
+    private static func castlingCheckReplyState() -> GameState {
+        GameState(
+            board: Board(pieces: [
+                sq("e1"): Piece(kind: .king, color: .white),
+                sq("e8"): Piece(kind: .king, color: .black),
+                sq("h8"): Piece(kind: .rook, color: .black),
+            ]),
+            sideToMove: .white,
+            castlingRights: CastlingRights(blackKingside: true)
+        )
+    }
+
+    private static func longMobilityThreatState() -> GameState {
+        let shortState = CoachingGoldenPosition.createRookThreat.state
+        var longState = shortState
+        let cycle = [
+            Move(from: sq("g1"), to: sq("h1")),
+            Move(from: sq("g8"), to: sq("h8")),
+            Move(from: sq("h1"), to: sq("g1")),
+            Move(from: sq("h8"), to: sq("g8")),
+        ]
+        for _ in 0..<2 {
+            cycle.forEach { move in
+                precondition(LegalMoveGenerator.allLegalMoves(in: longState).contains(move))
+                longState.apply(move)
+            }
+        }
+        precondition(longState.board == shortState.board)
+        precondition(longState.sideToMove == shortState.sideToMove)
+        precondition(longState.castlingRights == shortState.castlingRights)
+        precondition(longState.enPassantTarget == shortState.enPassantTarget)
+        return longState
     }
 
     private static func mateInOneState() -> GameState {
@@ -1429,6 +1471,17 @@ enum ModelCoachingEvaluationCorpus {
                 severe,
                 "The turn invents a piece, relationship, legal move, or reply that is absent from the request."
             ]
+        )
+    }
+
+    private static func mobilityThreatOracle() -> ModelCoachingSemanticOracle {
+        oracle(
+            intents: [.chooseMove],
+            success: (
+                "The tutor focuses on a legal a1-knight move that improves mobility and creates pressure on d4.",
+                "The tutor gives one answerable board task from the current position regardless of prior reversible moves."
+            ),
+            severe: "The turn claims the a1 knight already attacks the d4 rook before it moves."
         )
     }
 

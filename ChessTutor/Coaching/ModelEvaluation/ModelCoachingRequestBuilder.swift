@@ -177,12 +177,11 @@ enum ModelCoachingRequestBuilder {
                 let checkingPieces = ModelCoachingPositionEncoder.orderedSquares(
                     LegalMoveGenerator.checkingPieceSquares(against: learner, in: afterReply.board)
                 ).compactMap { checkerSquare -> String? in
-                    if checkerSquare == reply.to {
-                        guard let sourcePiece = afterMove.board[reply.from] else { return nil }
-                        return ModelCoachingPositionEncoder.pieceID(sourcePiece, at: reply.from)
-                    }
-                    guard let checkerPiece = afterMove.board[checkerSquare] else { return nil }
-                    return ModelCoachingPositionEncoder.pieceID(checkerPiece, at: checkerSquare)
+                    checkingPieceReference(
+                        at: checkerSquare,
+                        after: reply,
+                        in: afterMove
+                    )
                 }.sorted()
                 let estimate = evaluator.captureEstimate(for: reply, in: afterMove)
                 let capturedPieceReference = estimate.map {
@@ -293,10 +292,12 @@ enum ModelCoachingRequestBuilder {
         state: GameState,
         pieceIDsBySquare: [String: String]
     ) -> ModelCoachingInteraction {
-        let selectedPiece = snapshot.interaction.selectedSquare.flatMap {
+        let currentTentativeMove = tentativeMove(from: snapshot)
+        let selectedSquare = currentTentativeMove?.from ?? snapshot.interaction.selectedSquare
+        let selectedPiece = selectedSquare.flatMap {
             pieceIDsBySquare[ModelCoachingPositionEncoder.squareName($0)]
         }
-        let tentativeMove = tentativeMove(from: snapshot).flatMap { move in
+        let tentativeMove = currentTentativeMove.flatMap { move in
             state.board[move.from] == nil ? nil : ModelCoachingPositionEncoder.moveID(move)
         }
         return ModelCoachingInteraction(
@@ -305,6 +306,29 @@ enum ModelCoachingRequestBuilder {
             latestEvent: snapshot.latestEvent,
             availableOperationReferences: snapshot.availableOperations
         )
+    }
+
+    private static func checkingPieceReference(
+        at checkerSquare: Square,
+        after move: Move,
+        in stateBeforeMove: GameState
+    ) -> String? {
+        let sourceSquare: Square
+        if checkerSquare == move.to {
+            sourceSquare = move.from
+        } else {
+            switch move.special {
+            case .castleKingside where checkerSquare == Square(file: .f, rank: move.from.rank):
+                sourceSquare = Square(file: .h, rank: move.from.rank)
+            case .castleQueenside where checkerSquare == Square(file: .d, rank: move.from.rank):
+                sourceSquare = Square(file: .a, rank: move.from.rank)
+            case .castleKingside, .castleQueenside, .enPassant, .promotion, nil:
+                sourceSquare = checkerSquare
+            }
+        }
+
+        guard let checkerPiece = stateBeforeMove.board[sourceSquare] else { return nil }
+        return ModelCoachingPositionEncoder.pieceID(checkerPiece, at: sourceSquare)
     }
 
     private static func permittedReferences(

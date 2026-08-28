@@ -245,6 +245,111 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         XCTAssertFalse(encodedJSON(for: request).contains("center"))
     }
 
+    @MainActor
+    func testStagedCaptureFromGameSessionKeepsDestinationSelectedButReferencesCommittedMover() async throws {
+        let source = square("a1")
+        let destination = square("a4")
+        let capture = Move(from: source, to: destination)
+        let committedState = state(
+            sideToMove: .white,
+            pieces: [
+                square("e1"): Piece(kind: .king, color: .white),
+                source: Piece(kind: .rook, color: .white),
+                square("h8"): Piece(kind: .king, color: .black),
+                destination: Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let advisor = ModelRequestRecordingAdvisor()
+        let session = GameSession(state: committedState, coachingAdvisor: advisor)
+
+        session.select(source)
+        XCTAssertEqual(session.moveSelectedPiece(to: destination), .moved)
+        XCTAssertEqual(session.selectedSquare, destination)
+        session.startCoaching()
+        await session.resolvePendingCoachingAdvice()
+
+        let recordedRequests = await advisor.recordedRequests()
+        let coachingRequest = try XCTUnwrap(recordedRequests.first)
+        XCTAssertEqual(coachingRequest.committedState, committedState)
+        XCTAssertEqual(coachingRequest.tentativeMove, capture)
+        let snapshot = ModelCoachingSnapshot(
+            coachingRequest: coachingRequest,
+            interaction: CoachingInteractionSnapshot(
+                selectedSquare: session.selectedSquare,
+                tentativeMove: coachingRequest.tentativeMove,
+                positionRevision: coachingRequest.positionRevision
+            ),
+            latestEvent: ModelCoachingLearnerEvent(
+                kind: .moveStaged,
+                referencedIDs: ["move:a1-a4"]
+            ),
+            currentTurnHistory: [],
+            availableOperations: [.replaceMove, .removeMove, .playMove]
+        )
+
+        let request = ModelCoachingRequestBuilder.build(
+            snapshot: snapshot,
+            requestID: "request-session-capture",
+            promptVersion: "prompt.v1"
+        )
+
+        XCTAssertEqual(session.selectedSquare, destination, "The physical-board UI keeps the moved piece selected")
+        XCTAssertEqual(request.currentInteraction.tentativeMoveReference, "move:a1-a4")
+        XCTAssertEqual(request.currentInteraction.selectedPieceReference, "piece:white:rook:a1")
+    }
+
+    func testDiscoveredCheckReplyUsesStationaryCommittedCheckerReference() throws {
+        let learnerMove = Move(from: square("b1"), to: square("c3"))
+        let replyMove = Move(from: square("e7"), to: square("c8"))
+        let request = ModelCoachingRequestBuilder.build(
+            snapshot: makeSnapshot(state: discoveredCheckReplyState()),
+            requestID: "request-discovered-check",
+            promptVersion: "prompt.v1"
+        )
+
+        let reply = try XCTUnwrap(request.chessEvidence.immediateReplies.first {
+            $0.afterMoveReference == "move:b1-c3"
+                && $0.replyMoveReference == "move:e7-c8"
+        })
+        XCTAssertEqual(reply.checkingPieceReferences, ["piece:black:rook:e8"])
+
+        let afterReply = discoveredCheckReplyState()
+            .applyingUnchecked(learnerMove)
+            .applyingUnchecked(replyMove)
+        XCTAssertEqual(
+            LegalMoveGenerator.checkingPieceSquares(against: .white, in: afterReply.board),
+            [square("e8")]
+        )
+    }
+
+    func testCastlingCheckReplyUsesCommittedRookReference() throws {
+        let learnerMove = Move(from: square("e1"), to: square("f1"))
+        let replyMove = Move(
+            from: square("e8"),
+            to: square("g8"),
+            special: .castleKingside
+        )
+        let request = ModelCoachingRequestBuilder.build(
+            snapshot: makeSnapshot(state: castlingCheckReplyState()),
+            requestID: "request-castling-check",
+            promptVersion: "prompt.v1"
+        )
+
+        let reply = try XCTUnwrap(request.chessEvidence.immediateReplies.first {
+            $0.afterMoveReference == "move:e1-f1"
+                && $0.replyMoveReference == "move:e8-g8:castle-kingside"
+        })
+        XCTAssertEqual(reply.checkingPieceReferences, ["piece:black:rook:h8"])
+
+        let afterReply = castlingCheckReplyState()
+            .applyingUnchecked(learnerMove)
+            .applyingUnchecked(replyMove)
+        XCTAssertEqual(
+            LegalMoveGenerator.checkingPieceSquares(against: .white, in: afterReply.board),
+            [square("f8")]
+        )
+    }
+
     func testCheckerAndMateInOneFactsUseRuleAndEvaluatorSources() {
         let checkingState = state(
             sideToMove: .white,
@@ -399,6 +504,31 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         GameState(board: Board(pieces: pieces), sideToMove: sideToMove)
     }
 
+    private func discoveredCheckReplyState() -> GameState {
+        state(
+            sideToMove: .white,
+            pieces: [
+                square("e1"): Piece(kind: .king, color: .white),
+                square("b1"): Piece(kind: .knight, color: .white),
+                square("h8"): Piece(kind: .king, color: .black),
+                square("e8"): Piece(kind: .rook, color: .black),
+                square("e7"): Piece(kind: .knight, color: .black),
+            ]
+        )
+    }
+
+    private func castlingCheckReplyState() -> GameState {
+        GameState(
+            board: Board(pieces: [
+                square("e1"): Piece(kind: .king, color: .white),
+                square("e8"): Piece(kind: .king, color: .black),
+                square("h8"): Piece(kind: .rook, color: .black),
+            ]),
+            sideToMove: .white,
+            castlingRights: CastlingRights(blackKingside: true)
+        )
+    }
+
     private func encodedJSON(for request: ModelCoachingRequest) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -415,5 +545,18 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
             file: Square.File(rawValue: Int(characters[0]) - 96)!,
             rank: Int(String(UnicodeScalar(characters[1])))!
         )
+    }
+}
+
+private actor ModelRequestRecordingAdvisor: CoachingAdvising {
+    private var requests: [CoachingRequest] = []
+
+    func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
+        requests.append(request)
+        return try await LocalCoachingAdvisor().advice(for: request)
+    }
+
+    func recordedRequests() -> [CoachingRequest] {
+        requests
     }
 }
