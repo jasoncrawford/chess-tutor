@@ -21,6 +21,7 @@ struct RemotePlaySheetView: View {
     let onFetchRemoteInvite: @Sendable (InviteCode, RemoteInviteToken?) async throws -> RemotePendingInvite
     let onFetchAcceptedRemoteInvite: @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite?
     let onRemoteInviteAccepted: (RemoteAcceptedInvite) -> Void
+    let onRemoteInviteCreated: (RemotePendingInvite) -> Bool
     #if DEBUG
     let fakeRemoteLab: FakeRemoteGameLab?
     #endif
@@ -42,7 +43,8 @@ struct RemotePlaySheetView: View {
             throw RemoteInviteTransportError.notFound
         },
         onFetchAcceptedRemoteInvite: @escaping @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite? = { _ in nil },
-        onRemoteInviteAccepted: @escaping (RemoteAcceptedInvite) -> Void = { _ in }
+        onRemoteInviteAccepted: @escaping (RemoteAcceptedInvite) -> Void = { _ in },
+        onRemoteInviteCreated: @escaping (RemotePendingInvite) -> Bool = { _ in false }
     ) {
         self.flow = flow
         self.session = session
@@ -57,6 +59,7 @@ struct RemotePlaySheetView: View {
         self.onFetchRemoteInvite = onFetchRemoteInvite
         self.onFetchAcceptedRemoteInvite = onFetchAcceptedRemoteInvite
         self.onRemoteInviteAccepted = onRemoteInviteAccepted
+        self.onRemoteInviteCreated = onRemoteInviteCreated
         #if DEBUG
         self.fakeRemoteLab = nil
         #endif
@@ -81,7 +84,8 @@ struct RemotePlaySheetView: View {
             throw RemoteInviteTransportError.notFound
         },
         onFetchAcceptedRemoteInvite: @escaping @Sendable (RemoteInviteID) async throws -> RemoteAcceptedInvite? = { _ in nil },
-        onRemoteInviteAccepted: @escaping (RemoteAcceptedInvite) -> Void = { _ in }
+        onRemoteInviteAccepted: @escaping (RemoteAcceptedInvite) -> Void = { _ in },
+        onRemoteInviteCreated: @escaping (RemotePendingInvite) -> Bool = { _ in false }
     ) {
         self.flow = flow
         self.session = session
@@ -97,6 +101,7 @@ struct RemotePlaySheetView: View {
         self.onFetchRemoteInvite = onFetchRemoteInvite
         self.onFetchAcceptedRemoteInvite = onFetchAcceptedRemoteInvite
         self.onRemoteInviteAccepted = onRemoteInviteAccepted
+        self.onRemoteInviteCreated = onRemoteInviteCreated
     }
     #endif
 
@@ -514,7 +519,11 @@ struct RemotePlaySheetView: View {
                     onCreatedRemoteInviteAbandoned(invite)
                     return
                 }
-                flow.showCreatedRemoteInvite(invite, target: target)
+                if onRemoteInviteCreated(invite) {
+                    flow.cancel()
+                } else {
+                    flow.showCreatedRemoteInvite(invite, target: target)
+                }
             } catch {
                 guard isCurrentRemoteInviteRequest(request) else {
                     return

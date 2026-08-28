@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var dismissedIncomingRemoteInviteIDs: Set<RemoteInviteID> = []
     @State private var pendingOutboundAcceptanceFetchIDs: Set<RemoteInviteID> = []
     @State private var foregroundIncomingInvite: ManagedPendingRemoteBoard?
+    @State private var outboundInvitationNotice: ManagedPendingRemoteBoard?
     @State private var didLogAppLaunch = false
     @State private var baselineOrientation = UIInterfaceOrientation.landscapeLeft
     @State private var viewingAngle: BoardViewingAngle
@@ -178,6 +179,16 @@ struct ContentView: View {
                         foregroundIncomingInvite = nil
                     }
                 )
+            } else if let invitation = outboundInvitationNotice {
+                Color.black.opacity(0.24)
+                    .ignoresSafeArea()
+                InvitationSentNoticeView(
+                    onKeepLooking: { outboundInvitationNotice = nil },
+                    onCancel: {
+                        outboundInvitationNotice = nil
+                        cancelRemoteInviteRecord(id: invitation.invite.id)
+                    }
+                )
             }
         }
         .onAppear {
@@ -280,7 +291,8 @@ struct ContentView: View {
                 onCreateRemoteInvite: createRemoteInvite,
                 onFetchRemoteInvite: fetchRemoteInvite,
                 onFetchAcceptedRemoteInvite: fetchAcceptedRemoteInvite,
-                onRemoteInviteAccepted: startInviterRemoteGame
+                onRemoteInviteAccepted: startInviterRemoteGame,
+                onRemoteInviteCreated: { _ in true }
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -298,7 +310,8 @@ struct ContentView: View {
                 onCreateRemoteInvite: createRemoteInvite,
                 onFetchRemoteInvite: fetchRemoteInvite,
                 onFetchAcceptedRemoteInvite: fetchAcceptedRemoteInvite,
-                onRemoteInviteAccepted: startInviterRemoteGame
+                onRemoteInviteAccepted: startInviterRemoteGame,
+                onRemoteInviteCreated: { _ in true }
             )
                 .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
@@ -587,6 +600,7 @@ struct ContentView: View {
         )
         try? await remoteInviteTransport.prepareAcceptanceNotification(for: invite)
         let board = gameLibrary.createPendingRemoteBoard(invite, role: .inviter)
+        outboundInvitationNotice = board
         gameLibrary.showBoard(board.id)
         session = GameSession()
         session.lockBoard(message: "Waiting for someone to join this game.", statusText: "Invitation sent")
@@ -1373,7 +1387,7 @@ struct ContentView: View {
                     continue
                 }
                 Task { @MainActor in
-                    await fetchIncomingRemoteInviteIfNeeded()
+                    await fetchIncomingRemoteInviteIfNeeded(openingInvitationBoard: true)
                 }
             case .remoteGameMove(let gameID):
                 fetchRemoteMovesAfterPush(gameID: gameID)
@@ -1613,7 +1627,7 @@ struct ContentView: View {
         incomingRemoteInvitePollTask = nil
     }
 
-    private func fetchIncomingRemoteInviteIfNeeded() async {
+    private func fetchIncomingRemoteInviteIfNeeded(openingInvitationBoard: Bool = false) async {
         guard let profile = try? remoteIdentityStore.loadLocalProfile(),
               profile.displayName != nil else {
             return
@@ -1640,7 +1654,11 @@ struct ContentView: View {
                     "whiteAssignment": invite.whiteAssignment.rawValue
                 ]
             )
-            foregroundIncomingInvite = board
+            if openingInvitationBoard {
+                openPendingRemoteBoard(board)
+            } else {
+                foregroundIncomingInvite = board
+            }
         } catch {
             logDiagnostics(
                 category: "remoteInvite",
@@ -2201,6 +2219,31 @@ private struct IncomingInviteNoticeView: View {
                     .buttonStyle(.bordered)
                 Spacer()
                 Button("View invitation", action: onView)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(width: 390)
+        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.2), radius: 24, y: 12)
+    }
+}
+
+private struct InvitationSentNoticeView: View {
+    let onKeepLooking: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Invitation sent")
+                .font(.system(.title3, design: .rounded).weight(.bold))
+            Text("This board will open when the invitation is accepted.")
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Cancel invite", action: onCancel)
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button("Keep looking", action: onKeepLooking)
                     .buttonStyle(.borderedProminent)
             }
         }
