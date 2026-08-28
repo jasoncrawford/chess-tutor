@@ -184,6 +184,7 @@ class LlamaServer:
             "127.0.0.1",
             "--port",
             str(self.port),
+            "--skip-chat-parsing",
         ]
         self.process = subprocess.Popen(
             self.command,

@@ -70,6 +70,23 @@ class SchemaCompatibilityTests(unittest.TestCase):
             )
 
         self.assertIs(schema, calls[1]["schema"])
+        self.assertEqual(
+            "Echo the user's JSON object exactly. Return no other text.",
+            calls[1]["system_prompt"],
+        )
+        self.assertEqual(
+            {
+                "schemaVersion": "model-coaching-turn.v1",
+                "requestID": "schema-smoke",
+                "teachingIntent": "other",
+                "primaryMessage": "Ready.",
+                "actionReferences": [],
+                "boardFocusReferences": [],
+                "relationshipReferences": [],
+                "supportingEvidenceReferences": ["schema-smoke"],
+            },
+            calls[1]["request"],
+        )
         self.assertEqual("b10516", result["runtimeProvenance"]["sourceTag"])
         self.assertEqual(64, len(result["schemaSHA256"]))
 

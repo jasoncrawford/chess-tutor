@@ -22,6 +22,7 @@ parser.add_argument("-m")
 parser.add_argument("-c")
 parser.add_argument("--host")
 parser.add_argument("--port", type=int)
+parser.add_argument("--skip-chat-parsing", action="store_true")
 arguments = parser.parse_args()
 
 class Handler(BaseHTTPRequestHandler):
@@ -139,6 +140,7 @@ class LlamaServerTests(unittest.TestCase):
                 payload["response_format"]["json_schema"]["schema"],
             )
             self.assertIn("--host", server.command)
+            self.assertIn("--skip-chat-parsing", server.command)
             self.assertEqual("127.0.0.1", server.command[server.command.index("--host") + 1])
             self.assertEqual("8192", server.command[server.command.index("-c") + 1])
         finally:

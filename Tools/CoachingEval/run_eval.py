@@ -387,6 +387,7 @@ def _fake_server(argv):
     parser.add_argument("-c")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
+    parser.add_argument("--skip-chat-parsing", action="store_true")
     arguments = parser.parse_args(argv)
 
     class Handler(BaseHTTPRequestHandler):

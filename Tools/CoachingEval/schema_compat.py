@@ -53,14 +53,24 @@ def smoke_schema(*, schema, server, model, runtime_path, runtime_manifest):
         raise ValueError("Schema failed deterministic b10516 compatibility: " + ", ".join(issues))
     provenance = runtime_provenance.verify_runtime(server, runtime_path, runtime_manifest)
     runtime = json.loads(Path(runtime_path).read_text(encoding="utf-8"))
+    known_valid_turn = {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": "schema-smoke",
+        "teachingIntent": "other",
+        "primaryMessage": "Ready.",
+        "actionReferences": [],
+        "boardFocusReferences": [],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": ["schema-smoke"],
+    }
     with llama_server.LlamaServer(
         server,
         model,
         context_tokens=runtime["mac"]["contextTokens"],
     ) as client:
         client.complete(
-            system_prompt="Return one JSON object that satisfies the supplied schema.",
-            request={"requestID": "schema-smoke"},
+            system_prompt="Echo the user's JSON object exactly. Return no other text.",
+            request=known_valid_turn,
             schema=schema,
             seed=runtime["evaluation"]["seeds"][0],
             maximum_output_tokens=runtime["generation"]["maximumOutputTokens"],
