@@ -1,0 +1,16 @@
+{
+  "llamaCppTag": "b10516",
+  "mac": {
+    "contextTokens": 8192
+  },
+  "generation": {
+    "maximumOutputTokens": 256,
+    "temperature": 0.2,
+    "topP": 0.9
+  },
+  "evaluation": {
+    "repetitions": 3,
+    "seeds": [1103, 2207, 3301],
+    "reviewSeed": 20260828
+  }
+}

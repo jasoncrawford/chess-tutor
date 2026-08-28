@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model-coaching-turn.v1",
+  "title": "ModelCoachingTurn",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "requestID",
+    "teachingIntent",
+    "primaryMessage",
+    "actionReferences",
+    "boardFocusReferences",
+    "relationshipReferences",
+    "supportingEvidenceReferences"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "model-coaching-turn.v1"
+    },
+    "requestID": {
+      "type": "string",
+      "minLength": 1
+    },
+    "teachingIntent": {
+      "type": "string",
+      "enum": [
+        "orient",
+        "scanDanger",
+        "scanCapture",
+        "chooseMove",
+        "evaluateMove",
+        "reviseMove",
+        "confirmMove",
+        "resolveCheck",
+        "findMate",
+        "other"
+      ]
+    },
+    "primaryMessage": {
+      "type": "string",
+      "pattern": "^\\s*(?:\\S+\\s*){0,18}$"
+    },
+    "instruction": {
+      "type": ["string", "null"],
+      "pattern": "^\\s*(?:\\S+\\s*){0,14}$"
+    },
+    "responseToLatestAction": {
+      "type": ["string", "null"],
+      "pattern": "^\\s*(?:\\S+\\s*){0,16}$"
+    },
+    "actionReferences": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {"type": "string"}
+    },
+    "boardTaskReference": {
+      "type": ["string", "null"]
+    },
+    "boardFocusReferences": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "relationshipReferences": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "supportingEvidenceReferences": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    }
+  }
+}

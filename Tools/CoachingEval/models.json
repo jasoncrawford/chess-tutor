@@ -1,0 +1,35 @@
+[
+  {
+    "id": "qwen3-0.6b-q4_0",
+    "repository": "ggml-org/Qwen3-0.6B-GGUF",
+    "selector": "Q4_0",
+    "filename": "Qwen3-0.6B-Q4_0.gguf",
+    "license": "Apache-2.0",
+    "thinkingModes": ["off", "bounded"]
+  },
+  {
+    "id": "gemma3-1b-qat-q4_0",
+    "repository": "google/gemma-3-1b-it-qat-q4_0-gguf",
+    "selector": "Q4_0",
+    "filename": null,
+    "license": "Gemma Terms",
+    "requiresToken": true,
+    "thinkingModes": ["off"]
+  },
+  {
+    "id": "qwen3-1.7b-q4_k_m",
+    "repository": "ggml-org/Qwen3-1.7B-GGUF",
+    "selector": "Q4_K_M",
+    "filename": "Qwen3-1.7B-Q4_K_M.gguf",
+    "license": "Apache-2.0",
+    "thinkingModes": ["off", "bounded"]
+  },
+  {
+    "id": "smollm3-3b-q4_k_m",
+    "repository": "ggml-org/SmolLM3-3B-GGUF",
+    "selector": "Q4_K_M",
+    "filename": "SmolLM3-Q4_K_M.gguf",
+    "license": "Apache-2.0",
+    "thinkingModes": ["off", "bounded"]
+  }
+]

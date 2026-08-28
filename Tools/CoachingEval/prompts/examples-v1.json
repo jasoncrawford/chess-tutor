@@ -1,0 +1,271 @@
+[
+  {
+    "sourceCaseID": "t1Entry",
+    "scenario": "first-move opening",
+    "requestExcerpt": {
+      "requestID": "corpus:t1Entry",
+      "positionRevision": 1,
+      "currentPosition": {
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "helpOpened", "referencedIDs": []},
+      "permittedIDs": [
+        "action:noPieceNeedsHelp",
+        "task:stageMove",
+        "piece:white:pawn:e2",
+        "piece:white:knight:g1",
+        "reply:move:e2-e4->move:e7-e5"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t1Entry",
+      "teachingIntent": "chooseMove",
+      "primaryMessage": "Start with a center pawn or bring out a knight.",
+      "instruction": "Tap one of those pieces, then choose its square.",
+      "responseToLatestAction": null,
+      "actionReferences": ["action:noPieceNeedsHelp"],
+      "boardTaskReference": "task:stageMove",
+      "boardFocusReferences": ["piece:white:pawn:e2", "piece:white:knight:g1"],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": ["reply:move:e2-e4->move:e7-e5"]
+    }
+  },
+  {
+    "sourceCaseID": "t3Entry",
+    "scenario": "endangered piece",
+    "requestExcerpt": {
+      "requestID": "corpus:t3Entry",
+      "positionRevision": 1,
+      "currentPosition": {
+        "fen": "6k1/8/8/8/4p3/5N2/8/6K1 w - - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "helpOpened", "referencedIDs": []},
+      "permittedIDs": [
+        "task:selectBoardPiece",
+        "piece:white:knight:f3",
+        "relationship:attack:piece:black:pawn:e4->piece:white:knight:f3",
+        "fact:danger-loss:piece:white:knight:f3"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t3Entry",
+      "teachingIntent": "scanDanger",
+      "primaryMessage": "Which white piece can the black pawn take?",
+      "instruction": "Tap that piece.",
+      "responseToLatestAction": null,
+      "actionReferences": [],
+      "boardTaskReference": "task:selectBoardPiece",
+      "boardFocusReferences": ["piece:white:knight:f3"],
+      "relationshipReferences": ["relationship:attack:piece:black:pawn:e4->piece:white:knight:f3"],
+      "supportingEvidenceReferences": ["fact:danger-loss:piece:white:knight:f3"]
+    }
+  },
+  {
+    "sourceCaseID": "t7NoSafeCapture",
+    "scenario": "no-safe-capture followed by a staged move",
+    "requestExcerpt": {
+      "requestID": "corpus:t7NoSafeCapture",
+      "positionRevision": 4,
+      "currentPosition": {
+        "fen": "6k1/5p2/8/8/2B5/8/8/6K1 w - - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "moveStaged", "referencedIDs": ["move:c4-d3"]},
+      "permittedIDs": [
+        "action:looksSafe",
+        "action:tryAnotherMove",
+        "task:replaceMove",
+        "piece:white:bishop:c4",
+        "reply:move:c4-d3->move:f7-f5"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t7NoSafeCapture",
+      "teachingIntent": "evaluateMove",
+      "primaryMessage": "You moved your bishop to d3. Now check that move.",
+      "instruction": "Use the board marks, then choose Looks safe or try another move.",
+      "responseToLatestAction": "You moved ahead, so we can check your move now.",
+      "actionReferences": ["action:looksSafe", "action:tryAnotherMove"],
+      "boardTaskReference": "task:replaceMove",
+      "boardFocusReferences": ["piece:white:bishop:c4"],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": ["reply:move:c4-d3->move:f7-f5"]
+    }
+  },
+  {
+    "sourceCaseID": "t11BenignCaptureTap",
+    "scenario": "benign opponent activity",
+    "requestExcerpt": {
+      "requestID": "corpus:t11BenignCaptureTap",
+      "positionRevision": 3,
+      "currentPosition": {
+        "fen": "rnbqkbnr/pppppppp/8/8/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 0 1",
+        "sideToMove": "black",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "squareInspected", "referencedIDs": ["piece:white:bishop:c4"]},
+      "permittedIDs": [
+        "action:looksSafe",
+        "action:tryAnotherMove",
+        "task:inspectSquare",
+        "piece:white:bishop:c4",
+        "piece:black:pawn:e7",
+        "reply:move:e7-e6->move:c4-e6"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t11BenignCaptureTap",
+      "teachingIntent": "evaluateMove",
+      "primaryMessage": "Yes. That bishop could take the pawn after it moves.",
+      "instruction": "Now choose Looks safe or try another move.",
+      "responseToLatestAction": null,
+      "actionReferences": ["action:looksSafe", "action:tryAnotherMove"],
+      "boardTaskReference": "task:inspectSquare",
+      "boardFocusReferences": ["piece:white:bishop:c4", "piece:black:pawn:e7"],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": ["reply:move:e7-e6->move:c4-e6"]
+    }
+  },
+  {
+    "sourceCaseID": "t11Safe",
+    "scenario": "replacement move",
+    "requestExcerpt": {
+      "requestID": "corpus:t11Safe",
+      "positionRevision": 4,
+      "currentPosition": {
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "moveReplaced", "referencedIDs": ["move:g1-f3"]},
+      "permittedIDs": [
+        "action:playMove",
+        "action:tryAnotherMove",
+        "task:playMove",
+        "piece:white:knight:g1",
+        "reply:move:g1-f3->move:a7-a5"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t11Safe",
+      "teachingIntent": "confirmMove",
+      "primaryMessage": "You switched to bringing out your knight.",
+      "instruction": "Play this move, or try another one.",
+      "responseToLatestAction": null,
+      "actionReferences": ["action:playMove", "action:tryAnotherMove"],
+      "boardTaskReference": "task:playMove",
+      "boardFocusReferences": ["piece:white:knight:g1"],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": ["reply:move:g1-f3->move:a7-a5"]
+    }
+  },
+  {
+    "sourceCaseID": "t12Block",
+    "scenario": "check resolution",
+    "requestExcerpt": {
+      "requestID": "corpus:t12Block",
+      "positionRevision": 4,
+      "currentPosition": {
+        "fen": "k3r3/8/8/1B6/8/8/8/4K3 w - - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "actionChosen", "referencedIDs": ["action:looksSafe"]},
+      "permittedIDs": [
+        "action:playMove",
+        "action:tryAnotherMove",
+        "task:playMove",
+        "piece:white:bishop:b5",
+        "relationship:check:piece:black:rook:e8->piece:white:king:e1",
+        "fact:in-check"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t12Block",
+      "teachingIntent": "resolveCheck",
+      "primaryMessage": "Your bishop blocks the rook's check.",
+      "instruction": "Play this move, or try another one.",
+      "responseToLatestAction": null,
+      "actionReferences": ["action:playMove", "action:tryAnotherMove"],
+      "boardTaskReference": "task:playMove",
+      "boardFocusReferences": ["piece:white:bishop:b5"],
+      "relationshipReferences": ["relationship:check:piece:black:rook:e8->piece:white:king:e1"],
+      "supportingEvidenceReferences": ["fact:in-check"]
+    }
+  },
+  {
+    "sourceCaseID": "t9Hint",
+    "scenario": "mate-in-one",
+    "requestExcerpt": {
+      "requestID": "corpus:t9Hint",
+      "positionRevision": 2,
+      "currentPosition": {
+        "fen": "7k/8/5KQ1/8/8/8/8/8 w - - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "actionChosen", "referencedIDs": ["action:hint"]},
+      "permittedIDs": [
+        "task:stageMove",
+        "piece:white:queen:g6",
+        "fact:mate-in-one:move:g6-g7"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t9Hint",
+      "teachingIntent": "findMate",
+      "primaryMessage": "Your queen can checkmate on g7.",
+      "instruction": "Move your queen to g7.",
+      "responseToLatestAction": null,
+      "actionReferences": [],
+      "boardTaskReference": "task:stageMove",
+      "boardFocusReferences": ["piece:white:queen:g6"],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": ["fact:mate-in-one:move:g6-g7"]
+    }
+  },
+  {
+    "sourceCaseID": "t12UnsupportedEntry",
+    "scenario": "quiet move with no named purpose",
+    "requestExcerpt": {
+      "requestID": "corpus:t12UnsupportedEntry",
+      "positionRevision": 5,
+      "currentPosition": {
+        "fen": "7k/8/8/8/3K4/8/8/8 w - - 0 1",
+        "sideToMove": "white",
+        "status": "active"
+      },
+      "latestEvent": {"kind": "helpReopened", "referencedIDs": []},
+      "permittedIDs": [
+        "task:stageMove",
+        "piece:white:king:d4",
+        "reply:move:d4-c3->move:h8-g7"
+      ]
+    },
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t12UnsupportedEntry",
+      "teachingIntent": "chooseMove",
+      "primaryMessage": "This is a quiet position. Choose a legal king move.",
+      "instruction": "Tap your king, then tap a square.",
+      "responseToLatestAction": null,
+      "actionReferences": [],
+      "boardTaskReference": "task:stageMove",
+      "boardFocusReferences": ["piece:white:king:d4"],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": ["reply:move:d4-c3->move:h8-g7"]
+    }
+  }
+]
