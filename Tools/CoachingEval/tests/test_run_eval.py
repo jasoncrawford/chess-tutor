@@ -209,7 +209,40 @@ class RunEvalTests(unittest.TestCase):
         serialized = json.dumps(record).lower()
         self.assertNotIn("private provider error reasoning", serialized)
         self.assertNotIn("<think", serialized)
-        self.assertIn("endpoint failed", record["errors"][0]["message"])
+        self.assertEqual("Provider generation failed.", record["errors"][0]["message"])
+
+    def test_provider_error_persistence_fails_closed_for_nested_reasoning_json(self):
+        client = FailingClient(
+            run_eval.llama_server.LlamaServerError(
+                json.dumps(
+                    {
+                        "error": {
+                            "ReAsOnInG_CoNtEnT": "PRIVATE NESTED REASONING",
+                            "details": {
+                                "reasoningContent": "PRIVATE CAMEL REASONING",
+                                "trace": "<THINK>PRIVATE TRACE</THINK>",
+                            },
+                        },
+                        "message": "secret provider body",
+                    }
+                ),
+                http_status=422,
+            )
+        )
+
+        record = self.runner(client).evaluate_case(self.case(), mode="bounded", seed=2207)
+
+        self.assertEqual("generationError", record["errors"][0]["kind"])
+        self.assertEqual("Provider request failed with HTTP 422.", record["errors"][0]["message"])
+        serialized = json.dumps(record).lower()
+        for forbidden in (
+            "private",
+            "reasoning_content",
+            "reasoningcontent",
+            "<think",
+            "secret provider body",
+        ):
+            self.assertNotIn(forbidden, serialized)
 
     def test_does_not_repair_mechanically_valid_shape_with_bad_identity_or_pedagogy(self):
         wrong_identity = valid_turn()
@@ -424,6 +457,73 @@ class RunEvalTests(unittest.TestCase):
                     self.assertNotIn("test-only trace", persisted, output.name)
                     self.assertNotIn("reasoning_content", persisted, output.name)
                     self.assertNotIn("<think", persisted, output.name)
+
+    def test_fake_http_error_e2e_never_persists_provider_body_or_trace(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            corpus = root / "visible.jsonl"
+            corpus.write_text(json.dumps(self.case()) + "\n")
+            arguments = argparse.Namespace(
+                provider="local",
+                model="fake-test-model",
+                split="visible",
+                case="case-1",
+                repetitions=1,
+                mode="off",
+                corpus=str(corpus),
+                prompt_version="tutor-v1",
+            )
+            old_root = run_eval.ARTIFACT_ROOT
+            old_opt_in = os.environ.get("COACHING_EVAL_ALLOW_FAKE")
+            old_fake_error = os.environ.get("COACHING_EVAL_FAKE_HTTP_ERROR")
+            try:
+                run_eval.ARTIFACT_ROOT = root / "artifacts"
+                os.environ["COACHING_EVAL_ALLOW_FAKE"] = "1"
+                os.environ["COACHING_EVAL_FAKE_HTTP_ERROR"] = "reasoning"
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, run_eval._execute(arguments))
+            finally:
+                run_eval.ARTIFACT_ROOT = old_root
+                if old_opt_in is None:
+                    os.environ.pop("COACHING_EVAL_ALLOW_FAKE", None)
+                else:
+                    os.environ["COACHING_EVAL_ALLOW_FAKE"] = old_opt_in
+                if old_fake_error is None:
+                    os.environ.pop("COACHING_EVAL_FAKE_HTTP_ERROR", None)
+                else:
+                    os.environ["COACHING_EVAL_FAKE_HTTP_ERROR"] = old_fake_error
+
+            manifests = list((root / "artifacts" / "runs").rglob("run-manifest.json"))
+            self.assertEqual(1, len(manifests))
+            record = json.loads(manifests[0].with_name("records.jsonl").read_text())
+            self.assertEqual("generationError", record["errors"][0]["kind"])
+            self.assertEqual(
+                "Provider request failed with HTTP 422.",
+                record["errors"][0]["message"],
+            )
+
+            review = root / "artifacts" / "review"
+            render_review.render_review(
+                [root / "artifacts" / "runs" / "fake-test-model"],
+                review,
+                review_seed=20260828,
+            )
+            summarize_eval.summarize(review)
+            forbidden = (
+                "private nested reasoning",
+                "private camel reasoning",
+                "private trace",
+                "reasoning_content",
+                "reasoningcontent",
+                "<think",
+                "secret provider body",
+            )
+            for output in (root / "artifacts").rglob("*"):
+                if not output.is_file():
+                    continue
+                persisted = output.read_text(encoding="utf-8").lower()
+                for marker in forbidden:
+                    self.assertNotIn(marker, persisted, str(output))
 
 
 if __name__ == "__main__":

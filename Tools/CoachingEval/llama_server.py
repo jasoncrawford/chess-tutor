@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -14,12 +15,38 @@ from pathlib import Path
 from http_security import SameOriginAuthorizationRedirectHandler
 
 
+ERROR_CATEGORIES = frozenset(("generationError", "contextOverflow"))
+MAXIMUM_ERROR_BODY_BYTES = 64 * 1024
+CONTEXT_OVERFLOW_BODY = re.compile(
+    r"(?:context|token).{0,80}(?:exceed|too[ -]?large|limit|maximum|size)"
+    r"|(?:exceed|too[ -]?large).{0,80}(?:context|token)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 class LlamaServerError(RuntimeError):
-    pass
+    def __init__(self, message, *, category="generationError", http_status=None):
+        super().__init__(message)
+        self.category = category if category in ERROR_CATEGORIES else "generationError"
+        self.http_status = http_status if isinstance(http_status, int) else None
 
 
 class LlamaServerTimeout(LlamaServerError):
     pass
+
+
+def _bounded_http_error(error, *, source):
+    """Classify an HTTP failure without retaining or returning its response body."""
+    body = error.read(MAXIMUM_ERROR_BODY_BYTES).decode("utf-8", errors="replace")
+    category = (
+        "contextOverflow"
+        if error.code == 413 or CONTEXT_OVERFLOW_BODY.search(body)
+        else "generationError"
+    )
+    message = f"{source} returned HTTP {error.code}"
+    if category == "contextOverflow":
+        message += " (context overflow)"
+    return LlamaServerError(message, category=category, http_status=error.code)
 
 
 def build_chat_payload(
@@ -103,10 +130,9 @@ class OpenAIChatClient:
             with self.opener.open(http_request, timeout=timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace")
-            raise LlamaServerError(f"endpoint returned HTTP {error.code}: {detail}") from error
+            raise _bounded_http_error(error, source="reference endpoint") from error
         except (OSError, ValueError, urllib.error.URLError) as error:
-            raise LlamaServerError(f"endpoint request failed: {error}") from error
+            raise LlamaServerError("reference endpoint request failed") from error
 
 
 def _ephemeral_port():
@@ -239,8 +265,7 @@ class LlamaServer:
             with urllib.request.urlopen(http_request, timeout=timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace")
-            raise LlamaServerError(f"llama-server returned HTTP {error.code}: {detail}") from error
+            raise _bounded_http_error(error, source="llama-server") from error
         except (TimeoutError, socket.timeout) as error:
             self.stop()
             raise LlamaServerTimeout("Generation timed out; server process group terminated") from error
@@ -248,7 +273,7 @@ class LlamaServer:
             if isinstance(error.reason, (TimeoutError, socket.timeout)):
                 self.stop()
                 raise LlamaServerTimeout("Generation timed out; server process group terminated") from error
-            raise LlamaServerError(f"llama-server request failed: {error}") from error
+            raise LlamaServerError("llama-server request failed") from error
 
     def __enter__(self):
         self.start()

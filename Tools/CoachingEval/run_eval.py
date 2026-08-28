@@ -89,6 +89,24 @@ def _final_content(provider_response):
     return _without_thinking_traces(content, discard_prefix_before_json=True)
 
 
+def _persistable_provider_error(error):
+    """Return a bounded classification and message without retaining provider text."""
+    category = getattr(error, "category", None)
+    inferred_context_overflow = llama_server.CONTEXT_OVERFLOW_BODY.search(str(error))
+    if inferred_context_overflow:
+        category = "contextOverflow"
+    elif category not in llama_server.ERROR_CATEGORIES:
+        category = "generationError"
+    if category == "contextOverflow":
+        return category, "Provider request exceeded the context window."
+    status = getattr(error, "http_status", None)
+    if isinstance(status, int):
+        return category, f"Provider request failed with HTTP {status}."
+    if isinstance(error, llama_server.LlamaServerTimeout):
+        return category, "Provider response timed out."
+    return category, "Provider generation failed."
+
+
 def _validation(raw_content, request):
     try:
         parsed = json.loads(raw_content)
@@ -258,10 +276,7 @@ class EvaluationRunner:
                 record["repairValidation"] = repair_validation
                 self._add_metrics(record, repaired_response)
         except (llama_server.LlamaServerError, OSError, ValueError) as error:
-            message = _without_thinking_traces(str(error))
-            if not message:
-                message = "Provider error omitted because it contained an unresolved reasoning trace"
-            category = "contextOverflow" if re.search(r"context|token.*(limit|exceed|size)", message, re.I) else "generationError"
+            category, message = _persistable_provider_error(error)
             record["errors"].append({"kind": category, "message": message})
             record["preflight"]["serverOutcome"] = category
             transport_validation = {
@@ -388,6 +403,25 @@ def _fake_server(argv):
         def do_POST(self):
             size = int(self.headers["Content-Length"])
             payload = json.loads(self.rfile.read(size))
+            if os.environ.get("COACHING_EVAL_FAKE_HTTP_ERROR") == "reasoning":
+                body = json.dumps(
+                    {
+                        "error": {
+                            "message": "secret provider body",
+                            "ReAsOnInG_CoNtEnT": "PRIVATE NESTED REASONING",
+                            "details": {
+                                "reasoningContent": "PRIVATE CAMEL REASONING",
+                                "trace": "<THINK>PRIVATE TRACE</THINK>",
+                            },
+                        }
+                    }
+                ).encode("utf-8")
+                self.send_response(422)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             request = None
             for message in reversed(payload.get("messages", [])):
                 if message.get("role") != "user":

@@ -38,6 +38,32 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         size = int(self.headers["Content-Length"])
         request = json.loads(self.rfile.read(size))
+        if request.get("seed") == 996:
+            body = b'provider rejected request <THINK>PRIVATE TEXT TRACE</THINK> secret payload'
+            self.send_response(422)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if request.get("seed") == 997:
+            body = json.dumps({
+                "error": {
+                    "message": "request rejected after private analysis",
+                    "ReAsOnInG_CoNtEnT": "PRIVATE NESTED REASONING",
+                    "details": {
+                        "reasoningContent": "PRIVATE CAMEL REASONING",
+                        "trace": "<THINK>PRIVATE THINK TRACE</THINK>",
+                    },
+                },
+                "safeCode": "invalid_schema",
+            }).encode("utf-8")
+            self.send_response(422)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if request.get("seed") == 998:
             body = b'{"error":"prompt exceeds context size"}'
             self.send_response(400)
@@ -136,11 +162,11 @@ class LlamaServerTests(unittest.TestCase):
             )
         self.assertFalse(server.is_running)
 
-    def test_http_error_preserves_context_overflow_detail_for_run_record(self):
+    def test_http_error_preserves_bounded_context_overflow_classification(self):
         server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
         try:
             server.start(timeout=5)
-            with self.assertRaisesRegex(llama_server.LlamaServerError, "prompt exceeds context size"):
+            with self.assertRaises(llama_server.LlamaServerError) as raised:
                 server.complete(
                     system_prompt="Tutor prompt",
                     request={"requestID": "request-1"},
@@ -152,6 +178,48 @@ class LlamaServerTests(unittest.TestCase):
                     enable_thinking=False,
                     timeout=2,
                 )
+        finally:
+            server.stop()
+
+        error = raised.exception
+        self.assertEqual("contextOverflow", error.category)
+        self.assertEqual(400, error.http_status)
+        self.assertEqual("llama-server returned HTTP 400 (context overflow)", str(error))
+        self.assertNotIn("prompt exceeds context size", str(error))
+
+    def test_local_http_error_discards_json_and_text_provider_bodies(self):
+        server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
+        try:
+            server.start(timeout=5)
+            for seed in (996, 997):
+                with self.subTest(seed=seed):
+                    with self.assertRaises(llama_server.LlamaServerError) as raised:
+                        server.complete(
+                            system_prompt="Tutor prompt",
+                            request={"requestID": "request-1"},
+                            schema={"type": "object"},
+                            seed=seed,
+                            maximum_output_tokens=256,
+                            temperature=0.2,
+                            top_p=0.9,
+                            enable_thinking=False,
+                            timeout=2,
+                        )
+                    error = raised.exception
+                    self.assertEqual("generationError", error.category)
+                    self.assertEqual(422, error.http_status)
+                    self.assertEqual("llama-server returned HTTP 422", str(error))
+                    serialized = str(error).lower()
+                    for forbidden in (
+                        "private",
+                        "reasoning",
+                        "reasoning_content",
+                        "reasoningcontent",
+                        "<think",
+                        "secret",
+                        "invalid_schema",
+                    ):
+                        self.assertNotIn(forbidden, serialized)
         finally:
             server.stop()
 
@@ -187,6 +255,33 @@ class LlamaServerTests(unittest.TestCase):
 
         self.assertNotIn("chat_template_kwargs", response["echo"])
         self.assertEqual("reference-model", response["echo"]["model"])
+
+    def test_reference_http_error_discards_nested_reasoning_body(self):
+        server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
+        try:
+            server.start(timeout=5)
+            client = llama_server.OpenAIChatClient(server.base_url, model="reference-model")
+            with self.assertRaises(llama_server.LlamaServerError) as raised:
+                client.complete(
+                    system_prompt="Tutor prompt",
+                    request={"requestID": "request-1"},
+                    schema={"type": "object"},
+                    seed=997,
+                    maximum_output_tokens=256,
+                    temperature=0.2,
+                    top_p=0.9,
+                    enable_thinking=False,
+                    timeout=2,
+                )
+        finally:
+            server.stop()
+
+        error = raised.exception
+        self.assertEqual("generationError", error.category)
+        self.assertEqual(422, error.http_status)
+        self.assertEqual("reference endpoint returned HTTP 422", str(error))
+        self.assertNotIn("reasoning", str(error).lower())
+        self.assertNotIn("private", str(error).lower())
 
 
 if __name__ == "__main__":
