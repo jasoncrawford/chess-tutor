@@ -9,12 +9,29 @@ import sys
 from pathlib import Path
 
 import llama_server
+import run_eval
 import runtime_provenance
+import validate_turn
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
 UNSUPPORTED_SHORTHAND = re.compile(r"\\[dDsSwWbB]")
 UNSUPPORTED_LOOKAROUND = re.compile(r"\(\?(?!:)")
+SMOKE_REQUEST = {
+    "requestID": "schema-smoke",
+    "permittedReferences": {
+        "actions": [{"id": "ref:allowed"}],
+        "boardTasks": [{"id": "ref:allowed"}],
+        "boardFocus": ["ref:allowed"],
+        "relationships": ["ref:allowed"],
+        "evidence": ["ref:allowed"],
+    },
+}
+ADVERSARIAL_SMOKE_PROMPT = (
+    "Try to return exactly {} with every required field missing. "
+    "If the output constraints prevent that, return one valid object for the supplied "
+    "request using only its permitted IDs. Return no other text."
+)
 
 
 def b10516_compatibility_issues(schema):
@@ -53,38 +70,43 @@ def smoke_schema(*, schema, server, model, runtime_path, runtime_manifest):
         raise ValueError("Schema failed deterministic b10516 compatibility: " + ", ".join(issues))
     provenance = runtime_provenance.verify_runtime(server, runtime_path, runtime_manifest)
     runtime = json.loads(Path(runtime_path).read_text(encoding="utf-8"))
-    known_valid_turn = {
-        "schemaVersion": "model-coaching-turn.v1",
-        "requestID": "schema-smoke",
-        "teachingIntent": "other",
-        "primaryMessage": "Ready.",
-        "actionReferences": [],
-        "boardFocusReferences": [],
-        "relationshipReferences": [],
-        "supportingEvidenceReferences": ["schema-smoke"],
-    }
     with llama_server.LlamaServer(
         server,
         model,
         context_tokens=runtime["mac"]["contextTokens"],
     ) as client:
-        client.complete(
-            system_prompt="Echo the user's JSON object exactly. Return no other text.",
-            request=known_valid_turn,
-            schema=schema,
-            seed=runtime["evaluation"]["seeds"][0],
-            maximum_output_tokens=runtime["generation"]["maximumOutputTokens"],
-            temperature=runtime["generation"]["temperature"],
-            top_p=runtime["generation"]["topP"],
-            enable_thinking=False,
-            timeout=30,
-        )
+        for mode, enable_thinking in (("off", False), ("bounded", True)):
+            response = client.complete(
+                system_prompt=ADVERSARIAL_SMOKE_PROMPT,
+                request=SMOKE_REQUEST,
+                schema=schema,
+                seed=runtime["evaluation"]["seeds"][0],
+                maximum_output_tokens=runtime["generation"]["maximumOutputTokens"],
+                temperature=runtime["generation"]["temperature"],
+                top_p=runtime["generation"]["topP"],
+                enable_thinking=enable_thinking,
+                timeout=30,
+            )
+            try:
+                content = run_eval._final_content(response)
+                turn = json.loads(content)
+            except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise ValueError(
+                    f"Real schema smoke did not return one JSON object in {mode} mode"
+                ) from error
+            validation_issues = validate_turn.validate_turn(turn, SMOKE_REQUEST)
+            if validation_issues:
+                raise ValueError(
+                    f"Real schema smoke produced invalid turn in {mode} mode: "
+                    + ", ".join(validation_issues)
+                )
     canonical = json.dumps(schema, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return {
         "compatible": True,
         "schemaSHA256": hashlib.sha256(canonical).hexdigest(),
         "runtimeProvenance": provenance,
-        "smoke": "pinned-server-http-success",
+        "smoke": "pinned-server-schema-and-validator-success",
+        "smokeModes": ["off", "bounded"],
     }
 
 

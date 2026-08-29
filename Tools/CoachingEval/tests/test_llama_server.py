@@ -8,6 +8,7 @@ from pathlib import Path
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS_DIR))
 
+import coaching_grammar
 import llama_server
 
 
@@ -22,8 +23,8 @@ parser.add_argument("-m")
 parser.add_argument("-c")
 parser.add_argument("--host")
 parser.add_argument("--port", type=int)
-parser.add_argument("--skip-chat-parsing", action="store_true")
 arguments = parser.parse_args()
+last_template_request = None
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -37,8 +38,22 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
+        global last_template_request
         size = int(self.headers["Content-Length"])
         request = json.loads(self.rfile.read(size))
+        if self.path == "/apply-template":
+            last_template_request = request
+            prompt = "".join(
+                "<|im_start|>{role}\n{content}<|im_end|>\n".format(**message)
+                for message in request["messages"]
+            ) + "<|im_start|>assistant\n"
+            body = json.dumps({"prompt": prompt}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if request.get("seed") == 996:
             body = b'provider rejected request <THINK>PRIVATE TEXT TRACE</THINK> secret payload'
             self.send_response(422)
@@ -74,15 +89,32 @@ class Handler(BaseHTTPRequestHandler):
             return
         if request.get("seed") == 999:
             time.sleep(2)
-        body = json.dumps({
-            "choices": [{"message": {
+        if "prompt" in request:
+            response = {
                 "content": json.dumps({"schemaVersion": "model-coaching-turn.v1"}),
-                "reasoning_content": "private chain",
-            }}],
-            "usage": {"prompt_tokens": 11, "completion_tokens": 7},
-            "timings": {"prompt_ms": 12.5, "predicted_ms": 44.0},
-            "echo": request,
-        }).encode("utf-8")
+                "timings": {
+                    "prompt_n": 11,
+                    "predicted_n": 7,
+                    "prompt_ms": 12.5,
+                    "predicted_ms": 44.0,
+                },
+                "stop_type": "eos",
+                "echo": request,
+                "path": self.path,
+                "templateEcho": last_template_request,
+            }
+        else:
+            response = {
+                "choices": [{"message": {
+                    "content": json.dumps({"schemaVersion": "model-coaching-turn.v1"}),
+                    "reasoning_content": "private chain",
+                }}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+                "timings": {"prompt_ms": 12.5, "predicted_ms": 44.0},
+                "echo": request,
+                "path": self.path,
+            }
+        body = json.dumps(response).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -109,14 +141,15 @@ class LlamaServerTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def test_starts_on_localhost_waits_for_health_and_sends_exact_chat_payload(self):
+    def test_starts_on_localhost_and_sends_native_grammar_constrained_completion(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
         server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
         try:
             server.start(timeout=5)
             response = server.complete(
                 system_prompt="Tutor prompt",
                 request={"requestID": "request-1", "positionRevision": 4},
-                schema={"type": "object", "additionalProperties": False},
+                schema=schema,
                 seed=1103,
                 maximum_output_tokens=256,
                 temperature=0.2,
@@ -125,36 +158,101 @@ class LlamaServerTests(unittest.TestCase):
                 timeout=2,
             )
             payload = response["echo"]
-            self.assertEqual("Tutor prompt", payload["messages"][0]["content"])
             self.assertEqual(
-                {"positionRevision": 4, "requestID": "request-1"},
-                json.loads(payload["messages"][-1]["content"]),
+                (
+                    "<|im_start|>system\nTutor prompt<|im_end|>\n"
+                    "<|im_start|>user\n"
+                    '{"positionRevision":4,"requestID":"request-1"}'
+                    "<|im_end|>\n<|im_start|>assistant\n"
+                ),
+                payload["prompt"],
             )
             self.assertEqual(1103, payload["seed"])
-            self.assertEqual(256, payload["max_tokens"])
-            self.assertEqual(False, payload["chat_template_kwargs"]["enable_thinking"])
-            self.assertEqual("json_schema", payload["response_format"]["type"])
-            self.assertTrue(payload["response_format"]["json_schema"]["strict"])
+            self.assertEqual(256, payload["n_predict"])
             self.assertEqual(
-                {"type": "object", "additionalProperties": False},
-                payload["response_format"]["json_schema"]["schema"],
+                coaching_grammar.strict_grammar(schema, enable_thinking=False),
+                payload["grammar"],
+            )
+            self.assertNotIn("json_schema", payload)
+            self.assertNotIn("messages", payload)
+            self.assertNotIn("response_format", payload)
+            self.assertEqual("/completion", response["path"])
+            self.assertEqual(
+                {"enable_thinking": False},
+                response["templateEcho"]["chat_template_kwargs"],
+            )
+            self.assertEqual(11, response["usage"]["prompt_tokens"])
+            self.assertEqual(7, response["usage"]["completion_tokens"])
+            self.assertEqual(
+                '{"schemaVersion": "model-coaching-turn.v1"}',
+                response["choices"][0]["message"]["content"],
             )
             self.assertIn("--host", server.command)
-            self.assertIn("--skip-chat-parsing", server.command)
+            self.assertNotIn("--skip-chat-parsing", server.command)
+            self.assertNotIn("--chat-template", server.command)
             self.assertEqual("127.0.0.1", server.command[server.command.index("--host") + 1])
             self.assertEqual("8192", server.command[server.command.index("-c") + 1])
         finally:
             server.stop()
         self.assertFalse(server.is_running)
 
+    def test_native_completion_renders_few_shot_and_repair_messages_in_order(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
+        server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
+        try:
+            server.start(timeout=5)
+            response = server.complete(
+                system_prompt="Tutor prompt",
+                request={"requestID": "request-1"},
+                schema=schema,
+                seed=1103,
+                maximum_output_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+                enable_thinking=True,
+                timeout=2,
+                extra_messages=[
+                    {"role": "user", "content": "example request"},
+                    {"role": "assistant", "content": "example answer"},
+                ],
+                after_messages=[
+                    {"role": "assistant", "content": "invalid answer"},
+                    {"role": "user", "content": "repair it"},
+                ],
+            )
+        finally:
+            server.stop()
+
+        self.assertEqual(
+            (
+                "<|im_start|>system\nTutor prompt<|im_end|>\n"
+                "<|im_start|>user\nexample request<|im_end|>\n"
+                "<|im_start|>assistant\nexample answer<|im_end|>\n"
+                '<|im_start|>user\n{"requestID":"request-1"}<|im_end|>\n'
+                "<|im_start|>assistant\ninvalid answer<|im_end|>\n"
+                "<|im_start|>user\nrepair it<|im_end|>\n"
+                "<|im_start|>assistant\n"
+            ),
+            response["echo"]["prompt"],
+        )
+        self.assertEqual(
+            {"enable_thinking": True},
+            response["templateEcho"]["chat_template_kwargs"],
+        )
+        self.assertEqual(
+            coaching_grammar.strict_grammar(schema, enable_thinking=True),
+            response["echo"]["grammar"],
+        )
+
     def test_request_timeout_terminates_the_server_process_group(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
         server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
         server.start(timeout=5)
         with self.assertRaises(llama_server.LlamaServerTimeout):
             server.complete(
                 system_prompt="Tutor prompt",
                 request={"requestID": "request-1"},
-                schema={"type": "object"},
+                schema=schema,
                 seed=999,
                 maximum_output_tokens=256,
                 temperature=0.2,
@@ -165,6 +263,7 @@ class LlamaServerTests(unittest.TestCase):
         self.assertFalse(server.is_running)
 
     def test_http_error_preserves_bounded_context_overflow_classification(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
         server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
         try:
             server.start(timeout=5)
@@ -172,7 +271,7 @@ class LlamaServerTests(unittest.TestCase):
                 server.complete(
                     system_prompt="Tutor prompt",
                     request={"requestID": "request-1"},
-                    schema={"type": "object"},
+                    schema=schema,
                     seed=998,
                     maximum_output_tokens=256,
                     temperature=0.2,
@@ -190,6 +289,7 @@ class LlamaServerTests(unittest.TestCase):
         self.assertNotIn("prompt exceeds context size", str(error))
 
     def test_local_http_error_discards_json_and_text_provider_bodies(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
         server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
         try:
             server.start(timeout=5)
@@ -199,7 +299,7 @@ class LlamaServerTests(unittest.TestCase):
                         server.complete(
                             system_prompt="Tutor prompt",
                             request={"requestID": "request-1"},
-                            schema={"type": "object"},
+                            schema=schema,
                             seed=seed,
                             maximum_output_tokens=256,
                             temperature=0.2,

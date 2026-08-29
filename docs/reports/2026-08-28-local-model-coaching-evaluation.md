@@ -8,11 +8,17 @@ No evaluated local model advances to device testing. Do not execute the model po
 
 This is a negative result for the current combination of an 8,192-token context, the full unmodified coaching request, the `model-coaching-turn.v1` contract, and these quantized models. It is not evidence that local coaching is impossible. The current round found three independent blockers:
 
-1. first-attempt context overflow on 28–29 of the 41 visible cases, depending on tokenizer;
-2. displayable structured-output validity of only 0.0%–12.2%, with no successful repair; and
-3. repeated severe chess, reference, and responsiveness errors even among mechanically valid turns.
+1. first-attempt context overflow on 29 of the 41 visible cases for every candidate;
+2. displayable structured-output validity of only 3.3%–10.6%, with no successful repair; and
+3. severe chess, reference, and responsiveness errors even among mechanically valid turns.
 
-The best mechanically valid subset was also too slow and too inconsistent to be broadly usable without editing. The next useful architecture investigation is an explicit evidence-preserving compaction contract and a more reliable constrained-output path, followed by a new evaluation round. Silently truncating requests or loosening validation would conceal rather than solve the observed failures.
+The best mechanically valid subset was also too slow and too inconsistent to be broadly usable without editing. The next useful architecture investigation is an explicit evidence-preserving compaction contract and request-specific constrained reference IDs, followed by a new evaluation round. Silently truncating requests or loosening validation would conceal rather than solve the observed failures.
+
+## Methodology correction
+
+The quality numbers in the first version of this report were invalid and are superseded. A review found that llama.cpp b10516 returns from its pure-content `--skip-chat-parsing` path before applying JSON-schema grammar. Those generations were soft-prompt-only even though the harness had requested a schema. A first native-grammar rerun was also superseded before scoring because it forced JSON immediately in both declared modes, so its “bounded” mode did not actually permit bounded reasoning.
+
+The final results below come only from a third, corrected run. The evaluator now asks `/apply-template` to render each model's exact chat prompt and thinking setting, then sends that rendered prompt to native `/completion` with an explicit token-level GBNF. Off mode permits only the strict JSON object. Bounded mode permits exactly one closed, length-bounded `<think>...</think>` envelope followed by the identical strict JSON object. The 256-token output cap is unchanged, and the trace is removed before parsing or persistence. The original and intermediate runs and their review packets remain labeled `superseded-methodology` in ignored evidence; none contributes to the final statistics or decision.
 
 ## Frozen inputs and baseline
 
@@ -54,7 +60,9 @@ The machine was a MacBook Air (`MacBookAir10,1`) with Apple M1, 8 CPU cores (4 p
 
 The checkout was initially shallow, which made the binary self-report build 1. The source history was unshallowed and the server rebuilt; `runtime_provenance.py record` and `verify` then passed with build 10516 and the binary hash above.
 
-The real HTTP schema smoke exposed a b10516 integration defect before scoring. The default PEG-native assistant postprocessor rejected generated Qwen content with HTTP 500 after the exact schema had compiled. Focused RED/GREEN tests added the documented `--skip-chat-parsing` pure-content mode and changed the smoke stimulus from “invent a conforming object” to echoing a known-valid exact object. The mandatory real b10516/Qwen 0.6B smoke then passed with canonical schema SHA-256 `0f4c427f07cabeae9a6be611eb8a5959b5b916c8648649265d0f4a23f09f15d7`. The evaluator's strict Python/Swift-compatible validation remained unchanged.
+The real HTTP investigation found two independent b10516 integration defects. Its PEG-native assistant postprocessor can reject completed structured content with HTTP 500, while `--skip-chat-parsing` bypasses grammar application. Its JSON-schema converter can also embed a negated prose pattern without intersecting it with JSON-string syntax, allowing the regex to consume a closing quote and produce invalid JSON. The corrected path therefore uses the model's own `/apply-template` result with native `/completion` and an explicit grammar pinned to the canonical schema SHA-256 `0f4c427f07cabeae9a6be611eb8a5959b5b916c8648649265d0f4a23f09f15d7`. The grammar builder refuses any other schema hash; the request-aware Python/Swift-compatible validator remains unchanged.
+
+The final adversarial smoke asked each model to emit `{}` or omit required fields, then inspected the returned content, parsed it, and ran the full strict validator against the exact request. Both off and bounded modes passed for Qwen 0.6B, Qwen 1.7B, and SmolLM3. A separate real `/apply-template` audit showed distinct prompts for all three templates: off mode prefilled an empty thinking block, while bounded mode ended at the assistant prefix. All corrected run pairs had different prompt-envelope hashes, and no trace marker, trace content, or provider reasoning field appeared in a persisted record or review artifact.
 
 ## Candidate artifacts
 
@@ -71,9 +79,9 @@ Gemma reported the required Gemma Terms acceptance and `HF_TOKEN` guidance and d
 
 ## Prompt experiment
 
-Qwen 0.6B first ran the complete 246-record visible matrix with `tutor-v1` (41 cases × 2 modes × 3 seeds). After it produced no mechanically valid output, `tutor-v2` was created as one immutable, visible-only experiment. It changed only the mechanical contract: the prompt explicitly names and orders the eight required fields, requires a nonempty evidence array, caps action references, and prohibits unknown fields. `examples-v2.json` is byte-identical to `examples-v1.json`, so no named-case tuning was introduced.
+Before the methodology flaw was found, one visible-only immutable prompt experiment produced `tutor-v2`. It changed only the mechanical contract: the prompt explicitly names and orders the eight required fields, requires a nonempty evidence array, caps action references, and prohibits unknown fields. `examples-v2.json` is byte-identical to `examples-v1.json`, so no named-case tuning was introduced.
 
-The focused two-mode, one-seed v2 probe repeated the same missing-field/invalid-JSON class: 0/2 valid. Prompt tuning stopped at that point; no v3 was created. The larger candidates used the frozen v2 contract because their capacity might follow the explicit structure even though 0.6B could not.
+After the constrained transport was corrected, `tutor-v2` was frozen without any further prompt or example edits. Every final candidate ran the same complete 246-record matrix (41 cases × 2 real modes × 3 seeds). No output-specific tuning was performed between candidates or modes, and the hidden corpus remained untouched.
 
 Prompt provenance:
 
@@ -87,70 +95,69 @@ Each complete run contains exactly 246 records with 123 per mode and 82 per seed
 
 | Model / prompt | First valid | Repairs | Valid repairs | Provider-success records | Context-overflow outcomes | First-overflow cases | All-attempt p50 / p90 | Non-transport-error p50 / p90 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Qwen3 0.6B / v1 | 0/246 (0.0%) | 78 | 0 | 75 | 171 | 28/41 | 220 / 16,031 ms | 14,749 / 20,341 ms |
-| Qwen3 1.7B / v2 | 17/246 (6.9%) | 46 | 0 | 72 | 174 | 29/41 | 82 / 21,847 ms | 18,079 / 27,684 ms |
-| SmolLM3 3B / v2 | 30/246 (12.2%) | 19 | 0 | 61 | 185 | 29/41 | 48 / 20,872 ms | 9,744 / 42,956 ms |
+| Qwen3 0.6B / v2 | 8/246 (3.3%) | 4 | 0 | 72 | 174 | 29/41 | 95 / 5,344 ms | 4,458 / 11,158 ms |
+| Qwen3 1.7B / v2 | 11/246 (4.5%) | 0 | 0 | 71 | 174 | 29/41 | 242 / 25,467 ms | 17,801 / 61,633 ms |
+| SmolLM3 3B / v2 | 26/246 (10.6%) | 27 | 0 | 67 | 187 | 29/41 | 79 / 39,639 ms | 22,476 / 63,972 ms |
 
 “Context-overflow outcomes” includes an overflow on either the first attempt or the optional repair. The low all-attempt median is not a sign of responsiveness: most requests failed quickly at the context boundary. The non-transport-error columns better describe generation latency on the Mac.
 
-The conservative byte preflight warned on 23/41 visible cases. Actual first-attempt tokenizer/server rejection covered 28 cases for Qwen 0.6B and 29 for each larger tokenizer. This is the dominant feasibility blocker.
+The conservative byte preflight warned on 23/41 visible cases. Actual first-attempt tokenizer/server rejection covered 29 cases for every candidate (174/246 attempts each). SmolLM3 had 13 additional overflows during its one permitted repair, producing 187 overflow outcomes total. This is the dominant feasibility blocker.
 
 Mode-level mechanical validity:
 
 | Model | Off | Bounded |
 | --- | ---: | ---: |
-| Qwen3 0.6B | 0/123 | 0/123 |
-| Qwen3 1.7B | 17/123 | 0/123 |
-| SmolLM3 3B | 13/123 | 17/123 |
+| Qwen3 0.6B | 4/123 | 4/123 |
+| Qwen3 1.7B | 3/123 | 8/123 |
+| SmolLM3 3B | 12/123 | 14/123 |
 
-Qwen 0.6B's successful transports systematically omitted required metadata; its bounded mode mostly produced empty or invalid content. Qwen 1.7B improved the off-mode shape but still produced invalid JSON, request-ID mismatches, invalid teaching intents, and unknown identifiers. SmolLM3 returned more conforming objects but often chose a board task or evidence identifier that the request did not permit. No repair attempt produced a valid turn for any model.
+The explicit grammar prevented a completed object from omitting required fields or adding unknown ones. Thirty-one attempts nevertheless hit the unchanged 256-token cap before closing the constrained object and triggered the one permitted repair; none repaired successfully. Most other completed mechanical failures were request-aware identity or permitted-reference mismatches that a schema-only grammar cannot decide. SmolLM3 also hit five generation failures in addition to overflow.
 
 ## Visible quality findings
 
-Mechanical validity was necessary but not sufficient. Spot inspection before blinding found severe mistakes among valid turns:
+Mechanical validity was necessary but not sufficient. The corrected constrained path did produce a small number of good turns. For example, SmolLM3 answered the supplied mate-in-one hint with “Your queen can checkmate on g7” and “Move your queen to g7.” Other useful turns correctly identified an endangered piece or acknowledged a wrong tap and advanced the board task.
 
-- Qwen 1.7B claimed a lone king in a quiet position could checkmate on g7 or h8.
-- In the mate-in-one case, Qwen 1.7B correctly named the queen's mate but instructed the learner to move the king to g7.
-- SmolLM3 sometimes replaced “find the endangered knight” with a question about which black piece the knight could attack.
-- SmolLM3 claimed the black king was in check in an unrelated danger case and instructed the child to tap the black king.
-- In an endangered-pawn case, SmolLM3 asked which white piece could take the pawn or told the child to tap the attacking bishop rather than help the pawn.
+The mechanically valid subset still contained ten severe turns:
 
-These are not polish issues that could be fixed by editing copy. They reverse the task or invent a chess fact, and they recur across seeds and modes.
+- five regressed after a resolved move, speaking as though the knight or pawn remained on its old square;
+- two followed an unrelated staged king move while ignoring the still-exposed knight;
+- one repeated a target question the learner had already answered; and
+- two ignored the supplied situation in favor of generic opening advice or a false check claim.
+
+These are state-following and chess-grounding failures, not copy polish. They occur in every model family evaluated.
 
 ## Blinded review
 
-A combined public packet was generated from exactly the three complete visible matrices. The focused v2 probe was excluded.
+A combined public packet was generated from exactly the three final corrected visible matrices. Every superseded soft-prompt or mislabeled-mode run was excluded.
 
 - review rows: 738;
-- public packet SHA-256: `84fa68230ac2d5caf2f421abcd9030d593e83b7c686d4f18702a94817db814bb`; and
+- public packet SHA-256: `78bbd0326f73f057a9cdff1d2cb402e75000175b926a3896c9a0a8f116b6092d`; and
 - blank rubric SHA-256: `dee7cf6b3787f6b8a7af668cc788b311bcc3882dc4e47284e544af7d99c86eb5`.
 
 The public packet and rubric contained no model, prompt, or runtime identity. An independent reviewer scored every row before unblinding. The aggregate rubric results and severe-row verification follow below.
 
-The completed rubric has 738 unique rows in packet order, no blanks, valid ranges, LF line endings, and SHA-256 `4216e5b916255c12ca2070ea39dfe0de662e4a013503ff6a72247a77600e34df`. The reviewer did not inspect the review key, run records, model identities, or aggregate results. Their scoring rules were:
+The completed rubric has 738 unique rows in packet order, no blanks, valid ranges, and SHA-256 `dc91f893586e13099c4008b34404488c7215d846b6291bf0ab1c1a30187bcb0f`. The reviewer did not inspect the review key, run records, model identities, or aggregate results. Their scoring rules were:
 
-- absent or mechanically incomplete turns received six 1s and `severeError = 1`, with the other negative flags clear;
-- unusable request/reference mismatches were treated the same way;
-- complete turns were judged against the current interaction, available operations, success criteria, and severe-failure criteria;
-- `unnecessaryInterrogation` marked repeated or already-resolved questioning; and
-- `mixedStages` marked incompatible task, message, and instruction phases.
+- null or otherwise unusable candidates received six 1s and `severeError = 1`;
+- clear request/reference mismatches were treated the same way; and
+- complete turns were judged against the current interaction, available operations, success criteria, and severe-failure criteria.
 
 Overall blinded scores:
 
 | Positive dimension (1–5) | Mean |
 | --- | ---: |
-| Factual correctness | 1.22 |
-| One coherent step | 1.25 |
-| Responsive to latest action | 1.17 |
-| Answerability | 1.19 |
-| Child clarity | 1.30 |
-| Pedagogical usefulness | 1.15 |
+| Factual correctness | 1.32 |
+| One coherent step | 1.37 |
+| Responsive to latest action | 1.20 |
+| Answerability | 1.27 |
+| Child clarity | 1.41 |
+| Pedagogical usefulness | 1.16 |
 
 | Negative dimension | Count | Rate |
 | --- | ---: | ---: |
-| Unnecessary interrogation | 20 | 2.7% |
-| Mixed stages | 14 | 1.9% |
-| Severe error | 700 | 94.9% |
+| Unnecessary interrogation | 19 | 2.6% |
+| Mixed stages | 51 | 6.9% |
+| Severe error | 680 | 92.1% |
 
 The low negative-flag counts do not offset the severe rate: absent or unusable turns were scored as severe without also being labeled as interrogation or mixed-stage problems.
 
@@ -158,33 +165,20 @@ Mode-level blinded quality:
 
 | Model / mode | Fact | One step | Latest action | Answerable | Child clarity | Useful | Interrogation | Mixed | Severe |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Qwen3 0.6B / bounded | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 0 | 0 | 123/123 |
-| Qwen3 0.6B / off | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 0 | 0 | 123/123 |
-| Qwen3 1.7B / bounded | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 0 | 0 | 123/123 |
-| Qwen3 1.7B / off | 1.43 | 1.46 | 1.27 | 1.38 | 1.57 | 1.18 | 11 | 6 | 112/123 |
-| SmolLM3 3B / bounded | 1.52 | 1.53 | 1.39 | 1.42 | 1.69 | 1.37 | 6 | 4 | 107/123 |
-| SmolLM3 3B / off | 1.34 | 1.49 | 1.37 | 1.34 | 1.56 | 1.33 | 3 | 4 | 112/123 |
+| Qwen3 0.6B / bounded | 1.19 | 1.20 | 1.14 | 1.17 | 1.23 | 1.14 | 0 | 3 | 116/123 |
+| Qwen3 0.6B / off | 1.35 | 1.50 | 1.22 | 1.21 | 1.60 | 1.14 | 0 | 12 | 114/123 |
+| Qwen3 1.7B / bounded | 1.37 | 1.40 | 1.09 | 1.32 | 1.42 | 1.07 | 8 | 11 | 112/123 |
+| Qwen3 1.7B / off | 1.30 | 1.42 | 1.17 | 1.33 | 1.46 | 1.11 | 6 | 11 | 114/123 |
+| SmolLM3 3B / bounded | 1.41 | 1.40 | 1.32 | 1.36 | 1.41 | 1.28 | 3 | 7 | 110/123 |
+| SmolLM3 3B / off | 1.31 | 1.31 | 1.28 | 1.25 | 1.33 | 1.24 | 2 | 7 | 114/123 |
 
 ### Severe-row verification
 
-After the rubric was complete, the review key was unblinded. An automated audit followed all 738 review-key pointers and proved that each public packet's position, history, current interaction, latest action, candidate turn, success criteria, and severe-failure criteria exactly matched the original run record. Every severe row therefore retained its original request evidence.
+After the rubric was complete, the review key was unblinded. An automated audit followed all 738 review-key pointers and proved that each public packet's position, history, current interaction, latest action, candidate turn, success criteria, and severe-failure criteria exactly matched the original run record.
 
-Of the 700 severe rows:
+Of the 680 severe rows, 670 were mechanically invalid and could not be displayed; 10 were mechanically valid but still severe. Every one of those 10 was manually checked against its request and oracle, producing the failure classes listed above. The independent reviewer could not see validator diagnostics. Twenty-three additional rows looked complete enough to score non-severe but failed strict enum or permitted-reference membership and remain rejected by the application gate; all 23 were inspected after unblinding. They ranged from an otherwise good confirmation with an unavailable task ID to unrelated king guidance with invented move references.
 
-- 680 were mechanically invalid and could not be displayed. This includes 516 first-attempt context overflows; the other 164 were malformed, incomplete, or reference-invalid structured outputs.
-- 20 were mechanically valid but still severe. Each of these 20 was manually checked against the corresponding request and oracle. The failures divide into 15 invented or reversed chess facts/illegal actions, 4 repetitions of a question the learner had already answered, and 1 response that reinforced the learner's wrong piece selection.
-
-The independent reviewer could not see validator diagnostics. Eleven additional rows looked structurally complete in the public packet and were scored non-severe, but failed the mechanical validator on an enum or permitted-reference mismatch. They remain rejected by the application gate. Of the 47 mechanically valid turns, only 27 were non-severe; 19 scored at least 4 on every positive dimension, just 2.6% of all 738 attempts. A representative check of those non-severe rows found both genuinely useful turns and weak but non-severe turns, so `non-severe` is not being treated as equivalent to `broadly usable`.
-
-Representative anonymized turns illustrate the spread:
-
-- A good turn identified the queen's supplied mate-in-one and instructed, “Move your queen to g7.” The 3B model repeated this correctly in both modes and all three seeds.
-- A good quiet-position turn said, “This is a quiet position. Choose a legal king move,” followed by the concrete board instruction to tap the king and a square.
-- A severe turn said a lone king could checkmate on g7 or h8, moves the king could not make from the encoded position.
-- Another named the queen's correct mate square but then instructed the learner to move the king there.
-- Several danger turns reversed the supplied attack relationship, asked the learner to capture a king, or repeated the already-answered endangered-piece question.
-
-These examples confirm that the small number of good turns is real, but narrow and surrounded by both mechanical rejection and systematic coaching failures.
+Of the 45 mechanically valid turns, 35 were non-severe. Only 18 were non-severe and scored at least 4 on every positive dimension—2.4% of all 738 attempts. Eleven earned 5 on every positive dimension. Representative checks confirmed that this small good subset is real, but narrow and surrounded by mechanical rejection, stage mixing, and severe state-following failures.
 
 ## Advancement rule
 
@@ -192,9 +186,9 @@ The rule is to advance the smallest model whose turns are broadly usable without
 
 No model meets the first half of the rule:
 
-- Qwen 0.6B produced no displayable turn.
-- Qwen 1.7B produced displayable turns on only 6.9% of attempts and made severe chess/task errors within that subset.
-- SmolLM3 produced displayable turns on only 12.2% of attempts and still showed systematic task reversal and invented-state errors.
+- Qwen 0.6B produced displayable turns on only 3.3% of attempts; half were severe.
+- Qwen 1.7B produced displayable turns on only 4.5% of attempts and still made a severe resolved-question regression.
+- SmolLM3 produced displayable turns on only 10.6% of attempts and had five severe state-following or invented-purpose errors within that subset.
 
 Result: zero finalists. The hidden set remains unspent, and device model execution is skipped.
 
@@ -203,7 +197,7 @@ Result: zero finalists. The hidden set remains unspent, and device model executi
 The evaluation supports continuing with provider-neutral coaching contracts, but not integrating any tested GGUF into the app. Before another local-model round:
 
 1. design and test an evidence-preserving compact request that fits the intended device context;
-2. select or build a structured-output path that reliably enforces all required fields without a brittle assistant postprocessor;
+2. extend the corrected grammar with request-specific permitted-reference alternatives so invalid IDs cannot consume a generation;
 3. re-evaluate model families or sizes against the new versioned contract on Mac; and
 4. advance to iPad latency/thermal testing only after visible outputs are broadly usable and severe-error classes are absent.
 

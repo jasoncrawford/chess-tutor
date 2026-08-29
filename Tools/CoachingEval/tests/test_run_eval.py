@@ -426,7 +426,10 @@ class RunEvalTests(unittest.TestCase):
             manifests = list((root / "artifacts" / "runs" / "fake-test-model").rglob("run-manifest.json"))
             self.assertEqual(1, len(manifests))
             manifest = json.loads(manifests[0].read_text())
-            self.assertEqual("openai-compatible-http", manifest["transport"])
+            self.assertEqual(
+                "llama.cpp-apply-template-native-completion",
+                manifest["transport"],
+            )
             self.assertEqual("tutor-v1", manifest["promptVersion"])
             self.assertEqual("fake-test-only", manifest["runtimeProvenance"]["kind"])
             for field in (

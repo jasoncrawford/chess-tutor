@@ -181,18 +181,13 @@ class EvaluationRunner:
         request = evaluation_case["request"]
         request_bytes = canonical_json(request).encode("utf-8")
         example_messages = _example_messages(self.examples)
-        prompt_payload = llama_server.build_chat_payload(
+        prompt_payload = llama_server.build_template_payload(
             system_prompt=self.system_prompt,
             request=request,
-            schema=self.schema,
-            seed=seed,
-            maximum_output_tokens=self.maximum_output_tokens,
-            temperature=self.temperature,
-            top_p=self.top_p,
             enable_thinking=mode == "bounded",
             extra_messages=example_messages,
         )
-        prompt_bytes = canonical_json(prompt_payload["messages"]).encode("utf-8")
+        prompt_bytes = canonical_json(prompt_payload).encode("utf-8")
         likely_overflow = len(prompt_bytes) > self.context_tokens * 4
         record = {
             "caseID": evaluation_case["id"],
@@ -387,8 +382,8 @@ def _fake_server(argv):
     parser.add_argument("-c")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
-    parser.add_argument("--skip-chat-parsing", action="store_true")
     arguments = parser.parse_args(argv)
+    state = {"templatePayload": None}
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -404,6 +399,19 @@ def _fake_server(argv):
         def do_POST(self):
             size = int(self.headers["Content-Length"])
             payload = json.loads(self.rfile.read(size))
+            if self.path == "/apply-template":
+                state["templatePayload"] = payload
+                prompt = "".join(
+                    "<|im_start|>{role}\n{content}<|im_end|>\n".format(**message)
+                    for message in payload["messages"]
+                ) + "<|im_start|>assistant\n"
+                body = json.dumps({"prompt": prompt}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if os.environ.get("COACHING_EVAL_FAKE_HTTP_ERROR") == "reasoning":
                 body = json.dumps(
                     {
@@ -423,8 +431,9 @@ def _fake_server(argv):
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            template_payload = state.get("templatePayload") or {}
             request = None
-            for message in reversed(payload.get("messages", [])):
+            for message in reversed(template_payload.get("messages", [])):
                 if message.get("role") != "user":
                     continue
                 try:
@@ -440,12 +449,14 @@ def _fake_server(argv):
             content = "<think>test-only trace</think>\n" + canonical_json(_fake_turn_for(request))
             body = json.dumps(
                 {
-                    "choices": [{"message": {"content": content, "reasoning_content": "discard me"}}],
-                    "usage": {
-                        "prompt_tokens": max(1, size // 4),
-                        "completion_tokens": max(1, len(content) // 4),
+                    "content": content,
+                    "stop_type": "eos",
+                    "timings": {
+                        "prompt_n": max(1, size // 4),
+                        "predicted_n": max(1, len(content) // 4),
+                        "prompt_ms": 1.25,
+                        "predicted_ms": 2.5,
                     },
-                    "timings": {"prompt_ms": 1.25, "predicted_ms": 2.5},
                 }
             ).encode("utf-8")
             self.send_response(200)
@@ -591,7 +602,11 @@ def _execute(arguments):
     manifest = {
         "modelID": model_id,
         "provider": arguments.provider,
-        "transport": "openai-compatible-http",
+        "transport": (
+            "llama.cpp-apply-template-native-completion"
+            if arguments.provider == "local"
+            else "openai-compatible-http"
+        ),
         "split": arguments.split,
         "corpusPath": str(corpus_path.resolve()),
         "corpusSHA256": _file_sha256(corpus_path),

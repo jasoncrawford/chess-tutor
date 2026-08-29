@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import coaching_grammar
 from http_security import SameOriginAuthorizationRedirectHandler
 
 
@@ -93,6 +94,33 @@ def build_chat_payload(
     if model is not None:
         payload["model"] = model
     return payload
+
+
+def build_template_payload(
+    *,
+    system_prompt,
+    request,
+    enable_thinking,
+    extra_messages=None,
+    after_messages=None,
+):
+    """Build the exact conversation rendered by llama.cpp's model template."""
+    payload = build_chat_payload(
+        system_prompt=system_prompt,
+        request=request,
+        schema={},
+        seed=0,
+        maximum_output_tokens=1,
+        temperature=0,
+        top_p=1,
+        enable_thinking=enable_thinking,
+        extra_messages=extra_messages,
+        after_messages=after_messages,
+    )
+    return {
+        "messages": payload["messages"],
+        "chat_template_kwargs": payload["chat_template_kwargs"],
+    }
 
 
 class OpenAIChatClient:
@@ -184,7 +212,6 @@ class LlamaServer:
             "127.0.0.1",
             "--port",
             str(self.port),
-            "--skip-chat-parsing",
         ]
         self.process = subprocess.Popen(
             self.command,
@@ -243,21 +270,51 @@ class LlamaServer:
         extra_messages=None,
         after_messages=None,
     ):
-        payload = build_chat_payload(
+        template_payload = build_template_payload(
             system_prompt=system_prompt,
             request=request,
-            schema=schema,
-            seed=seed,
-            maximum_output_tokens=maximum_output_tokens,
-            temperature=temperature,
-            top_p=top_p,
             enable_thinking=enable_thinking,
             extra_messages=extra_messages,
             after_messages=after_messages,
         )
+        prompt = self._post_json("/apply-template", template_payload, timeout=timeout).get(
+            "prompt"
+        )
+        if not isinstance(prompt, str):
+            raise LlamaServerError("llama-server template response has no prompt")
+        payload = {
+            "prompt": prompt,
+            "seed": seed,
+            "n_predict": maximum_output_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "grammar": coaching_grammar.strict_grammar(
+                schema,
+                enable_thinking=enable_thinking,
+            ),
+        }
+        response = self._post_json("/completion", payload, timeout=timeout)
+        content = response.get("content")
+        if not isinstance(content, str):
+            raise LlamaServerError("llama-server completion response has no content")
+        timings = response.get("timings", {})
+        normalized = dict(response)
+        normalized["choices"] = [
+            {
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": response.get("stop_type"),
+            }
+        ]
+        normalized["usage"] = {
+            "prompt_tokens": int(timings.get("prompt_n", 0) or 0),
+            "completion_tokens": int(timings.get("predicted_n", 0) or 0),
+        }
+        return normalized
+
+    def _post_json(self, path, payload, *, timeout):
         request_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         http_request = urllib.request.Request(
-            f"{self.base_url}/v1/chat/completions",
+            f"{self.base_url}{path}",
             data=request_body,
             headers={"Content-Type": "application/json"},
             method="POST",

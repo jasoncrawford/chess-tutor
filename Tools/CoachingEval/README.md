@@ -63,7 +63,7 @@ python3 Tools/CoachingEval/runtime_provenance.py verify \
   --manifest .coaching-eval/runtime/b10516/runtime-manifest.json
 ```
 
-The runner refuses a missing manifest, a source tag/commit mismatch, changed version output, or changed binary hash. First run the deterministic b10516 schema preflight, then prove that the pinned server accepts the exact schema through its HTTP grammar path:
+The runner refuses a missing manifest, a source tag/commit mismatch, changed version output, or changed binary hash. First run the deterministic schema preflight, then prove that the pinned server enforces the exact turn contract through its HTTP grammar path:
 
 ```bash
 python3 Tools/CoachingEval/schema_compat.py
@@ -73,7 +73,7 @@ python3 Tools/CoachingEval/schema_compat.py \
   --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json
 ```
 
-The real pinned-server smoke is mandatory before Task 5 model comparisons. The unit suite exercises this hook with a fake server, but that is not evidence that a locally built b10516 converter compiled the schema.
+The real pinned-server smoke is mandatory before model comparisons. It adversarially asks for `{}`, inspects the returned content, parses exactly one JSON object, and applies the complete request-aware validator. The unit suite exercises the hook with a fake server, but that is not evidence that a locally built b10516 runtime enforced the grammar.
 
 ## Run local models
 
@@ -93,7 +93,11 @@ python3 Tools/CoachingEval/run_eval.py local \
 
 Use `--mode off` or `--mode bounded` to select one supported thinking mode, `--case t1Entry` for a focused case, and `--repetitions 1` for a smoke test. Without those overrides, the evaluator runs every model-supported mode and all three pinned seeds. The server is bound to an ephemeral `127.0.0.1` port, must pass `/health`, and is stopped in `finally`; a request timeout terminates its process group.
 
-The local server uses b10516's `--skip-chat-parsing` mode so the generated response-format content is returned directly in `message.content`. Without it, b10516's PEG-native assistant postprocessor can reject a completed Qwen response with HTTP 500 before the evaluator can validate it. This does not relax the evaluator contract: the exact schema is still sent, and every returned object must pass the same strict Python/Swift-compatible validation or is recorded as invalid.
+Local generation uses two documented b10516 endpoints. `/apply-template` renders the model's own template and thinking-mode setting without inference. The resulting prompt is sent to native `/completion` with the pinned strict `model-coaching-turn.v1` GBNF, bypassing the PEG-native chat response parser while retaining token-level grammar enforcement. The grammar builder refuses any schema hash other than the immutable contract; its bounded prose rules are JSON-safe and slightly stricter than the schema because they disallow `\\u` escapes. The evaluator then applies the unchanged strict Python/Swift-compatible identity, word-limit, and permitted-reference validator.
+
+Off mode constrains generation to the JSON object alone. Bounded mode constrains generation to exactly one closed `<think>...</think>` envelope (at most 128 non-`<` characters, with at most two line breaks on either side) followed by the identical strict JSON object. The total output cap remains 256 tokens. The envelope is removed before parsing and persistence; no reasoning marker or content is written to records or review artifacts.
+
+This explicit grammar is required because b10516's JSON-Schema converter embeds a string `pattern` without intersecting it with JSON string syntax. A negated word class can therefore consume a closing quote and permit invalid JSON even though the server logs a converted grammar. The mandatory real-runtime adversarial smoke protects against that regression.
 
 `runtime.json` selects the immutable `tutor-v1` prompt bundle by default. Use `--prompt-version tutor-v<number>` to select another committed `prompts/tutor-v<number>.md` plus matching `prompts/examples-v<number>.json` pair. The runner records the selected version, exact paths, and both hashes; aliases such as `latest` are rejected.
 
