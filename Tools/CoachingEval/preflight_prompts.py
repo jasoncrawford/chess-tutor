@@ -52,7 +52,12 @@ def _write_immutable_manifest(output, manifest):
             destination.write(_canonical_manifest_bytes(manifest))
             destination.flush()
             os.fsync(destination.fileno())
-        os.replace(temporary, output)
+        try:
+            os.link(temporary, output)
+        except FileExistsError as error:
+            raise ValueError(
+                f"Refusing to overwrite existing preflight manifest: {output}"
+            ) from error
         try:
             directory_descriptor = os.open(str(output.parent), os.O_RDONLY)
         except OSError:

@@ -263,8 +263,97 @@ class PreflightPromptTests(unittest.TestCase):
                         **{key: value for key, value in common.items() if key != "models"},
                     )
 
-    def test_cli_returns_a_budget_failure_only_after_writing_the_manifest(self):
-        result = {"summary": {"overBudgetCount": 1}}
+    def test_atomic_writer_refuses_a_destination_created_before_publish(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "preflight.json"
+            original_fsync = preflight_prompts.os.fsync
+            competitor_created = False
+
+            def fsync_then_create_competitor(descriptor):
+                nonlocal competitor_created
+                original_fsync(descriptor)
+                if not competitor_created:
+                    competitor_created = True
+                    output.write_text("competing manifest", encoding="utf-8")
+
+            with mock.patch.object(
+                preflight_prompts.os, "fsync", side_effect=fsync_then_create_competitor
+            ):
+                with self.assertRaisesRegex(ValueError, "overwrite"):
+                    preflight_prompts._write_immutable_manifest(output, {"new": "manifest"})
+
+            self.assertTrue(competitor_created)
+            self.assertEqual("competing manifest", output.read_text(encoding="utf-8"))
+
+    def test_matrix_validator_refuses_duplicate_cells(self):
+        models = [(f"model-{index}", Path(f"model-{index}.gguf")) for index in range(3)]
+        cases = [{"id": f"case-{index}"} for index in range(10)]
+        cells = [
+            {"modelID": model_id, "mode": mode, "caseID": case["id"]}
+            for model_id, _path in models
+            for mode in ("off", "bounded")
+            for case in cases
+        ]
+        cells[-1] = dict(cells[-2])
+
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            preflight_prompts._validate_complete_matrix(cells, models, cases)
+
+    def test_matrix_validator_refuses_incomplete_cells(self):
+        models = [(f"model-{index}", Path(f"model-{index}.gguf")) for index in range(3)]
+        cases = [{"id": f"case-{index}"} for index in range(10)]
+        cells = [
+            {"modelID": model_id, "mode": mode, "caseID": case["id"]}
+            for model_id, _path in models
+            for mode in ("off", "bounded")
+            for case in cases
+        ]
+
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            preflight_prompts._validate_complete_matrix(cells[:-1], models, cases)
+
+    def test_cli_persists_a_4001_token_manifest_and_returns_nonzero(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            corpus = self._write_corpus(root)
+            models = self._write_models(root)
+            output = root / "preflight.json"
+            FakeTemplateTokenServer.token_counts = [4001] + [4000] * 59
+            real_preflight = preflight_prompts.preflight
+
+            def preflight_with_fake_server(**arguments):
+                return real_preflight(
+                    **arguments, server_factory=FakeTemplateTokenServer
+                )
+
+            arguments = [
+                "--server", str(root / "llama-server"),
+                "--runtime-manifest", str(root / "runtime-manifest.json"),
+                "--corpus", str(corpus),
+                "--pilot", str(TOOLS_DIR / "pilots" / "compact-markdown-v1.json"),
+                "--model", f"model-0={models[0][1]}",
+                "--model", f"model-1={models[1][1]}",
+                "--model", f"model-2={models[2][1]}",
+                "--output", str(output),
+            ]
+            with mock.patch.object(
+                preflight_prompts.runtime_provenance,
+                "verify_runtime",
+                return_value={"sourceTag": "b10516"},
+            ), mock.patch.object(
+                preflight_prompts,
+                "preflight",
+                side_effect=preflight_with_fake_server,
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(1, preflight_prompts.main(arguments))
+
+            manifest = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(1, manifest["summary"]["overBudgetCount"])
+            self.assertEqual(4001, manifest["cells"][0]["renderedPromptTokens"])
+
+    def test_cli_returns_zero_when_the_summary_is_within_budget(self):
+        result = {"summary": {"overBudgetCount": 0}}
         arguments = [
             "--server", "server",
             "--runtime-manifest", "runtime-manifest.json",
@@ -275,10 +364,6 @@ class PreflightPromptTests(unittest.TestCase):
             "--model", "model-2=model-2.gguf",
             "--output", "unused.json",
         ]
-        with mock.patch.object(preflight_prompts, "preflight", return_value=result):
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(1, preflight_prompts.main(arguments))
-        result["summary"]["overBudgetCount"] = 0
         with mock.patch.object(preflight_prompts, "preflight", return_value=result):
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(0, preflight_prompts.main(arguments))
