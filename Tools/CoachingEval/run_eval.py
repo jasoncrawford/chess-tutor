@@ -47,6 +47,18 @@ TURN_OPTIONAL_PROPERTY_ORDER = (
     "responseToLatestAction",
     "boardTaskReference",
 )
+COMPACT_MARKDOWN_PILOT_CASE_IDS = (
+    "t1Entry",
+    "t3Entry",
+    "t7NoSafeCapture",
+    "t1PreferredKnight",
+    "t11UnsafeBishopFound",
+    "t11Safe",
+    "t11BenignCaptureTap",
+    "t12Block",
+    "t9Hint",
+    "t12UnsupportedEntry",
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -691,6 +703,35 @@ def _load_cases(path, case_id=None):
     return cases
 
 
+def _select_case_list(cases, path, *, split):
+    manifest = _load_json(path)
+    case_ids = manifest.get("caseIDs")
+    if not isinstance(case_ids, list) or len(case_ids) != len(set(case_ids)):
+        raise ValueError("Pilot case list contains a duplicate or invalid case ID")
+    if (
+        manifest.get("schemaVersion") != "coaching-eval-pilot.v1"
+        or manifest.get("id") != "compact-markdown-v1"
+        or tuple(case_ids) != COMPACT_MARKDOWN_PILOT_CASE_IDS
+    ):
+        raise ValueError("Pilot case list must contain the exact fixed pilot IDs in order")
+    if split != "visible":
+        raise ValueError("Pilot case list may be used only with the visible split")
+    by_id = {}
+    for case in cases:
+        identifier = case.get("id")
+        if identifier in by_id:
+            raise ValueError(f"Corpus contains duplicate case ID: {identifier}")
+        by_id[identifier] = case
+    missing = [identifier for identifier in case_ids if identifier not in by_id]
+    if missing:
+        raise ValueError(f"Pilot case list is missing corpus cases: {missing}")
+    selected = [by_id[identifier] for identifier in case_ids]
+    hidden = [case["id"] for case in selected if case.get("split") != "visible"]
+    if hidden:
+        raise ValueError(f"Pilot case list contains hidden or mislabeled cases: {hidden}")
+    return selected
+
+
 def _run_output_directory(base, split):
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     return base / f"{split}-{timestamp}"
@@ -961,7 +1002,12 @@ def _execute(arguments):
         getattr(arguments, "prompt_version", None) or runtime["evaluation"]["promptVersion"]
     )
     corpus_path = Path(arguments.corpus or ARTIFACT_ROOT / "corpus" / "v1" / f"{arguments.split}.jsonl")
-    cases = _load_cases(corpus_path, arguments.case)
+    case_list = getattr(arguments, "case_list", None)
+    if case_list is not None and getattr(arguments, "case", None) is not None:
+        raise ValueError("Use only one of --case or --case-list")
+    cases = _load_cases(corpus_path, None if case_list is not None else arguments.case)
+    if case_list is not None:
+        cases = _select_case_list(cases, case_list, split=arguments.split)
     repetitions = (
         runtime["evaluation"]["repetitions"]
         if arguments.repetitions is None
@@ -1102,6 +1148,7 @@ def main(argv=None):
     for subparser in (local, reference):
         subparser.add_argument("--split", choices=("visible", "hidden"), required=True)
         subparser.add_argument("--case")
+        subparser.add_argument("--case-list")
         subparser.add_argument("--repetitions", type=int)
         subparser.add_argument("--mode", choices=("off", "bounded"))
         subparser.add_argument("--corpus")

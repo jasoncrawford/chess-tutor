@@ -3,9 +3,14 @@
 
 import json
 import os
+import re
 
 
 _FORBIDDEN_MARKERS = ("<think", "reasoning_content", "reasoningcontent")
+_EMPTY_TEMPLATE_THINKING_CONTROL = re.compile(
+    r"<\s*think\b[^>]*>\s*<\s*/\s*think\s*>",
+    re.IGNORECASE,
+)
 
 
 def _json_block(value):
@@ -36,7 +41,7 @@ def _table(rows, columns):
 
 
 def _assert_trace_and_secret_free(transcript, environment):
-    lowered = transcript.lower()
+    lowered = _EMPTY_TEMPLATE_THINKING_CONTROL.sub("", transcript).lower()
     for marker in _FORBIDDEN_MARKERS:
         if marker in lowered:
             raise ValueError(f"Transcript contains forbidden trace marker: {marker}")

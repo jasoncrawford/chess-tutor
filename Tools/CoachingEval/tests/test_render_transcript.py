@@ -12,6 +12,28 @@ import render_transcript
 
 
 class RenderTranscriptTests(unittest.TestCase):
+    def test_allows_exact_empty_template_thinking_control_but_rejects_trace_content(self):
+        record = {
+            "evaluationCase": {"compactContext": {"markdown": "context"}},
+            "rawFinalContent": "{}",
+            "firstAttemptValidation": {"valid": False, "errors": []},
+        }
+        empty_control = "assistant\n<think>\n\n</think>\n\n"
+
+        transcript = render_transcript.render_transcript(
+            record,
+            rendered_prompt=empty_control,
+            environment={},
+        )
+
+        self.assertIn(empty_control, transcript)
+        with self.assertRaisesRegex(ValueError, "forbidden trace marker"):
+            render_transcript.render_transcript(
+                record,
+                rendered_prompt="assistant\n<think>private analysis</think>\n",
+                environment={},
+            )
+
     def test_renders_fixed_readable_sections_exact_text_and_evidence_accounting(self):
         markdown = "# Chess coaching context\n\n- Latest action: moved knight"
         rendered_prompt = "SYSTEM\n" + markdown + "\nASSISTANT"

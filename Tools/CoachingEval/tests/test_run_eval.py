@@ -743,6 +743,61 @@ class RunEvalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not support thinking mode bounded"):
             run_eval._selected_modes(candidate, "bounded")
 
+    def test_case_list_requires_exact_visible_ids(self):
+        expected = [
+            "t1Entry",
+            "t3Entry",
+            "t7NoSafeCapture",
+            "t1PreferredKnight",
+            "t11UnsafeBishopFound",
+            "t11Safe",
+            "t11BenignCaptureTap",
+            "t12Block",
+            "t9Hint",
+            "t12UnsupportedEntry",
+        ]
+        cases = [
+            {"id": identifier, "split": "visible"}
+            for identifier in reversed(expected)
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "pilot.json"
+
+            def write(case_ids):
+                path.write_text(
+                    json.dumps(
+                        {
+                            "schemaVersion": "coaching-eval-pilot.v1",
+                            "id": "compact-markdown-v1",
+                            "caseIDs": case_ids,
+                        }
+                    )
+                )
+
+            write(expected)
+            selected = run_eval._select_case_list(cases, path, split="visible")
+            self.assertEqual(expected, [item["id"] for item in selected])
+
+            write(expected[:-1])
+            with self.assertRaisesRegex(ValueError, "exact fixed pilot IDs"):
+                run_eval._select_case_list(cases, path, split="visible")
+
+            write(expected[:-1] + [expected[-2]])
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                run_eval._select_case_list(cases, path, split="visible")
+
+            write(expected[:1] + ["hiddenCase"] + expected[2:])
+            with self.assertRaisesRegex(ValueError, "exact fixed pilot IDs"):
+                run_eval._select_case_list(
+                    cases + [{"id": "hiddenCase", "split": "hidden"}],
+                    path,
+                    split="visible",
+                )
+
+            write(list(reversed(expected)))
+            with self.assertRaisesRegex(ValueError, "exact fixed pilot IDs"):
+                run_eval._select_case_list(cases, path, split="visible")
+
     def test_prompt_bundle_selects_immutable_versioned_files_without_runner_edits(self):
         with tempfile.TemporaryDirectory() as temporary:
             prompt_root = Path(temporary)

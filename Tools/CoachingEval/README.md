@@ -130,6 +130,18 @@ python3 Tools/CoachingEval/run_eval.py local \
 
 Use `--mode off` or `--mode bounded` to select one supported thinking mode, `--case t1Entry` for a focused case, and `--repetitions 1` for a smoke test. Without those overrides, the evaluator runs every model-supported mode and all three pinned seeds. The server is bound to an ephemeral `127.0.0.1` port, must pass `/health`, and is stopped in `finally`; a request timeout terminates its process group.
 
+The committed compact-context pilot is selected with:
+
+```bash
+python3 Tools/CoachingEval/run_eval.py local \
+  --model qwen3-0.6b-q4_0 --split visible \
+  --case-list Tools/CoachingEval/pilots/compact-markdown-v1.json \
+  --repetitions 1 --corpus .coaching-eval/corpus/v2/visible.jsonl \
+  --prompt-version tutor-v3
+```
+
+The runner accepts only the exact immutable ten visible IDs in that manifest, in its declared order. It rejects duplicates, missing cases, hidden cases, a reordered manifest, or combining `--case` with `--case-list`.
+
 Local generation uses two documented b10516 endpoints. `/apply-template` renders the model's own template and thinking-mode setting without inference. The resulting prompt is sent to native `/completion` with the pinned strict `model-coaching-turn.v1` GBNF, bypassing the PEG-native chat response parser while retaining token-level grammar enforcement. The grammar builder refuses any schema hash other than the immutable contract; its bounded prose rules are JSON-safe and slightly stricter than the schema because they disallow `\\u` escapes. The evaluator then applies the unchanged strict Python/Swift-compatible identity, word-limit, and permitted-reference validator.
 
 For `tutor-v3`, the final user message is the corpus's exact human-readable compact Markdown—not the complete JSON evidence request. The evaluator renders the full conversation exactly once with `/apply-template`, tokenizes that exact rendered string with `/tokenize`, and passes the same bytes to `/completion`. It refuses generation above 4,000 exact tokenizer tokens. The response grammar is request-specific: it pins the request ID and permits only the short aliases printed in that Markdown. After generation, aliases are restored fail-closed to stable IDs and the unchanged complete-request validator checks the restored turn. A repair is allowed only for parse/shape failure; its newly rendered prompt is independently tokenized and must also fit the 4,000-token compiler budget.
@@ -145,6 +157,8 @@ Every record preserves hashes and byte/token counts for the frozen request, effe
 Legacy `tutor-v1`/`tutor-v2` records retain their original complete-JSON path for reproducibility. The compact `tutor-v3` path never truncates either the Markdown or rendered prompt: over-budget prompts become explicit `compilerBudgetExceeded` records before inference, while provider context rejection remains a distinct `contextOverflow` outcome.
 
 Provider `reasoning_content` is ignored. Repeated, prefixed, case-variant, and embedded `<think>…</think>` blocks are removed before persistence; any unresolved trace marker fails closed to empty final content. HTTP error response bodies are discarded at the client boundary. Run records retain only a bounded status/category message, which is rebuilt again at persistence rather than copying exception text. Only sanitized final response content is persisted or scored. Repair is attempted at most once and only for invalid JSON or response shape—not for an identity/reference error or a pedagogically weak turn.
+
+An exact rendered prompt may contain the model template's empty `<think></think>` control block when thinking is disabled. Transcripts retain that empty syntax because removing it would falsify the bytes that were tokenized and sent. The transcript guard allows only an empty whitespace-only block in the prompt; non-empty, unclosed, output, or provider reasoning remains forbidden.
 
 ## Optional online reference
 
