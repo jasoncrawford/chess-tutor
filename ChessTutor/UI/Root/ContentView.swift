@@ -2153,15 +2153,15 @@ private struct PendingPromotion: Identifiable {
 private extension AnyTransition {
     static var gamesRack: AnyTransition {
         .asymmetric(
-            insertion: .scale(scale: 0.94).combined(with: .opacity),
-            removal: .scale(scale: 1.03).combined(with: .opacity)
+            insertion: .scale(scale: 1.08).combined(with: .opacity),
+            removal: .scale(scale: 0.90).combined(with: .opacity)
         )
     }
 
     static var gameBoard: AnyTransition {
         .asymmetric(
-            insertion: .scale(scale: 1.06).combined(with: .opacity),
-            removal: .scale(scale: 0.82).combined(with: .opacity)
+            insertion: .scale(scale: 0.48).combined(with: .opacity),
+            removal: .scale(scale: 0.48).combined(with: .opacity)
         )
     }
 }
