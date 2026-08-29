@@ -331,6 +331,134 @@ class SchemaCompatibilityTests(unittest.TestCase):
             self.assertTrue(bounded["returnedContentStrictValidationPassed"])
             self.assertNotIn("private timeout detail", json.dumps(result))
 
+    def test_adversarial_smoke_audit_persists_all_model_modes_without_trace_content(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
+        provenance = {
+            "sourceTag": "b10516",
+            "sourceCommit": "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9",
+            "binarySHA256": "a" * 64,
+            "versionOutput": "version: 10516 (b95502ba)",
+        }
+        seen = []
+
+        class FakeServer:
+            def __init__(self, executable, model, *, context_tokens):
+                self.model = Path(model)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_arguments):
+                return None
+
+            def _post_json(self, path, payload, *, timeout):
+                self_test.assertEqual("/apply-template", path)
+                self_test.assertEqual(
+                    schema_compat.ADVERSARIAL_SMOKE_PROMPT,
+                    payload["messages"][0]["content"],
+                )
+                self_test.assertEqual(2, len(payload["messages"]))
+                request_text = payload["messages"][-1]["content"]
+                enabled = payload["chat_template_kwargs"]["enable_thinking"]
+                suffix = "<assistant>" if enabled else "<assistant><think>\n\n</think>\n\n"
+                return {"prompt": f"rendered:{request_text}{suffix}"}
+
+            def complete(self, **arguments):
+                self_test.assertEqual(
+                    schema_compat.ADVERSARIAL_SMOKE_PROMPT,
+                    arguments["system_prompt"],
+                )
+                self_test.assertEqual("tutor-v2", arguments["request"]["promptVersion"])
+                self_test.assertEqual(120, arguments["timeout"])
+                seen.append((self.model.name, arguments["enable_thinking"]))
+                turn = dict(SchemaCompatibilityTests.VALID_SMOKE_TURN)
+                content = json.dumps(turn)
+                if arguments["enable_thinking"]:
+                    content = f"<think>private adversarial trace</think>{content}"
+                return {"choices": [{"message": {"content": content}}]}
+
+        self_test = self
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime_path = root / "runtime.json"
+            runtime_path.write_text(
+                json.dumps(
+                    {
+                        "mac": {"contextTokens": 8192},
+                        "generation": {
+                            "maximumOutputTokens": 256,
+                            "temperature": 0.2,
+                            "topP": 0.9,
+                        },
+                        "evaluation": {"seeds": [1103]},
+                    }
+                )
+            )
+            models = []
+            for index in range(3):
+                path = root / f"model-{index}.gguf"
+                path.write_bytes(f"model-{index}".encode("utf-8"))
+                models.append((f"candidate-{index}", path))
+            output = root / "adversarial-audit.json"
+            with mock.patch.object(
+                schema_compat.runtime_provenance,
+                "verify_runtime",
+                return_value=provenance,
+            ), mock.patch.object(schema_compat.llama_server, "LlamaServer", FakeServer):
+                result = schema_compat.audit_adversarial_smokes(
+                    schema=schema,
+                    server=root / "llama-server",
+                    models=models,
+                    runtime_path=runtime_path,
+                    runtime_manifest=root / "runtime-manifest.json",
+                    prompt_version="tutor-v2",
+                    output=output,
+                )
+
+            self.assertEqual(result, json.loads(output.read_text()))
+            self.assertEqual(
+                "coaching-eval-adversarial-smoke-audit.v1",
+                result["schemaVersion"],
+            )
+            self.assertEqual(provenance, result["runtimeProvenance"])
+            self.assertEqual("adversarial-empty-object", result["stimulus"]["kind"])
+            self.assertEqual(
+                hashlib.sha256(
+                    schema_compat.ADVERSARIAL_SMOKE_PROMPT.encode("utf-8")
+                ).hexdigest(),
+                result["stimulus"]["promptSHA256"],
+            )
+            self.assertEqual("tutor-v2", result["effectivePrompt"]["version"])
+            self.assertEqual(
+                result["stimulus"]["promptSHA256"],
+                result["effectivePrompt"]["systemPromptSHA256"],
+            )
+            self.assertEqual(64, len(result["effectivePrompt"]["requestSHA256"]))
+            self.assertEqual(3, len(result["models"]))
+            for (model_id, path), audited in zip(models, result["models"]):
+                self.assertEqual(model_id, audited["modelID"])
+                self.assertEqual(
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    audited["modelArtifactSHA256"],
+                )
+                self.assertEqual(
+                    ["off", "bounded"],
+                    [mode["mode"] for mode in audited["modes"]],
+                )
+                for mode in audited["modes"]:
+                    self.assertEqual("responseReceived", mode["httpResult"])
+                    self.assertEqual("success", mode["generationStatus"])
+                    self.assertEqual(64, len(mode["grammarSHA256"]))
+                    self.assertEqual(64, len(mode["applyTemplateSuffixSHA256"]))
+                    self.assertTrue(mode["returnedContentParsedJSON"])
+                    self.assertTrue(mode["returnedContentStrictValidationPassed"])
+                    self.assertEqual(0, mode["validationIssueCount"])
+            self.assertEqual(6, len(seen))
+            serialized = output.read_text().lower()
+            self.assertNotIn("<think", serialized)
+            self.assertNotIn("private adversarial trace", serialized)
+            self.assertNotIn("reasoning", serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

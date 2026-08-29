@@ -76,7 +76,7 @@ python3 Tools/CoachingEval/schema_compat.py \
 
 The real pinned-server smoke is mandatory before model comparisons. It adversarially asks for `{}`, inspects the returned content, parses exactly one JSON object, and applies the complete request-aware validator. The unit suite exercises the hook with a fake server, but that is not evidence that a locally built b10516 runtime enforced the grammar.
 
-After each smoke passes, persist one compact audit binding every exact model artifact and both thinking modes to the runtime, schema/grammar, immutable prompt, applied-template suffix, and parsed/strictly validated returned content:
+Persist an ordinary tutor-path audit binding every exact model artifact and both thinking modes to the runtime, schema/grammar, immutable tutor prompt, applied-template suffix, and parsed/strictly validated returned content:
 
 ```bash
 python3 Tools/CoachingEval/schema_compat.py \
@@ -90,6 +90,21 @@ python3 Tools/CoachingEval/schema_compat.py \
 ```
 
 The audit manifest contains hashes and pass/fail facts, never rendered prompts, model output, or thinking traces.
+
+Persist the distinct adversarial audit as well. It runs `ADVERSARIAL_SMOKE_PROMPT`, which explicitly asks for `{}` with every required field missing, through the same `/apply-template` plus native grammar path for all three models and both modes:
+
+```bash
+python3 Tools/CoachingEval/schema_compat.py \
+  --smoke-server .coaching-eval/runtime/b10516/bin/llama-server \
+  --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json \
+  --prompt-version tutor-v2 \
+  --audit-model qwen3-0.6b-q4_0=.coaching-eval/models/qwen3-0.6b-q4_0/Qwen3-0.6B-Q4_0.gguf \
+  --audit-model qwen3-1.7b-q4_k_m=.coaching-eval/models/qwen3-1.7b-q4_k_m/Qwen3-1.7B-Q4_K_M.gguf \
+  --audit-model smollm3-3b-q4_k_m=.coaching-eval/models/smollm3-3b-q4_k_m/SmolLM3-Q4_K_M.gguf \
+  --adversarial-audit-output .coaching-eval/analysis/adversarial-schema-smoke-audit-v4-final.json
+```
+
+The adversarial manifest records the stimulus and effective-request hashes, HTTP/generation outcomes, and parse/strict-validation facts without retaining returned content or thinking traces. It is evidence that grammar enforcement defeats the hostile missing-fields instruction; the ordinary audit separately proves the real tutor prompt and examples use the expected template shape.
 
 ## Run local models
 

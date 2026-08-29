@@ -296,6 +296,145 @@ def audit_runtime_templates(
     return result
 
 
+def audit_adversarial_smokes(
+    *,
+    schema,
+    server,
+    models,
+    runtime_path,
+    runtime_manifest,
+    prompt_version,
+    output,
+):
+    """Persist trace-free proof of the real adversarial constrained path."""
+    issues = b10516_compatibility_issues(schema)
+    if issues:
+        raise ValueError("Schema failed deterministic b10516 compatibility: " + ", ".join(issues))
+    provenance = runtime_provenance.verify_runtime(server, runtime_path, runtime_manifest)
+    runtime = json.loads(Path(runtime_path).read_text(encoding="utf-8"))
+    request = _effective_smoke_request(prompt_version)
+    canonical_schema = run_eval.canonical_json(schema).encode("utf-8")
+    canonical_request = run_eval.canonical_json(request).encode("utf-8")
+    stimulus_sha256 = _sha256_bytes(ADVERSARIAL_SMOKE_PROMPT.encode("utf-8"))
+    model_entries = []
+    for model_id, model_path in models:
+        mode_entries = []
+        for mode, enable_thinking in (("off", False), ("bounded", True)):
+            with llama_server.LlamaServer(
+                server,
+                model_path,
+                context_tokens=runtime["mac"]["contextTokens"],
+            ) as client:
+                template_payload = llama_server.build_template_payload(
+                    system_prompt=ADVERSARIAL_SMOKE_PROMPT,
+                    request=request,
+                    enable_thinking=enable_thinking,
+                )
+                applied = client._post_json("/apply-template", template_payload, timeout=30)
+                prompt = applied.get("prompt")
+                if not isinstance(prompt, str):
+                    raise ValueError(f"Applied template for {model_id}/{mode} has no prompt")
+                suffix, suffix_shape = _template_suffix(prompt, request)
+                grammar = coaching_grammar.strict_grammar(
+                    schema,
+                    enable_thinking=enable_thinking,
+                )
+                mode_entry = {
+                    "mode": mode,
+                    "grammarSHA256": _sha256_bytes(grammar.encode("utf-8")),
+                    "applyTemplateHTTPResult": "responseReceived",
+                    "applyTemplateSuffixSHA256": _sha256_bytes(suffix.encode("utf-8")),
+                    "applyTemplateSuffixShape": suffix_shape,
+                    "httpResult": "notAttempted",
+                    "generationStatus": "notAttempted",
+                    "returnedFinalContentSHA256": None,
+                    "returnedContentParsedJSON": False,
+                    "returnedContentStrictValidationPassed": False,
+                    "validationIssueCount": None,
+                }
+                try:
+                    response = client.complete(
+                        system_prompt=ADVERSARIAL_SMOKE_PROMPT,
+                        request=request,
+                        schema=schema,
+                        seed=runtime["evaluation"]["seeds"][0],
+                        maximum_output_tokens=runtime["generation"]["maximumOutputTokens"],
+                        temperature=runtime["generation"]["temperature"],
+                        top_p=runtime["generation"]["topP"],
+                        enable_thinking=enable_thinking,
+                        timeout=120,
+                    )
+                    mode_entry["httpResult"] = "responseReceived"
+                except llama_server.LlamaServerTimeout as error:
+                    mode_entry["httpResult"] = "timeout"
+                    mode_entry["generationStatus"] = "timeout"
+                    mode_entry["generationErrorCategory"] = error.category
+                    if error.http_status is not None:
+                        mode_entry["httpStatus"] = error.http_status
+                    mode_entries.append(mode_entry)
+                    continue
+                except llama_server.LlamaServerError as error:
+                    mode_entry["httpResult"] = (
+                        "httpError" if error.http_status is not None else "generationError"
+                    )
+                    mode_entry["generationStatus"] = "generationError"
+                    mode_entry["generationErrorCategory"] = error.category
+                    if error.http_status is not None:
+                        mode_entry["httpStatus"] = error.http_status
+                    mode_entries.append(mode_entry)
+                    continue
+                try:
+                    content = run_eval._final_content(response)
+                except (KeyError, IndexError, TypeError, ValueError):
+                    mode_entry["generationStatus"] = "invalidFinalContent"
+                    mode_entries.append(mode_entry)
+                    continue
+                mode_entry["returnedFinalContentSHA256"] = _sha256_bytes(
+                    content.encode("utf-8")
+                )
+                try:
+                    turn = json.loads(content)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    mode_entry["generationStatus"] = "invalidJSON"
+                    mode_entries.append(mode_entry)
+                    continue
+                mode_entry["returnedContentParsedJSON"] = True
+                validation_issues = validate_turn.validate_turn(turn, request)
+                mode_entry["validationIssueCount"] = len(validation_issues)
+                if validation_issues:
+                    mode_entry["generationStatus"] = "strictValidationFailed"
+                else:
+                    mode_entry["generationStatus"] = "success"
+                    mode_entry["returnedContentStrictValidationPassed"] = True
+                mode_entries.append(mode_entry)
+        model_entries.append(
+            {
+                "modelID": model_id,
+                "modelArtifactSHA256": _sha256_file(model_path),
+                "modes": mode_entries,
+            }
+        )
+    result = {
+        "schemaVersion": "coaching-eval-adversarial-smoke-audit.v1",
+        "runtimeProvenance": provenance,
+        "schemaSHA256": _sha256_bytes(canonical_schema),
+        "stimulus": {
+            "kind": "adversarial-empty-object",
+            "promptSHA256": stimulus_sha256,
+        },
+        "effectivePrompt": {
+            "version": prompt_version,
+            "systemPromptSHA256": stimulus_sha256,
+            "requestSHA256": _sha256_bytes(canonical_request),
+        },
+        "models": model_entries,
+    }
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -313,6 +452,7 @@ def main(argv=None):
         help="repeat for each exact model artifact in the runtime/template audit",
     )
     parser.add_argument("--audit-output", type=Path)
+    parser.add_argument("--adversarial-audit-output", type=Path)
     parser.add_argument("--prompt-version")
     parser.add_argument("--runtime", type=Path, default=TOOLS_DIR / "runtime.json")
     parser.add_argument("--runtime-manifest", type=Path)
@@ -320,8 +460,14 @@ def main(argv=None):
     schema = json.loads(arguments.schema.read_text(encoding="utf-8"))
     runtime = json.loads(arguments.runtime.read_text(encoding="utf-8"))
     prompt_version = arguments.prompt_version or runtime["evaluation"]["promptVersion"]
-    if bool(arguments.audit_model) != bool(arguments.audit_output):
-        parser.error("--audit-model and --audit-output are required together")
+    audit_outputs = [arguments.audit_output, arguments.adversarial_audit_output]
+    if arguments.audit_model and sum(output is not None for output in audit_outputs) != 1:
+        parser.error(
+            "--audit-model requires exactly one of --audit-output or "
+            "--adversarial-audit-output"
+        )
+    if not arguments.audit_model and any(output is not None for output in audit_outputs):
+        parser.error("an audit output requires at least one --audit-model")
     if arguments.audit_model:
         if arguments.smoke_model is not None:
             parser.error("--smoke-model cannot be combined with --audit-model")
@@ -334,18 +480,29 @@ def main(argv=None):
                 parser.error("--audit-model must have the form MODEL_ID=PATH")
             models.append((model_id, Path(path)))
         try:
-            result = audit_runtime_templates(
-                schema=schema,
-                server=arguments.smoke_server,
-                models=models,
-                runtime_path=arguments.runtime,
-                runtime_manifest=arguments.runtime_manifest,
-                prompt_bundle=run_eval._load_prompt_bundle(
-                    prompt_version,
-                    TOOLS_DIR / "prompts",
-                ),
-                output=arguments.audit_output,
-            )
+            if arguments.adversarial_audit_output is not None:
+                result = audit_adversarial_smokes(
+                    schema=schema,
+                    server=arguments.smoke_server,
+                    models=models,
+                    runtime_path=arguments.runtime,
+                    runtime_manifest=arguments.runtime_manifest,
+                    prompt_version=prompt_version,
+                    output=arguments.adversarial_audit_output,
+                )
+            else:
+                result = audit_runtime_templates(
+                    schema=schema,
+                    server=arguments.smoke_server,
+                    models=models,
+                    runtime_path=arguments.runtime,
+                    runtime_manifest=arguments.runtime_manifest,
+                    prompt_bundle=run_eval._load_prompt_bundle(
+                        prompt_version,
+                        TOOLS_DIR / "prompts",
+                    ),
+                    output=arguments.audit_output,
+                )
         except (
             ValueError,
             OSError,
