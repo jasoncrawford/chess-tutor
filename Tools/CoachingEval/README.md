@@ -144,6 +144,23 @@ The runner accepts only the exact immutable ten visible IDs in that manifest, in
 
 The 2026-08-29 compact-context round stopped at its pre-inference gate: the six model/mode render-and-tokenize cells for the small `t12UnsupportedEntry` case were 5,104–5,165 tokens, above the fixed 4,000-token compiler budget. The 60-record pilot, full matrix, hidden set, and device run were therefore not performed. `tutor-v4` is the immutable zero-shot compact-context successor: it removes few-shot examples without weakening the evidence or output validators. See `docs/reports/2026-08-29-compact-markdown-coaching-evaluation.md` before starting another comparison.
 
+Before any `tutor-v4` pilot inference, run the token-only preflight against all three exact model artifacts. It starts one pinned server at a time, renders and tokenizes the fixed ten visible pilot cases in off and bounded modes, never calls `/completion`, writes one immutable 60-cell manifest, and exits nonzero if any exact prompt exceeds 4,000 tokens:
+
+```bash
+python3 Tools/CoachingEval/preflight_prompts.py \
+  --server .coaching-eval/runtime/b10516/bin/llama-server \
+  --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json \
+  --corpus .coaching-eval/corpus/v2/visible.jsonl \
+  --pilot Tools/CoachingEval/pilots/compact-markdown-v1.json \
+  --prompt-version tutor-v4 \
+  --model qwen3-0.6b-q4_0=.coaching-eval/models/qwen3-0.6b-q4_0/Qwen3-0.6B-Q4_0.gguf \
+  --model qwen3-1.7b-q4_k_m=.coaching-eval/models/qwen3-1.7b-q4_k_m/Qwen3-1.7B-Q4_K_M.gguf \
+  --model smollm3-3b-q4_k_m=.coaching-eval/models/smollm3-3b-q4_k_m/SmolLM3-Q4_K_M.gguf \
+  --output .coaching-eval/analysis/zero-shot-preflight-v1.json
+```
+
+The manifest records the exact rendered-prompt byte/token/hash provenance per cell, alongside the immutable prompt, corpus, pilot, model, and runtime hashes. It refuses an existing output path rather than overwriting evidence.
+
 Local generation uses two documented b10516 endpoints. `/apply-template` renders the model's own template and thinking-mode setting without inference. The resulting prompt is sent to native `/completion` with the pinned strict `model-coaching-turn.v1` GBNF, bypassing the PEG-native chat response parser while retaining token-level grammar enforcement. The grammar builder refuses any schema hash other than the immutable contract; its bounded prose rules are JSON-safe and slightly stricter than the schema because they disallow `\\u` escapes. The evaluator then applies the unchanged strict Python/Swift-compatible identity, word-limit, and permitted-reference validator.
 
 For compact `tutor-v3` and zero-shot `tutor-v4`, the final user message is the corpus's exact human-readable compact Markdown—not the complete JSON evidence request. The evaluator renders the full conversation exactly once with `/apply-template`, tokenizes that exact rendered string with `/tokenize`, and passes the same bytes to `/completion`. It refuses generation above the unchanged 4,000 exact-token compiler budget. The response grammar is request-specific: it pins the request ID and permits only the short aliases printed in that Markdown. After generation, aliases are restored fail-closed to stable IDs and the unchanged complete-request validator checks the restored turn. A repair is allowed only for parse/shape failure; its newly rendered prompt is independently tokenized and must also fit the 4,000-token compiler budget.
