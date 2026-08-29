@@ -7,15 +7,16 @@ final class GameSessionTests: XCTestCase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 28, hour: 12))!
+        let time = now.formatted(date: .omitted, time: .shortened)
 
-        XCTAssertEqual(GameActivityDateFormatter.string(from: now, now: now, calendar: calendar), "Today")
+        XCTAssertEqual(GameActivityDateFormatter.string(from: now, now: now, calendar: calendar), "Today, \(time)")
         XCTAssertEqual(
             GameActivityDateFormatter.string(from: now.addingTimeInterval(-86_400), now: now, calendar: calendar),
-            "Yesterday"
+            "Yesterday, \(time)"
         )
         XCTAssertEqual(
             GameActivityDateFormatter.string(from: now.addingTimeInterval(-2 * 86_400), now: now, calendar: calendar),
-            "Wednesday"
+            "Wednesday, \(time)"
         )
     }
 

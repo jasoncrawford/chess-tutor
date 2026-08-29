@@ -7,21 +7,24 @@ enum GameActivityDateFormatter {
         let startOfDate = calendar.startOfDay(for: date)
         let daysAgo = calendar.dateComponents([.day], from: startOfDate, to: startOfToday).day ?? 0
 
+        let dayLabel: String
         switch daysAgo {
         case 0:
-            return "Today"
+            dayLabel = "Today"
         case 1:
-            return "Yesterday"
+            dayLabel = "Yesterday"
         case 2...6:
-            return date.formatted(.dateTime.weekday(.wide))
+            dayLabel = date.formatted(.dateTime.weekday(.wide))
         default:
             let isCurrentYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-            return date.formatted(
+            dayLabel = date.formatted(
                 isCurrentYear
                     ? .dateTime.month(.abbreviated).day()
                     : .dateTime.month(.abbreviated).day().year()
             )
         }
+
+        return "\(dayLabel), \(date.formatted(date: .omitted, time: .shortened))"
     }
 }
 
