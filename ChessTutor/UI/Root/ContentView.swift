@@ -114,7 +114,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
             if case .games = gameLibrary.route {
                 GamesRackView(
                     entries: gameLibrary.entries,
@@ -123,16 +123,17 @@ struct ContentView: View {
                     onStartRemote: remotePlayFlow.open,
                     onOpenEntry: openGameEntry
                 )
+                .transition(.gamesRack)
             } else {
-        GeometryReader { proxy in
-            let layout = PlaySurfaceLayout.make(for: proxy.size)
+                GeometryReader { proxy in
+                    let layout = PlaySurfaceLayout.make(for: proxy.size)
 
-            ZStack {
-                AppTheme.table.ignoresSafeArea()
-                tabletop(boardSide: layout.boardSide)
-                    .frame(width: layout.tabletopSize.width, height: layout.tabletopSize.height)
-                    .rotationEffect(.degrees(tableRotationDegrees))
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    ZStack {
+                        AppTheme.table.ignoresSafeArea()
+                        tabletop(boardSide: layout.boardSide)
+                            .frame(width: layout.tabletopSize.width, height: layout.tabletopSize.height)
+                            .rotationEffect(.degrees(tableRotationDegrees))
+                            .frame(width: proxy.size.width, height: proxy.size.height)
 
                 if let pendingRemoteStartAnnouncement = remoteLifecycle.pendingRemoteStartAnnouncement {
                     Color.black.opacity(0.24)
@@ -159,12 +160,14 @@ struct ContentView: View {
                     )
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
+                    }
+                    .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteStartAnnouncement)
+                    .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteInviteConfirmation)
+                }
+                .transition(.gameBoard)
             }
-            .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteStartAnnouncement)
-            .animation(.easeInOut(duration: 0.18), value: remoteLifecycle.pendingRemoteInviteConfirmation)
         }
-            }
-        }
+        .animation(.spring(response: 0.42, dampingFraction: 0.88), value: gameLibrary.route)
         .overlay {
             if let invite = foregroundIncomingInvite {
                 Color.black.opacity(0.24)
@@ -2145,6 +2148,22 @@ private struct PendingPromotion: Identifiable {
         self.testingSquare = testingSquare
     }
     #endif
+}
+
+private extension AnyTransition {
+    static var gamesRack: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 0.94).combined(with: .opacity),
+            removal: .scale(scale: 1.03).combined(with: .opacity)
+        )
+    }
+
+    static var gameBoard: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 1.06).combined(with: .opacity),
+            removal: .scale(scale: 0.82).combined(with: .opacity)
+        )
+    }
 }
 
 private struct GamesRackView: View {
