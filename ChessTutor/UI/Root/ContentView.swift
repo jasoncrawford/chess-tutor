@@ -2222,12 +2222,15 @@ private struct StartGameRackCard: View {
             }
             .aspectRatio(1, contentMode: .fit)
 
-            Text("Start a Game")
-                .font(.system(.title3, design: .serif).weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
-            Text("On this iPad or remotely")
-                .font(.subheadline)
-                .foregroundStyle(AppTheme.mutedInk)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Start a Game")
+                    .font(.system(.title3, design: .serif).weight(.semibold))
+                    .foregroundStyle(AppTheme.ink)
+                Text("On this iPad or remotely")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.mutedInk)
+            }
+            .frame(height: 62, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -2244,32 +2247,38 @@ private struct GameRackCard: View {
             GameThumbnail(state: presentation.boardState, moveCount: presentation.moves.count)
                 .aspectRatio(1, contentMode: .fit)
 
-            Text(GameActivityDateFormatter.string(from: presentation.startedAt))
-                .font(.system(.title3, design: .serif).weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
-                .lineLimit(1)
-            Text(presentation.title)
-                .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(GameActivityDateFormatter.string(from: presentation.startedAt))
+                    .font(.system(.title3, design: .serif).weight(.semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+
+                HStack(spacing: 7) {
+                    GameCardStatusMark(indicator: presentation.statusIndicator)
+                    Text(compactDetail)
+                        .lineLimit(1)
+                }
+                .font(.subheadline)
                 .foregroundStyle(AppTheme.mutedInk)
-                .lineLimit(1)
-            HStack(spacing: 7) {
-                GameCardStatusMark(indicator: presentation.statusIndicator)
-                Text(presentation.status)
-                    .lineLimit(1)
             }
-            .font(.subheadline)
-            .foregroundStyle(AppTheme.mutedInk)
-            if !presentation.moves.isEmpty {
-                Text("Last move \(GameActivityDateFormatter.string(from: presentation.lastActivityAt))")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.mutedInk.opacity(0.82))
-                    .lineLimit(1)
-            }
+            .frame(height: 62, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(cardBackground)
         .accessibilityElement(children: .combine)
+    }
+
+    private var compactDetail: String {
+        var details: [String] = []
+        if presentation.title != "Local game" {
+            details.append(presentation.title)
+        }
+        details.append(presentation.status.lowercased())
+        if !presentation.moves.isEmpty {
+            details.append("moved \(presentation.lastActivityAt.formatted(date: .omitted, time: .shortened))")
+        }
+        return details.joined(separator: " · ")
     }
 }
 
