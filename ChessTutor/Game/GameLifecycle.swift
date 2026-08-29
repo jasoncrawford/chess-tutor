@@ -174,6 +174,7 @@ enum GameLibraryEntry: Identifiable, Sendable {
                 status: GameCardPresentation.status(for: boardState),
                 statusIndicator: GameCardPresentation.indicator(for: boardState),
                 moves: game.moves,
+                startedAt: game.createdAt,
                 lastActivityAt: game.lastMovedAt
             )
         case .pendingRemote(let board):
@@ -182,6 +183,7 @@ enum GameLibraryEntry: Identifiable, Sendable {
                 status: board.listStatus,
                 statusIndicator: .waiting,
                 moves: [],
+                startedAt: board.createdAt,
                 lastActivityAt: board.lastUpdatedAt
             )
         case .remote(let game):
@@ -201,6 +203,7 @@ enum GameLibraryEntry: Identifiable, Sendable {
                     ? .finished
                     : (boardState.sideToMove == localColor ? .yourTurn : .waiting),
                 moves: moves,
+                startedAt: game.createdAt,
                 lastActivityAt: game.lastMovedAt
             )
         }
@@ -209,7 +212,7 @@ enum GameLibraryEntry: Identifiable, Sendable {
 
 struct GameCardPresentation: Equatable, Sendable {
     enum StatusIndicator: Equatable, Sendable {
-        case neutral
+        case active
         case yourTurn
         case waiting
         case finished
@@ -219,6 +222,7 @@ struct GameCardPresentation: Equatable, Sendable {
     let status: String
     let statusIndicator: StatusIndicator
     let moves: [Move]
+    let startedAt: Date
     let lastActivityAt: Date
     let boardState: GameState
 
@@ -227,12 +231,14 @@ struct GameCardPresentation: Equatable, Sendable {
         status: String,
         statusIndicator: StatusIndicator,
         moves: [Move],
+        startedAt: Date,
         lastActivityAt: Date
     ) {
         self.title = title
         self.status = status
         self.statusIndicator = statusIndicator
         self.moves = moves
+        self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt
         self.boardState = Self.boardState(replaying: moves)
     }
@@ -255,7 +261,7 @@ struct GameCardPresentation: Equatable, Sendable {
     }
 
     static func indicator(for state: GameState) -> StatusIndicator {
-        state.result == .ongoing ? .neutral : .finished
+        state.result == .ongoing ? .active : .finished
     }
 }
 

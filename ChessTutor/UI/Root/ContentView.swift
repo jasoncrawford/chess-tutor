@@ -183,7 +183,10 @@ struct ContentView: View {
                 InvitationSentNoticeView(
                     board: invitation,
                     onCopyLink: { copyInviteLink(invitation.inviteLink) },
-                    onKeepLooking: { outboundInvitationNotice = nil },
+                    onBackToGames: {
+                        outboundInvitationNotice = nil
+                        showGames()
+                    },
                     onCancel: {
                         outboundInvitationNotice = nil
                         cancelRemoteInviteRecord(id: invitation.invite.id)
@@ -2241,7 +2244,7 @@ private struct GameRackCard: View {
             GameThumbnail(state: presentation.boardState, moveCount: presentation.moves.count)
                 .aspectRatio(1, contentMode: .fit)
 
-            Text(GameActivityDateFormatter.string(from: presentation.lastActivityAt))
+            Text(GameActivityDateFormatter.string(from: presentation.startedAt))
                 .font(.system(.title3, design: .serif).weight(.semibold))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
@@ -2256,6 +2259,12 @@ private struct GameRackCard: View {
             }
             .font(.subheadline)
             .foregroundStyle(AppTheme.mutedInk)
+            if !presentation.moves.isEmpty {
+                Text("Last move \(GameActivityDateFormatter.string(from: presentation.lastActivityAt))")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedInk.opacity(0.82))
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -2268,20 +2277,29 @@ private struct GameCardStatusMark: View {
     let indicator: GameCardPresentation.StatusIndicator
 
     var body: some View {
-        Circle()
-            .fill(fill)
-            .overlay {
-                Circle().stroke(border, lineWidth: indicator == .waiting ? 1.5 : 0)
+        Group {
+            if indicator == .finished {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedInk.opacity(0.72))
+            } else {
+                Circle()
+                    .fill(fill)
+                    .overlay {
+                        Circle().stroke(border, lineWidth: indicator == .waiting ? 1.5 : 0)
+                    }
+                    .frame(width: 8, height: 8)
             }
-            .frame(width: 8, height: 8)
+        }
+        .frame(width: 10, height: 10)
     }
 
     private var fill: Color {
         switch indicator {
-        case .neutral: AppTheme.mutedInk.opacity(0.45)
+        case .active: AppTheme.captureBoxFelt
         case .yourTurn: AppTheme.captureBoxFelt
         case .waiting: AppTheme.panelWarmth
-        case .finished: AppTheme.mutedInk.opacity(0.55)
+        case .finished: .clear
         }
     }
 
@@ -2402,8 +2420,9 @@ private struct IncomingInviteNoticeView: View {
 private struct InvitationSentNoticeView: View {
     let board: ManagedPendingRemoteBoard
     let onCopyLink: () -> Void
-    let onKeepLooking: () -> Void
+    let onBackToGames: () -> Void
     let onCancel: () -> Void
+    @State private var isCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -2422,12 +2441,19 @@ private struct InvitationSentNoticeView: View {
                     .foregroundStyle(AppTheme.ink)
                     .monospacedDigit()
             }
-            Button("Copy link", action: onCopyLink)
+            Button(isCopied ? "Copied" : "Copy invite link") {
+                onCopyLink()
+                isCopied = true
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    isCopied = false
+                }
+            }
                 .buttonStyle(GameOverlayButtonStyle(isPrimary: false))
             HStack(spacing: 12) {
                 Button("Cancel invite", action: onCancel)
                     .buttonStyle(GameOverlayButtonStyle(isPrimary: false))
-                Button("Keep looking", action: onKeepLooking)
+                Button("Back to Games", action: onBackToGames)
                     .buttonStyle(GameOverlayButtonStyle(isPrimary: true))
             }
         }
@@ -2435,7 +2461,7 @@ private struct InvitationSentNoticeView: View {
         .frame(width: 430)
         .background {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(AppTheme.panel)
+                .fill(Color(red: 1.00, green: 0.98, blue: 0.92))
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .stroke(AppTheme.boardFrame, lineWidth: 8)

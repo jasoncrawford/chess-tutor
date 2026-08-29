@@ -138,6 +138,25 @@ final class GameSessionTests: XCTestCase {
     }
 
     @MainActor
+    func testGameCardUsesStartTimeForItsIdentityAndLastMoveForActivity() {
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        let lastMovedAt = startedAt.addingTimeInterval(60)
+        let library = GameLibrary(now: { startedAt })
+        let game = library.createLocalGame()
+        library.recordCommittedMove(
+            Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4)),
+            in: game.id,
+            at: lastMovedAt
+        )
+
+        let presentation = GameLibraryEntry.local(library.game(id: game.id)!).cardPresentation
+
+        XCTAssertEqual(presentation.startedAt, startedAt)
+        XCTAssertEqual(presentation.lastActivityAt, lastMovedAt)
+        XCTAssertEqual(presentation.statusIndicator, .active)
+    }
+
+    @MainActor
     func testGameLibraryStoreRestoresGamesAndLastVisibleBoard() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = GameLibraryStore(fileURL: directory.appendingPathComponent("games.json"))
