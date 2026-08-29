@@ -2160,7 +2160,7 @@ private extension AnyTransition {
 
     static var gameBoard: AnyTransition {
         .asymmetric(
-            insertion: .scale(scale: 0.18),
+            insertion: .scale(scale: 0.02).combined(with: .opacity),
             removal: .scale(scale: 0.18)
         )
     }
