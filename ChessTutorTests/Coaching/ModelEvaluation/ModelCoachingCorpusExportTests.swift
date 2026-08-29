@@ -28,10 +28,12 @@ final class ModelCoachingCorpusExportTests: XCTestCase {
 
         let manifestData = try Data(contentsOf: outputURL.appendingPathComponent("corpus-manifest.json"))
         let manifest = try JSONDecoder().decode(ModelCoachingCorpusManifest.self, from: manifestData)
-        XCTAssertEqual(manifest.schemaVersion, "model-coaching-corpus-manifest.v1")
-        XCTAssertEqual(manifest.corpusSchemaVersion, "model-coaching-evaluation-case.v1")
+        XCTAssertEqual(manifest.schemaVersion, "model-coaching-corpus-manifest.v2")
+        XCTAssertEqual(manifest.corpusSchemaVersion, "model-coaching-evaluation-case.v2")
         XCTAssertEqual(manifest.requestSchemaVersion, "model-coaching-request.v1")
         XCTAssertEqual(manifest.promptVersion, "tutor-v1")
+        XCTAssertEqual(manifest.compactContextSchemaVersion, "model-coaching-context.v1")
+        XCTAssertEqual(manifest.compactPromptVersion, "tutor-v3")
         XCTAssertEqual(manifest.sourceGitSHA, sourceSHA)
         XCTAssertEqual(manifest.caseCount, 52)
         XCTAssertEqual(manifest.visibleCaseCount, 41)
@@ -40,6 +42,11 @@ final class ModelCoachingCorpusExportTests: XCTestCase {
         XCTAssertEqual(manifest.hiddenCaseIDs, hiddenCases.map(\.id))
         XCTAssertEqual(manifest.visibleSHA256, sha256(visibleData))
         XCTAssertEqual(manifest.hiddenSHA256, sha256(hiddenData))
+
+        let visibleText = String(decoding: visibleData, as: UTF8.self)
+        for hiddenCase in ModelCoachingEvaluationCorpus.hiddenCases {
+            XCTAssertFalse(visibleText.contains(hiddenCase.id))
+        }
     }
 
     func testExporterRefusesToOverwriteNonemptyDirectory() throws {
@@ -80,6 +87,8 @@ struct ModelCoachingCorpusManifest: Codable, Equatable {
     let corpusSchemaVersion: String
     let requestSchemaVersion: String
     let promptVersion: String
+    let compactContextSchemaVersion: String
+    let compactPromptVersion: String
     let sourceGitSHA: String
     let caseCount: Int
     let visibleCaseCount: Int
@@ -109,20 +118,28 @@ enum ModelCoachingCorpusExporter {
         let hiddenCases = allCases.filter { $0.split == .hidden }
         let requestSchemaVersions = Set(allCases.map(\.request.schemaVersion))
         let promptVersions = Set(allCases.map(\.request.promptVersion))
+        let compactContextSchemaVersions = Set(allCases.map(\.compactContext.schemaVersion))
+        let compactPromptVersions = Set(allCases.map(\.compactContext.promptVersion))
         guard requestSchemaVersions.count == 1,
               promptVersions.count == 1,
+              compactContextSchemaVersions.count == 1,
+              compactPromptVersions.count == 1,
               let requestSchemaVersion = requestSchemaVersions.first,
-              let promptVersion = promptVersions.first else {
+              let promptVersion = promptVersions.first,
+              let compactContextSchemaVersion = compactContextSchemaVersions.first,
+              let compactPromptVersion = compactPromptVersions.first else {
             throw ModelCoachingCorpusExportError.inconsistentSchemaVersions
         }
 
         let visibleJSONL = try jsonl(for: visibleCases)
         let hiddenJSONL = try jsonl(for: hiddenCases)
         let manifest = ModelCoachingCorpusManifest(
-            schemaVersion: "model-coaching-corpus-manifest.v1",
-            corpusSchemaVersion: "model-coaching-evaluation-case.v1",
+            schemaVersion: "model-coaching-corpus-manifest.v2",
+            corpusSchemaVersion: "model-coaching-evaluation-case.v2",
             requestSchemaVersion: requestSchemaVersion,
             promptVersion: promptVersion,
+            compactContextSchemaVersion: compactContextSchemaVersion,
+            compactPromptVersion: compactPromptVersion,
             sourceGitSHA: sourceGitSHA,
             caseCount: allCases.count,
             visibleCaseCount: visibleCases.count,

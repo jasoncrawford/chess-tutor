@@ -21,6 +21,7 @@ struct ModelCoachingEvaluationCase: Codable, Equatable, Sendable {
     let id: String
     let split: ModelCoachingCorpusSplit
     let request: ModelCoachingRequest
+    let compactContext: ModelCoachingContextCompilation
     let oracle: ModelCoachingSemanticOracle
 }
 
@@ -1262,14 +1263,25 @@ enum ModelCoachingEvaluationCorpus {
         snapshot: ModelCoachingSnapshot,
         oracle: ModelCoachingSemanticOracle
     ) -> ModelCoachingEvaluationCase {
-        ModelCoachingEvaluationCase(
+        let request = ModelCoachingRequestBuilder.build(
+            snapshot: snapshot,
+            requestID: "corpus:\(goldenCase.rawValue)",
+            promptVersion: "tutor-v1"
+        )
+        let compactContext: ModelCoachingContextCompilation
+        do {
+            compactContext = try ModelCoachingContextCompiler.compile(
+                request,
+                promptVersion: "tutor-v3"
+            )
+        } catch {
+            preconditionFailure("Failed to compile compact context for \(goldenCase.rawValue): \(error)")
+        }
+        return ModelCoachingEvaluationCase(
             id: goldenCase.rawValue,
             split: hiddenIDs.contains(goldenCase.rawValue) ? .hidden : .visible,
-            request: ModelCoachingRequestBuilder.build(
-                snapshot: snapshot,
-                requestID: "corpus:\(goldenCase.rawValue)",
-                promptVersion: "tutor-v1"
-            ),
+            request: request,
+            compactContext: compactContext,
             oracle: oracle
         )
     }

@@ -1,7 +1,82 @@
+import CryptoKit
 import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingEvaluationCorpusTests: XCTestCase {
+    func testEveryCaseCarriesTheVersionedReproducibleCompactContext() throws {
+        let cases = ModelCoachingEvaluationCorpus.allCases
+
+        XCTAssertEqual(cases.count, 52)
+        XCTAssertEqual(cases.map(\.id), CoachingGoldenCase.allCases.map(\.rawValue))
+        XCTAssertEqual(cases.filter { $0.split == .visible }.count, 41)
+        XCTAssertEqual(cases.filter { $0.split == .hidden }.count, 11)
+
+        for evaluationCase in cases {
+            let request = evaluationCase.request
+            let compact = evaluationCase.compactContext
+            let rebuilt = try ModelCoachingContextCompiler.compile(
+                request,
+                promptVersion: "tutor-v3"
+            )
+
+            XCTAssertEqual(compact, rebuilt, evaluationCase.id)
+            XCTAssertEqual(compact.schemaVersion, "model-coaching-context.v1", evaluationCase.id)
+            XCTAssertEqual(compact.promptVersion, "tutor-v3", evaluationCase.id)
+            XCTAssertEqual(compact.requestID, request.requestID, evaluationCase.id)
+            XCTAssertEqual(compact.positionRevision, request.positionRevision, evaluationCase.id)
+            XCTAssertFalse(compact.markdown.isEmpty, evaluationCase.id)
+            XCTAssertFalse(compact.referenceBindings.isEmpty, evaluationCase.id)
+            XCTAssertEqual(
+                sourceReferences(in: request),
+                Set(compact.referenceBindings.map(\.stableID))
+                    .union(compact.omissions.map(\.stableID)),
+                evaluationCase.id
+            )
+            XCTAssertTrue(
+                Set(compact.referenceBindings.map(\.stableID))
+                    .isDisjoint(with: compact.omissions.map(\.stableID)),
+                evaluationCase.id
+            )
+        }
+    }
+
+    func testCompactContextContainsCurrentMechanicsWithoutSmuggledPolicy() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        for evaluationCase in ModelCoachingEvaluationCorpus.allCases {
+            let compact = evaluationCase.compactContext
+            let markdown = compact.markdown
+            let boundAliases = Set(compact.referenceBindings.map(\.alias))
+            let aliasesInMarkdown = aliasTokens(in: markdown)
+
+            XCTAssertTrue(markdown.contains(evaluationCase.request.currentPosition.fen), evaluationCase.id)
+            XCTAssertTrue(
+                markdown.contains(evaluationCase.request.currentInteraction.latestEvent.kind.rawValue),
+                evaluationCase.id
+            )
+            XCTAssertTrue(aliasesInMarkdown.isSubset(of: boundAliases), evaluationCase.id)
+            XCTAssertFalse(markdown.contains("CoachingStage"), evaluationCase.id)
+            XCTAssertFalse(markdown.contains("CoachingPresentation"), evaluationCase.id)
+            for criterion in evaluationCase.oracle.successCriteria
+                + evaluationCase.oracle.severeFailureCriteria {
+                XCTAssertFalse(markdown.contains(criterion), evaluationCase.id)
+            }
+
+            let requestHash = sha256(try encoder.encode(evaluationCase.request))
+            let rebuiltRequestHash = sha256(try encoder.encode(evaluationCase.request))
+            let compactHash = sha256(try encoder.encode(compact))
+            let rebuiltCompactHash = sha256(
+                try encoder.encode(ModelCoachingContextCompiler.compile(
+                    evaluationCase.request,
+                    promptVersion: "tutor-v3"
+                ))
+            )
+            XCTAssertEqual(requestHash, rebuiltRequestHash, evaluationCase.id)
+            XCTAssertEqual(compactHash, rebuiltCompactHash, evaluationCase.id)
+        }
+    }
+
     func testFirstMoveOracleDoesNotRequireNoPieceNeedsHelpAction() throws {
         let firstMove = try XCTUnwrap(
             ModelCoachingEvaluationCorpus.visibleCases.first { $0.id == "t1Entry" }
@@ -363,6 +438,31 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
                 "\(evaluationCase.id) permits a forbidden action"
             )
         }
+    }
+
+    private func sourceReferences(in request: ModelCoachingRequest) -> Set<String> {
+        Set(
+            request.permittedReferences.actions.map(\.id)
+                + request.permittedReferences.boardTasks.map(\.id)
+                + request.chessEvidence.pieces.map(\.id)
+                + request.chessEvidence.legalMoves.map(\.id)
+                + request.chessEvidence.relationships.map(\.id)
+                + request.chessEvidence.immediateReplies.map(\.id)
+                + request.chessEvidence.tacticalFacts.map(\.id)
+        )
+    }
+
+    private func aliasTokens(in markdown: String) -> Set<String> {
+        let pattern = #"\b(?:action|task|piece|move|relationship|reply|fact)-[a-z0-9-]+\b"#
+        let expression = try! NSRegularExpression(pattern: pattern)
+        let range = NSRange(markdown.startIndex..., in: markdown)
+        return Set(expression.matches(in: markdown, range: range).compactMap { match in
+            Range(match.range, in: markdown).map { String(markdown[$0]) }
+        })
+    }
+
+    private func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     func testRelationshipsAndMovesAreDerivableFromEncodedPositions() throws {
