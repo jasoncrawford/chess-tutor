@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -17,6 +18,7 @@ import run_eval
 import example_validation
 import render_review
 import summarize_eval
+import validate_turn
 from Tools.CoachingEval.tests.test_validate_turn import valid_request, valid_turn
 
 
@@ -52,7 +54,9 @@ class FailingClient:
 
 
 class RunEvalTests(unittest.TestCase):
-    def runner(self, client, *, context_tokens=8192):
+    def runner(self, client, *, context_tokens=8192, evaluator_prompt_version="tutor-v1"):
+        example_turn = valid_turn()
+        example_turn["requestID"] = "example-request"
         return run_eval.EvaluationRunner(
             client=client,
             model_id="test-model",
@@ -63,7 +67,7 @@ class RunEvalTests(unittest.TestCase):
                 {
                     "sourceCaseID": "visible-example",
                     "requestExcerpt": {"requestID": "example-request"},
-                    "turn": {"requestID": "example-request"},
+                    "turn": example_turn,
                 }
             ],
             schema={"type": "object", "additionalProperties": False},
@@ -71,6 +75,7 @@ class RunEvalTests(unittest.TestCase):
             maximum_output_tokens=256,
             temperature=0.2,
             top_p=0.9,
+            evaluator_prompt_version=evaluator_prompt_version,
         )
 
     def case(self, request=None):
@@ -119,13 +124,98 @@ class RunEvalTests(unittest.TestCase):
             [message["role"] for message in call["extra_messages"]],
         )
         self.assertEqual(
-            {"requestID": "example-request"},
+            {"promptVersion": "tutor-v1", "requestID": "example-request"},
             json.loads(call["extra_messages"][0]["content"]),
         )
         self.assertEqual(
             {"requestID": "example-request"},
-            json.loads(call["extra_messages"][1]["content"]),
+            {"requestID": json.loads(call["extra_messages"][1]["content"])["requestID"]},
         )
+
+    def test_selected_prompt_version_is_the_only_effective_request_mutation(self):
+        frozen_request = valid_request()
+        frozen_case = self.case(frozen_request)
+        client = ScriptedClient([response(json.dumps(valid_turn()))])
+        captured_validation_requests = []
+        real_validate_turn = validate_turn.validate_turn
+
+        def validate_with_capture(turn, request):
+            captured_validation_requests.append(request)
+            return real_validate_turn(turn, request)
+
+        with mock.patch.object(run_eval.validate_turn, "validate_turn", validate_with_capture):
+            record = self.runner(
+                client,
+                evaluator_prompt_version="tutor-v2",
+            ).evaluate_case(frozen_case, mode="off", seed=1103)
+
+        effective_request = client.calls[0]["request"]
+        self.assertEqual("tutor-v1", frozen_request["promptVersion"])
+        self.assertEqual("tutor-v2", effective_request["promptVersion"])
+        self.assertEqual(frozen_request["requestID"], effective_request["requestID"])
+        self.assertEqual(
+            {key: value for key, value in frozen_request.items() if key != "promptVersion"},
+            {key: value for key, value in effective_request.items() if key != "promptVersion"},
+        )
+        self.assertEqual(effective_request, record["evaluationCase"]["request"])
+        self.assertEqual("tutor-v2", record["promptVersion"])
+        self.assertEqual("tutor-v2", record["evaluatorPromptVersion"])
+        self.assertEqual(
+            [{"field": "promptVersion", "frozen": "tutor-v1", "effective": "tutor-v2"}],
+            record["requestMutations"],
+        )
+        frozen_bytes = run_eval.canonical_json(frozen_request).encode("utf-8")
+        effective_bytes = run_eval.canonical_json(effective_request).encode("utf-8")
+        self.assertEqual(hashlib.sha256(frozen_bytes).hexdigest(), record["frozenRequestSHA256"])
+        self.assertEqual(
+            hashlib.sha256(effective_bytes).hexdigest(),
+            record["effectiveRequestSHA256"],
+        )
+        self.assertEqual(record["effectiveRequestSHA256"], record["requestSHA256"])
+        self.assertEqual("tutor-v2", captured_validation_requests[0]["promptVersion"])
+        self.assertEqual(
+            "tutor-v2",
+            json.loads(client.calls[0]["extra_messages"][0]["content"])["promptVersion"],
+        )
+
+    def test_every_assistant_example_serializes_in_exact_grammar_order(self):
+        examples = json.loads((TOOLS_DIR / "prompts" / "examples-v2.json").read_text())
+        expected_required = [
+            "schemaVersion",
+            "requestID",
+            "teachingIntent",
+            "primaryMessage",
+            "actionReferences",
+            "boardFocusReferences",
+            "relationshipReferences",
+            "supportingEvidenceReferences",
+        ]
+        expected_optional = ["instruction", "responseToLatestAction", "boardTaskReference"]
+
+        messages = run_eval._example_messages(examples, prompt_version="tutor-v2")
+
+        self.assertEqual([], example_validation.validate_examples(
+            examples,
+            json.loads((TOOLS_DIR / "fixtures" / "example-contracts-v1.json").read_text()),
+        ))
+        for index, example in enumerate(examples):
+            with self.subTest(sourceCaseID=example["sourceCaseID"]):
+                user_request = json.loads(messages[index * 2]["content"])
+                serialized = messages[index * 2 + 1]["content"]
+                pairs = json.loads(serialized, object_pairs_hook=lambda value: value)
+                self.assertEqual("tutor-v2", user_request["promptVersion"])
+                self.assertTrue(serialized.startswith('{"schemaVersion":'))
+                self.assertEqual(
+                    expected_required
+                    + [key for key in expected_optional if key in example["turn"]],
+                    [key for key, _value in pairs],
+                )
+                self.assertEqual(example["turn"], dict(pairs))
+                synthetic_request = example_validation._synthetic_request(example)
+                self.assertEqual(
+                    [],
+                    validate_turn.validate_turn(dict(pairs), synthetic_request),
+                )
 
     def test_repairs_parse_or_shape_failure_once_and_records_both_attempts(self):
         repaired = valid_turn()
@@ -449,7 +539,7 @@ class RunEvalTests(unittest.TestCase):
 
             review = root / "artifacts" / "review"
             render_review.render_review(
-                [root / "artifacts" / "runs" / "fake-test-model"],
+                [manifests[0].parent],
                 review,
                 review_seed=20260828,
             )
@@ -507,7 +597,7 @@ class RunEvalTests(unittest.TestCase):
 
             review = root / "artifacts" / "review"
             render_review.render_review(
-                [root / "artifacts" / "runs" / "fake-test-model"],
+                [manifests[0].parent],
                 review,
                 review_seed=20260828,
             )

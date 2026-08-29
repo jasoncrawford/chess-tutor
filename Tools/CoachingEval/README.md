@@ -70,10 +70,26 @@ python3 Tools/CoachingEval/schema_compat.py
 python3 Tools/CoachingEval/schema_compat.py \
   --smoke-server .coaching-eval/runtime/b10516/bin/llama-server \
   --smoke-model .coaching-eval/models/qwen3-0.6b-q4_0/Qwen3-0.6B-Q4_0.gguf \
+  --prompt-version tutor-v2 \
   --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json
 ```
 
 The real pinned-server smoke is mandatory before model comparisons. It adversarially asks for `{}`, inspects the returned content, parses exactly one JSON object, and applies the complete request-aware validator. The unit suite exercises the hook with a fake server, but that is not evidence that a locally built b10516 runtime enforced the grammar.
+
+After each smoke passes, persist one compact audit binding every exact model artifact and both thinking modes to the runtime, schema/grammar, immutable prompt, applied-template suffix, and parsed/strictly validated returned content:
+
+```bash
+python3 Tools/CoachingEval/schema_compat.py \
+  --smoke-server .coaching-eval/runtime/b10516/bin/llama-server \
+  --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json \
+  --prompt-version tutor-v2 \
+  --audit-model qwen3-0.6b-q4_0=.coaching-eval/models/qwen3-0.6b-q4_0/Qwen3-0.6B-Q4_0.gguf \
+  --audit-model qwen3-1.7b-q4_k_m=.coaching-eval/models/qwen3-1.7b-q4_k_m/Qwen3-1.7B-Q4_K_M.gguf \
+  --audit-model smollm3-3b-q4_k_m=.coaching-eval/models/smollm3-3b-q4_k_m/SmolLM3-Q4_K_M.gguf \
+  --audit-output .coaching-eval/analysis/runtime-template-audit-v4-final.json
+```
+
+The audit manifest contains hashes and pass/fail facts, never rendered prompts, model output, or thinking traces.
 
 ## Run local models
 
@@ -99,7 +115,7 @@ Off mode constrains generation to the JSON object alone. Bounded mode constrains
 
 This explicit grammar is required because b10516's JSON-Schema converter embeds a string `pattern` without intersecting it with JSON string syntax. A negated word class can therefore consume a closing quote and permit invalid JSON even though the server logs a converted grammar. The mandatory real-runtime adversarial smoke protects against that regression.
 
-`runtime.json` selects the immutable `tutor-v1` prompt bundle by default. Use `--prompt-version tutor-v<number>` to select another committed `prompts/tutor-v<number>.md` plus matching `prompts/examples-v<number>.json` pair. The runner records the selected version, exact paths, and both hashes; aliases such as `latest` are rejected.
+`runtime.json` selects the immutable `tutor-v1` prompt bundle by default. Use `--prompt-version tutor-v<number>` to select another committed `prompts/tutor-v<number>.md` plus matching `prompts/examples-v<number>.json` pair. The runner creates an effective evaluation request by changing only the frozen request's `promptVersion`; the opaque request ID remains stable. Model-facing requests, few-shot request excerpts, response validation, and recorded evaluation cases all use that effective version. Each record also binds the frozen and effective request hashes plus the explicit mutation. Assistant examples use the exact top-level property order required by the GBNF. Sorted canonical JSON is used only for hashing and user-request serialization. The selected prompt paths and hashes are recorded, and aliases such as `latest` are rejected.
 
 Every record preserves the exact request, its UTF-8 byte count and SHA-256, the complete message-envelope byte count and SHA-256, the model artifact hash, runtime tag, generation settings, final response text, parsed turn, first-attempt validation, optional one-time repair validation, tokens, timings, split, and errors. The request is never truncated or compacted. Because several current real-pipeline requests are larger than an 8192-token context, the runner marks a conservative whole-envelope byte-based overflow warning and records an explicit context-overflow error if the server rejects the exact payload.
 
@@ -120,21 +136,23 @@ Credentialed reference endpoints must be HTTPS, and Authorization is never forwa
 
 ## Blinded review and scoring
 
-Each invocation creates an immutable timestamped run below `.coaching-eval/runs/<model>/`. Create a review packet from one model root:
+Each invocation creates an immutable timestamped run below `.coaching-eval/runs/<model>/`. Create a review packet from one exact timestamped run directory:
 
 ```bash
 python3 Tools/CoachingEval/render_review.py \
-  --run .coaching-eval/runs/qwen3-0.6b-q4_0
+  --run .coaching-eval/runs/qwen3-0.6b-q4_0/visible-<timestamp>
 ```
 
 For a combined comparison, repeat `--run` for each model and provide `--output <directory>`. The recorded review seed deterministically shuffles outputs. `review-packet.jsonl` shows the position, history, latest action, candidate turn, success criteria, and severe-failure criteria without model identity. Keep `review-key.json` private until scoring is complete.
 
 ```bash
 python3 Tools/CoachingEval/render_review.py \
-  --run .coaching-eval/runs/qwen3-0.6b-q4_0 \
-  --run .coaching-eval/runs/qwen3-1.7b-q4_k_m \
+  --run .coaching-eval/runs/qwen3-0.6b-q4_0/visible-<timestamp> \
+  --run .coaching-eval/runs/qwen3-1.7b-q4_k_m/visible-<timestamp> \
   --output .coaching-eval/reviews/combined-v1
 ```
+
+The renderer deliberately refuses a model root or any other recursive input so a packet cannot silently mix superseded and current run records.
 
 Fill every score cell in `rubric.csv`:
 
@@ -158,8 +176,8 @@ The fake model is rejected unless explicitly enabled. It still uses the subproce
 ```bash
 COACHING_EVAL_ALLOW_FAKE=1 python3 Tools/CoachingEval/run_eval.py local \
   --model fake-test-model --split visible --case t1Entry --repetitions 1
-python3 Tools/CoachingEval/render_review.py --run .coaching-eval/runs/fake-test-model
-python3 Tools/CoachingEval/summarize_eval.py --run .coaching-eval/runs/fake-test-model
+python3 Tools/CoachingEval/render_review.py --run .coaching-eval/runs/fake-test-model/visible-<timestamp>
+python3 Tools/CoachingEval/summarize_eval.py --run .coaching-eval/runs/fake-test-model/visible-<timestamp>
 ```
 
 The fake renderer adds an explicitly labeled synthetic rubric row only so this automated path can reach the summary gate. It is never a quality measurement.

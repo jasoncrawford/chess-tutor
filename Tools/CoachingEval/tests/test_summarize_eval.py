@@ -35,6 +35,7 @@ class SummarizeEvalTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name) / "run"
         child = self.root / "visible-one"
+        self.run = child
         child.mkdir(parents=True)
         records = []
         for index, latency in enumerate((100.0, 200.0, 1000.0), 1):
@@ -54,7 +55,7 @@ class SummarizeEvalTests(unittest.TestCase):
         with (child / "records.jsonl").open("w") as destination:
             for item in records:
                 destination.write(json.dumps(item) + "\n")
-        render_review.render_review([self.root], self.root, review_seed=7)
+        render_review.render_review([self.run], self.root, review_seed=7)
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -124,7 +125,7 @@ class SummarizeEvalTests(unittest.TestCase):
         (second_child / "records.jsonl").write_text(json.dumps(second) + "\n")
 
         combined = Path(self.temporary.name) / "combined-review"
-        render_review.render_review([self.root, second_root], combined, review_seed=19)
+        render_review.render_review([self.run, second_child], combined, review_seed=19)
         key = json.loads((combined / "review-key.json").read_text())
         with (combined / "rubric.csv").open("w", newline="") as destination:
             writer = csv.DictWriter(

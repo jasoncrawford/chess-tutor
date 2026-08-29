@@ -44,7 +44,23 @@ class RenderReviewTests(unittest.TestCase):
         with (run / "records.jsonl").open("w") as destination:
             for item in records:
                 destination.write(json.dumps(item) + "\n")
-        return root
+        return run
+
+    def test_refuses_recursive_model_root_with_multiple_record_sets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model_root = root / "runs"
+            first = model_root / "run-one"
+            second = model_root / "run-two"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            (first / "records.jsonl").write_text(json.dumps(record("case-a", "a")) + "\n")
+            (second / "records.jsonl").write_text(json.dumps(record("case-b", "b")) + "\n")
+
+            with self.assertRaisesRegex(ValueError, "exact run directory"):
+                render_review.render_review([model_root], root / "review", review_seed=42)
+
+            self.assertFalse((root / "review").exists())
 
     def test_writes_blinded_shuffled_packet_key_and_fixed_rubric(self):
         with tempfile.TemporaryDirectory() as temporary:

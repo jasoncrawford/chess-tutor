@@ -2,6 +2,7 @@
 """Run reproducible coaching-turn evaluations through an OpenAI-compatible endpoint."""
 
 import argparse
+import copy
 import dataclasses
 import datetime
 import hashlib
@@ -26,6 +27,21 @@ THINKING_BLOCK = re.compile(
     r"<\s*think\b[^>]*>.*?<\s*/\s*think\s*>", re.IGNORECASE | re.DOTALL
 )
 THINKING_MARKER = re.compile(r"<\s*/?\s*think\b", re.IGNORECASE)
+TURN_REQUIRED_PROPERTY_ORDER = (
+    "schemaVersion",
+    "requestID",
+    "teachingIntent",
+    "primaryMessage",
+    "actionReferences",
+    "boardFocusReferences",
+    "relationshipReferences",
+    "supportingEvidenceReferences",
+)
+TURN_OPTIONAL_PROPERTY_ORDER = (
+    "instruction",
+    "responseToLatestAction",
+    "boardTaskReference",
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -131,14 +147,48 @@ def _response_metrics(response):
     }
 
 
-def _example_messages(examples):
+def _effective_request(frozen_request, prompt_version):
+    effective = copy.deepcopy(frozen_request)
+    frozen_version = effective.get("promptVersion")
+    effective["promptVersion"] = prompt_version
+    mutations = []
+    if frozen_version != prompt_version:
+        mutations.append(
+            {
+                "field": "promptVersion",
+                "frozen": frozen_version,
+                "effective": prompt_version,
+            }
+        )
+    return effective, mutations
+
+
+def _serialize_assistant_turn(turn):
+    permitted = set(TURN_REQUIRED_PROPERTY_ORDER + TURN_OPTIONAL_PROPERTY_ORDER)
+    missing = [key for key in TURN_REQUIRED_PROPERTY_ORDER if key not in turn]
+    unknown = sorted(set(turn) - permitted)
+    if missing or unknown:
+        raise ValueError(
+            f"Assistant example does not match coaching turn shape; missing={missing}, unknown={unknown}"
+        )
+    ordered = {key: turn[key] for key in TURN_REQUIRED_PROPERTY_ORDER}
+    ordered.update(
+        (key, turn[key]) for key in TURN_OPTIONAL_PROPERTY_ORDER if key in turn
+    )
+    return json.dumps(ordered, ensure_ascii=False, separators=(",", ":"))
+
+
+def _example_messages(examples, *, prompt_version):
     messages = []
     for example in examples:
-        messages.append(
-            {"role": "user", "content": canonical_json(example["requestExcerpt"])}
+        effective_excerpt, _mutations = _effective_request(
+            example["requestExcerpt"], prompt_version
         )
         messages.append(
-            {"role": "assistant", "content": canonical_json(example["turn"])}
+            {"role": "user", "content": canonical_json(effective_excerpt)}
+        )
+        messages.append(
+            {"role": "assistant", "content": _serialize_assistant_turn(example["turn"])}
         )
     return messages
 
@@ -178,9 +228,18 @@ class EvaluationRunner:
         self.runtime_provenance_record = dict(runtime_provenance_record or {})
 
     def evaluate_case(self, evaluation_case, *, mode, seed):
-        request = evaluation_case["request"]
+        frozen_request = evaluation_case["request"]
+        request, request_mutations = _effective_request(
+            frozen_request, self.evaluator_prompt_version
+        )
+        effective_evaluation_case = copy.deepcopy(evaluation_case)
+        effective_evaluation_case["request"] = request
+        frozen_request_bytes = canonical_json(frozen_request).encode("utf-8")
         request_bytes = canonical_json(request).encode("utf-8")
-        example_messages = _example_messages(self.examples)
+        example_messages = _example_messages(
+            self.examples,
+            prompt_version=self.evaluator_prompt_version,
+        )
         prompt_payload = llama_server.build_template_payload(
             system_prompt=self.system_prompt,
             request=request,
@@ -192,7 +251,7 @@ class EvaluationRunner:
         record = {
             "caseID": evaluation_case["id"],
             "caseSplit": evaluation_case["split"],
-            "evaluationCase": evaluation_case,
+            "evaluationCase": effective_evaluation_case,
             "modelID": self.model_id,
             "mode": mode,
             "seed": seed,
@@ -205,6 +264,9 @@ class EvaluationRunner:
             "promptVersion": request.get("promptVersion"),
             "requestUTF8Bytes": len(request_bytes),
             "requestSHA256": hashlib.sha256(request_bytes).hexdigest(),
+            "frozenRequestSHA256": hashlib.sha256(frozen_request_bytes).hexdigest(),
+            "effectiveRequestSHA256": hashlib.sha256(request_bytes).hexdigest(),
+            "requestMutations": request_mutations,
             "requestCompacted": False,
             "promptEnvelopeUTF8Bytes": len(prompt_bytes),
             "promptEnvelopeSHA256": hashlib.sha256(prompt_bytes).hexdigest(),

@@ -28,14 +28,21 @@ NEGATIVE_COLUMNS = RUBRIC_COLUMNS[6:9]
 
 def _records(run_roots):
     records = []
+    seen = set()
     for root in run_roots:
-        paths = sorted(Path(root).rglob("records.jsonl"))
-        if not paths:
-            raise ValueError(f"No records.jsonl found under {root}")
-        for path in paths:
-            for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if line:
-                    records.append((path, line_number, json.loads(line)))
+        root = Path(root)
+        path = root / "records.jsonl"
+        if not path.is_file():
+            raise ValueError(
+                f"Each --run must name an exact run directory containing records.jsonl: {root}"
+            )
+        resolved = path.resolve()
+        if resolved in seen:
+            raise ValueError(f"Duplicate run directory: {root}")
+        seen.add(resolved)
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line:
+                records.append((path, line_number, json.loads(line)))
     return records
 
 
@@ -48,9 +55,9 @@ def render_review(run_roots, output, *, review_seed):
     ]
     if any(path.exists() for path in targets):
         raise ValueError(f"Refusing to overwrite existing review artifacts in {output}")
+    source_records = _records(run_roots)
     output.mkdir(parents=True, exist_ok=True)
 
-    source_records = _records(run_roots)
     random.Random(review_seed).shuffle(source_records)
     packet = []
     key_entries = {}

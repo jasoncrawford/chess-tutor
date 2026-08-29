@@ -1,5 +1,7 @@
 import json
+import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -133,6 +135,201 @@ class SchemaCompatibilityTests(unittest.TestCase):
             "unknownSupportingEvidenceReference:fact:invented",
         ):
             self._smoke_with_content(json.dumps(invalid))
+
+    def test_runtime_template_audit_binds_every_model_and_mode_without_trace_content(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
+        provenance = {
+            "sourceTag": "b10516",
+            "sourceCommit": "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9",
+            "binarySHA256": "a" * 64,
+            "versionOutput": "version: 10516 (b95502ba)",
+        }
+        seen = []
+
+        class FakeServer:
+            def __init__(self, executable, model, *, context_tokens):
+                self.model = Path(model)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_arguments):
+                return None
+
+            def _post_json(self, path, payload, *, timeout):
+                self.assert_template_payload(payload)
+                request_text = payload["messages"][-1]["content"]
+                enabled = payload["chat_template_kwargs"]["enable_thinking"]
+                suffix = "<assistant>" if enabled else "<assistant><think>\n\n</think>\n\n"
+                return {"prompt": f"rendered:{request_text}{suffix}"}
+
+            def assert_template_payload(self, payload):
+                self_test.assertEqual("tutor-v2", json.loads(payload["messages"][-1]["content"])["promptVersion"])
+                assistant_examples = [
+                    message["content"]
+                    for message in payload["messages"]
+                    if message["role"] == "assistant"
+                ]
+                self_test.assertTrue(assistant_examples[0].startswith('{"schemaVersion":'))
+
+            def complete(self, **arguments):
+                self_test.assertEqual(120, arguments["timeout"])
+                seen.append((self.model.name, arguments["enable_thinking"], arguments["request"]))
+                turn = dict(SchemaCompatibilityTests.VALID_SMOKE_TURN)
+                turn["requestID"] = arguments["request"]["requestID"]
+                turn["supportingEvidenceReferences"] = [
+                    arguments["request"]["permittedReferences"]["evidence"][0]
+                ]
+                content = json.dumps(turn)
+                if arguments["enable_thinking"]:
+                    content = f"<think>private audit trace</think>{content}"
+                return {"choices": [{"message": {"content": content}}]}
+
+        self_test = self
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime_path = root / "runtime.json"
+            runtime_path.write_text(
+                json.dumps(
+                    {
+                        "mac": {"contextTokens": 8192},
+                        "generation": {
+                            "maximumOutputTokens": 256,
+                            "temperature": 0.2,
+                            "topP": 0.9,
+                        },
+                        "evaluation": {"seeds": [1103]},
+                    }
+                )
+            )
+            models = []
+            for index in range(3):
+                path = root / f"model-{index}.gguf"
+                path.write_bytes(f"model-{index}".encode("utf-8"))
+                models.append((f"candidate-{index}", path))
+            output = root / "audit.json"
+            prompt_bundle = schema_compat.run_eval._load_prompt_bundle(
+                "tutor-v2", TOOLS_DIR / "prompts"
+            )
+            with mock.patch.object(
+                schema_compat.runtime_provenance,
+                "verify_runtime",
+                return_value=provenance,
+            ), mock.patch.object(schema_compat.llama_server, "LlamaServer", FakeServer):
+                result = schema_compat.audit_runtime_templates(
+                    schema=schema,
+                    server=root / "llama-server",
+                    models=models,
+                    runtime_path=runtime_path,
+                    runtime_manifest=root / "runtime-manifest.json",
+                    prompt_bundle=prompt_bundle,
+                    output=output,
+                )
+
+            self.assertEqual(result, json.loads(output.read_text()))
+            self.assertEqual("coaching-eval-runtime-template-audit.v1", result["schemaVersion"])
+            self.assertEqual(provenance, result["runtimeProvenance"])
+            self.assertEqual("tutor-v2", result["effectivePrompt"]["version"])
+            self.assertEqual(prompt_bundle.prompt_sha256, result["effectivePrompt"]["promptSHA256"])
+            self.assertEqual(prompt_bundle.examples_sha256, result["effectivePrompt"]["examplesSHA256"])
+            self.assertEqual(3, len(result["models"]))
+            for (model_id, path), audited in zip(models, result["models"]):
+                self.assertEqual(model_id, audited["modelID"])
+                self.assertEqual(
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    audited["modelArtifactSHA256"],
+                )
+                self.assertEqual(["off", "bounded"], [mode["mode"] for mode in audited["modes"]])
+                self.assertEqual(
+                    ["assistant-prefix-empty-thinking-prefill", "assistant-prefix"],
+                    [mode["applyTemplateSuffixShape"] for mode in audited["modes"]],
+                )
+                for mode in audited["modes"]:
+                    self.assertEqual(64, len(mode["grammarSHA256"]))
+                    self.assertEqual(64, len(mode["applyTemplateSuffixSHA256"]))
+                    self.assertTrue(mode["returnedContentParsedJSON"])
+                    self.assertTrue(mode["returnedContentStrictValidationPassed"])
+            self.assertEqual(6, len(seen))
+            serialized = output.read_text().lower()
+            self.assertNotIn("<think", serialized)
+            self.assertNotIn("private audit trace", serialized)
+            self.assertNotIn("reasoning", serialized)
+
+    def test_runtime_template_audit_records_timeout_and_continues_to_the_other_mode(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
+
+        class TimeoutThenSuccessServer:
+            def __init__(self, executable, model, *, context_tokens):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_arguments):
+                return None
+
+            def _post_json(self, path, payload, *, timeout):
+                request_text = payload["messages"][-1]["content"]
+                return {"prompt": f"rendered:{request_text}<assistant>"}
+
+            def complete(self, **arguments):
+                if not arguments["enable_thinking"]:
+                    raise schema_compat.llama_server.LlamaServerTimeout("private timeout detail")
+                turn = dict(SchemaCompatibilityTests.VALID_SMOKE_TURN)
+                turn["requestID"] = arguments["request"]["requestID"]
+                turn["supportingEvidenceReferences"] = [
+                    arguments["request"]["permittedReferences"]["evidence"][0]
+                ]
+                return {"choices": [{"message": {"content": json.dumps(turn)}}]}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime_path = root / "runtime.json"
+            runtime_path.write_text(
+                json.dumps(
+                    {
+                        "mac": {"contextTokens": 8192},
+                        "generation": {
+                            "maximumOutputTokens": 256,
+                            "temperature": 0.2,
+                            "topP": 0.9,
+                        },
+                        "evaluation": {"seeds": [1103]},
+                    }
+                )
+            )
+            model = root / "model.gguf"
+            model.write_bytes(b"model")
+            prompt_bundle = schema_compat.run_eval._load_prompt_bundle(
+                "tutor-v2", TOOLS_DIR / "prompts"
+            )
+            with mock.patch.object(
+                schema_compat.runtime_provenance,
+                "verify_runtime",
+                return_value={"sourceTag": "b10516", "binarySHA256": "a" * 64},
+            ), mock.patch.object(
+                schema_compat.llama_server,
+                "LlamaServer",
+                TimeoutThenSuccessServer,
+            ):
+                result = schema_compat.audit_runtime_templates(
+                    schema=schema,
+                    server=root / "llama-server",
+                    models=[("slow-model", model)],
+                    runtime_path=runtime_path,
+                    runtime_manifest=root / "runtime-manifest.json",
+                    prompt_bundle=prompt_bundle,
+                    output=root / "audit.json",
+                )
+
+            off, bounded = result["models"][0]["modes"]
+            self.assertEqual("timeout", off["generationStatus"])
+            self.assertFalse(off["returnedContentParsedJSON"])
+            self.assertFalse(off["returnedContentStrictValidationPassed"])
+            self.assertEqual("success", bounded["generationStatus"])
+            self.assertTrue(bounded["returnedContentParsedJSON"])
+            self.assertTrue(bounded["returnedContentStrictValidationPassed"])
+            self.assertNotIn("private timeout detail", json.dumps(result))
 
 
 if __name__ == "__main__":
