@@ -9,13 +9,18 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import llama_server
+import coaching_grammar
+import compact_context
 import model_store
+import render_transcript
 import runtime_provenance as provenance
 import validate_turn
 
@@ -232,6 +237,11 @@ class EvaluationRunner:
         self.runtime_provenance_record = dict(runtime_provenance_record or {})
 
     def evaluate_case(self, evaluation_case, *, mode, seed):
+        if self.evaluator_prompt_version == "tutor-v3":
+            return self._evaluate_compact_case(evaluation_case, mode=mode, seed=seed)
+        return self._evaluate_legacy_case(evaluation_case, mode=mode, seed=seed)
+
+    def _evaluate_legacy_case(self, evaluation_case, *, mode, seed):
         frozen_request = evaluation_case["request"]
         request, request_mutations = _effective_request(
             frozen_request, self.evaluator_prompt_version
@@ -352,6 +362,287 @@ class EvaluationRunner:
             record["latencyMilliseconds"] = (time.monotonic() - started) * 1000
         return record
 
+    def _evaluate_compact_case(self, evaluation_case, *, mode, seed):
+        frozen_request = evaluation_case["request"]
+        request, request_mutations = _effective_request(
+            frozen_request, self.evaluator_prompt_version
+        )
+        effective_evaluation_case = copy.deepcopy(evaluation_case)
+        effective_evaluation_case["request"] = request
+        compilation = evaluation_case.get("compactContext", {})
+        markdown = compilation.get("markdown", "")
+        frozen_request_bytes = canonical_json(frozen_request).encode("utf-8")
+        request_bytes = canonical_json(request).encode("utf-8")
+        markdown_bytes = markdown.encode("utf-8") if isinstance(markdown, str) else b""
+        example_messages = _example_messages(
+            self.examples,
+            prompt_version=self.evaluator_prompt_version,
+        )
+        record = {
+            "caseID": evaluation_case["id"],
+            "caseSplit": evaluation_case["split"],
+            "evaluationCase": effective_evaluation_case,
+            "modelID": self.model_id,
+            "mode": mode,
+            "seed": seed,
+            "requestID": request.get("requestID"),
+            "positionRevision": request.get("positionRevision"),
+            "modelArtifactSHA256": self.model_artifact_sha256,
+            "llamaCppVersion": self.llama_cpp_version,
+            "runtimeProvenance": self.runtime_provenance_record,
+            "evaluatorPromptVersion": self.evaluator_prompt_version,
+            "promptVersion": request.get("promptVersion"),
+            "requestUTF8Bytes": len(request_bytes),
+            "requestSHA256": hashlib.sha256(request_bytes).hexdigest(),
+            "frozenRequestSHA256": hashlib.sha256(frozen_request_bytes).hexdigest(),
+            "effectiveRequestSHA256": hashlib.sha256(request_bytes).hexdigest(),
+            "requestMutations": request_mutations,
+            "requestCompacted": False,
+            "modelInputFormat": "compactMarkdown",
+            "modelInputMarkdownUTF8Bytes": len(markdown_bytes),
+            "modelInputMarkdownSHA256": hashlib.sha256(markdown_bytes).hexdigest(),
+            "renderedPromptUTF8Bytes": 0,
+            "renderedPromptSHA256": None,
+            "renderedPromptTokens": 0,
+            "grammarUTF8Bytes": 0,
+            "grammarSHA256": None,
+            "generationStatus": "notStarted",
+            "generationAttempted": False,
+            "rawFinalContent": None,
+            "firstAttemptRawFinalContent": None,
+            "repairRawFinalContent": None,
+            "aliasTurn": None,
+            "aliasTurnUTF8Bytes": 0,
+            "aliasTurnSHA256": None,
+            "stableTurn": None,
+            "stableTurnUTF8Bytes": 0,
+            "stableTurnSHA256": None,
+            "parsedTurn": None,
+            "aliasRestorationErrors": [],
+            "firstAttemptValidation": {"valid": False, "errors": ["attempt.notRun"]},
+            "repairAttempted": False,
+            "repairValidation": None,
+            "repairRenderedPromptTokens": None,
+            "repairRenderedPromptUTF8Bytes": None,
+            "repairRenderedPromptSHA256": None,
+            "promptTokens": 0,
+            "outputTokens": 0,
+            "promptMilliseconds": 0.0,
+            "generationMilliseconds": 0.0,
+            "latencyMilliseconds": 0.0,
+            "errors": [],
+        }
+        started = time.monotonic()
+        rendered_prompt = ""
+        repair_rendered_prompt = None
+        compilation_issues = compact_context.validate_compilation(evaluation_case)
+        if compilation_issues:
+            record["generationStatus"] = "compilerValidationFailed"
+            record["firstAttemptValidation"] = {
+                "valid": False,
+                "errors": compilation_issues,
+            }
+            record["errors"].append(
+                {
+                    "kind": "compilerValidationFailed",
+                    "message": "Compact context failed deterministic validation.",
+                }
+            )
+            return self._finish_compact_record(record, rendered_prompt, started)
+
+        aliases = compact_context.permitted_aliases(compilation)
+        try:
+            rendered_prompt = self.client.render_prompt(
+                system_prompt=self.system_prompt,
+                user_content=markdown,
+                enable_thinking=mode == "bounded",
+                timeout=self.request_timeout,
+                extra_messages=example_messages,
+            )
+            self._record_rendered_prompt(record, rendered_prompt)
+            record["renderedPromptTokens"] = self.client.token_count(
+                rendered_prompt,
+                timeout=self.request_timeout,
+            )
+            if record["renderedPromptTokens"] > 4000:
+                record["generationStatus"] = "compilerBudgetExceeded"
+                record["firstAttemptValidation"] = {
+                    "valid": False,
+                    "errors": ["transport.compilerBudgetExceeded"],
+                }
+                return self._finish_compact_record(record, rendered_prompt, started)
+
+            grammar = coaching_grammar.strict_grammar(
+                self.schema,
+                enable_thinking=mode == "bounded",
+                request_id=request["requestID"],
+                permitted_aliases=aliases,
+            )
+            grammar_bytes = grammar.encode("utf-8")
+            record["grammarUTF8Bytes"] = len(grammar_bytes)
+            record["grammarSHA256"] = hashlib.sha256(grammar_bytes).hexdigest()
+            record["generationAttempted"] = True
+            record["generationStatus"] = "generated"
+            first_response = self.client.complete_rendered(
+                prompt=rendered_prompt,
+                grammar=grammar,
+                seed=seed,
+                maximum_output_tokens=self.maximum_output_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                timeout=self.request_timeout,
+            )
+            first_content = _final_content(first_response)
+            record["firstAttemptRawFinalContent"] = first_content
+            record["rawFinalContent"] = first_content
+            repairable = self._record_compact_turn(
+                record,
+                first_content,
+                request,
+                compilation,
+                validation_field="firstAttemptValidation",
+            )
+            self._add_metrics(record, first_response)
+
+            if repairable:
+                record["repairAttempted"] = True
+                repair_messages = [
+                    {"role": "assistant", "content": first_content},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Return one corrected JSON object only. Fix parsing or schema shape. "
+                            "Use only aliases listed in this coaching context."
+                        ),
+                    },
+                ]
+                repair_prompt = self.client.render_prompt(
+                    system_prompt=self.system_prompt,
+                    user_content=markdown,
+                    enable_thinking=mode == "bounded",
+                    timeout=self.request_timeout,
+                    extra_messages=example_messages,
+                    after_messages=repair_messages,
+                )
+                repair_rendered_prompt = repair_prompt
+                repair_bytes = repair_prompt.encode("utf-8")
+                record["repairRenderedPromptUTF8Bytes"] = len(repair_bytes)
+                record["repairRenderedPromptSHA256"] = hashlib.sha256(repair_bytes).hexdigest()
+                repair_tokens = self.client.token_count(
+                    repair_prompt,
+                    timeout=self.request_timeout,
+                )
+                record["repairRenderedPromptTokens"] = repair_tokens
+                if repair_tokens > 4000:
+                    record["generationStatus"] = "repairBudgetExceeded"
+                    record["repairValidation"] = {
+                        "valid": False,
+                        "errors": ["transport.repairBudgetExceeded"],
+                    }
+                else:
+                    repaired_response = self.client.complete_rendered(
+                        prompt=repair_prompt,
+                        grammar=grammar,
+                        seed=seed,
+                        maximum_output_tokens=self.maximum_output_tokens,
+                        temperature=self.temperature,
+                        top_p=self.top_p,
+                        timeout=self.request_timeout,
+                    )
+                    repaired_content = _final_content(repaired_response)
+                    record["repairRawFinalContent"] = repaired_content
+                    record["rawFinalContent"] = repaired_content
+                    self._record_compact_turn(
+                        record,
+                        repaired_content,
+                        request,
+                        compilation,
+                        validation_field="repairValidation",
+                    )
+                    self._add_metrics(record, repaired_response)
+        except (llama_server.LlamaServerError, OSError, ValueError) as error:
+            category, message = _persistable_provider_error(error)
+            record["generationStatus"] = category
+            record["errors"].append({"kind": category, "message": message})
+            transport_validation = {
+                "valid": False,
+                "errors": [f"transport.{category}"],
+            }
+            if record["repairAttempted"]:
+                record["repairValidation"] = transport_validation
+            else:
+                record["firstAttemptValidation"] = transport_validation
+        return self._finish_compact_record(
+            record, rendered_prompt, started, repair_rendered_prompt
+        )
+
+    @staticmethod
+    def _record_rendered_prompt(record, prompt):
+        prompt_bytes = prompt.encode("utf-8")
+        record["renderedPromptUTF8Bytes"] = len(prompt_bytes)
+        record["renderedPromptSHA256"] = hashlib.sha256(prompt_bytes).hexdigest()
+
+    @staticmethod
+    def _record_compact_turn(record, content, request, compilation, *, validation_field):
+        record["aliasTurnUTF8Bytes"] = 0
+        record["aliasTurnSHA256"] = None
+        record["stableTurnUTF8Bytes"] = 0
+        record["stableTurnSHA256"] = None
+        try:
+            alias_turn = json.loads(content)
+        except (TypeError, ValueError) as error:
+            record["aliasTurn"] = None
+            record["stableTurn"] = None
+            record["parsedTurn"] = None
+            record[validation_field] = {
+                "valid": False,
+                "errors": [f"parse.invalidJSON:{error}"],
+            }
+            return True
+        if not isinstance(alias_turn, dict):
+            record["aliasTurn"] = alias_turn
+            record["stableTurn"] = None
+            record["parsedTurn"] = None
+            record[validation_field] = {
+                "valid": False,
+                "errors": ["shape.rootMustBeObject"],
+            }
+            return True
+        alias_bytes = canonical_json(alias_turn).encode("utf-8")
+        record["aliasTurnUTF8Bytes"] = len(alias_bytes)
+        record["aliasTurnSHA256"] = hashlib.sha256(alias_bytes).hexdigest()
+        stable_turn, alias_issues = compact_context.restore_stable_turn(
+            alias_turn, compilation
+        )
+        stable_issues = validate_turn.validate_turn(stable_turn, request)
+        issues = sorted(set(alias_issues + stable_issues))
+        record["aliasTurn"] = alias_turn
+        record["stableTurn"] = stable_turn if not alias_issues else None
+        record["parsedTurn"] = stable_turn if not alias_issues else None
+        if not alias_issues:
+            stable_bytes = canonical_json(stable_turn).encode("utf-8")
+            record["stableTurnUTF8Bytes"] = len(stable_bytes)
+            record["stableTurnSHA256"] = hashlib.sha256(stable_bytes).hexdigest()
+        else:
+            record["stableTurnUTF8Bytes"] = 0
+            record["stableTurnSHA256"] = None
+        record["aliasRestorationErrors"] = alias_issues
+        record[validation_field] = {"valid": not issues, "errors": issues}
+        return any(issue.startswith("shape.") for issue in issues)
+
+    @staticmethod
+    def _finish_compact_record(
+        record, rendered_prompt, started, repair_rendered_prompt=None
+    ):
+        record["latencyMilliseconds"] = (time.monotonic() - started) * 1000
+        record["_transcriptMarkdown"] = render_transcript.render_transcript(
+            record,
+            rendered_prompt=rendered_prompt,
+            repair_rendered_prompt=repair_rendered_prompt,
+            environment={},
+        )
+        return record
+
     @staticmethod
     def _add_metrics(record, response):
         metrics = _response_metrics(response)
@@ -402,22 +693,79 @@ def _load_cases(path, case_id=None):
 
 def _run_output_directory(base, split):
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-    output = base / f"{split}-{timestamp}"
-    output.mkdir(parents=True, exist_ok=False)
-    return output
+    return base / f"{split}-{timestamp}"
 
 
 def _write_run(output, records, manifest):
-    records_path = output / "records.jsonl"
-    with records_path.open("w", encoding="utf-8") as destination:
-        for record in records:
-            destination.write(canonical_json(record) + "\n")
-    manifest = dict(manifest)
-    manifest["recordCount"] = len(records)
-    manifest["recordsSHA256"] = hashlib.sha256(records_path.read_bytes()).hexdigest()
-    (output / "run-manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    output = Path(output)
+    if output.exists():
+        raise ValueError(f"Refusing to overwrite existing run directory: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(
+        tempfile.mkdtemp(prefix=f".{output.name}.tmp-", dir=str(output.parent))
     )
+    try:
+        transcript_root = temporary / "transcripts"
+        persisted_records = []
+        transcript_names = set()
+        for source_record in records:
+            record = dict(source_record)
+            transcript = record.pop("_transcriptMarkdown", None)
+            if transcript is not None:
+                components = (record.get("caseID"), record.get("mode"), record.get("seed"))
+                if not all(
+                    isinstance(value, (str, int))
+                    and re.fullmatch(r"[A-Za-z0-9._-]+", str(value))
+                    for value in components
+                ):
+                    raise ValueError(f"Unsafe transcript identity: {components}")
+                name = "--".join(str(value) for value in components) + ".md"
+                if name in transcript_names:
+                    raise ValueError(f"Duplicate transcript identity: {name}")
+                transcript_names.add(name)
+                transcript_root.mkdir(exist_ok=True)
+                transcript_path = transcript_root / name
+                _write_fsynced(transcript_path, transcript)
+                relative = transcript_path.relative_to(temporary)
+                record["transcriptPath"] = str(relative)
+                record["transcriptSHA256"] = hashlib.sha256(
+                    transcript_path.read_bytes()
+                ).hexdigest()
+            persisted_records.append(record)
+
+        records_path = temporary / "records.jsonl"
+        _write_fsynced(
+            records_path,
+            "".join(canonical_json(record) + "\n" for record in persisted_records),
+        )
+        manifest = dict(manifest)
+        manifest["recordCount"] = len(persisted_records)
+        manifest["recordsSHA256"] = hashlib.sha256(records_path.read_bytes()).hexdigest()
+        _write_fsynced(
+            temporary / "run-manifest.json",
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        )
+        directory_descriptor = os.open(temporary, os.O_RDONLY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+        os.replace(temporary, output)
+        parent_descriptor = os.open(output.parent, os.O_RDONLY)
+        try:
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+
+
+def _write_fsynced(path, content):
+    with Path(path).open("w", encoding="utf-8") as destination:
+        destination.write(content)
+        destination.flush()
+        os.fsync(destination.fileno())
 
 
 def _fake_turn_for(request):
@@ -439,6 +787,26 @@ def _fake_turn_for(request):
         "boardFocusReferences": board_focus[:1],
         "relationshipReferences": [],
         "supportingEvidenceReferences": evidence[:1],
+    }
+
+
+def _fake_alias_turn_for(markdown):
+    request_match = re.search(r"^- Request: `([^`]+)`$", markdown, re.MULTILINE)
+    aliases = sorted(set(re.findall(r"\b(?:fact|move|reply)-[a-z0-9-]+\b", markdown)))
+    if request_match is None or not aliases:
+        raise ValueError("fake model requires a compact request ID and evidence alias")
+    return {
+        "schemaVersion": "model-coaching-turn.v1",
+        "requestID": request_match.group(1),
+        "teachingIntent": "other",
+        "primaryMessage": "Choose one move and look at the board.",
+        "actionReferences": [],
+        "boardFocusReferences": [],
+        "relationshipReferences": [],
+        "supportingEvidenceReferences": [aliases[0]],
+        "instruction": "Use the board to show your choice.",
+        "responseToLatestAction": None,
+        "boardTaskReference": None,
     }
 
 
@@ -478,6 +846,14 @@ def _fake_server(argv):
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if self.path == "/tokenize":
+                body = json.dumps({"count": 2000}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if os.environ.get("COACHING_EVAL_FAKE_HTTP_ERROR") == "reasoning":
                 body = json.dumps(
                     {
@@ -510,9 +886,16 @@ def _fake_server(argv):
                     request = candidate
                     break
             if request is None:
-                self.send_error(400, "missing request JSON")
-                return
-            content = "<think>test-only trace</think>\n" + canonical_json(_fake_turn_for(request))
+                messages = template_payload.get("messages", [])
+                markdown = messages[-1].get("content", "") if messages else ""
+                try:
+                    turn = _fake_alias_turn_for(markdown)
+                except ValueError:
+                    self.send_error(400, "missing request JSON or compact Markdown")
+                    return
+            else:
+                turn = _fake_turn_for(request)
+            content = "<think>test-only trace</think>\n" + canonical_json(turn)
             body = json.dumps(
                 {
                     "content": content,
@@ -669,7 +1052,11 @@ def _execute(arguments):
         "modelID": model_id,
         "provider": arguments.provider,
         "transport": (
-            "llama.cpp-apply-template-native-completion"
+            (
+                "llama.cpp-apply-template-tokenize-native-completion"
+                if prompt_bundle.version == "tutor-v3"
+                else "llama.cpp-apply-template-native-completion"
+            )
             if arguments.provider == "local"
             else "openai-compatible-http"
         ),
@@ -688,6 +1075,9 @@ def _execute(arguments):
         "llamaCppVersion": version,
         "runtimeProvenance": runtime_record,
         "contextTokens": runtime["mac"]["contextTokens"],
+        "compilerPromptBudgetTokens": (
+            4000 if prompt_bundle.version == "tutor-v3" else None
+        ),
         "maximumOutputTokens": runtime["generation"]["maximumOutputTokens"],
         "temperature": runtime["generation"]["temperature"],
         "topP": runtime["generation"]["topP"],

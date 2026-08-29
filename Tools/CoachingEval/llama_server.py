@@ -123,6 +123,25 @@ def build_template_payload(
     }
 
 
+def build_text_template_payload(
+    *,
+    system_prompt,
+    user_content,
+    enable_thinking,
+    extra_messages=None,
+    after_messages=None,
+):
+    """Build a template request whose final user content is already rendered text."""
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(extra_messages or [])
+    messages.append({"role": "user", "content": user_content})
+    messages.extend(after_messages or [])
+    return {
+        "messages": messages,
+        "chat_template_kwargs": {"enable_thinking": bool(enable_thinking)},
+    }
+
+
 class OpenAIChatClient:
     def __init__(self, base_url, *, api_key=None, model=None):
         base_url = base_url.rstrip("/")
@@ -277,21 +296,79 @@ class LlamaServer:
             extra_messages=extra_messages,
             after_messages=after_messages,
         )
-        prompt = self._post_json("/apply-template", template_payload, timeout=timeout).get(
-            "prompt"
+        response = self._post_json(
+            "/apply-template", template_payload, timeout=timeout
         )
+        prompt = response.get("prompt")
         if not isinstance(prompt, str):
             raise LlamaServerError("llama-server template response has no prompt")
+        return self.complete_rendered(
+            prompt=prompt,
+            grammar=coaching_grammar.strict_grammar(
+                schema,
+                enable_thinking=enable_thinking,
+            ),
+            seed=seed,
+            maximum_output_tokens=maximum_output_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            timeout=timeout,
+        )
+
+    def render_prompt(
+        self,
+        *,
+        system_prompt,
+        user_content,
+        enable_thinking,
+        timeout,
+        extra_messages=None,
+        after_messages=None,
+    ):
+        payload = build_text_template_payload(
+            system_prompt=system_prompt,
+            user_content=user_content,
+            enable_thinking=enable_thinking,
+            extra_messages=extra_messages,
+            after_messages=after_messages,
+        )
+        prompt = self._post_json("/apply-template", payload, timeout=timeout).get("prompt")
+        if not isinstance(prompt, str):
+            raise LlamaServerError("llama-server template response has no prompt")
+        return prompt
+
+    def token_count(self, prompt, *, timeout):
+        response = self._post_json(
+            "/tokenize",
+            {"content": prompt, "add_special": False, "parse_special": True},
+            timeout=timeout,
+        )
+        tokens = response.get("tokens")
+        if isinstance(tokens, list) and all(isinstance(token, int) for token in tokens):
+            return len(tokens)
+        count = response.get("count")
+        if isinstance(count, int) and count >= 0:
+            return count
+        raise LlamaServerError("llama-server tokenization response has no token count")
+
+    def complete_rendered(
+        self,
+        *,
+        prompt,
+        grammar,
+        seed,
+        maximum_output_tokens,
+        temperature,
+        top_p,
+        timeout,
+    ):
         payload = {
             "prompt": prompt,
             "seed": seed,
             "n_predict": maximum_output_tokens,
             "temperature": temperature,
             "top_p": top_p,
-            "grammar": coaching_grammar.strict_grammar(
-                schema,
-                enable_thinking=enable_thinking,
-            ),
+            "grammar": grammar,
         }
         response = self._post_json("/completion", payload, timeout=timeout)
         content = response.get("content")

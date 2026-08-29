@@ -112,6 +112,31 @@ def _aggregate(records, scores):
         for record in records
     )
     latency = [float(record.get("latencyMilliseconds", 0.0)) for record in records]
+    rendered_prompt_tokens = [
+        int(record.get("renderedPromptTokens", record.get("promptTokens", 0)) or 0)
+        for record in records
+    ]
+    compiler_budget_failures = sum(
+        record.get("generationStatus") == "compilerBudgetExceeded" for record in records
+    )
+    provider_context_overflows = sum(
+        any(error.get("kind") == "contextOverflow" for error in record.get("errors", []))
+        for record in records
+    )
+    alias_restoration_failures = sum(
+        bool(record.get("aliasRestorationErrors")) for record in records
+    )
+
+    def final_validation(record):
+        if record.get("repairAttempted") and record.get("repairValidation") is not None:
+            return record["repairValidation"]
+        return record.get("firstAttemptValidation", {})
+
+    stable_validator_failures = sum(
+        record.get("stableTurn") is not None
+        and not final_validation(record).get("valid", False)
+        for record in records
+    )
     rubric_dimensions = {}
     for column in render_review.POSITIVE_COLUMNS:
         values = [score[column] for score in scores]
@@ -137,6 +162,10 @@ def _aggregate(records, scores):
             "repairedValidityRate": _rate(repaired_valid, len(repaired)),
             "displayableValidCount": displayable,
             "displayableValidityRate": _rate(displayable, total),
+            "compilerBudgetFailureCount": compiler_budget_failures,
+            "providerContextOverflowCount": provider_context_overflows,
+            "aliasRestorationFailureCount": alias_restoration_failures,
+            "stableValidatorFailureCount": stable_validator_failures,
         },
         "latencyMilliseconds": {
             "p50": _percentile(latency, 0.5),
@@ -147,6 +176,13 @@ def _aggregate(records, scores):
             "outputTotal": sum(int(record.get("outputTokens", 0)) for record in records),
             "inputMean": statistics.fmean(int(record.get("promptTokens", 0)) for record in records),
             "outputMean": statistics.fmean(int(record.get("outputTokens", 0)) for record in records),
+            "renderedPrompt": {
+                "min": min(rendered_prompt_tokens),
+                "p50": _percentile(rendered_prompt_tokens, 0.5),
+                "p90": _percentile(rendered_prompt_tokens, 0.9),
+                "max": max(rendered_prompt_tokens),
+            },
+            "above4000Count": sum(value > 4000 for value in rendered_prompt_tokens),
         },
         "rubric": {
             "completedRows": len(scores),
@@ -202,7 +238,7 @@ def summarize(run_root):
                 "mode": record["mode"],
                 "seed": record["seed"],
                 "rawFinalContent": record.get("rawFinalContent"),
-                "candidateTurn": record.get("parsedTurn"),
+                "candidateTurn": record.get("stableTurn") or record.get("parsedTurn"),
                 "rubric": {column: score[column] for column in render_review.RUBRIC_COLUMNS},
             }
         )
@@ -226,6 +262,20 @@ def _markdown(summary):
         f"Repair attempts: {mechanical['repairAttemptCount']}; successful: {mechanical['repairedValidCount']}",
         f"Latency p50/p90: {summary['latencyMilliseconds']['p50']:.1f} / {summary['latencyMilliseconds']['p90']:.1f} ms",
         f"Input/output tokens: {summary['tokens']['inputTotal']} / {summary['tokens']['outputTotal']}",
+        (
+            "Rendered prompt tokens min/p50/p90/max: "
+            f"{summary['tokens']['renderedPrompt']['min']} / "
+            f"{summary['tokens']['renderedPrompt']['p50']} / "
+            f"{summary['tokens']['renderedPrompt']['p90']} / "
+            f"{summary['tokens']['renderedPrompt']['max']}"
+        ),
+        (
+            "Budget/provider/alias/stable failures: "
+            f"{mechanical['compilerBudgetFailureCount']} / "
+            f"{mechanical['providerContextOverflowCount']} / "
+            f"{mechanical['aliasRestorationFailureCount']} / "
+            f"{mechanical['stableValidatorFailureCount']}"
+        ),
         f"Severe errors: {summary['rubric']['severeErrorCount']}",
         "",
         "## Rubric dimensions",

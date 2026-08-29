@@ -25,6 +25,9 @@ parser.add_argument("--host")
 parser.add_argument("--port", type=int)
 arguments = parser.parse_args()
 last_template_request = None
+last_tokenize_request = None
+template_count = 0
+tokenize_count = 0
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -38,16 +41,27 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
-        global last_template_request
+        global last_template_request, last_tokenize_request, template_count, tokenize_count
         size = int(self.headers["Content-Length"])
         request = json.loads(self.rfile.read(size))
         if self.path == "/apply-template":
             last_template_request = request
+            template_count += 1
             prompt = "".join(
                 "<|im_start|>{role}\n{content}<|im_end|>\n".format(**message)
                 for message in request["messages"]
             ) + "<|im_start|>assistant\n"
             body = json.dumps({"prompt": prompt}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/tokenize":
+            last_tokenize_request = request
+            tokenize_count += 1
+            body = json.dumps({"tokens": list(range(37))}).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -102,6 +116,9 @@ class Handler(BaseHTTPRequestHandler):
                 "echo": request,
                 "path": self.path,
                 "templateEcho": last_template_request,
+                "tokenizeEcho": last_tokenize_request,
+                "templateCount": template_count,
+                "tokenizeCount": tokenize_count,
             }
         else:
             response = {
@@ -140,6 +157,48 @@ class LlamaServerTests(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_renders_markdown_once_tokenizes_exact_prompt_and_completes_same_bytes(self):
+        server = llama_server.LlamaServer(self.executable, self.model, context_tokens=8192)
+        grammar = 'root ::= "ok"'
+        markdown = "# Chess coaching context\n\n- Latest action: moved knight"
+        examples = [
+            {"role": "user", "content": "example markdown"},
+            {"role": "assistant", "content": '{"schemaVersion":"model-coaching-turn.v1"}'},
+        ]
+        try:
+            server.start(timeout=5)
+            prompt = server.render_prompt(
+                system_prompt="Tutor prompt",
+                user_content=markdown,
+                enable_thinking=False,
+                extra_messages=examples,
+                timeout=2,
+            )
+            token_count = server.token_count(prompt, timeout=2)
+            response = server.complete_rendered(
+                prompt=prompt,
+                grammar=grammar,
+                seed=1103,
+                maximum_output_tokens=256,
+                temperature=0.2,
+                top_p=0.9,
+                timeout=2,
+            )
+        finally:
+            server.stop()
+
+        self.assertEqual(37, token_count)
+        self.assertEqual(prompt, response["echo"]["prompt"])
+        self.assertEqual(grammar, response["echo"]["grammar"])
+        self.assertEqual(
+            {"content": prompt, "add_special": False, "parse_special": True},
+            response["tokenizeEcho"],
+        )
+        self.assertEqual(1, response["templateCount"])
+        self.assertEqual(1, response["tokenizeCount"])
+        self.assertEqual(markdown, response["templateEcho"]["messages"][-1]["content"])
+        self.assertFalse(response["templateEcho"]["messages"][-1]["content"].startswith("{"))
 
     def test_starts_on_localhost_and_sends_native_grammar_constrained_completion(self):
         schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())

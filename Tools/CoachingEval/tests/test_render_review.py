@@ -103,6 +103,25 @@ class RenderReviewTests(unittest.TestCase):
             for name in ("review-packet.jsonl", "review-key.json", "rubric.csv"):
                 self.assertEqual((first / name).read_bytes(), (second / name).read_bytes())
 
+    def test_review_uses_restored_stable_turn_not_request_local_alias_turn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            item = record("case-a", "model-a")
+            alias_turn = dict(item["parsedTurn"])
+            alias_turn["supportingEvidenceReferences"] = ["fact-position"]
+            stable_turn = dict(item["parsedTurn"])
+            stable_turn["supportingEvidenceReferences"] = ["fact:position"]
+            item["aliasTurn"] = alias_turn
+            item["stableTurn"] = stable_turn
+            item["parsedTurn"] = alias_turn
+            run = self.write_run(root / "runs", [item])
+
+            render_review.render_review([run], root / "review", review_seed=42)
+
+            packet = json.loads((root / "review" / "review-packet.jsonl").read_text())
+            self.assertEqual(stable_turn, packet["candidateTurn"])
+            self.assertNotIn("fact-position", json.dumps(packet))
+
 
 if __name__ == "__main__":
     unittest.main()

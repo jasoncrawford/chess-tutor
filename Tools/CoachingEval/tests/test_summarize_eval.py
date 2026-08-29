@@ -47,7 +47,20 @@ class SummarizeEvalTests(unittest.TestCase):
                     "repairValidation": {"valid": True, "errors": []} if index == 2 else None,
                     "latencyMilliseconds": latency,
                     "promptTokens": index * 10,
+                    "renderedPromptTokens": (3999, 4000, 4001)[index - 1],
                     "outputTokens": index * 2,
+                    "generationStatus": (
+                        "generated", "compilerBudgetExceeded", "contextOverflow"
+                    )[index - 1],
+                    "errors": (
+                        [],
+                        [],
+                        [{"kind": "contextOverflow", "message": "bounded"}],
+                    )[index - 1],
+                    "aliasRestorationErrors": (
+                        [], ["alias.unknown:boardFocusReferences:piece-missing"], []
+                    )[index - 1],
+                    "stableTurn": item["parsedTurn"] if index in (1, 3) else None,
                     "rawFinalContent": json.dumps(item["parsedTurn"]),
                 }
             )
@@ -97,6 +110,15 @@ class SummarizeEvalTests(unittest.TestCase):
         self.assertEqual(1000.0, summary["latencyMilliseconds"]["p90"])
         self.assertEqual(60, summary["tokens"]["inputTotal"])
         self.assertEqual(12, summary["tokens"]["outputTotal"])
+        self.assertEqual(
+            {"min": 3999, "p50": 4000, "p90": 4001, "max": 4001},
+            summary["tokens"]["renderedPrompt"],
+        )
+        self.assertEqual(1, summary["tokens"]["above4000Count"])
+        self.assertEqual(1, summary["mechanical"]["compilerBudgetFailureCount"])
+        self.assertEqual(1, summary["mechanical"]["providerContextOverflowCount"])
+        self.assertEqual(1, summary["mechanical"]["aliasRestorationFailureCount"])
+        self.assertEqual(1, summary["mechanical"]["stableValidatorFailureCount"])
         self.assertEqual(3.0, summary["rubric"]["dimensions"]["childClarity"]["mean"])
         self.assertEqual(1, summary["rubric"]["severeErrorCount"])
         self.assertEqual({"case-1", "case-2", "case-3"}, set(summary["examplesByCase"]))

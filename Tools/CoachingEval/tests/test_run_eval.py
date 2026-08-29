@@ -53,6 +53,31 @@ class FailingClient:
         raise self.error
 
 
+class CompactScriptedClient:
+    def __init__(self, responses, *, prompt="RENDERED PROMPT", token_counts=(4000,)):
+        self.responses = list(responses)
+        self.prompt = prompt
+        self.token_counts = list(token_counts)
+        self.render_calls = []
+        self.token_calls = []
+        self.completion_calls = []
+
+    def render_prompt(self, **arguments):
+        self.render_calls.append(arguments)
+        return self.prompt
+
+    def token_count(self, prompt, **arguments):
+        self.token_calls.append((prompt, arguments))
+        return self.token_counts.pop(0)
+
+    def complete_rendered(self, **arguments):
+        self.completion_calls.append(arguments)
+        result = self.responses.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
 class RunEvalTests(unittest.TestCase):
     def runner(self, client, *, context_tokens=8192, evaluator_prompt_version="tutor-v1"):
         example_turn = valid_turn()
@@ -88,6 +113,186 @@ class RunEvalTests(unittest.TestCase):
                 "severeFailureCriteria": ["The turn invents a board fact."],
             },
         }
+
+    def compact_case(self):
+        request = valid_request()
+        bindings = [
+            {"alias": "action-close-help", "stableID": "action:closeHelp", "category": "action"},
+            {"alias": "task-select-piece", "stableID": "task:selectBoardPiece", "category": "boardTask"},
+            {"alias": "piece-white-king-d4", "stableID": "piece:white:king:d4", "category": "piece"},
+            {"alias": "fact-position", "stableID": "fact:position", "category": "tacticalFact"},
+        ]
+        markdown = (
+            "# Chess coaching context\n\n"
+            "- Schema: `model-coaching-context.v1`\n"
+            "- Prompt: `tutor-v3`\n"
+            "- Request: `request-1`\n\n"
+            "## Available response references\n\n"
+            "- `action-close-help` — Close help\n"
+            "- `task-select-piece` — Select a piece\n"
+            "- `piece-white-king-d4` — White king on d4\n"
+            "- `fact-position` — Position fact\n"
+        )
+        result = self.case(request)
+        result["compactContext"] = {
+            "schemaVersion": "model-coaching-context.v1",
+            "promptVersion": "tutor-v3",
+            "requestID": request["requestID"],
+            "positionRevision": request["positionRevision"],
+            "markdown": markdown,
+            "referenceBindings": bindings,
+            "omissions": [],
+        }
+        return result
+
+    def alias_turn(self):
+        turn = valid_turn()
+        turn.update(
+            {
+                "actionReferences": ["action-close-help"],
+                "boardTaskReference": "task-select-piece",
+                "boardFocusReferences": ["piece-white-king-d4"],
+                "relationshipReferences": [],
+                "supportingEvidenceReferences": ["fact-position"],
+            }
+        )
+        return turn
+
+    def compact_runner(self, client):
+        examples = json.loads((TOOLS_DIR / "prompts" / "examples-v3.json").read_text())
+        return run_eval.EvaluationRunner(
+            client=client,
+            model_id="test-model",
+            model_artifact_sha256="f" * 64,
+            llama_cpp_version="b10516",
+            system_prompt="Exact tutor-v3 prompt",
+            examples=examples,
+            schema=json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text()),
+            context_tokens=8192,
+            maximum_output_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+            evaluator_prompt_version="tutor-v3",
+        )
+
+    def test_tutor_v3_refuses_4001_token_prompt_without_generation_or_repair(self):
+        client = CompactScriptedClient([], token_counts=[4001])
+
+        record = self.compact_runner(client).evaluate_case(
+            self.compact_case(), mode="off", seed=1103
+        )
+
+        self.assertEqual("compilerBudgetExceeded", record["generationStatus"])
+        self.assertEqual(4001, record["renderedPromptTokens"])
+        self.assertFalse(record["generationAttempted"])
+        self.assertEqual([], client.completion_calls)
+        self.assertFalse(record["repairAttempted"])
+        self.assertEqual(1, len(client.render_calls))
+        self.assertEqual(1, len(client.token_calls))
+
+    def test_tutor_v3_at_4000_tokens_restores_aliases_and_validates_stable_turn(self):
+        alias_turn = self.alias_turn()
+        client = CompactScriptedClient(
+            [response("<think>private</think>\n" + json.dumps(alias_turn))],
+            token_counts=[4000],
+        )
+
+        record = self.compact_runner(client).evaluate_case(
+            self.compact_case(), mode="bounded", seed=2207
+        )
+
+        self.assertEqual("generated", record["generationStatus"])
+        self.assertTrue(record["generationAttempted"])
+        self.assertEqual(4000, record["renderedPromptTokens"])
+        self.assertEqual(alias_turn, record["aliasTurn"])
+        self.assertEqual(valid_turn(), record["stableTurn"])
+        self.assertEqual(valid_turn(), record["parsedTurn"])
+        self.assertEqual([], record["aliasRestorationErrors"])
+        self.assertTrue(record["firstAttemptValidation"]["valid"])
+        self.assertEqual(
+            self.compact_case()["compactContext"]["markdown"],
+            client.render_calls[0]["user_content"],
+        )
+        self.assertEqual(client.prompt, client.completion_calls[0]["prompt"])
+        grammar = client.completion_calls[0]["grammar"]
+        self.assertIn("action-close-help", grammar)
+        self.assertIn("fact-position", grammar)
+        self.assertNotIn("action:closeHelp", grammar)
+        self.assertNotIn("private", json.dumps(record))
+        self.assertEqual(64, len(record["aliasTurnSHA256"]))
+        self.assertEqual(64, len(record["stableTurnSHA256"]))
+        self.assertGreater(record["aliasTurnUTF8Bytes"], 0)
+        self.assertGreater(record["stableTurnUTF8Bytes"], 0)
+
+    def test_tutor_v3_refuses_repair_when_repaired_prompt_exceeds_budget(self):
+        client = CompactScriptedClient(
+            [response("not json")],
+            token_counts=[4000, 4001],
+        )
+
+        record = self.compact_runner(client).evaluate_case(
+            self.compact_case(), mode="off", seed=1103
+        )
+
+        self.assertEqual("repairBudgetExceeded", record["generationStatus"])
+        self.assertTrue(record["repairAttempted"])
+        self.assertEqual(4001, record["repairRenderedPromptTokens"])
+        self.assertEqual(1, len(client.completion_calls))
+        self.assertEqual(2, len(client.render_calls))
+        self.assertEqual(2, len(client.token_calls))
+        self.assertEqual(
+            ["transport.repairBudgetExceeded"], record["repairValidation"]["errors"]
+        )
+
+    def test_tutor_v3_unknown_alias_fails_closed_without_semantic_repair(self):
+        alias_turn = self.alias_turn()
+        alias_turn["boardFocusReferences"] = ["piece-not-listed"]
+        client = CompactScriptedClient(
+            [response(json.dumps(alias_turn))],
+            token_counts=[1000],
+        )
+
+        record = self.compact_runner(client).evaluate_case(
+            self.compact_case(), mode="off", seed=1103
+        )
+
+        self.assertFalse(record["firstAttemptValidation"]["valid"])
+        self.assertEqual(
+            ["alias.unknown:boardFocusReferences:piece-not-listed"],
+            record["aliasRestorationErrors"],
+        )
+        self.assertIsNone(record["stableTurn"])
+        self.assertIsNone(record["parsedTurn"])
+        self.assertFalse(record["repairAttempted"])
+        self.assertEqual(1, len(client.completion_calls))
+
+    def test_write_run_atomically_persists_transcript_and_bounded_record(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "visible-fixed"
+            record = {
+                "caseID": "case-1",
+                "mode": "off",
+                "seed": 1103,
+                "_transcriptMarkdown": "# Coaching evaluation transcript\n",
+            }
+
+            run_eval._write_run(output, [record], {"modelID": "test-model"})
+
+            self.assertTrue(output.is_dir())
+            transcript = output / "transcripts" / "case-1--off--1103.md"
+            self.assertEqual("# Coaching evaluation transcript\n", transcript.read_text())
+            persisted = json.loads((output / "records.jsonl").read_text())
+            self.assertNotIn("_transcriptMarkdown", persisted)
+            self.assertEqual("transcripts/case-1--off--1103.md", persisted["transcriptPath"])
+            self.assertEqual(
+                hashlib.sha256(transcript.read_bytes()).hexdigest(),
+                persisted["transcriptSHA256"],
+            )
+            self.assertNotIn("RENDERED PROMPT", json.dumps(persisted))
+            with self.assertRaisesRegex(ValueError, "Refusing to overwrite"):
+                run_eval._write_run(output, [record], {"modelID": "test-model"})
+            self.assertEqual([], list(root.glob(".*.tmp-*")))
 
     def test_records_final_content_validation_tokens_timings_and_reproducibility_fields(self):
         turn = valid_turn()
@@ -626,6 +831,58 @@ class RunEvalTests(unittest.TestCase):
                     self.assertNotIn("test-only trace", persisted, output.name)
                     self.assertNotIn("reasoning_content", persisted, output.name)
                     self.assertNotIn("<think", persisted, output.name)
+
+    def test_fake_tutor_v3_e2e_persists_readable_hash_bound_transcript(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            corpus = root / "visible.jsonl"
+            corpus.write_text(json.dumps(self.compact_case()) + "\n")
+            arguments = argparse.Namespace(
+                provider="local",
+                model="fake-test-model",
+                split="visible",
+                case="case-1",
+                repetitions=1,
+                mode="off",
+                corpus=str(corpus),
+                prompt_version="tutor-v3",
+            )
+            old_root = run_eval.ARTIFACT_ROOT
+            old_opt_in = os.environ.get("COACHING_EVAL_ALLOW_FAKE")
+            try:
+                run_eval.ARTIFACT_ROOT = root / "artifacts"
+                os.environ["COACHING_EVAL_ALLOW_FAKE"] = "1"
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, run_eval._execute(arguments))
+            finally:
+                run_eval.ARTIFACT_ROOT = old_root
+                if old_opt_in is None:
+                    os.environ.pop("COACHING_EVAL_ALLOW_FAKE", None)
+                else:
+                    os.environ["COACHING_EVAL_ALLOW_FAKE"] = old_opt_in
+
+            manifest_path = next((root / "artifacts" / "runs").rglob("run-manifest.json"))
+            record = json.loads(manifest_path.with_name("records.jsonl").read_text())
+            manifest = json.loads(manifest_path.read_text())
+            self.assertEqual(
+                "llama.cpp-apply-template-tokenize-native-completion",
+                manifest["transport"],
+            )
+            self.assertEqual(4000, manifest["compilerPromptBudgetTokens"])
+            transcript_path = manifest_path.parent / record["transcriptPath"]
+            transcript = transcript_path.read_text()
+            self.assertTrue(record["firstAttemptValidation"]["valid"])
+            self.assertEqual("generated", record["generationStatus"])
+            self.assertEqual(2000, record["renderedPromptTokens"])
+            self.assertEqual(
+                hashlib.sha256(transcript_path.read_bytes()).hexdigest(),
+                record["transcriptSHA256"],
+            )
+            self.assertIn(self.compact_case()["compactContext"]["markdown"], transcript)
+            self.assertIn("## Exact rendered prompt", transcript)
+            self.assertNotIn("renderedPrompt", record)
+            self.assertNotIn("test-only trace", json.dumps(record).lower())
+            self.assertNotIn("test-only trace", transcript.lower())
 
     def test_fake_http_error_e2e_never_persists_provider_body_or_trace(self):
         with tempfile.TemporaryDirectory() as temporary:

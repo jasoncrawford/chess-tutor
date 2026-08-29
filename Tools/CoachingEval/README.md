@@ -18,7 +18,7 @@ The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 2
 From the repository root:
 
 ```bash
-COACHING_EVAL_OUTPUT_DIR="$PWD/.coaching-eval/corpus/v1" \
+COACHING_EVAL_OUTPUT_DIR="$PWD/.coaching-eval/corpus/v2" \
 COACHING_EVAL_SOURCE_SHA="$(git rev-parse HEAD)" \
 xcodebuild test -scheme ChessTutor \
   -destination 'platform=iOS Simulator,name=iPad (A16)' \
@@ -112,19 +112,27 @@ Place the `b10516` binary at the path above, then run visible cases:
 
 ```bash
 python3 Tools/CoachingEval/run_eval.py local \
-  --model qwen3-0.6b-q4_0 --split visible
+  --model qwen3-0.6b-q4_0 \
+  --split visible \
+  --corpus .coaching-eval/corpus/v2/visible.jsonl \
+  --prompt-version tutor-v3
 ```
 
 After freezing the prompt and examples, run hidden cases once:
 
 ```bash
 python3 Tools/CoachingEval/run_eval.py local \
-  --model qwen3-0.6b-q4_0 --split hidden
+  --model qwen3-0.6b-q4_0 \
+  --split hidden \
+  --corpus .coaching-eval/corpus/v2/hidden.jsonl \
+  --prompt-version tutor-v3
 ```
 
 Use `--mode off` or `--mode bounded` to select one supported thinking mode, `--case t1Entry` for a focused case, and `--repetitions 1` for a smoke test. Without those overrides, the evaluator runs every model-supported mode and all three pinned seeds. The server is bound to an ephemeral `127.0.0.1` port, must pass `/health`, and is stopped in `finally`; a request timeout terminates its process group.
 
 Local generation uses two documented b10516 endpoints. `/apply-template` renders the model's own template and thinking-mode setting without inference. The resulting prompt is sent to native `/completion` with the pinned strict `model-coaching-turn.v1` GBNF, bypassing the PEG-native chat response parser while retaining token-level grammar enforcement. The grammar builder refuses any schema hash other than the immutable contract; its bounded prose rules are JSON-safe and slightly stricter than the schema because they disallow `\\u` escapes. The evaluator then applies the unchanged strict Python/Swift-compatible identity, word-limit, and permitted-reference validator.
+
+For `tutor-v3`, the final user message is the corpus's exact human-readable compact Markdown—not the complete JSON evidence request. The evaluator renders the full conversation exactly once with `/apply-template`, tokenizes that exact rendered string with `/tokenize`, and passes the same bytes to `/completion`. It refuses generation above 4,000 exact tokenizer tokens. The response grammar is request-specific: it pins the request ID and permits only the short aliases printed in that Markdown. After generation, aliases are restored fail-closed to stable IDs and the unchanged complete-request validator checks the restored turn. A repair is allowed only for parse/shape failure; its newly rendered prompt is independently tokenized and must also fit the 4,000-token compiler budget.
 
 Off mode constrains generation to the JSON object alone. Bounded mode constrains generation to exactly one closed `<think>...</think>` envelope (at most 128 non-`<` characters, with at most two line breaks on either side) followed by the identical strict JSON object. The total output cap remains 256 tokens. The envelope is removed before parsing and persistence; no reasoning marker or content is written to records or review artifacts.
 
@@ -132,7 +140,9 @@ This explicit grammar is required because b10516's JSON-Schema converter embeds 
 
 `runtime.json` selects the immutable `tutor-v1` prompt bundle by default. Use `--prompt-version tutor-v<number>` to select another committed `prompts/tutor-v<number>.md` plus matching `prompts/examples-v<number>.json` pair. The runner creates an effective evaluation request by changing only the frozen request's `promptVersion`; the opaque request ID remains stable. Model-facing requests, few-shot request excerpts, response validation, and recorded evaluation cases all use that effective version. Each record also binds the frozen and effective request hashes plus the explicit mutation. Assistant examples use the exact top-level property order required by the GBNF. Sorted canonical JSON is used only for hashing and user-request serialization. The selected prompt paths and hashes are recorded, and aliases such as `latest` are rejected.
 
-Every record preserves the exact request, its UTF-8 byte count and SHA-256, the complete message-envelope byte count and SHA-256, the model artifact hash, runtime tag, generation settings, final response text, parsed turn, first-attempt validation, optional one-time repair validation, tokens, timings, split, and errors. The request is never truncated or compacted. Because several current real-pipeline requests are larger than an 8192-token context, the runner marks a conservative whole-envelope byte-based overflow warning and records an explicit context-overflow error if the server rejects the exact payload.
+Every record preserves hashes and byte/token counts for the frozen request, effective request, compact Markdown, rendered prompts, grammar, alias turn, and restored stable-ID turn, plus the model artifact hash, runtime tag, settings, validation, timings, split, and bounded errors. Exact rendered prompts are deliberately not duplicated into `records.jsonl`. Each record instead points to `transcripts/<case>--<mode>--<seed>.md` and binds that file by SHA-256. The transcript presents the exact readable Markdown input, exact rendered attempt prompt, trace-free response, alias/stable turns, validation, and complete included/omitted evidence accounting. Runs are written to a temporary sibling directory, fsynced, and atomically renamed; existing destinations and transcript collisions are refused.
+
+Legacy `tutor-v1`/`tutor-v2` records retain their original complete-JSON path for reproducibility. The compact `tutor-v3` path never truncates either the Markdown or rendered prompt: over-budget prompts become explicit `compilerBudgetExceeded` records before inference, while provider context rejection remains a distinct `contextOverflow` outcome.
 
 Provider `reasoning_content` is ignored. Repeated, prefixed, case-variant, and embedded `<think>…</think>` blocks are removed before persistence; any unresolved trace marker fails closed to empty final content. HTTP error response bodies are discarded at the client boundary. Run records retain only a bounded status/category message, which is rebuilt again at persistence rather than copying exception text. Only sanitized final response content is persisted or scored. Repair is attempted at most once and only for invalid JSON or response shape—not for an identity/reference error or a pedagogically weak turn.
 
@@ -182,7 +192,7 @@ python3 Tools/CoachingEval/summarize_eval.py \
   --run .coaching-eval/reviews/combined-v1
 ```
 
-The summarizer refuses missing or incomplete scored rows. It writes `aggregate.json` and `summary.md` with every rubric dimension, first-attempt and repaired validity, severe errors, p50/p90 latency, tokens, configurations, and raw examples by case. It intentionally has no single combined score.
+The summarizer refuses missing or incomplete scored rows. It writes `aggregate.json` and `summary.md` with every rubric dimension, first-attempt and repaired validity, severe errors, p50/p90 latency, rendered-prompt token min/p50/p90/max, compiler-budget failures, provider context overflows, alias-restoration failures, stable-validator failures, configurations, and raw examples by case. It intentionally has no single combined score.
 
 ## Test-only end-to-end smoke test
 
@@ -190,7 +200,8 @@ The fake model is rejected unless explicitly enabled. It still uses the subproce
 
 ```bash
 COACHING_EVAL_ALLOW_FAKE=1 python3 Tools/CoachingEval/run_eval.py local \
-  --model fake-test-model --split visible --case t1Entry --repetitions 1
+  --model fake-test-model --split visible --case t12UnsupportedEntry --repetitions 1 \
+  --corpus .coaching-eval/corpus/v2/visible.jsonl --prompt-version tutor-v3
 python3 Tools/CoachingEval/render_review.py --run .coaching-eval/runs/fake-test-model/visible-<timestamp>
 python3 Tools/CoachingEval/summarize_eval.py --run .coaching-eval/runs/fake-test-model/visible-<timestamp>
 ```

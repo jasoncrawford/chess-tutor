@@ -74,7 +74,7 @@ def render_review(run_roots, output, *, review_seed):
                 "fullGameHistory": request["fullGameHistory"],
                 "latestAction": request["currentInteraction"]["latestEvent"],
                 "currentInteraction": request["currentInteraction"],
-                "candidateTurn": record.get("parsedTurn"),
+                "candidateTurn": record.get("stableTurn") or record.get("parsedTurn"),
                 "successCriteria": oracle["successCriteria"],
                 "severeFailureCriteria": oracle["severeFailureCriteria"],
             }
