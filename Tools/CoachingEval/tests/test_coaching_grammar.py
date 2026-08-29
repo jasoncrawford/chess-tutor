@@ -11,6 +11,35 @@ import coaching_grammar
 
 
 class CoachingGrammarTests(unittest.TestCase):
+    def test_request_specific_grammar_pins_identity_and_exact_alias_membership(self):
+        schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
+        permitted = {
+            "actions": ["action-close", "action-try-another"],
+            "boardTasks": ["task-stage-move"],
+            "boardFocus": ["piece-white-bishop-a6"],
+            "relationships": ["relationship-attack-1"],
+            "evidence": ["reply-b7-b6", "fact-danger-1"],
+        }
+
+        grammar = coaching_grammar.strict_grammar(
+            schema,
+            enable_thinking=False,
+            request_id="corpus:t11UnsafeBishopFound",
+            permitted_aliases=permitted,
+        )
+
+        self.assertIn('requestID-kv ::= "\\\"requestID\\\"" space ":" space "\\\"corpus:t11UnsafeBishopFound\\\""', grammar)
+        for aliases in permitted.values():
+            for alias in aliases:
+                self.assertIn(f'"\\\"{alias}\\\""', grammar)
+        self.assertIn('actionReferences ::= "[" space "]"', grammar)
+        self.assertIn('boardTaskReference ::= "null"', grammar)
+        self.assertIn('boardFocusReferences ::= "[" space "]"', grammar)
+        self.assertIn('relationshipReferences ::= "[" space "]"', grammar)
+        self.assertIn('supportingEvidenceReferences ::= "[" space evidenceReference', grammar)
+        self.assertNotIn("action:closeHelp", grammar)
+        self.assertNotIn("piece:black:pawn:b7", grammar)
+
     def test_exact_schema_builds_strict_json_grammar_with_word_limits(self):
         schema = json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text())
 

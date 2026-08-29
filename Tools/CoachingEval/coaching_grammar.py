@@ -13,7 +13,13 @@ def _canonical_sha256(value):
     return hashlib.sha256(encoded).hexdigest()
 
 
-def strict_grammar(schema, *, enable_thinking):
+def strict_grammar(
+    schema,
+    *,
+    enable_thinking,
+    request_id=None,
+    permitted_aliases=None,
+):
     """Return a strict grammar, refusing any schema other than the pinned contract.
 
     b10516's JSON-schema converter embeds string ``pattern`` expressions without
@@ -37,7 +43,81 @@ def strict_grammar(schema, *, enable_thinking):
         if enable_thinking
         else "root ::= coaching-turn\n"
     )
-    return root + _GRAMMAR_PREFIX + intent_rule + _GRAMMAR_SUFFIX
+    grammar = root + _GRAMMAR_PREFIX + intent_rule + _GRAMMAR_SUFFIX
+    if request_id is None and permitted_aliases is None:
+        return grammar
+    if not isinstance(request_id, str) or not isinstance(permitted_aliases, dict):
+        raise ValueError("Request-specific grammar requires request_id and permitted_aliases")
+    return _request_specific_grammar(grammar, request_id, permitted_aliases)
+
+
+def _gbnf_json_string(value):
+    return json.dumps(json.dumps(value, ensure_ascii=False), ensure_ascii=False)
+
+
+def _alias_rule(name, values):
+    alternatives = " | ".join(
+        _gbnf_json_string(value) for value in sorted(set(values))
+    )
+    return f"{name} ::= ({alternatives})" if alternatives else None
+
+
+def _request_specific_grammar(grammar, request_id, permitted):
+    replacements = {
+        'requestID-kv ::= "\\\"requestID\\\"" space ":" space json-string': (
+            'requestID-kv ::= "\\\"requestID\\\"" space ":" space '
+            + _gbnf_json_string(request_id)
+        ),
+    }
+    action_rule = _alias_rule("actionReference", permitted.get("actions", []))
+    if action_rule:
+        replacements[
+            'actionReferences ::= "[" space (json-string ("," space json-string){0,2})? space "]"'
+        ] = (
+            'actionReferences ::= "[" space "]" | "[" space actionReference '
+            '("," space actionReference){0,2} space "]"\n' + action_rule
+        )
+    else:
+        replacements[
+            'actionReferences ::= "[" space (json-string ("," space json-string){0,2})? space "]"'
+        ] = 'actionReferences ::= "[" space "]"'
+
+    task_rule = _alias_rule("boardTaskReferenceValue", permitted.get("boardTasks", []))
+    replacements['boardTaskReference ::= "null" | json-string'] = (
+        'boardTaskReference ::= "null"'
+        + (" | boardTaskReferenceValue\n" + task_rule if task_rule else "")
+    )
+    for field, grammar_rule, alias_rule_name, key in (
+        ("boardFocusReferences", "string-array", "boardFocusReference", "boardFocus"),
+        ("relationshipReferences", "string-array", "relationshipReference", "relationships"),
+    ):
+        alias_rule = _alias_rule(alias_rule_name, permitted.get(key, []))
+        replacement = f'{field} ::= "[" space "]"'
+        if alias_rule:
+            replacement += (
+                f' | "[" space {alias_rule_name} '
+                f'("," space {alias_rule_name})* space "]"\n{alias_rule}'
+            )
+        replacements[f"{field} ::= {grammar_rule}"] = replacement
+
+    evidence_rule = _alias_rule("evidenceReference", permitted.get("evidence", []))
+    if evidence_rule:
+        replacements["supportingEvidenceReferences ::= nonempty-string-array"] = (
+            'supportingEvidenceReferences ::= "[" space evidenceReference '
+            '("," space evidenceReference)* space "]"\n' + evidence_rule
+        )
+    else:
+        replacements[
+            "supportingEvidenceReferences ::= nonempty-string-array"
+        ] = "supportingEvidenceReferences ::= impossible-reference"
+
+    for original, replacement in replacements.items():
+        if original not in grammar:
+            raise ValueError(f"Pinned grammar shape changed before replacement: {original}")
+        grammar = grammar.replace(original, replacement, 1)
+    if not evidence_rule:
+        grammar += "\nimpossible-reference ::= [^\\x00-\\U0010FFFF]\n"
+    return grammar
 
 
 _GRAMMAR_PREFIX = r'''coaching-turn ::= "{" space schemaVersion-kv "," space requestID-kv "," space teachingIntent-kv "," space primaryMessage-kv "," space actionReferences-kv "," space boardFocusReferences-kv "," space relationshipReferences-kv "," space supportingEvidenceReferences-kv ("," space (instruction-kv instruction-rest | responseToLatestAction-kv responseToLatestAction-rest | boardTaskReference-kv))? space "}"
@@ -60,9 +140,12 @@ actionReferences-kv ::= "\"actionReferences\"" space ":" space actionReferences
 actionReferences ::= "[" space (json-string ("," space json-string){0,2})? space "]"
 boardTaskReference-kv ::= "\"boardTaskReference\"" space ":" space boardTaskReference
 boardTaskReference ::= "null" | json-string
-boardFocusReferences-kv ::= "\"boardFocusReferences\"" space ":" space string-array
-relationshipReferences-kv ::= "\"relationshipReferences\"" space ":" space string-array
-supportingEvidenceReferences-kv ::= "\"supportingEvidenceReferences\"" space ":" space nonempty-string-array
+boardFocusReferences-kv ::= "\"boardFocusReferences\"" space ":" space boardFocusReferences
+boardFocusReferences ::= string-array
+relationshipReferences-kv ::= "\"relationshipReferences\"" space ":" space relationshipReferences
+relationshipReferences ::= string-array
+supportingEvidenceReferences-kv ::= "\"supportingEvidenceReferences\"" space ":" space supportingEvidenceReferences
+supportingEvidenceReferences ::= nonempty-string-array
 instruction-rest ::= ("," space responseToLatestAction-kv)? responseToLatestAction-rest
 responseToLatestAction-rest ::= ("," space boardTaskReference-kv)?
 string-array ::= "[" space (json-string ("," space json-string)*)? space "]"

@@ -1,0 +1,188 @@
+[
+  {
+    "sourceCaseID": "t1Entry",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t1Entry`\n- Position revision: 1\n\n# Current situation\n\nFEN:\n```text\nrnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\n```\n- Side to move: white\n- Status: active\n\n## Latest action\n\n- Latest event: helpOpened\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete: no useful safe capture exists.\n\n## Selected move ideas\n\n- Development candidates — selected 2 of 6:\n- move-b1-a3: b1-a3\n- move-d2-d4: d2-d4\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-hint — Hint\n- action-no-piece-needs-help — No Piece Needs Help\n- Board Task:\n- task-inspect-relationship — inspectRelationship\n- task-identify-piece — identifyPiece\n- task-move-piece — movePiece\n- Piece:\n- piece-white-knight-b1 — White knight on b1\n- piece-white-pawn-d2 — White pawn on d2\n- Move:\n- move-b1-a3 — Knight b1-a3\n- move-d2-d4 — Pawn d2-d4\n- Relationship:\n- relationship-defends — white knight b1 defends white pawn d2\n- Tactical Fact:\n- fact-no-immediate-danger — No Immediate Danger\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t1Entry",
+      "teachingIntent": "chooseMove",
+      "primaryMessage": "Start with a center pawn or bring out a knight.",
+      "actionReferences": [],
+      "boardFocusReferences": [
+        "piece-white-pawn-d2",
+        "piece-white-knight-b1"
+      ],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "move-d2-d4",
+        "move-b1-a3"
+      ],
+      "instruction": "Tap one of those pieces, then choose its square.",
+      "responseToLatestAction": null,
+      "boardTaskReference": "task-move-piece"
+    }
+  },
+  {
+    "sourceCaseID": "t3Entry",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t3Entry`\n- Position revision: 1\n\n# Current situation\n\nFEN:\n```text\n6k1/8/8/8/4p3/5N2/8/6K1 w - - 0 1\n```\n- Side to move: white\n- Status: active\n\n## Latest action\n\n- Latest event: helpOpened\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete:\n- fact-danger-loss: immediate estimated loss 3.\n- Safe captures — complete: no useful safe capture exists.\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-hint — Hint\n- Board Task:\n- task-inspect-relationship — inspectRelationship\n- task-identify-piece — identifyPiece\n- Piece:\n- piece-black-pawn-e4 — Black pawn on e4\n- piece-white-knight-f3 — White knight on f3\n- Relationship:\n- relationship-attacks — black pawn e4 attacks white knight f3\n- Tactical Fact:\n- fact-danger-loss — Danger Loss: white knight f3\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t3Entry",
+      "teachingIntent": "scanDanger",
+      "primaryMessage": "Which white piece can the black pawn take?",
+      "actionReferences": [],
+      "boardFocusReferences": [
+        "piece-white-knight-f3"
+      ],
+      "relationshipReferences": [
+        "relationship-attacks"
+      ],
+      "supportingEvidenceReferences": [
+        "fact-danger-loss"
+      ],
+      "instruction": "Tap that piece.",
+      "responseToLatestAction": null,
+      "boardTaskReference": "task-identify-piece"
+    }
+  },
+  {
+    "sourceCaseID": "t7NoSafeCapture",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t7NoSafeCapture`\n- Position revision: 4\n\n# Current situation\n\nFEN:\n```text\n6k1/5p2/8/8/2B5/8/8/6K1 w - - 0 1\n```\n- Side to move: white\n- Status: active\n- Selected piece: piece-white-bishop-c4\n- Tentative move: move-c4-d3\n\n## Latest action\n\n- Latest event: moveStaged\n- Event references: move-c4-d3\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n2. [learnerEvent] learner event: actionChosen\n3. [tutorTurn] tutor turn: no-safe-capture answer accepted\n4. [learnerEvent] learner event: moveStaged\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete: no useful safe capture exists.\n\n## Staged move\n\n- Move: move-c4-d3 — c4-d3\n- Current status: staged\n- Legal: yes\n- No immediate tactical refutation was found.\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-hint — Hint\n- action-looks-safe — Looks Safe\n- action-try-another-move — Try Another Move\n- Board Task:\n- task-inspect-relationship — inspectRelationship\n- task-move-piece — movePiece\n- task-move-piece-2 — movePiece\n- Piece:\n- piece-white-bishop-c4 — White bishop on c4\n- Move:\n- move-c4-d3 — Bishop c4-d3\n- Tactical Fact:\n- fact-no-immediate-danger — No Immediate Danger\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t7NoSafeCapture",
+      "teachingIntent": "evaluateMove",
+      "primaryMessage": "Now check whether your bishop move is safe.",
+      "actionReferences": [
+        "action-looks-safe",
+        "action-try-another-move"
+      ],
+      "boardFocusReferences": [
+        "piece-white-bishop-c4"
+      ],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "move-c4-d3",
+        "fact-no-immediate-danger"
+      ],
+      "instruction": "Choose Looks safe or try another move.",
+      "responseToLatestAction": null,
+      "boardTaskReference": "task-move-piece-2"
+    }
+  },
+  {
+    "sourceCaseID": "t11BenignCaptureTap",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t11BenignCaptureTap`\n- Position revision: 3\n\n# Current situation\n\nFEN:\n```text\nrnbqkbnr/pppppppp/8/8/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 0 1\n```\n- Side to move: black\n- Status: active\n- Selected piece: piece-black-pawn-e7\n- Tentative move: move-e7-e6\n\n## Latest action\n\n- Latest event: squareInspected\n- Event references: piece-white-bishop-c4\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n2. [learnerEvent] learner event: moveStaged\n3. [learnerEvent] learner event: squareInspected\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete: no useful safe capture exists.\n\n## Staged move\n\n- Move: move-e7-e6 — e7-e6\n- Current status: staged\n- Legal: yes\n- No immediate tactical refutation was found.\n- Inspected reply: reply-c4-e6\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-hint — Hint\n- action-looks-safe — Looks Safe\n- action-try-another-move — Try Another Move\n- Board Task:\n- task-inspect-relationship — inspectRelationship\n- task-move-piece — movePiece\n- task-move-piece-2 — movePiece\n- Piece:\n- piece-black-pawn-e7 — Black pawn on e7\n- piece-white-bishop-c4 — White bishop on c4\n- Move:\n- move-e7-e6 — Pawn e7-e6\n- Reply:\n- reply-c4-e6 — Reply c4-e6 after e7-e6\n- Tactical Fact:\n- fact-no-immediate-danger — No Immediate Danger\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t11BenignCaptureTap",
+      "teachingIntent": "evaluateMove",
+      "primaryMessage": "Now check whether moving that pawn is safe.",
+      "actionReferences": [
+        "action-looks-safe",
+        "action-try-another-move"
+      ],
+      "boardFocusReferences": [
+        "piece-white-bishop-c4",
+        "piece-black-pawn-e7"
+      ],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "reply-c4-e6"
+      ],
+      "instruction": "Choose Looks safe or try another move.",
+      "responseToLatestAction": "Yes. That bishop could take the pawn.",
+      "boardTaskReference": "task-inspect-relationship"
+    }
+  },
+  {
+    "sourceCaseID": "t11Safe",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t11Safe`\n- Position revision: 4\n\n# Current situation\n\nFEN:\n```text\nrnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\n```\n- Side to move: white\n- Status: active\n- Selected piece: piece-white-knight-g1\n- Tentative move: move-g1-f3\n\n## Latest action\n\n- Latest event: moveReplaced\n- Event references: move-g1-f3\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n2. [learnerEvent] learner event: moveStaged\n3. [tutorTurn] tutor turn: staged outside-pawn move considered\n4. [learnerEvent] learner event: moveReplaced\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete: no useful safe capture exists.\n\n## Staged move\n\n- Move: move-g1-f3 — g1-f3\n- Current status: replacement staged\n- Legal: yes\n- No immediate tactical refutation was found.\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-play-move — Play Move\n- action-try-another-move — Try Another Move\n- Board Task:\n- task-confirm-move — confirmMove\n- task-move-piece — movePiece\n- task-move-piece-2 — movePiece\n- Piece:\n- piece-white-knight-g1 — White knight on g1\n- Move:\n- move-g1-f3 — Knight g1-f3\n- Tactical Fact:\n- fact-no-immediate-danger — No Immediate Danger\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t11Safe",
+      "teachingIntent": "confirmMove",
+      "primaryMessage": "This knight move is ready to play.",
+      "actionReferences": [
+        "action-play-move",
+        "action-try-another-move"
+      ],
+      "boardFocusReferences": [
+        "piece-white-knight-g1"
+      ],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "move-g1-f3"
+      ],
+      "instruction": "Play this move, or try another one.",
+      "responseToLatestAction": "You switched to bringing out your knight.",
+      "boardTaskReference": "task-confirm-move"
+    }
+  },
+  {
+    "sourceCaseID": "t12Block",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t12Block`\n- Position revision: 4\n\n# Current situation\n\nFEN:\n```text\nk3r3/8/8/1B6/8/8/8/4K3 w - - 0 1\n```\n- Side to move: white\n- Status: active\n- Selected piece: piece-white-bishop-b5\n- Tentative move: move-b5-e2\n\n## Latest action\n\n- Latest event: actionChosen\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n2. [learnerEvent] learner event: squareInspected\n3. [learnerEvent] learner event: moveStaged\n4. [learnerEvent] learner event: actionChosen\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete:\n- fact-exchange-gain: estimated gain 5.\n\n## Staged move\n\n- Move: move-b5-e2 — b5-e2\n- Current status: staged\n- Legal: yes\n- No immediate tactical refutation was found.\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-play-move — Play Move\n- action-try-another-move — Try Another Move\n- Board Task:\n- task-confirm-move — confirmMove\n- task-move-piece — movePiece\n- task-move-piece-2 — movePiece\n- Piece:\n- piece-black-rook-e8 — Black rook on e8\n- piece-white-bishop-b5 — White bishop on b5\n- Move:\n- move-b5-e2 — Bishop b5-e2\n- move-b5-e8 — Bishop b5-e8\n- Relationship:\n- relationship-attacks — white bishop b5 attacks black rook e8\n- Tactical Fact:\n- fact-exchange-gain — Exchange Gain: b5-e8: black rook e8\n- fact-in-check — In Check: black rook e8\n- fact-no-immediate-danger — No Immediate Danger",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t12Block",
+      "teachingIntent": "resolveCheck",
+      "primaryMessage": "This move is ready to play.",
+      "actionReferences": [
+        "action-play-move",
+        "action-try-another-move"
+      ],
+      "boardFocusReferences": [
+        "piece-white-bishop-b5"
+      ],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "fact-in-check",
+        "move-b5-e2"
+      ],
+      "instruction": "Play this move, or try another one.",
+      "responseToLatestAction": "Your bishop blocks the rook's check.",
+      "boardTaskReference": "task-confirm-move"
+    }
+  },
+  {
+    "sourceCaseID": "t9Hint",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t9Hint`\n- Position revision: 2\n\n# Current situation\n\nFEN:\n```text\n7k/8/5KQ1/8/8/8/8/8 w - - 0 1\n```\n- Side to move: white\n- Status: active\n\n## Latest action\n\n- Latest event: actionChosen\n- Event references: action-hint\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n2. [learnerEvent] learner event: actionChosen\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete: no useful safe capture exists.\n- Mate in one — complete:\n- fact-mate-in-one\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- action-hint — Hint\n- Board Task:\n- task-inspect-relationship — inspectRelationship\n- task-identify-piece — identifyPiece\n- task-move-piece — movePiece\n- Piece:\n- piece-white-queen-g6 — White queen on g6\n- Move:\n- move-g6-g7 — Queen g6-g7\n- Tactical Fact:\n- fact-mate-in-one — Mate In One: g6-g7\n- fact-no-immediate-danger — No Immediate Danger\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t9Hint",
+      "teachingIntent": "findMate",
+      "primaryMessage": "Your queen can checkmate on g7.",
+      "actionReferences": [],
+      "boardFocusReferences": [
+        "piece-white-queen-g6"
+      ],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "fact-mate-in-one",
+        "move-g6-g7"
+      ],
+      "instruction": "Move your queen to g7.",
+      "responseToLatestAction": null,
+      "boardTaskReference": "task-move-piece"
+    }
+  },
+  {
+    "sourceCaseID": "t12UnsupportedEntry",
+    "contextMarkdown": "# Chess coaching context\n\n- Schema: `model-coaching-context.v1`\n- Prompt: `tutor-v3`\n- Request: `corpus:t12UnsupportedEntry`\n- Position revision: 5\n\n# Current situation\n\nFEN:\n```text\n7k/8/8/8/3K4/8/8/8 w - - 0 1\n```\n- Side to move: white\n- Status: active\n\n## Latest action\n\n- Latest event: helpReopened\n\n## History\n\n- Game history: no committed moves.\n- Current-turn history:\n1. [learnerEvent] learner event: helpOpened\n2. [tutorTurn] tutor turn: quiet-position guidance displayed\n3. [learnerEvent] learner event: helpClosed\n4. [supersededRequest] superseded request: help panel closed\n5. [learnerEvent] learner event: helpReopened\n\n## Complete tactical summary\n\n- Position status — complete: active.\n- Danger scan — complete: no learner piece is in immediate danger.\n- Safe captures — complete: no useful safe capture exists.\n\n## Available response references\n\n- Action:\n- action-close-help — Close Help\n- Board Task:\n- task-identify-piece — identifyPiece\n- task-move-piece — movePiece\n- Tactical Fact:\n- fact-no-immediate-danger — No Immediate Danger\n- fact-no-useful-safe-capture — No Useful Safe Capture",
+    "turn": {
+      "schemaVersion": "model-coaching-turn.v1",
+      "requestID": "corpus:t12UnsupportedEntry",
+      "teachingIntent": "chooseMove",
+      "primaryMessage": "This is a quiet position. Choose a legal king move.",
+      "actionReferences": [],
+      "boardFocusReferences": [],
+      "relationshipReferences": [],
+      "supportingEvidenceReferences": [
+        "fact-no-immediate-danger"
+      ],
+      "instruction": "Tap your king, then tap a square.",
+      "responseToLatestAction": null,
+      "boardTaskReference": "task-move-piece"
+    }
+  }
+]

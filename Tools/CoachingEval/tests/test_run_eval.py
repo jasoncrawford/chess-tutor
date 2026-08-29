@@ -217,6 +217,82 @@ class RunEvalTests(unittest.TestCase):
                     validate_turn.validate_turn(dict(pairs), synthetic_request),
                 )
 
+    def test_tutor_v3_example_messages_send_exact_markdown_and_alias_turn(self):
+        turn = valid_turn()
+        turn["requestID"] = "corpus:example"
+        turn["actionReferences"] = ["action-close-help"]
+        turn["boardTaskReference"] = "task-move-piece"
+        turn["boardFocusReferences"] = ["piece-white-king-d4"]
+        turn["supportingEvidenceReferences"] = ["fact-no-immediate-danger"]
+        markdown = (
+            "# Chess coaching context\n\n"
+            "- Request: `corpus:example`\n\n"
+            "## Available response references\n\n"
+            "- action-close-help — Close help\n"
+            "- task-move-piece — Move piece\n"
+            "- piece-white-king-d4 — White king on d4\n"
+            "- fact-no-immediate-danger — No immediate danger"
+        )
+        example = {
+            "sourceCaseID": "example",
+            "contextMarkdown": markdown,
+            "turn": turn,
+        }
+
+        messages = run_eval._example_messages([example], prompt_version="tutor-v3")
+
+        self.assertEqual(markdown, messages[0]["content"])
+        self.assertEqual(turn, json.loads(messages[1]["content"]))
+        self.assertEqual([], example_validation.validate_examples(
+            [example],
+            [{
+                "sourceCaseID": "example",
+                "permittedTeachingIntents": [turn["teachingIntent"]],
+                "requiredActionReferences": ["action:closeHelp"],
+                "forbiddenActionReferences": [],
+                "prohibitedPhrases": [],
+            }],
+        ))
+
+    def test_tutor_v3_examples_preserve_visible_scenarios_with_exact_alias_contracts(self):
+        examples = json.loads((TOOLS_DIR / "prompts" / "examples-v3.json").read_text())
+        contracts = json.loads(
+            (TOOLS_DIR / "fixtures" / "example-contracts-v1.json").read_text()
+        )
+        v2_source_ids = [
+            example["sourceCaseID"]
+            for example in json.loads(
+                (TOOLS_DIR / "prompts" / "examples-v2.json").read_text()
+            )
+        ]
+
+        messages = run_eval._example_messages(examples, prompt_version="tutor-v3")
+
+        self.assertEqual(v2_source_ids, [example["sourceCaseID"] for example in examples])
+        self.assertEqual([], example_validation.validate_examples(examples, contracts))
+        for index, example in enumerate(examples):
+            with self.subTest(sourceCaseID=example["sourceCaseID"]):
+                self.assertEqual(
+                    {"sourceCaseID", "contextMarkdown", "turn"},
+                    set(example),
+                )
+                self.assertEqual(example["contextMarkdown"], messages[index * 2]["content"])
+                self.assertIn("model-coaching-context.v1", example["contextMarkdown"])
+                self.assertIn("tutor-v3", example["contextMarkdown"])
+                self.assertEqual(
+                    example["turn"],
+                    json.loads(messages[index * 2 + 1]["content"]),
+                )
+                for field in (
+                    "actionReferences",
+                    "boardFocusReferences",
+                    "relationshipReferences",
+                    "supportingEvidenceReferences",
+                ):
+                    self.assertTrue(all(":" not in value for value in example["turn"][field]))
+                board_task = example["turn"].get("boardTaskReference")
+                self.assertTrue(board_task is None or ":" not in board_task)
+
     def test_repairs_parse_or_shape_failure_once_and_records_both_attempts(self):
         repaired = valid_turn()
         client = ScriptedClient([response("not json"), response(json.dumps(repaired), prompt_tokens=5, output_tokens=3)])

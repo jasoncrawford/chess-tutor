@@ -181,11 +181,15 @@ def _serialize_assistant_turn(turn):
 def _example_messages(examples, *, prompt_version):
     messages = []
     for example in examples:
-        effective_excerpt, _mutations = _effective_request(
-            example["requestExcerpt"], prompt_version
-        )
+        if prompt_version == "tutor-v3":
+            user_content = example["contextMarkdown"]
+        else:
+            effective_excerpt, _mutations = _effective_request(
+                example["requestExcerpt"], prompt_version
+            )
+            user_content = canonical_json(effective_excerpt)
         messages.append(
-            {"role": "user", "content": canonical_json(effective_excerpt)}
+            {"role": "user", "content": user_content}
         )
         messages.append(
             {"role": "assistant", "content": _serialize_assistant_turn(example["turn"])}
