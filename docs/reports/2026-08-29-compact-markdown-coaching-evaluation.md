@@ -74,4 +74,18 @@ No prompt was tuned against candidate output. The next meaningful experiment sho
 - Runtime provenance, deterministic schema compatibility, three intended model artifacts, corpus counts/hashes, prompt hashes, and examples hashes were re-verified before real inference.
 - One harness-only transcript issue was caught by the first real run: Qwen's thinking-off template includes an empty `<think></think>` control block in the exact prompt. The transcript now preserves that empty control syntax but continues to reject non-empty, unclosed, or residual private reasoning.
 
-Final Swift and Python verification counts will be appended after the stopped-pilot tooling is committed and the full repository gates run.
+## Final verification
+
+- Full ChessTutor scheme: 832 passed, 0 failed, 0 skipped, 0 expected failures. Result bundle: `/tmp/chess-compact-markdown-final-20260829.xcresult`.
+- Standalone `xcodebuild build` for the iPad (A16) simulator: exit 0.
+- Full evaluator suite on the final code: 82 passed, 0 failed, 0 skipped.
+- `python3 -m py_compile Tools/CoachingEval/*.py`: passed.
+- Runtime provenance, all three intended model artifacts, schema, corpus, prompt, and examples reverified.
+- Six-cell render/tokenize audit reverified; all six cells exceeded the compiler budget and none generated.
+- Real stopped-run transcript SHA-256 `29253d8f578df025c146a3e655ab0aad188812e3a2a31513704af20e8661d622` matches its record.
+- Hidden run count: 0.
+- `git diff --check`: clean.
+
+The full UI suite emitted repeated non-fatal `DebuggerVersionStore` / “no debugger version” warnings during simulator launches, as prior green runs did. They did not produce a test failure.
+
+Implementation checkpoints: `109eac7` added exact compact-prompt evaluation and transcripts; `1e59d04` added the fixed pilot selector and recorded the stopped-pilot result. The final conclusion remains: the compact deterministic context is sound and much easier to inspect, but the current eight-example prompt bundle is too large for this evaluation's 4,000-token compiler budget. No claim about local-model tutoring quality can be made from this iteration because inference was intentionally not run after the gate failed.
