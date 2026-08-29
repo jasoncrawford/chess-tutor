@@ -2333,15 +2333,12 @@ private struct StartGameTypeChooserView: View {
             Text("Start a Game")
                 .font(AppTheme.panelTitleFont)
                 .foregroundStyle(AppTheme.ink)
-            Text("Choose who will be at the board.")
-                .font(AppTheme.panelBodyFont)
-                .foregroundStyle(AppTheme.mutedInk)
 
             VStack(spacing: 12) {
                 Button(action: onStartLocal) {
                     StartGameChoiceCard(
                         title: "On this iPad",
-                        subtitle: "Take turns around one board",
+                        subtitle: "Two players take turns on this device",
                         illustration: .sharedBoard,
                         isPrimary: true
                     )
@@ -2350,8 +2347,8 @@ private struct StartGameTypeChooserView: View {
 
                 Button(action: onStartRemote) {
                     StartGameChoiceCard(
-                        title: "With someone else",
-                        subtitle: "Invite a player to their own board",
+                        title: "Remotely",
+                        subtitle: "Invite someone to play online",
                         illustration: .remoteBoards,
                         isPrimary: false
                     )
