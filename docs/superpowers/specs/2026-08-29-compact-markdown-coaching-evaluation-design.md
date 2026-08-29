@@ -16,7 +16,7 @@ This iteration changes the model-facing input, not the product architecture. Com
 
 This iteration will:
 
-- Add a versioned compact model-context contract derived from the complete `ModelCoachingRequest`.
+- Add `model-coaching-context.v1`, a versioned compact model-context contract derived from the complete `ModelCoachingRequest`.
 - Render that context as readable Markdown for the model.
 - Replace exhaustive reply enumeration with complete mechanical conclusions plus a small number of explanatory witness replies.
 - Preserve exact inclusion and omission provenance for every original evidence reference.
@@ -36,7 +36,7 @@ This iteration will not:
 
 ## Architecture
 
-The existing request builder remains the authoritative source of complete mechanical chess evidence. A separate pure compiler creates a bounded model-facing view.
+The existing request builder remains the authoritative source of complete mechanical chess evidence. A separate pure compiler creates a bounded model-facing view. The first immutable prompt bundle using this context is `tutor-v3`; it supersedes neither the preserved `tutor-v2` prompt nor the final v4 evidence.
 
 ```text
 Board, interaction, and history
@@ -63,13 +63,13 @@ Strict ModelCoachingTurn JSON
 Existing request-aware validator
 ```
 
-The compiler owns evidence selection and representation. The model owns pedagogical judgment: what matters most now, whether and how Safe/Take/Wake helps, what concise language to use, and which supplied UI actions and board marks support the turn.
+The compiler owns evidence selection and representation. Unlike the complete request builder, it is intentionally allowed to apply deterministic relevance policy. That policy may rank and limit mechanically supported facts, but it may not author the coaching conclusion, choose a required Safe/Take/Wake stage, or copy a deterministic tutor response. The model owns pedagogical judgment: what matters most now, whether and how Safe/Take/Wake helps, what concise language to use, and which supplied UI actions and board marks support the turn.
 
 The compiler is pure and deterministic. The same complete request and compiler version must produce byte-identical Markdown, reference mapping, and omission manifest.
 
 ## Compact context contract
 
-Every compact context contains the following sections in a fixed order.
+Every compact context declares `schemaVersion: model-coaching-context.v1` and `promptVersion: tutor-v3`, then contains the following sections in a fixed order.
 
 ### 1. Current situation
 
@@ -130,7 +130,7 @@ The compiler never enumerates every harmless opponent reply. A safe conclusion i
 
 When no move is staged, the compiler may include a bounded set of relevant development or plan-making candidates. These are suggestions for model consideration, not an authored coaching decision.
 
-Selection is deterministic and based only on existing mechanical facts. It must not import the deterministic coach's stage, preferred candidate, authored copy, or pedagogical verdict.
+Selection is deterministic and based only on mechanical facts available from the complete request or on new pure per-move facts added explicitly to the complete evidence contract. Permitted new facts include descriptive properties such as leaving a home square, occupying or controlling a center square, giving check, and changing mobility. They must be computed for all eligible moves before selection. The compiler must not import the deterministic coach's stage, preferred candidate, authored copy, or pedagogical verdict.
 
 The context reports the selected count and total eligible count, for example:
 
@@ -195,7 +195,7 @@ The evaluation's hard mechanical gate is zero provider context-overflow outcomes
 
 ## Model prompt and output
 
-The tutoring philosophy remains the current `tutor-v2` philosophy: warm, concise, grounded, one current idea at a time, latest learner action authoritative, and Safe/Take/Wake optional rather than ritualized.
+The new immutable `tutor-v3` prompt retains the `tutor-v2` coaching philosophy: warm, concise, grounded, one current idea at a time, latest learner action authoritative, and Safe/Take/Wake optional rather than ritualized. It changes the input contract from exhaustive JSON evidence to `model-coaching-context.v1` Markdown and documents the meanings of `complete` and `selected` evidence sections.
 
 The eight existing visible worked examples remain semantically unchanged. Their user messages are rewritten into the compact Markdown format, while their assistant messages continue to use the exact structured turn format. Keeping the same eight scenarios reduces pedagogical confounding between rounds.
 
@@ -313,4 +313,3 @@ This iteration succeeds as an experiment if it produces a reproducible, auditabl
 - latency remains tolerable with the existing Thinking presentation.
 
 The final report must distinguish failures caused by context construction, grammar/validation, chess reasoning, pedagogy, and runtime performance.
-
