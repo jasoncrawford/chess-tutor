@@ -63,6 +63,12 @@ enum ModelCoachingContextCompiler {
             }) {
                 consequence.criticalReplyReferences.forEach(include)
             }
+            if let inspectedReply = inspectedReply(
+                in: request,
+                afterMoveReference: currentMoveID
+            ) {
+                include(inspectedReply.id)
+            }
         }
 
         let dangerTargetIDs = Set(
@@ -277,6 +283,27 @@ enum ModelCoachingContextCompiler {
         case .helpOpened, .helpReopened, .pieceSelected, .squareInspected, .actionChosen, .helpClosed:
             return nil
         }
+    }
+
+    private static func inspectedReply(
+        in request: ModelCoachingRequest,
+        afterMoveReference: String
+    ) -> ModelCoachingReplyReference? {
+        guard request.currentInteraction.latestEvent.kind == .squareInspected,
+              let inspectedPieceID = request.currentInteraction.latestEvent.referencedIDs.first,
+              let inspectedPiece = request.chessEvidence.pieces.first(where: {
+                  $0.id == inspectedPieceID
+              }),
+              let stagedMove = request.chessEvidence.legalMoves.first(where: {
+                  $0.id == afterMoveReference
+              }) else {
+            return nil
+        }
+        let expectedReply = "\(inspectedPiece.square)-\(stagedMove.destinationSquare)"
+        return request.chessEvidence.immediateReplies
+            .filter { $0.afterMoveReference == afterMoveReference }
+            .sorted { $0.id < $1.id }
+            .first { shortMove($0.replyMoveReference) == expectedReply }
     }
 
     private static func wakeMoveIdeas(in request: ModelCoachingRequest) -> MoveIdeaSelection {
@@ -496,6 +523,10 @@ enum ModelCoachingContextCompiler {
             for reply in consequence.criticalReplyReferences {
                 lines.append("- Critical reply: \(aliasesByStableID[reply] ?? reply)")
             }
+        }
+        if let inspectedReply = inspectedReply(in: request, afterMoveReference: move.id),
+           let inspectedAlias = aliasesByStableID[inspectedReply.id] {
+            lines.append("- Inspected reply: \(inspectedAlias)")
         }
         return ModelCoachingMarkdownSection(heading: "Staged move", lines: lines)
     }

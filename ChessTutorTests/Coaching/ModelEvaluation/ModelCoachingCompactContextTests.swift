@@ -125,6 +125,21 @@ final class ModelCoachingCompactContextTests: XCTestCase {
         })
     }
 
+    func testLatestInspectedOpponentPieceKeepsItsReplyToTheStagedDestination() throws {
+        let compilation = try compile("t11BenignCaptureTap")
+        let replyID = "reply:move:e7-e6->move:c4-e6"
+
+        XCTAssertTrue(compilation.referenceBindings.contains {
+            $0.stableID == replyID && $0.category == .reply
+        })
+        XCTAssertTrue(compilation.markdown.contains("Inspected reply:"))
+        XCTAssertTrue(compilation.markdown.contains("reply-c4-e6"))
+        XCTAssertLessThanOrEqual(
+            compilation.referenceBindings.filter { $0.category == .reply }.count,
+            1
+        )
+    }
+
     func testReopenedHelpRetainsOrderedTurnHistoryAndRendersPositionOnce() throws {
         let evaluationCase = try corpusCase("t12UnsupportedEntry")
         let compilation = try ModelCoachingContextCompiler.compile(
