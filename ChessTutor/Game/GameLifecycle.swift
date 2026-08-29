@@ -148,9 +148,10 @@ enum GameLibraryEntry: Identifiable, Sendable {
     var cardPresentation: GameCardPresentation {
         switch self {
         case .local(let game):
+            let boardState = GameCardPresentation.boardState(replaying: game.moves)
             return GameCardPresentation(
                 title: "Local game",
-                status: game.moves.count.isMultiple(of: 2) ? "White’s turn" : "Black’s turn",
+                status: GameCardPresentation.status(for: boardState),
                 moves: game.moves,
                 lastActivityAt: game.lastMovedAt
             )
@@ -166,10 +167,15 @@ enum GameLibraryEntry: Identifiable, Sendable {
             let opponent = descriptor.localPlayerID == descriptor.whitePlayer.id
                 ? descriptor.blackPlayer
                 : descriptor.whitePlayer
+            let moves = game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) }
+            let boardState = GameCardPresentation.boardState(replaying: moves)
+            let localColor: PieceColor = descriptor.localPlayerID == descriptor.whitePlayer.id ? .white : .black
             return GameCardPresentation(
                 title: opponent.displayName,
-                status: descriptor.status == .ended ? "Finished" : "Remote game",
-                moves: game.snapshot.acceptedEvents.compactMap { try? RemoteMoveCodec.decode($0.move) },
+                status: descriptor.status == .ended
+                    ? "Finished"
+                    : (boardState.sideToMove == localColor ? "Your turn" : "Their turn"),
+                moves: moves,
                 lastActivityAt: game.lastMovedAt
             )
         }
@@ -188,8 +194,23 @@ struct GameCardPresentation: Equatable, Sendable {
         self.status = status
         self.moves = moves
         self.lastActivityAt = lastActivityAt
-        self.boardState = moves.reduce(into: .startingPosition()) { state, move in
+        self.boardState = Self.boardState(replaying: moves)
+    }
+
+    static func boardState(replaying moves: [Move]) -> GameState {
+        moves.reduce(into: .startingPosition()) { state, move in
             state.apply(move)
+        }
+    }
+
+    static func status(for state: GameState) -> String {
+        switch state.result {
+        case .ongoing:
+            return "\(state.sideToMove.rawValue.capitalized)’s turn"
+        case .checkmate(let winner):
+            return "Checkmate. \(winner.rawValue.capitalized) wins."
+        case .stalemate:
+            return "Stalemate."
         }
     }
 }

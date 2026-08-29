@@ -21,6 +21,27 @@ final class GameSessionTests: XCTestCase {
     }
 
     @MainActor
+    func testFinishedLocalGameCardShowsCheckmateInsteadOfAPlayerTurn() {
+        let library = GameLibrary()
+        let game = library.createLocalGame()
+        let moves = [
+            Move(from: Square(file: .f, rank: 2), to: Square(file: .f, rank: 3)),
+            Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5)),
+            Move(from: Square(file: .g, rank: 2), to: Square(file: .g, rank: 4)),
+            Move(from: Square(file: .d, rank: 8), to: Square(file: .h, rank: 4)),
+        ]
+
+        for move in moves {
+            library.recordCommittedMove(move, in: game.id)
+        }
+
+        XCTAssertEqual(
+            GameLibraryEntry.local(library.game(id: game.id)!).cardPresentation.status,
+            "Checkmate. Black wins."
+        )
+    }
+
+    @MainActor
     func testGameLibraryCreatesSeparateLocalGamesAndKeepsNewestFirst() {
         let start = Date(timeIntervalSince1970: 1_000)
         let library = GameLibrary(now: { start })
