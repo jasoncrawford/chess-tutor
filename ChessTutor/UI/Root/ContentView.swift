@@ -2167,7 +2167,7 @@ private struct GamesRackView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        Text("Games")
+                        Text(entries.isEmpty ? "Start a game" : "Games")
                             .font(AppTheme.panelTitleFont)
                             .foregroundStyle(AppTheme.ink)
 
