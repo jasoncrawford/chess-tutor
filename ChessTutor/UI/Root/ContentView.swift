@@ -119,6 +119,8 @@ struct ContentView: View {
                 GamesRackView(
                     entries: gameLibrary.entries,
                     onStartGame: startNewGame,
+                    onStartLocal: startLocalGame,
+                    onStartRemote: remotePlayFlow.open,
                     onOpenEntry: openGameEntry
                 )
             } else {
@@ -2148,6 +2150,8 @@ private struct PendingPromotion: Identifiable {
 private struct GamesRackView: View {
     let entries: [GameLibraryEntry]
     let onStartGame: () -> Void
+    let onStartLocal: () -> Void
+    let onStartRemote: () -> Void
     let onOpenEntry: (GameLibraryEntry) -> Void
 
     var body: some View {
@@ -2167,30 +2171,30 @@ private struct GamesRackView: View {
                             .font(AppTheme.panelTitleFont)
                             .foregroundStyle(AppTheme.ink)
 
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
-                            Button(action: onStartGame) {
-                                StartGameRackCard()
-                            }
-                            .buttonStyle(GameRackButtonStyle())
-                            .accessibilityIdentifier("games-start-card")
-
-                            ForEach(entries) { entry in
-                                Button {
-                                    onOpenEntry(entry)
-                                } label: {
-                                    GameRackCard(presentation: entry.cardPresentation)
+                        if entries.isEmpty {
+                            EmptyGamesStartView(
+                                isWide: isWide,
+                                onStartLocal: onStartLocal,
+                                onStartRemote: onStartRemote
+                            )
+                        } else {
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
+                                Button(action: onStartGame) {
+                                    StartGameRackCard()
                                 }
                                 .buttonStyle(GameRackButtonStyle())
-                                .accessibilityIdentifier("game-card-\(entry.id.rawValue.uuidString)")
-                            }
-                        }
+                                .accessibilityIdentifier("games-start-card")
 
-                        if entries.isEmpty {
-                            Text("Your boards will appear here.")
-                                .font(AppTheme.emptyPanelFont)
-                                .foregroundStyle(AppTheme.mutedInk)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 4)
+                                ForEach(entries) { entry in
+                                    Button {
+                                        onOpenEntry(entry)
+                                    } label: {
+                                        GameRackCard(presentation: entry.cardPresentation)
+                                    }
+                                    .buttonStyle(GameRackButtonStyle())
+                                    .accessibilityIdentifier("game-card-\(entry.id.rawValue.uuidString)")
+                                }
+                            }
                         }
                     }
                     .padding(isWide ? 42 : 24)
@@ -2200,6 +2204,70 @@ private struct GamesRackView: View {
                 .scrollIndicators(.hidden)
             }
         }
+    }
+}
+
+private struct EmptyGamesStartView: View {
+    let isWide: Bool
+    let onStartLocal: () -> Void
+    let onStartRemote: () -> Void
+
+    var body: some View {
+        Group {
+            if isWide {
+                HStack(spacing: 24) {
+                    choices
+                }
+            } else {
+                VStack(spacing: 20) {
+                    choices
+                }
+            }
+        }
+        .frame(maxWidth: 900, alignment: .center)
+        .frame(maxWidth: .infinity)
+        .padding(.top, isWide ? 26 : 10)
+    }
+
+    @ViewBuilder
+    private var choices: some View {
+        Button(action: onStartLocal) {
+            EmptyGamesStartCard(choice: .sharedBoard)
+        }
+        .buttonStyle(GameRackButtonStyle())
+        .accessibilityIdentifier("empty-games-start-local")
+
+        Button(action: onStartRemote) {
+            EmptyGamesStartCard(choice: .remoteBoards)
+        }
+        .buttonStyle(GameRackButtonStyle())
+        .accessibilityIdentifier("empty-games-start-remote")
+    }
+}
+
+private struct EmptyGamesStartCard: View {
+    let choice: StartGameChoiceIllustration
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Image(choice.assetName)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .aspectRatio(3 / 2, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            Text(choice.title)
+                .font(.system(.title2, design: .serif).weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+            Text(choice.subtitle)
+                .font(AppTheme.panelBodyFont)
+                .foregroundStyle(AppTheme.mutedInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(cardBackground)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -2403,6 +2471,24 @@ private enum StartGameChoiceIllustration {
             "StartGameSharedBoard"
         case .remoteBoards:
             "StartGameRemoteBoards"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .sharedBoard:
+            "On this iPad"
+        case .remoteBoards:
+            "Remotely"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .sharedBoard:
+            "Two players take turns on this device"
+        case .remoteBoards:
+            "Invite someone to play online"
         }
     }
 }
