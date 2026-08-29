@@ -28,7 +28,8 @@ struct SidePanelView: View {
         )
         let secondaryActions = GameControlsPresentation(
             result: session.state.result,
-            isRemoteGameEnded: session.isRemoteGameEnded
+            isRemoteGameEnded: session.isRemoteGameEnded,
+            isInvitationPending: isInvitationPending
         ).secondaryActions
 
         VStack(spacing: 0) {
@@ -187,12 +188,14 @@ private struct SidePanelUtilityStrip: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            Button(action: onGames) {
+                Label("Games", systemImage: "square.stack.3d.up")
+            }
+
             ForEach(actions, id: \.self) { action in
                 switch action {
                 case .newGame:
-                    Button(action: onGames) {
-                        Label("Games", systemImage: "square.stack.3d.up")
-                    }
+                    EmptyView()
                 case .about:
                     Button(action: onAbout) {
                         Label("About", systemImage: "info.circle")

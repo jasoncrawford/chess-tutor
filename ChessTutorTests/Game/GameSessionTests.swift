@@ -3,6 +3,22 @@ import Observation
 @testable import ChessTutor
 
 final class GameSessionTests: XCTestCase {
+    func testGameActivityDateFormatterUsesFriendlyRecentDates() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 28, hour: 12))!
+
+        XCTAssertEqual(GameActivityDateFormatter.string(from: now, now: now, calendar: calendar), "Today")
+        XCTAssertEqual(
+            GameActivityDateFormatter.string(from: now.addingTimeInterval(-86_400), now: now, calendar: calendar),
+            "Yesterday"
+        )
+        XCTAssertEqual(
+            GameActivityDateFormatter.string(from: now.addingTimeInterval(-2 * 86_400), now: now, calendar: calendar),
+            "Wednesday"
+        )
+    }
+
     @MainActor
     func testGameLibraryCreatesSeparateLocalGamesAndKeepsNewestFirst() {
         let start = Date(timeIntervalSince1970: 1_000)

@@ -2161,20 +2161,11 @@ private struct GamesRackView: View {
                                 .padding(.top, 4)
                         }
                     }
-                    .padding(isWide ? 30 : 24)
+                    .padding(isWide ? 42 : 24)
                     .frame(maxWidth: 980, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .background {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(AppTheme.panel)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                .stroke(AppTheme.boardFrame, lineWidth: 14)
-                        }
-                        .shadow(color: AppTheme.captureBoxShadow, radius: 22, y: 12)
-                }
-                .padding(isWide ? 42 : 24)
+                .scrollIndicators(.hidden)
             }
         }
     }
@@ -2225,13 +2216,9 @@ private struct GameRackCard: View {
                 .font(.system(.title3, design: .serif).weight(.semibold))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
-            Text(presentation.status)
+            Text("\(presentation.status) · \(GameActivityDateFormatter.string(from: presentation.lastActivityAt))")
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.mutedInk)
-                .lineLimit(1)
-            Text(presentation.lastActivityAt.formatted(date: .abbreviated, time: .shortened))
-                .font(.footnote)
-                .foregroundStyle(AppTheme.mutedInk.opacity(0.78))
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

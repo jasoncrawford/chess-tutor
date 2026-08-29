@@ -43,14 +43,14 @@ final class GameControlsPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.secondaryActions, [.about])
     }
 
-    func testPresentationUsesGamesForPendingInvitationBoard() {
+    func testPresentationShowsNoNewGameActionForPendingInvitationBoard() {
         let presentation = GameControlsPresentation(
             result: .ongoing,
             isRemoteGameEnded: true,
             isInvitationPending: true
         )
 
-        XCTAssertEqual(presentation.primaryAction, .games)
+        XCTAssertEqual(presentation.primaryAction, .waiting)
         XCTAssertEqual(presentation.secondaryActions, [.about])
     }
 }

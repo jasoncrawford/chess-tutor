@@ -4,7 +4,7 @@ struct GameControlsPresentation: Equatable {
     enum PrimaryAction: Equatable {
         case done
         case newGame
-        case games
+        case waiting
     }
 
     enum SecondaryAction: Equatable {
@@ -22,7 +22,7 @@ struct GameControlsPresentation: Equatable {
         isRemotePlayAvailable: Bool = false
     ) {
         if isInvitationPending {
-            primaryAction = .games
+            primaryAction = .waiting
             secondaryActions = [.about]
             return
         }
@@ -90,20 +90,9 @@ struct GameControlsView: View {
             doneButton
         case .newGame:
             primaryNewGameButton
-        case .games:
-            gamesButton
+        case .waiting:
+            EmptyView()
         }
-    }
-
-    private var gamesButton: some View {
-        Button(action: onGames) {
-            Label("Games", systemImage: "square.stack.3d.up")
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-        }
-        .buttonStyle(PrimaryGameButtonStyle(isEnabled: true))
-        .font(.system(size: 19, weight: .semibold, design: .rounded))
-        .labelStyle(.titleAndIcon)
     }
 
     private var doneButton: some View {

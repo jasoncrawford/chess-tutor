@@ -1,6 +1,30 @@
 import Foundation
 import Observation
 
+enum GameActivityDateFormatter {
+    static func string(from date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfDate = calendar.startOfDay(for: date)
+        let daysAgo = calendar.dateComponents([.day], from: startOfDate, to: startOfToday).day ?? 0
+
+        switch daysAgo {
+        case 0:
+            return "Today"
+        case 1:
+            return "Yesterday"
+        case 2...6:
+            return date.formatted(.dateTime.weekday(.wide))
+        default:
+            let isCurrentYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+            return date.formatted(
+                isCurrentYear
+                    ? .dateTime.month(.abbreviated).day()
+                    : .dateTime.month(.abbreviated).day().year()
+            )
+        }
+    }
+}
+
 struct ManagedGameID: Codable, Equatable, Hashable, Sendable, Identifiable {
     let rawValue: UUID
 
