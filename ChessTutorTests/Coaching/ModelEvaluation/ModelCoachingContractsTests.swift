@@ -71,7 +71,8 @@ final class ModelCoachingContractsTests: XCTestCase {
     func testCategoryEnumsEncodeTheirStableRawValues() {
         XCTAssertEqual([ModelCoachingEvidenceScopeKind.exhaustive, .bounded].map(\.rawValue), ["exhaustive", "bounded"])
         XCTAssertEqual([ModelCoachingRelationshipKind.attacks, .defends, .checks, .canCapture, .canRecapture].map(\.rawValue), ["attacks", "defends", "checks", "canCapture", "canRecapture"])
-        XCTAssertEqual([ModelCoachingTacticalFactKind.inCheck, .checkmate, .stalemate, .dangerLoss, .exchangeGain, .mateInOne].map(\.rawValue), ["inCheck", "checkmate", "stalemate", "dangerLoss", "exchangeGain", "mateInOne"])
+        XCTAssertEqual([ModelCoachingTacticalFactKind.inCheck, .checkmate, .stalemate, .dangerLoss, .exchangeGain, .mateInOne, .noImmediateDanger, .noUsefulSafeCapture].map(\.rawValue), ["inCheck", "checkmate", "stalemate", "dangerLoss", "exchangeGain", "mateInOne", "noImmediateDanger", "noUsefulSafeCapture"])
+        XCTAssertEqual([ModelCoachingMoveIssueKind.materialLoss, .allowsCheck, .allowsMateInOne].map(\.rawValue), ["materialLoss", "allowsCheck", "allowsMateInOne"])
         XCTAssertEqual([ModelCoachingActionKind.hint, .noPieceNeedsHelp, .noSafeCapture, .looksSafe, .playMove, .tryAnotherMove, .closeHelp].map(\.rawValue), ["hint", "noPieceNeedsHelp", "noSafeCapture", "looksSafe", "playMove", "tryAnotherMove", "closeHelp"])
         XCTAssertEqual([ModelCoachingBoardTaskKind.none, .identifyPiece, .inspectRelationship, .movePiece, .confirmMove].map(\.rawValue), ["none", "identifyPiece", "inspectRelationship", "movePiece", "confirmMove"])
         XCTAssertEqual([ModelCoachingLearnerEventKind.helpOpened, .helpReopened, .pieceSelected, .squareInspected, .moveStaged, .moveReplaced, .moveRemoved, .actionChosen, .helpClosed].map(\.rawValue), ["helpOpened", "helpReopened", "pieceSelected", "squareInspected", "moveStaged", "moveReplaced", "moveRemoved", "actionChosen", "helpClosed"])
@@ -105,6 +106,34 @@ final class ModelCoachingContractsTests: XCTestCase {
             scope.immediateRepliesDescription,
             "one legal opponent ply after each legal or staged learner move"
         )
+    }
+
+    func testMoveConsequenceRoundTripsWithStableJSONShape() throws {
+        let consequence = ModelCoachingMoveConsequence(
+            id: "consequence:move:f1-a6",
+            moveReference: "move:f1-a6",
+            isLegal: true,
+            issueKinds: [.materialLoss],
+            criticalReplyReferences: ["reply:move:f1-a6->move:b7-b6"],
+            worstEstimatedLoss: 3
+        )
+
+        let data = try JSONEncoder().encode(consequence)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(ModelCoachingMoveConsequence.self, from: data)
+
+        XCTAssertEqual(
+            Set(object.keys),
+            [
+                "id",
+                "moveReference",
+                "isLegal",
+                "issueKinds",
+                "criticalReplyReferences",
+                "worstEstimatedLoss",
+            ]
+        )
+        XCTAssertEqual(decoded, consequence)
     }
 
     private func makeRequest() -> ModelCoachingRequest {
@@ -180,6 +209,16 @@ final class ModelCoachingContractsTests: XCTestCase {
                         checkingPieceReferences: [],
                         capturedPieceReference: nil,
                         netMaterialGain: nil
+                    )
+                ],
+                moveConsequences: [
+                    ModelCoachingMoveConsequence(
+                        id: "consequence:move-knight-e4-f6",
+                        moveReference: "move-knight-e4-f6",
+                        isLegal: true,
+                        issueKinds: [],
+                        criticalReplyReferences: [],
+                        worstEstimatedLoss: 0
                     )
                 ],
                 tacticalFacts: [

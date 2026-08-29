@@ -36,6 +36,12 @@ enum ModelCoachingRequestBuilder {
             in: state,
             pieceIDsBySquare: pieceIDsBySquare
         )
+        let moveConsequences = moveConsequences(
+            for: moves,
+            evaluation: evaluation,
+            in: state,
+            learner: request.learner
+        )
 
         return ModelCoachingRequest(
             schemaVersion: "model-coaching-request.v1",
@@ -65,11 +71,13 @@ enum ModelCoachingRequestBuilder {
                 legalMoves: moves,
                 relationships: relationships,
                 immediateReplies: replies,
+                moveConsequences: moveConsequences,
                 tacticalFacts: tacticalFacts
             ),
             permittedReferences: permittedReferences(
                 operations: snapshot.availableOperations,
                 pieces: pieces,
+                moves: moves,
                 relationships: relationships,
                 replies: replies,
                 tacticalFacts: tacticalFacts
@@ -249,6 +257,15 @@ enum ModelCoachingRequestBuilder {
             ))
         }
 
+        if evaluation.dangerProblems.isEmpty {
+            facts.append(ModelCoachingTacticalFact(
+                id: "fact:no-immediate-danger",
+                kind: .noImmediateDanger,
+                subjectReferences: [],
+                integerValue: nil
+            ))
+        }
+
         for estimate in evaluation.learnerCaptureEstimates where estimate.netGainForMover != 0 {
             let moveID = ModelCoachingPositionEncoder.moveID(estimate.move)
             let captureID = ModelCoachingPositionEncoder.pieceID(
@@ -260,6 +277,14 @@ enum ModelCoachingRequestBuilder {
                 kind: .exchangeGain,
                 subjectReferences: [moveID, captureID].sorted(),
                 integerValue: estimate.netGainForMover
+            ))
+        }
+        if !evaluation.learnerCaptureEstimates.contains(where: { $0.netGainForMover >= 1 }) {
+            facts.append(ModelCoachingTacticalFact(
+                id: "fact:no-useful-safe-capture",
+                kind: .noUsefulSafeCapture,
+                subjectReferences: [],
+                integerValue: nil
             ))
         }
 
@@ -274,6 +299,66 @@ enum ModelCoachingRequestBuilder {
         }
 
         return facts.sorted { $0.id < $1.id }
+    }
+
+    private static func moveConsequences(
+        for moveReferences: [ModelCoachingMoveReference],
+        evaluation: CoachingEvaluation,
+        in state: GameState,
+        learner: PieceColor
+    ) -> [ModelCoachingMoveConsequence] {
+        moveReferences.compactMap { moveReference in
+            guard let move = move(from: moveReference, learner: learner, in: state),
+                  let assessment = evaluation.moveAssessments[move] else {
+                return nil
+            }
+            let revisableIssues = assessment.opponentIssues.filter {
+                $0.severity == .reviseMove
+            }
+            let categorizedReplies = revisableIssues.map { issue in
+                (
+                    kind: modelIssueKind(for: issue),
+                    reference: "reply:\(moveReference.id)->\(ModelCoachingPositionEncoder.moveID(issue.reply))"
+                )
+            }.sorted {
+                ($0.kind.rawValue, $0.reference) < ($1.kind.rawValue, $1.reference)
+            }
+            let issueKinds = Array(Set(categorizedReplies.map(\.kind))).sorted {
+                $0.rawValue < $1.rawValue
+            }
+            var seenReplyReferences: Set<String> = []
+            let replyReferences = categorizedReplies.compactMap { categorized in
+                seenReplyReferences.insert(categorized.reference).inserted
+                    ? categorized.reference
+                    : nil
+            }
+            let worstEstimatedLoss = assessment.opponentActivities
+                .compactMap(\.netGainForOpponent)
+                .filter { $0 > 0 }
+                .max() ?? 0
+
+            return ModelCoachingMoveConsequence(
+                id: "consequence:\(moveReference.id)",
+                moveReference: moveReference.id,
+                isLegal: assessment.isLegal,
+                issueKinds: issueKinds,
+                criticalReplyReferences: Array(replyReferences.prefix(2)),
+                worstEstimatedLoss: worstEstimatedLoss
+            )
+        }.sorted { $0.id < $1.id }
+    }
+
+    private static func modelIssueKind(
+        for issue: CoachingOpponentIssue
+    ) -> ModelCoachingMoveIssueKind {
+        switch issue.kind {
+        case .materialLoss:
+            return .materialLoss
+        case .check:
+            return .allowsCheck
+        case .mateInOne:
+            return .allowsMateInOne
+        }
     }
 
     private static func gameHistory(from moves: [Move]) -> [ModelCoachingHistoryMove] {
@@ -334,6 +419,7 @@ enum ModelCoachingRequestBuilder {
     private static func permittedReferences(
         operations: [ModelCoachingOperation],
         pieces: [ModelCoachingPieceReference],
+        moves: [ModelCoachingMoveReference],
         relationships: [ModelCoachingRelationshipReference],
         replies: [ModelCoachingReplyReference],
         tacticalFacts: [ModelCoachingTacticalFact]
@@ -343,7 +429,7 @@ enum ModelCoachingRequestBuilder {
             boardTasks: operations.compactMap(permittedBoardTask(for:)),
             boardFocus: pieces.map(\.id).sorted(),
             relationships: relationships.map(\.id).sorted(),
-            evidence: (replies.map(\.id) + tacticalFacts.map(\.id)).sorted()
+            evidence: (moves.map(\.id) + replies.map(\.id) + tacticalFacts.map(\.id)).sorted()
         )
     }
 

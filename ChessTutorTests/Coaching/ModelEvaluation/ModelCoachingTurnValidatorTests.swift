@@ -197,6 +197,7 @@ final class ModelCoachingTurnValidatorTests: XCTestCase {
                 legalMoves: [],
                 relationships: [],
                 immediateReplies: [],
+                moveConsequences: [],
                 tacticalFacts: []
             ),
             permittedReferences: ModelCoachingPermittedReferences(

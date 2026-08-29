@@ -37,6 +37,7 @@ def valid_request():
             "legalMoves": [],
             "relationships": [],
             "immediateReplies": [],
+            "moveConsequences": [],
             "tacticalFacts": [
                 {"id": "fact:position", "kind": "stalemate", "subjectReferences": [], "integerValue": None}
             ],

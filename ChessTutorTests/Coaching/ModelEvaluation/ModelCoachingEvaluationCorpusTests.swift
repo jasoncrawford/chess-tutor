@@ -310,7 +310,8 @@ final class ModelCoachingEvaluationCorpusTests: XCTestCase {
             let request = evaluationCase.request
             let permitted = request.permittedReferences
             let evidenceIDs = Set(
-                request.chessEvidence.immediateReplies.map(\.id)
+                request.chessEvidence.legalMoves.map(\.id)
+                    + request.chessEvidence.immediateReplies.map(\.id)
                     + request.chessEvidence.tacticalFacts.map(\.id)
             )
 

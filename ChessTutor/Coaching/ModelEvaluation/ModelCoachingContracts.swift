@@ -62,6 +62,7 @@ struct ModelCoachingEvidenceBundle: Codable, Equatable, Sendable {
     let legalMoves: [ModelCoachingMoveReference]
     let relationships: [ModelCoachingRelationshipReference]
     let immediateReplies: [ModelCoachingReplyReference]
+    let moveConsequences: [ModelCoachingMoveConsequence]
     let tacticalFacts: [ModelCoachingTacticalFact]
 }
 
@@ -103,6 +104,15 @@ struct ModelCoachingReplyReference: Codable, Equatable, Sendable {
     let checkingPieceReferences: [String]
     let capturedPieceReference: String?
     let netMaterialGain: Int?
+}
+
+struct ModelCoachingMoveConsequence: Codable, Equatable, Sendable {
+    let id: String
+    let moveReference: String
+    let isLegal: Bool
+    let issueKinds: [ModelCoachingMoveIssueKind]
+    let criticalReplyReferences: [String]
+    let worstEstimatedLoss: Int
 }
 
 struct ModelCoachingTacticalFact: Codable, Equatable, Sendable {
@@ -151,6 +161,14 @@ enum ModelCoachingTacticalFactKind: String, Codable, Equatable, Sendable {
     case dangerLoss
     case exchangeGain
     case mateInOne
+    case noImmediateDanger
+    case noUsefulSafeCapture
+}
+
+enum ModelCoachingMoveIssueKind: String, Codable, Equatable, Sendable {
+    case materialLoss
+    case allowsCheck
+    case allowsMateInOne
 }
 
 enum ModelCoachingActionKind: String, Codable, Equatable, Sendable {

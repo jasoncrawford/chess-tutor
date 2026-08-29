@@ -158,6 +158,63 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
         XCTAssertFalse(encodedJSON(for: request).contains("noPieceNeedsHelp"))
     }
 
+    func testMoveConsequencesAndAbsenceFactsComeFromTheRealEvaluator() throws {
+        let opening = request(for: .t1Entry)
+        let safeKnight = try XCTUnwrap(opening.chessEvidence.moveConsequences.first {
+            $0.moveReference == "move:g1-f3"
+        })
+
+        XCTAssertTrue(safeKnight.isLegal)
+        XCTAssertEqual([], safeKnight.issueKinds)
+        XCTAssertEqual([], safeKnight.criticalReplyReferences)
+        XCTAssertEqual(0, safeKnight.worstEstimatedLoss)
+        XCTAssertTrue(opening.chessEvidence.tacticalFacts.contains {
+            $0.kind == .noImmediateDanger && $0.id == "fact:no-immediate-danger"
+        })
+        XCTAssertTrue(opening.chessEvidence.tacticalFacts.contains {
+            $0.kind == .noUsefulSafeCapture && $0.id == "fact:no-useful-safe-capture"
+        })
+        XCTAssertTrue(opening.permittedReferences.evidence.contains("move:g1-f3"))
+
+        let unsafeCapture = request(for: .t7UnsafeCapture)
+        let bishopCapture = try XCTUnwrap(unsafeCapture.chessEvidence.moveConsequences.first {
+            $0.moveReference == "move:c4-f7"
+        })
+
+        XCTAssertTrue(bishopCapture.isLegal)
+        XCTAssertEqual([.materialLoss], bishopCapture.issueKinds)
+        XCTAssertEqual(
+            ["reply:move:c4-f7->move:g8-f7"],
+            bishopCapture.criticalReplyReferences
+        )
+        XCTAssertEqual(3, bishopCapture.worstEstimatedLoss)
+    }
+
+    func testEveryMoveConsequenceReferencesDeclaredMoveAndMatchingReplies() {
+        for evaluationCase in ModelCoachingEvaluationCorpus.allCases {
+            let request = evaluationCase.request
+            let moveIDs = Set(request.chessEvidence.legalMoves.map(\.id))
+            let repliesByMove = Dictionary(grouping: request.chessEvidence.immediateReplies) {
+                $0.afterMoveReference
+            }
+
+            for consequence in request.chessEvidence.moveConsequences {
+                XCTAssertTrue(moveIDs.contains(consequence.moveReference), evaluationCase.id)
+                XCTAssertLessThanOrEqual(consequence.criticalReplyReferences.count, 2, evaluationCase.id)
+                XCTAssertEqual(
+                    consequence.criticalReplyReferences,
+                    consequence.criticalReplyReferences.sorted(),
+                    evaluationCase.id
+                )
+                let matchingReplyIDs = Set((repliesByMove[consequence.moveReference] ?? []).map(\.id))
+                XCTAssertTrue(
+                    consequence.criticalReplyReferences.allSatisfy(matchingReplyIDs.contains),
+                    evaluationCase.id
+                )
+            }
+        }
+    }
+
     func testQueenAttackAndKingDefenseAreMechanicalRelationshipsWithoutPolicy() {
         let state = state(
             sideToMove: .white,
@@ -498,6 +555,12 @@ final class ModelCoachingRequestBuilderTests: XCTestCase {
             currentTurnHistory: history,
             availableOperations: operations
         )
+    }
+
+    private func request(for goldenCase: CoachingGoldenCase) -> ModelCoachingRequest {
+        ModelCoachingEvaluationCorpus.allCases.first {
+            $0.id == goldenCase.rawValue
+        }!.request
     }
 
     private func state(sideToMove: PieceColor, pieces: [Square: Piece]) -> GameState {
