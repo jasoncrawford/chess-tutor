@@ -1007,5 +1007,103 @@ class RunEvalTests(unittest.TestCase):
                     self.assertNotIn(marker, persisted, str(output))
 
 
+class CompactEvaluationRunnerTests(unittest.TestCase):
+    def test_tutor_v4_uses_zero_shot_compact_markdown_with_the_compiler_budget(self):
+        fixture = RunEvalTests()
+        bundle = run_eval._load_prompt_bundle("tutor-v4")
+        client = CompactScriptedClient(
+            [response(json.dumps(fixture.alias_turn()))], token_counts=[4000]
+        )
+        runner = run_eval.EvaluationRunner(
+            client=client,
+            model_id="test-model",
+            model_artifact_sha256="f" * 64,
+            llama_cpp_version="b10516",
+            system_prompt=bundle.system_prompt,
+            examples=bundle.examples,
+            schema=json.loads((TOOLS_DIR / "coaching-turn.schema.json").read_text()),
+            context_tokens=8192,
+            maximum_output_tokens=256,
+            temperature=0.2,
+            top_p=0.9,
+            evaluator_prompt_version="tutor-v4",
+        )
+
+        record = runner.evaluate_case(fixture.compact_case(), mode="off", seed=1103)
+
+        self.assertTrue(run_eval._uses_compact_context("tutor-v4"))
+        self.assertEqual([], bundle.examples)
+        self.assertEqual(
+            fixture.compact_case()["compactContext"]["markdown"],
+            client.render_calls[0]["user_content"],
+        )
+        self.assertEqual([], client.render_calls[0]["extra_messages"])
+        self.assertEqual(4000, record["renderedPromptTokens"])
+        self.assertEqual("generated", record["generationStatus"])
+
+
+class RunEvalConfigurationTests(unittest.TestCase):
+    def test_tutor_v4_bundle_is_zero_shot_and_older_prompt_files_are_immutable(self):
+        bundle = run_eval._load_prompt_bundle("tutor-v4")
+
+        self.assertEqual([], bundle.examples)
+        self.assertLess(len(bundle.system_prompt.encode("utf-8")), 2600)
+        self.assertIn("latest learner action", bundle.system_prompt.lower())
+        self.assertIn("one coherent", bundle.system_prompt.lower())
+        self.assertEqual(
+            {
+                "tutor-v1.md": "e3b988d525b6b985cf87f2ba20d43d11918ae11399345ed403c77fb88c3a613a",
+                "examples-v1.json": "a685f71686f49bde1e092cda103ea07bcac56804c54cd4518af22ac8f29f7239",
+                "tutor-v2.md": "787101c311ce7a851c1e553858b84b98bb6fc4d71cc8d7f7c7e40c6da38ffd5d",
+                "examples-v2.json": "a685f71686f49bde1e092cda103ea07bcac56804c54cd4518af22ac8f29f7239",
+                "tutor-v3.md": "d1c6b0dfc1698015e3ebbdd49d59f6544d84159ecb7752cbc1a454e0562409a8",
+                "examples-v3.json": "f2b8b9cde3ecc17c4828d07754b8685b40e02320d9f48cca515041dd17c3fc0b",
+            },
+            {
+                path.name: run_eval._file_sha256(path)
+                for path in sorted((TOOLS_DIR / "prompts").glob("*v[1-3].*"))
+            },
+        )
+
+    def test_tutor_v4_records_compact_transport_and_4000_token_gate(self):
+        fixture = RunEvalTests()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            corpus = root / "visible.jsonl"
+            corpus.write_text(json.dumps(fixture.compact_case()) + "\n")
+            arguments = argparse.Namespace(
+                provider="local",
+                model="fake-test-model",
+                split="visible",
+                case="case-1",
+                repetitions=1,
+                mode="off",
+                corpus=str(corpus),
+                prompt_version="tutor-v4",
+            )
+            old_root = run_eval.ARTIFACT_ROOT
+            old_opt_in = os.environ.get("COACHING_EVAL_ALLOW_FAKE")
+            try:
+                run_eval.ARTIFACT_ROOT = root / "artifacts"
+                os.environ["COACHING_EVAL_ALLOW_FAKE"] = "1"
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, run_eval._execute(arguments))
+            finally:
+                run_eval.ARTIFACT_ROOT = old_root
+                if old_opt_in is None:
+                    os.environ.pop("COACHING_EVAL_ALLOW_FAKE", None)
+                else:
+                    os.environ["COACHING_EVAL_ALLOW_FAKE"] = old_opt_in
+
+            manifest_path = next((root / "artifacts" / "runs").rglob("run-manifest.json"))
+            manifest = json.loads(manifest_path.read_text())
+            self.assertEqual("tutor-v4", manifest["promptVersion"])
+            self.assertEqual(
+                "llama.cpp-apply-template-tokenize-native-completion",
+                manifest["transport"],
+            )
+            self.assertEqual(4000, manifest["compilerPromptBudgetTokens"])
+
+
 if __name__ == "__main__":
     unittest.main()

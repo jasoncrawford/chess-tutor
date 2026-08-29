@@ -59,6 +59,11 @@ COMPACT_MARKDOWN_PILOT_CASE_IDS = (
     "t9Hint",
     "t12UnsupportedEntry",
 )
+COMPACT_CONTEXT_PROMPT_VERSIONS = frozenset(("tutor-v3", "tutor-v4"))
+
+
+def _uses_compact_context(prompt_version):
+    return prompt_version in COMPACT_CONTEXT_PROMPT_VERSIONS
 
 
 @dataclasses.dataclass(frozen=True)
@@ -198,7 +203,7 @@ def _serialize_assistant_turn(turn):
 def _example_messages(examples, *, prompt_version):
     messages = []
     for example in examples:
-        if prompt_version == "tutor-v3":
+        if _uses_compact_context(prompt_version):
             user_content = example["contextMarkdown"]
         else:
             effective_excerpt, _mutations = _effective_request(
@@ -249,7 +254,7 @@ class EvaluationRunner:
         self.runtime_provenance_record = dict(runtime_provenance_record or {})
 
     def evaluate_case(self, evaluation_case, *, mode, seed):
-        if self.evaluator_prompt_version == "tutor-v3":
+        if _uses_compact_context(self.evaluator_prompt_version):
             return self._evaluate_compact_case(evaluation_case, mode=mode, seed=seed)
         return self._evaluate_legacy_case(evaluation_case, mode=mode, seed=seed)
 
@@ -1100,7 +1105,7 @@ def _execute(arguments):
         "transport": (
             (
                 "llama.cpp-apply-template-tokenize-native-completion"
-                if prompt_bundle.version == "tutor-v3"
+                if _uses_compact_context(prompt_bundle.version)
                 else "llama.cpp-apply-template-native-completion"
             )
             if arguments.provider == "local"
@@ -1122,7 +1127,7 @@ def _execute(arguments):
         "runtimeProvenance": runtime_record,
         "contextTokens": runtime["mac"]["contextTokens"],
         "compilerPromptBudgetTokens": (
-            4000 if prompt_bundle.version == "tutor-v3" else None
+            4000 if _uses_compact_context(prompt_bundle.version) else None
         ),
         "maximumOutputTokens": runtime["generation"]["maximumOutputTokens"],
         "temperature": runtime["generation"]["temperature"],
