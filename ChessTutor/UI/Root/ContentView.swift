@@ -181,6 +181,8 @@ struct ContentView: View {
                 Color.black.opacity(0.24)
                     .ignoresSafeArea()
                 InvitationSentNoticeView(
+                    board: invitation,
+                    onCopyLink: { copyInviteLink(invitation.inviteLink) },
                     onKeepLooking: { outboundInvitationNotice = nil },
                     onCancel: {
                         outboundInvitationNotice = nil
@@ -199,6 +201,7 @@ struct ContentView: View {
             prepareIncomingRemoteInviteNotificationIfPossible()
             startIncomingRemoteInvitePollLoopIfNeeded()
             replayBufferedRemotePushNotifications()
+            presentPendingBoardInvitationIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
@@ -473,7 +476,34 @@ struct ContentView: View {
             remotePlayFlow: remotePlayFlow,
             remoteGameTransport: remoteGameTransport
         )
-        if board.role == .invitee {
+        switch board.reopenedInvitationPresentation {
+        case .confirmInvitation:
+            showRemoteInviteConfirmation(
+                RemoteInviteConfirmation(
+                    opponentName: board.invite.inviter.displayName,
+                    localPlayerColor: board.invite.whiteAssignment.localPlayerColorForJoiner
+                ),
+                invite: board.invite
+            )
+        case .showInviteDetails:
+            outboundInvitationNotice = board
+        }
+        persistGameLibrary()
+    }
+
+    private func presentPendingBoardInvitationIfNeeded() {
+        guard foregroundIncomingInvite == nil,
+              outboundInvitationNotice == nil,
+              remoteLifecycle.pendingRemoteInviteConfirmation == nil,
+              case let .board(id) = gameLibrary.route,
+              let board = gameLibrary.pendingRemoteBoard(id: id) else {
+            return
+        }
+
+        switch board.reopenedInvitationPresentation {
+        case .showInviteDetails:
+            outboundInvitationNotice = board
+        case .confirmInvitation:
             showRemoteInviteConfirmation(
                 RemoteInviteConfirmation(
                     opponentName: board.invite.inviter.displayName,
@@ -482,7 +512,6 @@ struct ContentView: View {
                 invite: board.invite
             )
         }
-        persistGameLibrary()
     }
 
     private func openRemoteGame(_ game: ManagedRemoteGame) {
@@ -2212,19 +2241,52 @@ private struct GameRackCard: View {
             GameThumbnail(state: presentation.boardState, moveCount: presentation.moves.count)
                 .aspectRatio(1, contentMode: .fit)
 
-            Text(presentation.title)
+            Text(GameActivityDateFormatter.string(from: presentation.lastActivityAt))
                 .font(.system(.title3, design: .serif).weight(.semibold))
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
-            Text("\(presentation.status) · \(GameActivityDateFormatter.string(from: presentation.lastActivityAt))")
-                .font(.subheadline)
+            Text(presentation.title)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.mutedInk)
                 .lineLimit(1)
+            HStack(spacing: 7) {
+                GameCardStatusMark(indicator: presentation.statusIndicator)
+                Text(presentation.status)
+                    .lineLimit(1)
+            }
+            .font(.subheadline)
+            .foregroundStyle(AppTheme.mutedInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(cardBackground)
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct GameCardStatusMark: View {
+    let indicator: GameCardPresentation.StatusIndicator
+
+    var body: some View {
+        Circle()
+            .fill(fill)
+            .overlay {
+                Circle().stroke(border, lineWidth: indicator == .waiting ? 1.5 : 0)
+            }
+            .frame(width: 8, height: 8)
+    }
+
+    private var fill: Color {
+        switch indicator {
+        case .neutral: AppTheme.mutedInk.opacity(0.45)
+        case .yourTurn: AppTheme.captureBoxFelt
+        case .waiting: AppTheme.panelWarmth
+        case .finished: AppTheme.mutedInk.opacity(0.55)
+        }
+    }
+
+    private var border: Color {
+        indicator == .waiting ? AppTheme.mutedInk.opacity(0.65) : .clear
     }
 }
 
@@ -2338,18 +2400,47 @@ private struct IncomingInviteNoticeView: View {
 }
 
 private struct InvitationSentNoticeView: View {
+    let board: ManagedPendingRemoteBoard
+    let onCopyLink: () -> Void
     let onKeepLooking: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
-        GameOverlayCard(
-            title: "Invitation sent",
-            message: "This board will be ready when the invitation is accepted.",
-            secondaryTitle: "Cancel invite",
-            onSecondary: onCancel,
-            primaryTitle: "Keep looking",
-            onPrimary: onKeepLooking
-        )
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Invitation sent")
+                .font(AppTheme.panelTitleFont)
+                .foregroundStyle(AppTheme.ink)
+            Text("This board will be ready when the invitation is accepted.")
+                .font(AppTheme.panelBodyFont)
+                .foregroundStyle(AppTheme.mutedInk)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Join code")
+                    .font(AppTheme.aboutSectionTitleFont)
+                    .foregroundStyle(AppTheme.ink)
+                Text(board.invite.code.formatted)
+                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.ink)
+                    .monospacedDigit()
+            }
+            Button("Copy link", action: onCopyLink)
+                .buttonStyle(GameOverlayButtonStyle(isPrimary: false))
+            HStack(spacing: 12) {
+                Button("Cancel invite", action: onCancel)
+                    .buttonStyle(GameOverlayButtonStyle(isPrimary: false))
+                Button("Keep looking", action: onKeepLooking)
+                    .buttonStyle(GameOverlayButtonStyle(isPrimary: true))
+            }
+        }
+        .padding(26)
+        .frame(width: 430)
+        .background {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(AppTheme.panel)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(AppTheme.boardFrame, lineWidth: 8)
+                }
+        }
     }
 }
 

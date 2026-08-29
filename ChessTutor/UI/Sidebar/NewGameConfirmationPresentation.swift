@@ -58,8 +58,15 @@ struct NewGameConfirmationPresentation: Equatable {
 }
 
 enum NewGameRequestPolicy {
-    static func shouldConfirm(hasGameInProgress: Bool, isRemoteGameActive: Bool) -> Bool {
-        hasGameInProgress || isRemoteGameActive
+    static func shouldConfirm(
+        hasGameInProgress: Bool,
+        isRemoteGameActive: Bool,
+        gameResult: GameResult
+    ) -> Bool {
+        guard gameResult == .ongoing else {
+            return false
+        }
+        return hasGameInProgress || isRemoteGameActive
     }
 }
 

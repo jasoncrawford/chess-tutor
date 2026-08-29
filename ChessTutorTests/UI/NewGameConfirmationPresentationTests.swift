@@ -46,11 +46,12 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.localResetActionTitle, "New Game")
     }
 
-    func testNewGameRequestConfirmsWhenRemoteGameIsActiveAfterGameEnds() {
-        XCTAssertTrue(
+    func testNewGameRequestDoesNotConfirmWhenRemoteGameHasEnded() {
+        XCTAssertFalse(
             NewGameRequestPolicy.shouldConfirm(
                 hasGameInProgress: false,
-                isRemoteGameActive: true
+                isRemoteGameActive: true,
+                gameResult: .checkmate(winner: .white)
             )
         )
     }
@@ -59,7 +60,8 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         XCTAssertTrue(
             NewGameRequestPolicy.shouldConfirm(
                 hasGameInProgress: true,
-                isRemoteGameActive: false
+                isRemoteGameActive: false,
+                gameResult: .ongoing
             )
         )
     }
@@ -68,7 +70,8 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         XCTAssertTrue(
             NewGameRequestPolicy.shouldConfirm(
                 hasGameInProgress: false,
-                isRemoteGameActive: true
+                isRemoteGameActive: true,
+                gameResult: .ongoing
             )
         )
     }
@@ -77,7 +80,8 @@ final class NewGameConfirmationPresentationTests: XCTestCase {
         XCTAssertFalse(
             NewGameRequestPolicy.shouldConfirm(
                 hasGameInProgress: false,
-                isRemoteGameActive: false
+                isRemoteGameActive: false,
+                gameResult: .stalemate
             )
         )
     }

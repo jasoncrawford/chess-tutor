@@ -39,6 +39,84 @@ final class GameSessionTests: XCTestCase {
             GameLibraryEntry.local(library.game(id: game.id)!).cardPresentation.status,
             "Checkmate. Black wins."
         )
+        XCTAssertEqual(
+            GameLibraryEntry.local(library.game(id: game.id)!).cardPresentation.statusIndicator,
+            .finished
+        )
+    }
+
+    func testPendingRemoteBoardKeepsItsJoinLinkAvailable() {
+        let invite = RemotePendingInvite(
+            id: RemoteInviteID(rawValue: "invite"),
+            code: InviteCode(rawValue: "428193"),
+            token: RemoteInviteToken(rawValue: "token-1"),
+            inviter: RemotePlayerRef(id: RemotePlayerID(rawValue: "dad"), displayName: "Dad"),
+            inviteeDisplayName: "Maya",
+            whiteAssignment: .inviter,
+            status: .pending,
+            createdAt: .distantPast,
+            expiresAt: .distantFuture,
+            protocolVersion: 1
+        )
+        let board = ManagedPendingRemoteBoard(
+            id: ManagedGameID(),
+            invite: invite,
+            role: .inviter,
+            createdAt: .distantPast
+        )
+
+        XCTAssertEqual(board.inviteLink.absoluteString, "chesstutor://invite?code=428193&token=token-1")
+        XCTAssertEqual(board.reopenedInvitationPresentation, .showInviteDetails)
+    }
+
+    @MainActor
+    func testRemoteGameCardsDistinguishYourTurnFromWaiting() {
+        let descriptor = RemoteGameDescriptor(
+            id: RemoteGameID(rawValue: "game"),
+            protocolVersion: 1,
+            status: .active,
+            whitePlayer: RemotePlayerRef(id: RemotePlayerID(rawValue: "me"), displayName: "Me"),
+            blackPlayer: RemotePlayerRef(id: RemotePlayerID(rawValue: "maya"), displayName: "Maya"),
+            localPlayerID: RemotePlayerID(rawValue: "me")
+        )
+        let yourTurn = ManagedRemoteGame(
+            id: ManagedGameID(),
+            createdAt: .distantPast,
+            snapshot: ActiveRemoteGameSnapshot(
+                descriptor: descriptor,
+                acceptedEvents: [],
+                outbox: RemoteOutbox(),
+                lastAppliedSequence: 0
+            )
+        )
+        let waiting = ManagedRemoteGame(
+            id: ManagedGameID(),
+            createdAt: .distantPast,
+            snapshot: ActiveRemoteGameSnapshot(
+                descriptor: descriptor,
+                acceptedEvents: [
+                    RemoteMoveEvent(
+                        id: RemoteMoveEventID(rawValue: "move"),
+                        gameID: RemoteGameID(rawValue: "game"),
+                        sequenceNumber: 1,
+                        actorPlayerID: RemotePlayerID(rawValue: "me"),
+                        move: RemoteMoveCodec.encode(Move(from: Square(file: .e, rank: 2), to: Square(file: .e, rank: 4))),
+                        createdAt: .distantPast,
+                        protocolVersion: 1,
+                        previousPositionFingerprint: PositionFingerprint(rawValue: "before"),
+                        resultingPositionFingerprint: PositionFingerprint(rawValue: "after"),
+                        notificationSummary: "White pawn to e4"
+                    ),
+                ],
+                outbox: RemoteOutbox(),
+                lastAppliedSequence: 1
+            )
+        )
+
+        XCTAssertEqual(GameLibraryEntry.remote(yourTurn).cardPresentation.status, "Your turn")
+        XCTAssertEqual(GameLibraryEntry.remote(yourTurn).cardPresentation.statusIndicator, .yourTurn)
+        XCTAssertEqual(GameLibraryEntry.remote(waiting).cardPresentation.status, "Their turn")
+        XCTAssertEqual(GameLibraryEntry.remote(waiting).cardPresentation.statusIndicator, .waiting)
     }
 
     @MainActor

@@ -61,6 +61,11 @@ struct ManagedLocalGame: Codable, Equatable, Sendable, Identifiable {
 /// lightweight record in the library lets the UI treat it like every other
 /// game without pretending it is an active remote match yet.
 struct ManagedPendingRemoteBoard: Codable, Equatable, Sendable, Identifiable {
+    enum ReopenedInvitationPresentation: Equatable, Sendable {
+        case showInviteDetails
+        case confirmInvitation
+    }
+
     enum Role: String, Codable, Equatable, Sendable {
         case inviter
         case invitee
@@ -97,6 +102,21 @@ struct ManagedPendingRemoteBoard: Codable, Equatable, Sendable, Identifiable {
 
     var listStatus: String {
         role == .inviter ? "Invitation sent" : "Invitation pending"
+    }
+
+    var inviteLink: URL {
+        var components = URLComponents()
+        components.scheme = "chesstutor"
+        components.host = "invite"
+        components.queryItems = [
+            URLQueryItem(name: "code", value: invite.code.rawValue),
+            URLQueryItem(name: "token", value: invite.token.rawValue),
+        ]
+        return components.url!
+    }
+
+    var reopenedInvitationPresentation: ReopenedInvitationPresentation {
+        role == .inviter ? .showInviteDetails : .confirmInvitation
     }
 }
 
@@ -152,6 +172,7 @@ enum GameLibraryEntry: Identifiable, Sendable {
             return GameCardPresentation(
                 title: "Local game",
                 status: GameCardPresentation.status(for: boardState),
+                statusIndicator: GameCardPresentation.indicator(for: boardState),
                 moves: game.moves,
                 lastActivityAt: game.lastMovedAt
             )
@@ -159,6 +180,7 @@ enum GameLibraryEntry: Identifiable, Sendable {
             return GameCardPresentation(
                 title: board.listTitle,
                 status: board.listStatus,
+                statusIndicator: .waiting,
                 moves: [],
                 lastActivityAt: board.lastUpdatedAt
             )
@@ -175,6 +197,9 @@ enum GameLibraryEntry: Identifiable, Sendable {
                 status: descriptor.status == .ended
                     ? "Finished"
                     : (boardState.sideToMove == localColor ? "Your turn" : "Their turn"),
+                statusIndicator: descriptor.status == .ended
+                    ? .finished
+                    : (boardState.sideToMove == localColor ? .yourTurn : .waiting),
                 moves: moves,
                 lastActivityAt: game.lastMovedAt
             )
@@ -183,15 +208,30 @@ enum GameLibraryEntry: Identifiable, Sendable {
 }
 
 struct GameCardPresentation: Equatable, Sendable {
+    enum StatusIndicator: Equatable, Sendable {
+        case neutral
+        case yourTurn
+        case waiting
+        case finished
+    }
+
     let title: String
     let status: String
+    let statusIndicator: StatusIndicator
     let moves: [Move]
     let lastActivityAt: Date
     let boardState: GameState
 
-    init(title: String, status: String, moves: [Move], lastActivityAt: Date) {
+    init(
+        title: String,
+        status: String,
+        statusIndicator: StatusIndicator,
+        moves: [Move],
+        lastActivityAt: Date
+    ) {
         self.title = title
         self.status = status
+        self.statusIndicator = statusIndicator
         self.moves = moves
         self.lastActivityAt = lastActivityAt
         self.boardState = Self.boardState(replaying: moves)
@@ -212,6 +252,10 @@ struct GameCardPresentation: Equatable, Sendable {
         case .stalemate:
             return "Stalemate."
         }
+    }
+
+    static func indicator(for state: GameState) -> StatusIndicator {
+        state.result == .ongoing ? .neutral : .finished
     }
 }
 

@@ -101,7 +101,8 @@ struct SidePanelView: View {
     private func requestNewGame() {
         if NewGameRequestPolicy.shouldConfirm(
             hasGameInProgress: session.hasGameInProgress,
-            isRemoteGameActive: remoteNewGameOpponentName != nil
+            isRemoteGameActive: remoteNewGameOpponentName != nil,
+            gameResult: session.state.result
         ) {
             isConfirmingNewGame = true
         } else {
