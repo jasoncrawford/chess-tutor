@@ -2342,7 +2342,7 @@ private struct StartGameTypeChooserView: View {
                     StartGameChoiceCard(
                         title: "On this iPad",
                         subtitle: "Take turns around one board",
-                        symbol: "person.2.fill",
+                        illustration: .sharedBoard,
                         isPrimary: true
                     )
                 }
@@ -2352,7 +2352,7 @@ private struct StartGameTypeChooserView: View {
                     StartGameChoiceCard(
                         title: "With someone else",
                         subtitle: "Invite a player to their own board",
-                        symbol: "network",
+                        illustration: .remoteBoards,
                         isPrimary: false
                     )
                 }
@@ -2366,19 +2366,13 @@ private struct StartGameTypeChooserView: View {
 private struct StartGameChoiceCard: View {
     let title: String
     let subtitle: String
-    let symbol: String
+    let illustration: StartGameChoiceIllustration
     let isPrimary: Bool
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: symbol)
-                .font(.system(size: 23, weight: .semibold, design: .rounded))
-                .foregroundStyle(isPrimary ? AppTheme.lightSquare : AppTheme.captureBoxFelt)
-                .frame(width: 48, height: 48)
-                .background {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(isPrimary ? AppTheme.captureBoxFelt : AppTheme.panelWarmth)
-                }
+            StartGameChoiceIllustrationView(kind: illustration)
+                .frame(width: 108, height: 76)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -2395,6 +2389,113 @@ private struct StartGameChoiceCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground)
         .accessibilityElement(children: .combine)
+    }
+}
+
+private enum StartGameChoiceIllustration {
+    case sharedBoard
+    case remoteBoards
+}
+
+private struct StartGameChoiceIllustrationView: View {
+    let kind: StartGameChoiceIllustration
+
+    var body: some View {
+        switch kind {
+        case .sharedBoard:
+            SharedBoardIllustration()
+        case .remoteBoards:
+            RemoteBoardsIllustration()
+        }
+    }
+}
+
+private struct SharedBoardIllustration: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(AppTheme.panelWarmth.opacity(0.82))
+
+            MiniTabletBoard()
+                .frame(width: 72, height: 53)
+
+            PlayerHand(isTop: true)
+                .offset(x: -30, y: -34)
+            PlayerHand(isTop: false)
+                .offset(x: 31, y: 34)
+        }
+    }
+}
+
+private struct RemoteBoardsIllustration: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(AppTheme.panelWarmth.opacity(0.64))
+
+            DottedArc()
+                .stroke(AppTheme.captureBoxFelt.opacity(0.85), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, dash: [1, 5]))
+                .frame(width: 58, height: 37)
+                .offset(y: -15)
+
+            MiniTabletBoard()
+                .frame(width: 43, height: 34)
+                .rotationEffect(.degrees(-8))
+                .offset(x: -27, y: 13)
+
+            MiniTabletBoard()
+                .frame(width: 43, height: 34)
+                .rotationEffect(.degrees(8))
+                .offset(x: 27, y: 13)
+        }
+    }
+}
+
+private struct MiniTabletBoard: View {
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 8)
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(AppTheme.ink)
+            .overlay {
+                LazyVGrid(columns: columns, spacing: 0) {
+                    ForEach(0..<64, id: \.self) { index in
+                        Rectangle()
+                            .fill((index / 8 + index % 8).isMultiple(of: 2) ? AppTheme.lightSquare : AppTheme.darkSquare)
+                    }
+                }
+                .padding(4)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+    }
+}
+
+private struct PlayerHand: View {
+    let isTop: Bool
+
+    var body: some View {
+        Capsule(style: .continuous)
+            .fill(isTop ? AppTheme.captureBoxFelt.opacity(0.85) : Color(red: 0.68, green: 0.30, blue: 0.15))
+            .frame(width: 13, height: 35)
+            .rotationEffect(.degrees(isTop ? -42 : 42))
+            .overlay(alignment: isTop ? .bottom : .top) {
+                Circle()
+                    .fill(Color(red: 0.93, green: 0.64, blue: 0.40))
+                    .frame(width: 14, height: 14)
+                    .offset(y: isTop ? 5 : -5)
+            }
+    }
+}
+
+private struct DottedArc: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY),
+            control: CGPoint(x: rect.midX, y: rect.minY - rect.height * 0.35)
+        )
+        return path
     }
 }
 
