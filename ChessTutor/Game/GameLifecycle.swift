@@ -263,6 +263,18 @@ struct GameCardPresentation: Equatable, Sendable {
     static func indicator(for state: GameState) -> StatusIndicator {
         state.result == .ongoing ? .active : .finished
     }
+
+    var compactDetail: String {
+        var details: [String] = []
+        if title != "Local game" {
+            details.append(title)
+        }
+        details.append(status)
+        if !moves.isEmpty, statusIndicator != .finished {
+            details.append("moved \(lastActivityAt.formatted(date: .omitted, time: .shortened))")
+        }
+        return details.joined(separator: " · ")
+    }
 }
 
 struct GameLibrarySnapshot: Codable, Equatable, Sendable {

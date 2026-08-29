@@ -2255,7 +2255,7 @@ private struct GameRackCard: View {
 
                 HStack(spacing: 7) {
                     GameCardStatusMark(indicator: presentation.statusIndicator)
-                    Text(compactDetail)
+                    Text(presentation.compactDetail)
                         .lineLimit(1)
                 }
                 .font(.subheadline)
@@ -2269,17 +2269,6 @@ private struct GameRackCard: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var compactDetail: String {
-        var details: [String] = []
-        if presentation.title != "Local game" {
-            details.append(presentation.title)
-        }
-        details.append(presentation.status.lowercased())
-        if !presentation.moves.isEmpty {
-            details.append("moved \(presentation.lastActivityAt.formatted(date: .omitted, time: .shortened))")
-        }
-        return details.joined(separator: " · ")
-    }
 }
 
 private struct GameCardStatusMark: View {

@@ -43,6 +43,10 @@ final class GameSessionTests: XCTestCase {
             GameLibraryEntry.local(library.game(id: game.id)!).cardPresentation.statusIndicator,
             .finished
         )
+        XCTAssertEqual(
+            GameLibraryEntry.local(library.game(id: game.id)!).cardPresentation.compactDetail,
+            "Checkmate. Black wins."
+        )
     }
 
     func testPendingRemoteBoardKeepsItsJoinLinkAvailable() {
