@@ -47,6 +47,7 @@
 		39FCC4FEFE302725780CD261 /* ModelCoachingNeutralTurnValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58D5B89877EB9C0FCAB1977 /* ModelCoachingNeutralTurnValidator.swift */; };
 		3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */; };
 		3B2BB09FA9B0263C77E9C5CF /* RemotePresencePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EDC053A4E5B45FA2B04601 /* RemotePresencePolicyTests.swift */; };
+		3CCD29A9DC9113BFFC4F1027 /* ModelCoachingChessNativeContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F03807AD4D011F9B95248B /* ModelCoachingChessNativeContracts.swift */; };
 		3E475A94036E66EC06309644 /* ModelCoachingEvaluationCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C84019BE98D64B70E733C266 /* ModelCoachingEvaluationCorpusTests.swift */; };
 		3E6419F184A380CA90C52662 /* CoachingTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65CE7D6785DA7589EA14E63 /* CoachingTestFixtures.swift */; };
 		4055B6D26D46FF40D5AC5B39 /* CloudKitRemoteInviteTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1603F5651C9AF18C92BFFC5D /* CloudKitRemoteInviteTransport.swift */; };
@@ -79,7 +80,9 @@
 		6907A6151781818E8A8E77C9 /* GameSessionCoachingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C04C4A6FB05C5990088BEE60 /* GameSessionCoachingTests.swift */; };
 		69ACAB4421D086C7422CF5B3 /* PositionAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F828B058294EEA95395D4A /* PositionAnalyzerTests.swift */; };
 		6AF109EE664DC66EA71C25E7 /* ModelCoachingRequestBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DBF47517B526ADFBB8CAA23 /* ModelCoachingRequestBuilder.swift */; };
+		6C72008FCF4CAFAF38BFC79F /* ModelCoachingChessNativeContextCompiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D649C7D4A3C0FB90766C3D /* ModelCoachingChessNativeContextCompiler.swift */; };
 		72D18795F0896B6D5ABBBC18 /* GameResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C9B30C3E0E430A338D94D6 /* GameResult.swift */; };
+		73517258C21ADB969122CC40 /* ModelCoachingChessNativeContextCompilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F215543CC93140E640B9FCD6 /* ModelCoachingChessNativeContextCompilerTests.swift */; };
 		73E2A6171A4E73CD50C61F95 /* CaptureTrayLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */; };
 		74768121A7D172469250D06B /* CoachingGoldenPositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5EE6DF747DA36014AE79820 /* CoachingGoldenPositionTests.swift */; };
 		75DDC809D991FCF2BE49A675 /* CloudKitRemoteInviteTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62C65BB76751EB9AD3B6B142 /* CloudKitRemoteInviteTransportTests.swift */; };
@@ -257,6 +260,7 @@
 		808465DBB203862F171B8137 /* ModelCoachingPositionEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingPositionEncoder.swift; sourceTree = "<group>"; };
 		80D53364C2471FF324E13201 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicy.swift; sourceTree = "<group>"; };
+		83D649C7D4A3C0FB90766C3D /* ModelCoachingChessNativeContextCompiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingChessNativeContextCompiler.swift; sourceTree = "<group>"; };
 		843DA88957074E118D9B5F6C /* RemoteInviteConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteConfirmationTests.swift; sourceTree = "<group>"; };
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		87976591E2D0B5A556CA8E83 /* ModelCoachingNeutralRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilder.swift; sourceTree = "<group>"; };
@@ -336,6 +340,7 @@
 		E134EABED5BC244A5466A161 /* RemoteGameCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameCoordinator.swift; sourceTree = "<group>"; };
 		E2276117FCAFEF68732876EF /* LocalCoachingInsightSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalCoachingInsightSource.swift; sourceTree = "<group>"; };
 		E2AF7050703D5DCF0641C734 /* RemoteGameStartPresentationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicyTests.swift; sourceTree = "<group>"; };
+		E3F03807AD4D011F9B95248B /* ModelCoachingChessNativeContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingChessNativeContracts.swift; sourceTree = "<group>"; };
 		E6D98017AFFA0B1E2F1C695A /* RemoteInviteTransportModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteTransportModelTests.swift; sourceTree = "<group>"; };
 		E70E1D7D9348336F94C0E2DB /* CaptureTrayLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTrayLayoutTests.swift; sourceTree = "<group>"; };
 		E79A88E3BD48DC472E496410 /* BoardGuidanceOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGuidanceOverlay.swift; sourceTree = "<group>"; };
@@ -345,6 +350,7 @@
 		F0C34DD0B8F34D966E92E299 /* RemoteGameSessionControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameSessionControllerTests.swift; sourceTree = "<group>"; };
 		F13E0EE4C35EED64A264EF55 /* GameLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameLifecycleTests.swift; sourceTree = "<group>"; };
 		F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteOutbox.swift; sourceTree = "<group>"; };
+		F215543CC93140E640B9FCD6 /* ModelCoachingChessNativeContextCompilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingChessNativeContextCompilerTests.swift; sourceTree = "<group>"; };
 		F282481C8F5235C05C815F52 /* ModelCoachingContractsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingContractsTests.swift; sourceTree = "<group>"; };
 		F31CE47397439E48A329AAA0 /* MoveHistoryFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatter.swift; sourceTree = "<group>"; };
 		F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialMoveTests.swift; sourceTree = "<group>"; };
@@ -608,6 +614,8 @@
 		9ABB07F575C973E58A1ED807 /* ModelEvaluation */ = {
 			isa = PBXGroup;
 			children = (
+				83D649C7D4A3C0FB90766C3D /* ModelCoachingChessNativeContextCompiler.swift */,
+				E3F03807AD4D011F9B95248B /* ModelCoachingChessNativeContracts.swift */,
 				4F107D7B1074E326601FBBD8 /* ModelCoachingCompactContext.swift */,
 				9A104A4E00422B91E68BCDA7 /* ModelCoachingContextCompiler.swift */,
 				FD3302FAFD3E1B76CC1EF1ED /* ModelCoachingContracts.swift */,
@@ -687,6 +695,7 @@
 		D4FAEBC546E5AAEAFF8B88E5 /* ModelEvaluation */ = {
 			isa = PBXGroup;
 			children = (
+				F215543CC93140E640B9FCD6 /* ModelCoachingChessNativeContextCompilerTests.swift */,
 				312CAF5E1C64EF2C6CC2B909 /* ModelCoachingCompactContextTests.swift */,
 				F282481C8F5235C05C815F52 /* ModelCoachingContractsTests.swift */,
 				A695B52B59F4F50BDBF5F337 /* ModelCoachingCorpusExportTests.swift */,
@@ -989,6 +998,8 @@
 				9F593642083020C52C450B58 /* LocalCoachingExplanationSource.swift in Sources */,
 				5D6C4D63867C5340AD70AA83 /* LocalCoachingInsightSource.swift in Sources */,
 				BE885EEB3663F62FE6D0D99B /* MaterialTacticalEvaluator.swift in Sources */,
+				6C72008FCF4CAFAF38BFC79F /* ModelCoachingChessNativeContextCompiler.swift in Sources */,
+				3CCD29A9DC9113BFFC4F1027 /* ModelCoachingChessNativeContracts.swift in Sources */,
 				C28A1B903D902445419E9004 /* ModelCoachingCompactContext.swift in Sources */,
 				46EA92E83339D15D8EFFEEA4 /* ModelCoachingContextCompiler.swift in Sources */,
 				57D1CCE36349B493E418D9BC /* ModelCoachingContracts.swift in Sources */,
@@ -1076,6 +1087,7 @@
 				D4CA8F2592EF3AF138FF8F50 /* LocalCoachingAdvisorTests.swift in Sources */,
 				9E628FE7B55251C40A5ED21D /* LocalCoachingExplanationSourceTests.swift in Sources */,
 				C5AD9BCA93BE3E38D0130525 /* MaterialTacticalEvaluatorTests.swift in Sources */,
+				73517258C21ADB969122CC40 /* ModelCoachingChessNativeContextCompilerTests.swift in Sources */,
 				C58E89C0CD7C80E86E160BC9 /* ModelCoachingCompactContextTests.swift in Sources */,
 				56A77FDE6C7C61B1E257FB17 /* ModelCoachingContractsTests.swift in Sources */,
 				C6DB3B065019DE3B4FB80449 /* ModelCoachingCorpusExportTests.swift in Sources */,

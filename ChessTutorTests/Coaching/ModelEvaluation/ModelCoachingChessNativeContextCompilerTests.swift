@@ -1,0 +1,265 @@
+import Foundation
+import XCTest
+@testable import ChessTutor
+
+final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
+    func testEightProductionFixturesUseFixedSectionsWithoutNumberedAliases() throws {
+        for fixture in ModelCoachingNeutralPromptExamples.fixtures {
+            let compilation = compile(fixture)
+
+            XCTAssertEqual(
+                markdownHeadings(in: compilation.markdown),
+                [
+                    "# Chess coaching situation",
+                    "## Position",
+                    "## Latest interaction",
+                    "## Relevant legal facts",
+                    "## Available UI response",
+                ],
+                fixture.id
+            )
+            for pattern in [
+                #"relationship-[0-9]+"#,
+                #"move-[0-9]+"#,
+                #"piece-[0-9]+"#,
+                #"action-[0-9]+"#,
+            ] {
+                XCTAssertFalse(
+                    containsRegex(pattern, in: compilation.markdown),
+                    "\(fixture.id) contains alias matching \(pattern)"
+                )
+            }
+        }
+    }
+
+    func testCompilationPreservesMetadataCompleteHistoryAndSeparateTentativeMove() {
+        for fixture in ModelCoachingNeutralPromptExamples.fixtures {
+            let request = request(for: fixture)
+            let compilation = ModelCoachingChessNativeContextCompiler.compile(
+                request,
+                promptVersion: "tutor-v6"
+            )
+            let expectedHistory = request.gameHistory.isEmpty
+                ? "none"
+                : request.gameHistory.map(\.displayNotation).joined(separator: " ")
+            let expectedTentative = request.interaction.tentativeMove?.san ?? "none"
+
+            XCTAssertEqual(compilation.schemaVersion, "model-coaching-chess-native-context.v1", fixture.id)
+            XCTAssertEqual(compilation.promptVersion, "tutor-v6", fixture.id)
+            XCTAssertEqual(compilation.requestID, request.requestID, fixture.id)
+            XCTAssertEqual(compilation.positionRevision, request.positionRevision, fixture.id)
+            XCTAssertEqual(lines(startingWith: "FEN: ", in: compilation.markdown), ["FEN: \(request.position.fen)"], fixture.id)
+            XCTAssertEqual(lines(startingWith: "Moves: ", in: compilation.markdown), ["Moves: \(expectedHistory)"], fixture.id)
+            XCTAssertEqual(
+                lines(startingWith: "Tentative move: ", in: section("Position", of: compilation.markdown)),
+                ["Tentative move: \(expectedTentative)"],
+                fixture.id
+            )
+        }
+    }
+
+    func testNoSelectionDoesNotDumpMovesOrRelationships() throws {
+        for index in [0, 1, 7] {
+            let fixture = ModelCoachingNeutralPromptExamples.fixtures[index]
+            let compilation = compile(fixture)
+            let facts = section("Relevant legal facts", of: compilation.markdown)
+
+            XCTAssertFalse(facts.contains("Legal moves for"), fixture.id)
+            XCTAssertFalse(facts.contains("Opponent immediate replies"), fixture.id)
+            XCTAssertFalse(facts.contains("attacks"), fixture.id)
+            XCTAssertFalse(facts.contains("defends"), fixture.id)
+            XCTAssertFalse(facts.contains("can capture"), fixture.id)
+            XCTAssertFalse(facts.contains("can recapture"), fixture.id)
+            XCTAssertEqual(compilation.availableMoveFocus, [], fixture.id)
+            XCTAssertTrue(
+                section("Available UI response", of: compilation.markdown)
+                    .contains("Allowable move focus: none"),
+                fixture.id
+            )
+        }
+    }
+
+    func testSelectedPieceListsOnlyThatPiecesLegalMoves() throws {
+        let fixture = ModelCoachingNeutralPromptExamples.fixtures[2]
+        let compilation = compile(fixture)
+        let facts = section("Relevant legal facts", of: compilation.markdown)
+
+        XCTAssertTrue(facts.contains("Selected piece: White knight on f3"))
+        XCTAssertTrue(
+            facts.contains("Legal moves for White knight on f3: Nd4, Ne5, Ng1, Ng5, Nh4")
+        )
+        XCTAssertFalse(facts.contains("Legal captures:"))
+        XCTAssertFalse(facts.contains("Checking moves:"))
+        XCTAssertFalse(facts.contains("Mating moves:"))
+        XCTAssertFalse(facts.contains("Attackers on selected piece:"))
+        XCTAssertFalse(facts.contains("Defenders of selected piece:"))
+        XCTAssertEqual(
+            compilation.availableMoveFocus,
+            [
+                .init(from: "f3", to: "d4"),
+                .init(from: "f3", to: "e5"),
+                .init(from: "f3", to: "g1"),
+                .init(from: "f3", to: "g5"),
+                .init(from: "f3", to: "h4"),
+            ]
+        )
+    }
+
+    func testReplacementLatestInteractionIncludesOnlyOldAndCurrentTentativeMoves() throws {
+        let fixture = ModelCoachingNeutralPromptExamples.fixtures[3]
+        let compilation = compile(fixture)
+        let interaction = section("Latest interaction", of: compilation.markdown)
+
+        XCTAssertEqual(nonemptyBodyLines(in: interaction), ["White replaced h4 with Nf3."])
+        XCTAssertEqual(occurrences(of: "h4", in: interaction), 1)
+        XCTAssertEqual(occurrences(of: "Nf3", in: interaction), 1)
+        XCTAssertFalse(interaction.contains("Help opened"))
+        XCTAssertFalse(interaction.contains("Move staged"))
+    }
+
+    func testTentativeMovesIncludeLegalityAndOnlyImmediateForcingReplies() throws {
+        let expectations: [(index: Int, move: String, replies: String)] = [
+            (3, "Nf3", "none"),
+            (4, "Bb5", "axb5"),
+            (6, "Bd2", "Bxd2+"),
+        ]
+
+        for expectation in expectations {
+            let fixture = ModelCoachingNeutralPromptExamples.fixtures[expectation.index]
+            let compilation = compile(fixture)
+            let facts = section("Relevant legal facts", of: compilation.markdown)
+
+            XCTAssertTrue(facts.contains("Tentative move \(expectation.move) is legal."), fixture.id)
+            XCTAssertTrue(
+                facts.contains("Opponent immediate replies that capture, check, or mate: \(expectation.replies)"),
+                fixture.id
+            )
+            XCTAssertFalse(facts.contains("Direct relationships"), fixture.id)
+            XCTAssertFalse(facts.contains("after reply"), fixture.id)
+            XCTAssertFalse(facts.contains("after tentative"), fixture.id)
+        }
+    }
+
+    func testInspectedOpponentPieceListsOnlyItsMatchingRepliesOnceWithoutDownstreamRelationships() throws {
+        let fixture = ModelCoachingNeutralPromptExamples.fixtures[5]
+        let compilation = compile(fixture)
+        let interaction = section("Latest interaction", of: compilation.markdown)
+        let facts = section("Relevant legal facts", of: compilation.markdown)
+
+        XCTAssertEqual(nonemptyBodyLines(in: interaction), ["The child tapped the black queen on h4."])
+        XCTAssertTrue(facts.contains("Inspected piece: Black queen on h4"))
+        XCTAssertTrue(facts.contains("Matching immediate replies: Qxe4+, Qxf2+, Qxh2"))
+        for notation in ["Qxe4+", "Qxf2+", "Qxh2"] {
+            XCTAssertEqual(occurrences(of: notation, in: compilation.markdown), 1, notation)
+        }
+        XCTAssertFalse(compilation.markdown.contains("Direct relationships"))
+        XCTAssertFalse(compilation.markdown.localizedCaseInsensitiveContains("after reply"))
+        XCTAssertFalse(compilation.markdown.localizedCaseInsensitiveContains("after tentative"))
+        XCTAssertFalse(compilation.markdown.contains("relationship:"))
+        XCTAssertEqual(
+            compilation.availableMoveFocus,
+            [
+                .init(from: "b1", to: "c3"),
+                .init(from: "h4", to: "e4"),
+                .init(from: "h4", to: "f2"),
+                .init(from: "h4", to: "h2"),
+            ]
+        )
+    }
+
+    func testLatestInteractionUsesOnlyLatestProductionEvent() throws {
+        let expectedLines = [
+            "Help opened.",
+            "Help opened.",
+            "White selected the knight on f3.",
+            "White replaced h4 with Nf3.",
+            "White tentatively played Bb5.",
+            "The child tapped the black queen on h4.",
+            "White tentatively played Bd2.",
+            "Help opened.",
+        ]
+
+        for (fixture, expectedLine) in zip(ModelCoachingNeutralPromptExamples.fixtures, expectedLines) {
+            let interaction = section("Latest interaction", of: compile(fixture).markdown)
+            XCTAssertEqual(nonemptyBodyLines(in: interaction), [expectedLine], fixture.id)
+        }
+    }
+
+    func testActionsAndMoveFocusUseSemanticValuesOnce() throws {
+        let compilation = compile(ModelCoachingNeutralPromptExamples.fixtures[4])
+        let available = section("Available UI response", of: compilation.markdown)
+
+        XCTAssertEqual(compilation.availableActions, ["hint", "playMove", "tryAnotherMove"])
+        XCTAssertEqual(
+            compilation.availableMoveFocus,
+            [
+                .init(from: "c4", to: "b5"),
+                .init(from: "a6", to: "b5"),
+            ]
+        )
+        XCTAssertTrue(available.contains("Actions: hint, playMove, tryAnotherMove"))
+        XCTAssertTrue(available.contains("Square focus: any board square"))
+        XCTAssertTrue(available.contains("Allowable move focus: c4-b5, a6-b5"))
+        XCTAssertEqual(occurrences(of: "c4-b5", in: compilation.markdown), 1)
+        XCTAssertEqual(occurrences(of: "a6-b5", in: compilation.markdown), 1)
+    }
+
+    func testCompilationIsByteDeterministic() {
+        for fixture in ModelCoachingNeutralPromptExamples.fixtures {
+            let request = request(for: fixture)
+            XCTAssertEqual(
+                ModelCoachingChessNativeContextCompiler.compile(request, promptVersion: "tutor-v6"),
+                ModelCoachingChessNativeContextCompiler.compile(request, promptVersion: "tutor-v6"),
+                fixture.id
+            )
+        }
+    }
+
+    private func compile(
+        _ fixture: ModelCoachingNeutralPromptFixture
+    ) -> ModelCoachingChessNativeContextCompilation {
+        ModelCoachingChessNativeContextCompiler.compile(
+            request(for: fixture),
+            promptVersion: "tutor-v6"
+        )
+    }
+
+    private func request(
+        for fixture: ModelCoachingNeutralPromptFixture
+    ) -> ModelCoachingNeutralRequest {
+        ModelCoachingNeutralRequestBuilder.build(
+            snapshot: fixture.snapshot,
+            requestID: fixture.id
+        )
+    }
+
+    private func markdownHeadings(in markdown: String) -> [String] {
+        markdown.split(separator: "\n").map(String.init).filter { $0.hasPrefix("#") }
+    }
+
+    private func section(_ heading: String, of markdown: String) -> String {
+        let marker = "## \(heading)"
+        guard let start = markdown.range(of: marker) else { return "" }
+        let remainder = markdown[start.lowerBound...]
+        guard let next = remainder.dropFirst(marker.count).range(of: "\n\n## ") else {
+            return String(remainder)
+        }
+        return String(remainder[..<next.lowerBound])
+    }
+
+    private func nonemptyBodyLines(in section: String) -> [String] {
+        Array(section.split(separator: "\n").dropFirst()).map(String.init)
+    }
+
+    private func lines(startingWith prefix: String, in text: String) -> [String] {
+        text.split(separator: "\n").map(String.init).filter { $0.hasPrefix(prefix) }
+    }
+
+    private func occurrences(of needle: String, in haystack: String) -> Int {
+        haystack.components(separatedBy: needle).count - 1
+    }
+
+    private func containsRegex(_ pattern: String, in text: String) -> Bool {
+        text.range(of: pattern, options: .regularExpression) != nil
+    }
+}
