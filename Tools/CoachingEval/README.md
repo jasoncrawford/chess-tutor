@@ -168,7 +168,7 @@ python3 Tools/CoachingEval/preview_neutral_prompts.py \
   --destination .coaching-eval/neutral-prompt-preview/final
 ```
 
-This command calls only the server's template-rendering and tokenization endpoints. It does not request a completion, import evaluator scoring, or retain a model reply. It writes `preview-manifest.json` plus eight complete logical transcripts under `prompts/`, refuses any existing destination, and fails if a rendered prompt exceeds 2,500 tokens. Review those exact system and user messages before authorizing any model run.
+Apart from `/health` readiness checks while the local server starts, this command calls only the server's template-rendering and tokenization endpoints. It does not request a completion, import evaluator scoring, or retain a model reply. It writes `preview-manifest.json` plus eight complete logical transcripts under `prompts/`, refuses any existing destination, and fails if a rendered prompt exceeds 2,500 tokens. Review those exact system and user messages before authorizing any model run.
 
 Before any `tutor-v4` pilot inference, run the token-only preflight against all three exact model artifacts. It starts one pinned server at a time, renders and tokenizes the fixed ten visible pilot cases in off and bounded modes, never calls `/completion`, writes one immutable 60-cell manifest, and exits nonzero if any exact prompt exceeds 4,000 tokens:
 
