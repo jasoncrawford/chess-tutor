@@ -17,8 +17,15 @@ class TutorV5PromptTests(unittest.TestCase):
         self.assertIn("neutral, authoritative chess-rule facts", self.lower_prompt)
         self.assertIn("not a suggested lesson", self.lower_prompt)
         self.assertIn("choose one useful coaching step", self.lower_prompt)
-        self.assertIn("safe/take/wake", self.lower_prompt)
-        self.assertIn("optional reasoning lens", self.lower_prompt)
+        self.assertIn("urgent danger", self.lower_prompt)
+        self.assertIn("threatened piece", self.lower_prompt)
+        self.assertIn("opponent reply to a tentative move", self.lower_prompt)
+        self.assertIn("simple captures", self.lower_prompt)
+        self.assertIn("one-move tactical opportunities", self.lower_prompt)
+        self.assertIn("quiet improvement", self.lower_prompt)
+        self.assertIn("respond first to what the child just did", self.lower_prompt)
+        self.assertNotIn("safe/take/wake", self.lower_prompt)
+        self.assertNotIn("optional reasoning lens", self.lower_prompt)
         self.assertIn("latest interaction supersedes", self.lower_prompt)
 
     def test_requires_exact_small_response_shape_and_request_local_aliases(self):
