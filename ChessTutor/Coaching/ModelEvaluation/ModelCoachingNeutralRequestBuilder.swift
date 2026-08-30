@@ -184,10 +184,98 @@ enum ModelCoachingNeutralRequestBuilder {
                     return nil
                 }
                 if reference.capturePieceReference != nil || reference.givesCheck || reference.givesCheckmate {
-                    return reference
+                    return ModelCoachingNeutralReply(
+                        move: reference,
+                        directRelationships: directRelationships(
+                            for: reply,
+                            moveReference: reference,
+                            in: afterTentative
+                        )
+                    )
                 }
                 return nil
             }.sorted { $0.id < $1.id }
+    }
+
+    private static func directRelationships(
+        for reply: Move,
+        moveReference: ModelCoachingNeutralMove,
+        in afterTentative: GameState
+    ) -> [ModelCoachingNeutralReplyRelationship] {
+        var relationships: [ModelCoachingNeutralReplyRelationship] = []
+        let afterTentativePieces = pieceReferences(in: afterTentative)
+        let afterTentativePieceByID = Dictionary(
+            uniqueKeysWithValues: afterTentativePieces.map { ($0.id, $0) }
+        )
+
+        if let capturedID = moveReference.capturePieceReference,
+           let source = afterTentativePieceByID[moveReference.sourcePieceReference],
+           let target = afterTentativePieceByID[capturedID] {
+            relationships.append(
+                replyRelationship(
+                    replyID: moveReference.id,
+                    phase: .afterTentative,
+                    kind: .canCapture,
+                    source: source,
+                    target: target
+                )
+            )
+        }
+
+        let afterReply = afterTentative.applyingUnchecked(reply)
+        let afterReplyPieces = pieceReferences(in: afterReply)
+        let afterReplyPieceByID = Dictionary(
+            uniqueKeysWithValues: afterReplyPieces.map { ($0.id, $0) }
+        )
+        let afterReplyPieceIDsBySquare = Dictionary(
+            uniqueKeysWithValues: afterReplyPieces.map { ($0.square, $0.id) }
+        )
+        guard let movedPiece = afterReply.board[reply.to] else {
+            return relationships.sorted { $0.id < $1.id }
+        }
+        let movedPieceID = ModelCoachingPositionEncoder.pieceID(movedPiece, at: reply.to)
+        let afterReplyRelationships = relationshipReferences(
+            in: afterReply,
+            pieceIDsBySquare: afterReplyPieceIDsBySquare
+        ).filter { relationship in
+            relationship.sourcePieceReference == movedPieceID
+                || relationship.targetPieceReference == movedPieceID
+                || (moveReference.givesCheck && relationship.kind == .checks)
+        }
+
+        for relationship in afterReplyRelationships {
+            guard let source = afterReplyPieceByID[relationship.sourcePieceReference],
+                  let target = afterReplyPieceByID[relationship.targetPieceReference] else {
+                continue
+            }
+            relationships.append(
+                replyRelationship(
+                    replyID: moveReference.id,
+                    phase: .afterReply,
+                    kind: relationship.kind,
+                    source: source,
+                    target: target
+                )
+            )
+        }
+
+        return relationships.sorted { $0.id < $1.id }
+    }
+
+    private static func replyRelationship(
+        replyID: String,
+        phase: ModelCoachingNeutralReplyRelationshipPhase,
+        kind: ModelCoachingRelationshipKind,
+        source: ModelCoachingNeutralPiece,
+        target: ModelCoachingNeutralPiece
+    ) -> ModelCoachingNeutralReplyRelationship {
+        ModelCoachingNeutralReplyRelationship(
+            id: "reply-relationship:\(replyID):\(phase.rawValue):\(kind.rawValue):\(source.id)->\(target.id)",
+            phase: phase,
+            kind: kind,
+            sourcePiece: source,
+            targetPiece: target
+        )
     }
 
     private static func capabilities(

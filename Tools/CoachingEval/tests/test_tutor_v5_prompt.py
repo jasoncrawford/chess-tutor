@@ -26,6 +26,9 @@ class TutorV5PromptTests(unittest.TestCase):
         self.assertIn("one short child-facing utterance", self.lower_prompt)
         self.assertIn("only aliases permitted", self.lower_prompt)
         self.assertIn("no private reasoning", self.lower_prompt)
+        self.assertIn("message must be 18 words or fewer", self.lower_prompt)
+        self.assertIn("actions may contain at most 3 aliases", self.lower_prompt)
+        self.assertIn("focus may contain at most 4 aliases", self.lower_prompt)
 
     def test_contains_no_case_answers_or_fixture_data(self):
         forbidden_phrases = [

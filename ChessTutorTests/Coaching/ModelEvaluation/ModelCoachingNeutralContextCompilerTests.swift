@@ -40,7 +40,7 @@ final class ModelCoachingNeutralContextCompilerTests: XCTestCase {
         XCTAssertTrue(compilation.markdown.contains("Side to move: White"))
         XCTAssertTrue(compilation.markdown.contains(request.position.fen))
         XCTAssertTrue(compilation.markdown.contains("Moves: none"))
-        XCTAssertTrue(compilation.markdown.contains("1. helpOpened"))
+        XCTAssertTrue(compilation.markdown.contains("1. Help opened"))
         XCTAssertTrue(compilation.markdown.contains("White is not in check."))
 
         [
@@ -194,24 +194,76 @@ final class ModelCoachingNeutralContextCompilerTests: XCTestCase {
         }
     }
 
-    func testInspectedReplyScopeIncludesReplyAndDirectRelationships() throws {
-        let tentativeMove = Move(from: square("f1"), to: square("e2"))
-        let inspectedPieceID = "piece:black:rook:e8"
-        let inspectedReplyID = "move:e8-e2"
+    func testUnsafeButMovementValidTentativeMoveHasFocusAliasAcceptedByValidator() throws {
+        let tentativeMove = Move(from: square("e2"), to: square("f2"))
         let request = ModelCoachingNeutralRequestBuilder.build(
             snapshot: ModelCoachingNeutralSnapshot(
                 committedState: state(
                     sideToMove: .white,
                     pieces: [
                         square("e1"): Piece(kind: .king, color: .white),
-                        square("f1"): Piece(kind: .bishop, color: .white),
+                        square("e2"): Piece(kind: .rook, color: .white),
                         square("h8"): Piece(kind: .king, color: .black),
                         square("e8"): Piece(kind: .rook, color: .black),
                     ]
                 ),
                 learner: .white,
+                positionRevision: 4,
+                selectedSquare: square("f2"),
+                tentativeMove: tentativeMove,
+                latestEvent: event(4, .moveStaged, ["move:e2-f2"]),
+                episodeEvents: [
+                    event(1, .helpOpened),
+                    event(4, .moveStaged, ["move:e2-f2"]),
+                ]
+            ),
+            requestID: "neutral-unsafe-stageable"
+        )
+
+        XCTAssertEqual(request.interaction.tentativeMove?.isLegal, false)
+        let compilation = ModelCoachingNeutralContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v5"
+        )
+        let alias = try alias(for: "move:e2-f2", in: compilation)
+
+        XCTAssertTrue(compilation.markdown.contains("Tentative move: \(alias) (Rf2)"))
+        XCTAssertTrue(compilation.markdown.contains("\(alias) (Rf2) is not legal."))
+        XCTAssertTrue(compilation.markdown.contains("\(alias) (Rf2)"))
+        XCTAssertEqual(
+            ModelCoachingNeutralTurnValidator.issues(
+                for: ModelCoachingNeutralTurn(
+                    message: "That move leaves your king in check.",
+                    actions: [],
+                    focus: [alias]
+                ),
+                compilation: compilation
+            ),
+            []
+        )
+    }
+
+    func testInspectedPieceScopeIncludesAllMatchingRepliesAndTheirDerivedRelationships() throws {
+        let tentativeMove = Move(from: square("b1"), to: square("c3"))
+        let inspectedPieceID = "piece:black:rook:a8"
+        let request = ModelCoachingNeutralRequestBuilder.build(
+            snapshot: ModelCoachingNeutralSnapshot(
+                committedState: state(
+                    sideToMove: .white,
+                    pieces: [
+                        square("g1"): Piece(kind: .king, color: .white),
+                        square("b1"): Piece(kind: .knight, color: .white),
+                        square("a2"): Piece(kind: .pawn, color: .white),
+                        square("b2"): Piece(kind: .bishop, color: .white),
+                        square("h2"): Piece(kind: .pawn, color: .white),
+                        square("h8"): Piece(kind: .rook, color: .white),
+                        square("g6"): Piece(kind: .king, color: .black),
+                        square("a8"): Piece(kind: .rook, color: .black),
+                    ]
+                ),
+                learner: .white,
                 positionRevision: 5,
-                selectedSquare: square("e2"),
+                selectedSquare: square("c3"),
                 tentativeMove: tentativeMove,
                 latestEvent: event(5, .squareInspected, [inspectedPieceID]),
                 episodeEvents: [
@@ -228,30 +280,37 @@ final class ModelCoachingNeutralContextCompilerTests: XCTestCase {
             promptVersion: "tutor-v5"
         )
 
-        let replyAlias = try alias(for: inspectedReplyID, in: compilation)
-        let directCheckAlias = try alias(
-            for: "relationship:check:piece:black:rook:e8->piece:white:king:e1",
-            in: compilation
-        )
-
-        XCTAssertTrue(compilation.markdown.contains("Inspected reply:"))
-        XCTAssertTrue(compilation.markdown.contains(replyAlias))
-        XCTAssertTrue(compilation.markdown.contains(directCheckAlias))
-        XCTAssertFalse(compilation.markdown.contains("piece:white:bishop:f1"))
+        let matchingReplies = request.tentativeReplies.filter {
+            $0.sourcePieceReference == inspectedPieceID
+        }
+        XCTAssertEqual(matchingReplies.map(\.id), ["move:a8-a2", "move:a8-h8"])
+        XCTAssertTrue(compilation.markdown.contains("Inspected piece:"))
+        XCTAssertTrue(compilation.markdown.contains("Black rook on a8"))
+        XCTAssertTrue(compilation.markdown.contains("Matching inspected replies:"))
+        for reply in matchingReplies {
+            let replyAlias = try alias(for: reply.id, in: compilation)
+            XCTAssertTrue(compilation.markdown.contains("\(replyAlias) (\(reply.san))"))
+            for relationship in reply.directRelationships {
+                let relationshipAlias = try alias(for: relationship.id, in: compilation)
+                XCTAssertTrue(compilation.markdown.contains(relationshipAlias))
+            }
+        }
     }
 
-    func testActionChosenLinesPreserveAliasedCanonicalActionReferences() throws {
+    func testHistoricalActionsRemainDescriptiveWithoutBecomingCurrentActions() throws {
         let request = ModelCoachingNeutralRequestBuilder.build(
             snapshot: ModelCoachingNeutralSnapshot(
                 committedState: .startingPosition(),
                 learner: .white,
-                positionRevision: 1,
+                positionRevision: 3,
                 selectedSquare: nil,
                 tentativeMove: nil,
-                latestEvent: event(2, .actionChosen, ["action:looksSafe"]),
+                latestEvent: event(4, .helpReopened),
                 episodeEvents: [
                     event(1, .helpOpened),
                     event(2, .actionChosen, ["action:looksSafe"]),
+                    event(3, .actionChosen, ["action:closeHelp"]),
+                    event(4, .helpReopened),
                 ]
             ),
             requestID: "neutral-action-history"
@@ -262,11 +321,58 @@ final class ModelCoachingNeutralContextCompilerTests: XCTestCase {
             promptVersion: "tutor-v5"
         )
 
-        let looksSafeAlias = try alias(for: "action:looksSafe", in: compilation)
-        XCTAssertTrue(compilation.markdown.contains("2. actionChosen [\(looksSafeAlias)]"))
-        XCTAssertTrue(compilation.referenceBindings.contains {
-            $0.stableID == "action:looksSafe" && $0.category == .action
-        })
+        XCTAssertTrue(compilation.markdown.contains("2. Action chosen: Looks safe"))
+        XCTAssertTrue(compilation.markdown.contains("3. Action chosen: Close help"))
+        XCTAssertFalse(compilation.referenceBindings.contains { $0.stableID == "action:looksSafe" })
+        XCTAssertFalse(compilation.referenceBindings.contains { $0.stableID == "action:closeHelp" })
+        XCTAssertEqual(
+            compilation.referenceBindings.filter { $0.category == .action }.map(\.stableID),
+            ["action:hint"]
+        )
+        let available = compilation.markdown.components(separatedBy: "## Available interactions").last ?? ""
+        XCTAssertFalse(available.contains("Close help"))
+        XCTAssertFalse(available.contains("Looks safe"))
+    }
+
+    func testEpisodeAndAvailableFocusRenderCompactAliasLabels() throws {
+        let knightID = "piece:white:knight:f3"
+        let request = ModelCoachingNeutralRequestBuilder.build(
+            snapshot: ModelCoachingNeutralSnapshot(
+                committedState: state(
+                    sideToMove: .white,
+                    pieces: [
+                        square("g1"): Piece(kind: .king, color: .white),
+                        square("f3"): Piece(kind: .knight, color: .white),
+                        square("g8"): Piece(kind: .king, color: .black),
+                    ]
+                ),
+                learner: .white,
+                positionRevision: 2,
+                selectedSquare: square("f3"),
+                tentativeMove: nil,
+                latestEvent: event(3, .pieceSelected, [knightID]),
+                episodeEvents: [
+                    event(1, .helpOpened),
+                    event(2, .moveRemoved, ["move:h2-h4"]),
+                    event(3, .pieceSelected, [knightID]),
+                ]
+            ),
+            requestID: "neutral-readable-aliases"
+        )
+
+        let compilation = ModelCoachingNeutralContextCompiler.compile(request, promptVersion: "tutor-v5")
+        let knightAlias = try alias(for: knightID, in: compilation)
+
+        XCTAssertTrue(compilation.markdown.contains("1. Help opened"))
+        XCTAssertTrue(compilation.markdown.contains("2. Move removed: h2-h4"))
+        XCTAssertTrue(
+            compilation.markdown.contains(
+                "3. Piece selected: \(knightAlias) (White knight on f3)"
+            )
+        )
+        let available = compilation.markdown.components(separatedBy: "## Available interactions").last ?? ""
+        XCTAssertTrue(available.contains("\(knightAlias) (White knight on f3)"))
+        XCTAssertFalse(compilation.referenceBindings.contains { $0.stableID == "move:h2-h4" })
     }
 
     func testAvailableActionBindingsUseCanonicalRawValueStableIDs() throws {

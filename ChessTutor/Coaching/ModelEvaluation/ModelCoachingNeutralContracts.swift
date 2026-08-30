@@ -63,7 +63,34 @@ struct ModelCoachingNeutralRelationship: Codable, Equatable, Sendable {
     let targetPieceReference: String
 }
 
-typealias ModelCoachingNeutralReply = ModelCoachingNeutralMove
+enum ModelCoachingNeutralReplyRelationshipPhase: String, Codable, Equatable, Sendable {
+    case afterTentative
+    case afterReply
+}
+
+struct ModelCoachingNeutralReplyRelationship: Codable, Equatable, Sendable {
+    let id: String
+    let phase: ModelCoachingNeutralReplyRelationshipPhase
+    let kind: ModelCoachingRelationshipKind
+    let sourcePiece: ModelCoachingNeutralPiece
+    let targetPiece: ModelCoachingNeutralPiece
+}
+
+struct ModelCoachingNeutralReply: Codable, Equatable, Sendable {
+    let move: ModelCoachingNeutralMove
+    let directRelationships: [ModelCoachingNeutralReplyRelationship]
+
+    var id: String { move.id }
+    var san: String { move.san }
+    var canonicalMove: String { move.canonicalMove }
+    var sourcePieceReference: String { move.sourcePieceReference }
+    var destinationSquare: String { move.destinationSquare }
+    var capturePieceReference: String? { move.capturePieceReference }
+    var special: String { move.special }
+    var isLegal: Bool { move.isLegal }
+    var givesCheck: Bool { move.givesCheck }
+    var givesCheckmate: Bool { move.givesCheckmate }
+}
 
 struct ModelCoachingNeutralCapabilities: Codable, Equatable, Sendable {
     let canSelectBoardPiece: Bool

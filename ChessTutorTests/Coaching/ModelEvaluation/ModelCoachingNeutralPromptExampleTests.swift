@@ -46,13 +46,19 @@ final class ModelCoachingNeutralPromptExampleTests: XCTestCase {
         XCTAssertEqual(requests[5].interaction.latestEvent.kind, .squareInspected)
         XCTAssertEqual(
             requests[5].interaction.latestEvent.referencedIDs,
-            ["piece:white:bishop:c4"]
+            ["piece:black:rook:a8"]
+        )
+        XCTAssertEqual(
+            requests[5].tentativeReplies
+                .filter { $0.sourcePieceReference == "piece:black:rook:a8" }
+                .map(\.id),
+            ["move:a8-a2", "move:a8-h8"]
         )
         XCTAssertTrue(
             ModelCoachingNeutralContextCompiler.compile(
                 requests[5],
                 promptVersion: "tutor-v5"
-            ).markdown.contains("Inspected reply:")
+            ).markdown.contains("Matching inspected replies:")
         )
         XCTAssertTrue(
             LegalMoveGenerator.isKingInCheck(
@@ -333,22 +339,26 @@ enum ModelCoachingNeutralPromptExamples {
             id: "06-inspected-reply",
             snapshot: snapshot(
                 state: state(
-                    sideToMove: .black,
+                    sideToMove: .white,
                     pieces: [
                         "g1": Piece(kind: .king, color: .white),
-                        "c4": Piece(kind: .bishop, color: .white),
-                        "h8": Piece(kind: .king, color: .black),
-                        "e7": Piece(kind: .pawn, color: .black),
+                        "b1": Piece(kind: .knight, color: .white),
+                        "a2": Piece(kind: .pawn, color: .white),
+                        "b2": Piece(kind: .bishop, color: .white),
+                        "h2": Piece(kind: .pawn, color: .white),
+                        "h8": Piece(kind: .rook, color: .white),
+                        "g6": Piece(kind: .king, color: .black),
+                        "a8": Piece(kind: .rook, color: .black),
                     ]
                 ),
-                learner: .black,
+                learner: .white,
                 positionRevision: 5,
-                selectedSquare: square("e6"),
-                tentativeMove: move("e7", "e6"),
+                selectedSquare: square("c3"),
+                tentativeMove: move("b1", "c3"),
                 events: [
                     event(1, .helpOpened),
-                    event(2, .moveStaged, [ModelCoachingPositionEncoder.moveID(move("e7", "e6"))]),
-                    event(3, .squareInspected, ["piece:white:bishop:c4"]),
+                    event(2, .moveStaged, [ModelCoachingPositionEncoder.moveID(move("b1", "c3"))]),
+                    event(3, .squareInspected, ["piece:black:rook:a8"]),
                 ]
             )
         ),

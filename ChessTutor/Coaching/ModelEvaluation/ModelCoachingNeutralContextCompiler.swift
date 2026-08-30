@@ -15,26 +15,34 @@ enum ModelCoachingNeutralContextCompiler {
         promptVersion: String
     ) -> ModelCoachingNeutralContextCompilation {
         let pieceByID = Dictionary(uniqueKeysWithValues: request.pieces.map { ($0.id, $0) })
-        let legalMovesByID = Dictionary(uniqueKeysWithValues: request.legalMoves.map { ($0.id, $0) })
-        let tentativeReplyByID = Dictionary(uniqueKeysWithValues: request.tentativeReplies.map { ($0.id, $0) })
+        var movesByID = Dictionary(uniqueKeysWithValues: request.legalMoves.map { ($0.id, $0) })
+        if let tentativeMove = request.interaction.tentativeMove {
+            movesByID[tentativeMove.id] = tentativeMove
+        }
+        request.tentativeReplies.forEach { movesByID[$0.id] = $0.move }
         let relationshipByID = Dictionary(
             uniqueKeysWithValues: request.occupiedSquareRelationships.map { ($0.id, $0) }
         )
+        let replyRelationshipByID = Dictionary(
+            uniqueKeysWithValues: request.tentativeReplies
+                .flatMap(\.directRelationships)
+                .map { ($0.id, $0) }
+        )
 
-        let inspectedReplyID = inspectedReplyID(in: request)
+        let inspectedReplies = inspectedReplies(in: request)
 
         let focusStableIDs = focusStableIDs(
             for: request,
-            inspectedReplyID: inspectedReplyID
+            inspectedReplies: inspectedReplies
         )
         let actionStableIDs = actionStableIDs(for: request)
         let bindingTable = bindingTable(
             focusStableIDs: focusStableIDs,
             actionStableIDs: actionStableIDs,
             pieceByID: pieceByID,
-            legalMovesByID: legalMovesByID,
-            tentativeReplyByID: tentativeReplyByID,
-            relationshipByID: relationshipByID
+            movesByID: movesByID,
+            relationshipByID: relationshipByID,
+            replyRelationshipByID: replyRelationshipByID
         )
 
         let document = ModelCoachingContextDocument(
@@ -46,18 +54,24 @@ enum ModelCoachingNeutralContextCompiler {
                 ),
                 ModelCoachingMarkdownSection(
                     heading: "Current help episode",
-                    lines: episodeLines(for: request, bindings: bindingTable)
+                    lines: episodeLines(
+                        for: request,
+                        bindings: bindingTable,
+                        pieceByID: pieceByID,
+                        movesByID: movesByID,
+                        relationshipByID: relationshipByID,
+                        replyRelationshipByID: replyRelationshipByID
+                    )
                 ),
                 ModelCoachingMarkdownSection(
                     heading: "Rule facts",
                     lines: ruleFactLines(
                         for: request,
-                        inspectedReplyID: inspectedReplyID,
+                        inspectedReplies: inspectedReplies,
                         bindings: bindingTable,
                         pieceByID: pieceByID,
-                        legalMovesByID: legalMovesByID,
-                        tentativeReplyByID: tentativeReplyByID,
-                        relationshipByID: relationshipByID
+                        relationshipByID: relationshipByID,
+                        replyRelationshipByID: replyRelationshipByID
                     )
                 ),
                 ModelCoachingMarkdownSection(
@@ -98,27 +112,40 @@ enum ModelCoachingNeutralContextCompiler {
 
     private static func episodeLines(
         for request: ModelCoachingNeutralRequest,
-        bindings: BindingTable
+        bindings: BindingTable,
+        pieceByID: [String: ModelCoachingNeutralPiece],
+        movesByID: [String: ModelCoachingNeutralMove],
+        relationshipByID: [String: ModelCoachingNeutralRelationship],
+        replyRelationshipByID: [String: ModelCoachingNeutralReplyRelationship]
     ) -> [String] {
         request.interaction.episodeEvents.sorted { $0.sequence < $1.sequence }.map { event in
-            let aliases = event.referencedIDs
+            let references = event.referencedIDs
                 .sorted()
-                .compactMap { bindings.aliasByStableID[$0] }
-            if aliases.isEmpty {
-                return "\(event.sequence). \(event.kind.rawValue)"
+                .map {
+                    referenceDescription(
+                        for: $0,
+                        bindings: bindings,
+                        pieceByID: pieceByID,
+                        movesByID: movesByID,
+                        relationshipByID: relationshipByID,
+                        replyRelationshipByID: replyRelationshipByID
+                    )
+                }
+            let prefix = "\(event.sequence). \(eventLabel(event.kind))"
+            if references.isEmpty {
+                return prefix
             }
-            return "\(event.sequence). \(event.kind.rawValue) [\(aliases.joined(separator: ", "))]"
+            return "\(prefix): \(references.joined(separator: ", "))"
         }
     }
 
     private static func ruleFactLines(
         for request: ModelCoachingNeutralRequest,
-        inspectedReplyID: String?,
+        inspectedReplies: [ModelCoachingNeutralReply],
         bindings: BindingTable,
         pieceByID: [String: ModelCoachingNeutralPiece],
-        legalMovesByID: [String: ModelCoachingNeutralMove],
-        tentativeReplyByID: [String: ModelCoachingNeutralReply],
-        relationshipByID: [String: ModelCoachingNeutralRelationship]
+        relationshipByID: [String: ModelCoachingNeutralRelationship],
+        replyRelationshipByID: [String: ModelCoachingNeutralReplyRelationship]
     ) -> [String] {
         var lines = [
             checkLine(for: request, pieceByID: pieceByID, relationshipByID: relationshipByID),
@@ -180,17 +207,25 @@ enum ModelCoachingNeutralContextCompiler {
             )
         }
 
-        if let inspectedReplyID,
-           let inspectedReply = tentativeReplyByID[inspectedReplyID] {
-            lines.append(inspectedReplyLine(inspectedReply, bindings: bindings))
+        if !inspectedReplies.isEmpty,
+           let inspectedPieceID = inspectedPieceID(in: request) {
             lines.append(
-                inspectedRelationshipLine(
-                    reply: inspectedReply,
-                    request: request,
+                inspectedPieceLine(
+                    inspectedPieceID,
                     bindings: bindings,
                     pieceByID: pieceByID
                 )
             )
+            lines.append(inspectedRepliesLine(inspectedReplies, bindings: bindings))
+            for reply in inspectedReplies {
+                lines.append(
+                    inspectedRelationshipLine(
+                        reply: reply,
+                        bindings: bindings,
+                        replyRelationshipByID: replyRelationshipByID
+                    )
+                )
+            }
         }
 
         return lines
@@ -208,7 +243,7 @@ enum ModelCoachingNeutralContextCompiler {
         let focus = bindings.bindings
             .filter { $0.category != .action }
             .sorted { $0.stableID < $1.stableID }
-            .map(\.alias)
+            .map { "\($0.alias) (\($0.label))" }
 
         return [
             "Board gestures: \(gestures.joined(separator: ", "))",
@@ -219,13 +254,9 @@ enum ModelCoachingNeutralContextCompiler {
 
     private static func focusStableIDs(
         for request: ModelCoachingNeutralRequest,
-        inspectedReplyID: String?
+        inspectedReplies: [ModelCoachingNeutralReply]
     ) -> [String] {
-        var stableIDs = Set(
-            request.interaction.episodeEvents
-                .flatMap(\.referencedIDs)
-                .filter { !$0.hasPrefix("action:") }
-        )
+        var stableIDs = Set<String>()
 
         request.occupiedSquareRelationships
             .filter { $0.kind == .attacks }
@@ -251,31 +282,19 @@ enum ModelCoachingNeutralContextCompiler {
                 .forEach { stableIDs.insert($0.id) }
         }
 
-        if let inspectedReplyID,
-           let reply = request.tentativeReplies.first(where: { $0.id == inspectedReplyID }) {
-            stableIDs.insert(inspectedReplyID)
-            let relatedPieces = Set(
-                [reply.sourcePieceReference, reply.capturePieceReference].compactMap { $0 }
-            )
-            request.occupiedSquareRelationships
-                .filter {
-                    ($0.kind == .attacks || $0.kind == .defends || $0.kind == .checks)
-                        && (relatedPieces.contains($0.sourcePieceReference)
-                            || relatedPieces.contains($0.targetPieceReference))
-                }
-                .forEach { stableIDs.insert($0.id) }
+        if let inspectedPieceID = inspectedPieceID(in: request), !inspectedReplies.isEmpty {
+            stableIDs.insert(inspectedPieceID)
+            for reply in inspectedReplies {
+                stableIDs.insert(reply.id)
+                reply.directRelationships.forEach { stableIDs.insert($0.id) }
+            }
         }
 
         return stableIDs.sorted()
     }
 
     private static func actionStableIDs(for request: ModelCoachingNeutralRequest) -> [String] {
-        var stableIDs = Set(
-            request.interaction.episodeEvents
-                .flatMap(\.referencedIDs)
-                .filter { $0.hasPrefix("action:") }
-        )
-
+        var stableIDs = Set<String>()
         stableIDs.insert(actionStableID(for: .hint))
         if request.capabilities.canReplaceMove || request.capabilities.canRemoveMove {
             stableIDs.insert(actionStableID(for: .tryAnotherMove))
@@ -290,9 +309,9 @@ enum ModelCoachingNeutralContextCompiler {
         focusStableIDs: [String],
         actionStableIDs: [String],
         pieceByID: [String: ModelCoachingNeutralPiece],
-        legalMovesByID: [String: ModelCoachingNeutralMove],
-        tentativeReplyByID: [String: ModelCoachingNeutralReply],
-        relationshipByID: [String: ModelCoachingNeutralRelationship]
+        movesByID: [String: ModelCoachingNeutralMove],
+        relationshipByID: [String: ModelCoachingNeutralRelationship],
+        replyRelationshipByID: [String: ModelCoachingNeutralReplyRelationship]
     ) -> BindingTable {
         let focusDescriptors = focusStableIDs.compactMap { stableID -> BindingDescriptor? in
             if let piece = pieceByID[stableID] {
@@ -302,7 +321,7 @@ enum ModelCoachingNeutralContextCompiler {
                     label: pieceLabel(piece)
                 )
             }
-            if let move = legalMovesByID[stableID] ?? tentativeReplyByID[stableID] {
+            if let move = movesByID[stableID] {
                 return BindingDescriptor(
                     stableID: stableID,
                     category: .move,
@@ -317,6 +336,13 @@ enum ModelCoachingNeutralContextCompiler {
                         relationship,
                         pieceByID: pieceByID
                     )
+                )
+            }
+            if let relationship = replyRelationshipByID[stableID] {
+                return BindingDescriptor(
+                    stableID: stableID,
+                    category: .relationship,
+                    label: replyRelationshipLabel(relationship)
                 )
             }
             return nil
@@ -436,7 +462,7 @@ enum ModelCoachingNeutralContextCompiler {
         }
         let entries = sortedReplies.map { reply in
             let alias = bindings.aliasByStableID[reply.id] ?? reply.id
-            return "\(alias) (\(moveLabel(reply)))"
+            return "\(alias) (\(moveLabel(reply.move)))"
         }
         return "Opponent replies that capture, check, or mate: \(entries.joined(separator: ", "))"
     }
@@ -483,31 +509,39 @@ enum ModelCoachingNeutralContextCompiler {
         )
     }
 
-    private static func inspectedReplyLine(
-        _ reply: ModelCoachingNeutralReply,
+    private static func inspectedPieceLine(
+        _ pieceID: String,
+        bindings: BindingTable,
+        pieceByID: [String: ModelCoachingNeutralPiece]
+    ) -> String {
+        let alias = bindings.aliasByStableID[pieceID] ?? pieceID
+        let label = pieceByID[pieceID].map(pieceLabel) ?? pieceID
+        return "Inspected piece: \(alias) (\(label))"
+    }
+
+    private static func inspectedRepliesLine(
+        _ replies: [ModelCoachingNeutralReply],
         bindings: BindingTable
     ) -> String {
-        let alias = bindings.aliasByStableID[reply.id] ?? reply.id
-        return "Inspected reply: \(alias) (\(moveLabel(reply)))"
+        let entries = replies.sorted { $0.id < $1.id }.map { reply in
+            let alias = bindings.aliasByStableID[reply.id] ?? reply.id
+            return "\(alias) (\(moveLabel(reply.move)))"
+        }
+        return "Matching inspected replies: \(entries.joined(separator: ", "))"
     }
 
     private static func inspectedRelationshipLine(
         reply: ModelCoachingNeutralReply,
-        request: ModelCoachingNeutralRequest,
         bindings: BindingTable,
-        pieceByID: [String: ModelCoachingNeutralPiece]
+        replyRelationshipByID: [String: ModelCoachingNeutralReplyRelationship]
     ) -> String {
-        let relatedPieces = Set([reply.sourcePieceReference, reply.capturePieceReference].compactMap { $0 })
-        let relationships = request.occupiedSquareRelationships.filter {
-            relatedPieces.contains($0.sourcePieceReference)
-                || relatedPieces.contains($0.targetPieceReference)
+        let replyAlias = bindings.aliasByStableID[reply.id] ?? reply.id
+        let entries: [String] = reply.directRelationships.sorted { $0.id < $1.id }.map { relationship in
+            let canonical = replyRelationshipByID[relationship.id] ?? relationship
+            let alias = bindings.aliasByStableID[canonical.id] ?? canonical.id
+            return "\(alias) (\(replyRelationshipLabel(canonical)))"
         }
-        return relationshipCategoryLine(
-            title: "Direct relationships for inspected reply",
-            relationships: relationships,
-            bindings: bindings,
-            pieceByID: pieceByID
-        )
+        return "Direct relationships for \(replyAlias): \(entries.isEmpty ? "none" : entries.joined(separator: ", "))"
     }
 
     private static func relationshipCategoryLine(
@@ -565,6 +599,56 @@ enum ModelCoachingNeutralContextCompiler {
         color.prefix(1).uppercased() + color.dropFirst()
     }
 
+    private static func eventLabel(_ kind: ModelCoachingLearnerEventKind) -> String {
+        switch kind {
+        case .helpOpened: return "Help opened"
+        case .helpReopened: return "Help reopened"
+        case .pieceSelected: return "Piece selected"
+        case .squareInspected: return "Square inspected"
+        case .moveStaged: return "Move staged"
+        case .moveReplaced: return "Move replaced"
+        case .moveRemoved: return "Move removed"
+        case .actionChosen: return "Action chosen"
+        case .helpClosed: return "Help closed"
+        }
+    }
+
+    private static func referenceDescription(
+        for stableID: String,
+        bindings: BindingTable,
+        pieceByID: [String: ModelCoachingNeutralPiece],
+        movesByID: [String: ModelCoachingNeutralMove],
+        relationshipByID: [String: ModelCoachingNeutralRelationship],
+        replyRelationshipByID: [String: ModelCoachingNeutralReplyRelationship]
+    ) -> String {
+        if stableID.hasPrefix("action:") {
+            return actionLabel(for: stableID)
+        }
+        if let binding = bindings.bindings.first(where: { $0.stableID == stableID }) {
+            return "\(binding.alias) (\(binding.label))"
+        }
+        if let piece = pieceByID[stableID] {
+            return pieceLabel(piece)
+        }
+        if let move = movesByID[stableID] {
+            return moveLabel(move)
+        }
+        if let relationship = relationshipByID[stableID] {
+            return relationshipLabel(relationship, pieceByID: pieceByID)
+        }
+        if let relationship = replyRelationshipByID[stableID] {
+            return replyRelationshipLabel(relationship)
+        }
+        if stableID.hasPrefix("move:") {
+            return String(stableID.dropFirst("move:".count))
+        }
+        let pieceComponents = stableID.split(separator: ":")
+        if pieceComponents.count == 4, pieceComponents[0] == "piece" {
+            return "\(displayColor(String(pieceComponents[1]))) \(pieceComponents[2]) on \(pieceComponents[3])"
+        }
+        return stableID
+    }
+
     private static func pieceLabel(_ piece: ModelCoachingNeutralPiece) -> String {
         "\(displayColor(piece.color)) \(piece.kind) on \(piece.square)"
     }
@@ -593,22 +677,55 @@ enum ModelCoachingNeutralContextCompiler {
         }
     }
 
-    private static func actionLabel(for stableID: String) -> String {
-        stableID.split(separator: ":", maxSplits: 1).last.map(String.init) ?? stableID
+    private static func replyRelationshipLabel(
+        _ relationship: ModelCoachingNeutralReplyRelationship
+    ) -> String {
+        let phase = relationship.phase == .afterTentative
+            ? "After tentative move"
+            : "After reply"
+        let source = pieceLabel(relationship.sourcePiece)
+        let target = pieceLabel(relationship.targetPiece)
+        let verb: String
+        switch relationship.kind {
+        case .attacks: verb = "attacks"
+        case .defends: verb = "defends"
+        case .checks: verb = "checks"
+        case .canCapture: verb = "can capture"
+        case .canRecapture: verb = "can recapture"
+        }
+        return "\(phase), \(source) \(verb) \(target)"
     }
 
-    private static func inspectedReplyID(in request: ModelCoachingNeutralRequest) -> String? {
+    private static func actionLabel(for stableID: String) -> String {
+        let rawValue = stableID.split(separator: ":", maxSplits: 1).last.map(String.init) ?? stableID
+        switch rawValue {
+        case "hint": return "Hint"
+        case "noPieceNeedsHelp": return "No piece needs help"
+        case "noSafeCapture": return "No safe capture"
+        case "looksSafe": return "Looks safe"
+        case "playMove": return "Play move"
+        case "tryAnotherMove": return "Try another move"
+        case "closeHelp": return "Close help"
+        default: return rawValue
+        }
+    }
+
+    private static func inspectedPieceID(in request: ModelCoachingNeutralRequest) -> String? {
         guard request.interaction.latestEvent.kind == .squareInspected,
               let inspectedPieceID = request.interaction.latestEvent.referencedIDs.first,
               request.interaction.tentativeMove != nil else {
             return nil
         }
+        return inspectedPieceID
+    }
 
+    private static func inspectedReplies(
+        in request: ModelCoachingNeutralRequest
+    ) -> [ModelCoachingNeutralReply] {
+        guard let inspectedPieceID = inspectedPieceID(in: request) else { return [] }
         return request.tentativeReplies
             .filter { $0.sourcePieceReference == inspectedPieceID }
             .sorted { $0.id < $1.id }
-            .first?
-            .id
     }
 
     private static func actionStableID(for operation: ModelCoachingOperation) -> String {

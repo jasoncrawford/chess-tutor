@@ -189,6 +189,71 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
         )
     }
 
+    func testTentativeReplyFactsUseAfterTentativeAndAfterReplyBoards() throws {
+        let tentativeMove = Move(from: square("b1"), to: square("c3"))
+        let state = state(
+            sideToMove: .white,
+            pieces: [
+                square("g1"): Piece(kind: .king, color: .white),
+                square("b1"): Piece(kind: .knight, color: .white),
+                square("a2"): Piece(kind: .pawn, color: .white),
+                square("b2"): Piece(kind: .bishop, color: .white),
+                square("h2"): Piece(kind: .pawn, color: .white),
+                square("h8"): Piece(kind: .rook, color: .white),
+                square("g6"): Piece(kind: .king, color: .black),
+                square("a8"): Piece(kind: .rook, color: .black),
+            ]
+        )
+        let request = ModelCoachingNeutralRequestBuilder.build(
+            snapshot: ModelCoachingNeutralSnapshot(
+                committedState: state,
+                learner: .white,
+                positionRevision: 6,
+                selectedSquare: square("c3"),
+                tentativeMove: tentativeMove,
+                latestEvent: event(6, .squareInspected, ["piece:black:rook:a8"]),
+                episodeEvents: [
+                    event(1, .helpOpened),
+                    event(5, .moveStaged, ["move:b1-c3"]),
+                    event(6, .squareInspected, ["piece:black:rook:a8"]),
+                ]
+            ),
+            requestID: "neutral-multiple-inspected-replies"
+        )
+
+        let matchingReplies = request.tentativeReplies.filter {
+            $0.sourcePieceReference == "piece:black:rook:a8"
+        }
+        XCTAssertEqual(matchingReplies.map(\.id), ["move:a8-a2", "move:a8-h8"])
+
+        let pawnCapture = try XCTUnwrap(matchingReplies.first { $0.id == "move:a8-a2" })
+        XCTAssertTrue(pawnCapture.directRelationships.contains {
+            $0.phase == .afterTentative
+                && $0.kind == .canCapture
+                && $0.sourcePiece.id == "piece:black:rook:a8"
+                && $0.targetPiece.id == "piece:white:pawn:a2"
+        })
+        XCTAssertTrue(pawnCapture.directRelationships.contains {
+            $0.phase == .afterReply
+                && $0.kind == .attacks
+                && $0.sourcePiece.id == "piece:black:rook:a2"
+                && $0.targetPiece.id == "piece:white:bishop:b2"
+        })
+
+        let rookCapture = try XCTUnwrap(matchingReplies.first { $0.id == "move:a8-h8" })
+        XCTAssertTrue(rookCapture.directRelationships.contains {
+            $0.phase == .afterTentative
+                && $0.kind == .canCapture
+                && $0.targetPiece.id == "piece:white:rook:h8"
+        })
+        XCTAssertTrue(rookCapture.directRelationships.contains {
+            $0.phase == .afterReply
+                && $0.kind == .attacks
+                && $0.sourcePiece.id == "piece:black:rook:h8"
+                && $0.targetPiece.id == "piece:white:pawn:h2"
+        })
+    }
+
     func testTentativeMoveNormalizesSelectedPieceReferenceBackToCommittedSourceSquare() {
         let tentativeMove = Move(from: square("a1"), to: square("a4"))
         let state = state(
