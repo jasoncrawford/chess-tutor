@@ -32,6 +32,21 @@ final class ModelCoachingNeutralPromptExampleTests: XCTestCase {
         let requests = fixtures.map {
             ModelCoachingNeutralRequestBuilder.build(snapshot: $0.snapshot, requestID: $0.id)
         }
+        XCTAssertEqual(
+            requests.map { $0.gameHistory.map(\.displayNotation) },
+            [
+                [],
+                ["Nf3", "e5", "g3", "e4"],
+                ["Nf3", "e5", "g3", "e4"],
+                ["e4", "e5"],
+                ["e4", "e5", "Bc4", "a6"],
+                ["e4", "e5", "Bc4", "Qh4"],
+                ["e4", "e5", "d3", "Bb4+"],
+                ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "Ba4", "Nf6"],
+            ]
+        )
+        XCTAssertTrue(requests.dropFirst().allSatisfy { !$0.gameHistory.isEmpty })
+        XCTAssertEqual(requests.map(\.positionRevision), [0, 4, 4, 2, 4, 4, 4, 8])
         XCTAssertEqual(requests[0].position.fen, ModelCoachingPositionEncoder.fen(for: .startingPosition()))
         XCTAssertTrue(requests[1].occupiedSquareRelationships.contains {
             $0.kind == .attacks
@@ -42,17 +57,20 @@ final class ModelCoachingNeutralPromptExampleTests: XCTestCase {
         XCTAssertEqual(requests[2].interaction.selectedPieceReference, "piece:white:knight:f3")
         XCTAssertEqual(requests[3].interaction.latestEvent.kind, .moveReplaced)
         XCTAssertEqual(requests[3].interaction.tentativeMove?.canonicalMove, "g1f3")
-        XCTAssertTrue(requests[4].tentativeReplies.contains { $0.capturePieceReference != nil })
+        XCTAssertTrue(requests[4].tentativeReplies.contains {
+            $0.id == "move:a6-b5"
+                && $0.capturePieceReference == "piece:white:bishop:b5"
+        })
         XCTAssertEqual(requests[5].interaction.latestEvent.kind, .squareInspected)
         XCTAssertEqual(
             requests[5].interaction.latestEvent.referencedIDs,
-            ["piece:black:rook:a8"]
+            ["piece:black:queen:h4"]
         )
         XCTAssertEqual(
             requests[5].tentativeReplies
-                .filter { $0.sourcePieceReference == "piece:black:rook:a8" }
+                .filter { $0.sourcePieceReference == "piece:black:queen:h4" }
                 .map(\.id),
-            ["move:a8-a2", "move:a8-h8"]
+            ["move:h4-e4", "move:h4-f2", "move:h4-h2"]
         )
         XCTAssertTrue(
             ModelCoachingNeutralContextCompiler.compile(
@@ -66,11 +84,11 @@ final class ModelCoachingNeutralPromptExampleTests: XCTestCase {
                 in: fixtures[6].snapshot.committedState.board
             )
         )
-        XCTAssertEqual(requests[6].interaction.tentativeMove?.canonicalMove, "b5e2")
-        XCTAssertEqual(
-            requests[7].gameHistory.map(\.displayNotation),
-            ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "Ba4", "Nf6"]
-        )
+        XCTAssertEqual(requests[6].interaction.tentativeMove?.canonicalMove, "c1d2")
+        XCTAssertTrue(requests[6].tentativeReplies.contains {
+            $0.id == "move:b4-d2"
+                && $0.capturePieceReference == "piece:white:bishop:d2"
+        })
     }
 
     func testArtifactsAreDeterministicAndCarryExactRequestCompilationAndHashes() throws {
@@ -279,18 +297,18 @@ enum ModelCoachingNeutralPromptExamples {
         fixture(
             id: "02-attacked-piece",
             snapshot: snapshot(
-                state: attackedKnightState(),
+                state: replaying(["g1f3", "e7e5", "g2g3", "e5e4"]),
                 learner: .white,
-                positionRevision: 1,
+                positionRevision: 4,
                 events: [event(1, .helpOpened)]
             )
         ),
         fixture(
             id: "03-selected-piece",
             snapshot: snapshot(
-                state: attackedKnightState(),
+                state: replaying(["g1f3", "e7e5", "g2g3", "e5e4"]),
                 learner: .white,
-                positionRevision: 1,
+                positionRevision: 4,
                 selectedSquare: square("f3"),
                 events: [
                     event(1, .helpOpened),
@@ -301,9 +319,9 @@ enum ModelCoachingNeutralPromptExamples {
         fixture(
             id: "04-replaced-tentative-move",
             snapshot: snapshot(
-                state: .startingPosition(),
+                state: replaying(["e2e4", "e7e5"]),
                 learner: .white,
-                positionRevision: 0,
+                positionRevision: 2,
                 selectedSquare: square("f3"),
                 tentativeMove: move("g1", "f3"),
                 events: [
@@ -316,15 +334,7 @@ enum ModelCoachingNeutralPromptExamples {
         fixture(
             id: "05-tactical-reply",
             snapshot: snapshot(
-                state: state(
-                    sideToMove: .white,
-                    pieces: [
-                        "g1": Piece(kind: .king, color: .white),
-                        "c4": Piece(kind: .bishop, color: .white),
-                        "h8": Piece(kind: .king, color: .black),
-                        "a6": Piece(kind: .pawn, color: .black),
-                    ]
-                ),
+                state: replaying(["e2e4", "e7e5", "f1c4", "a7a6"]),
                 learner: .white,
                 positionRevision: 4,
                 selectedSquare: square("b5"),
@@ -338,49 +348,29 @@ enum ModelCoachingNeutralPromptExamples {
         fixture(
             id: "06-inspected-reply",
             snapshot: snapshot(
-                state: state(
-                    sideToMove: .white,
-                    pieces: [
-                        "g1": Piece(kind: .king, color: .white),
-                        "b1": Piece(kind: .knight, color: .white),
-                        "a2": Piece(kind: .pawn, color: .white),
-                        "b2": Piece(kind: .bishop, color: .white),
-                        "h2": Piece(kind: .pawn, color: .white),
-                        "h8": Piece(kind: .rook, color: .white),
-                        "g6": Piece(kind: .king, color: .black),
-                        "a8": Piece(kind: .rook, color: .black),
-                    ]
-                ),
+                state: replaying(["e2e4", "e7e5", "f1c4", "d8h4"]),
                 learner: .white,
-                positionRevision: 5,
+                positionRevision: 4,
                 selectedSquare: square("c3"),
                 tentativeMove: move("b1", "c3"),
                 events: [
                     event(1, .helpOpened),
                     event(2, .moveStaged, [ModelCoachingPositionEncoder.moveID(move("b1", "c3"))]),
-                    event(3, .squareInspected, ["piece:black:rook:a8"]),
+                    event(3, .squareInspected, ["piece:black:queen:h4"]),
                 ]
             )
         ),
         fixture(
             id: "07-answering-check",
             snapshot: snapshot(
-                state: state(
-                    sideToMove: .white,
-                    pieces: [
-                        "e1": Piece(kind: .king, color: .white),
-                        "b5": Piece(kind: .bishop, color: .white),
-                        "a8": Piece(kind: .king, color: .black),
-                        "e8": Piece(kind: .rook, color: .black),
-                    ]
-                ),
+                state: replaying(["e2e4", "e7e5", "d2d3", "f8b4"]),
                 learner: .white,
-                positionRevision: 6,
-                selectedSquare: square("e2"),
-                tentativeMove: move("b5", "e2"),
+                positionRevision: 4,
+                selectedSquare: square("d2"),
+                tentativeMove: move("c1", "d2"),
                 events: [
                     event(1, .helpOpened),
-                    event(2, .moveStaged, [ModelCoachingPositionEncoder.moveID(move("b5", "e2"))]),
+                    event(2, .moveStaged, [ModelCoachingPositionEncoder.moveID(move("c1", "d2"))]),
                 ]
             )
         ),
@@ -426,28 +416,6 @@ enum ModelCoachingNeutralPromptExamples {
             tentativeMove: tentativeMove,
             latestEvent: events.last!,
             episodeEvents: events
-        )
-    }
-
-    private static func attackedKnightState() -> GameState {
-        state(
-            sideToMove: .white,
-            pieces: [
-                "g1": Piece(kind: .king, color: .white),
-                "f3": Piece(kind: .knight, color: .white),
-                "h8": Piece(kind: .king, color: .black),
-                "e4": Piece(kind: .pawn, color: .black),
-            ]
-        )
-    }
-
-    private static func state(
-        sideToMove: PieceColor,
-        pieces: [String: Piece]
-    ) -> GameState {
-        GameState(
-            board: Board(pieces: Dictionary(uniqueKeysWithValues: pieces.map { (square($0.key), $0.value) })),
-            sideToMove: sideToMove
         )
     }
 
