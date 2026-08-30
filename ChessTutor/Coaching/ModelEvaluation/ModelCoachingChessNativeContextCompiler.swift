@@ -181,10 +181,13 @@ enum ModelCoachingChessNativeContextCompiler {
 
     private static func inspectedPieceID(in request: ModelCoachingNeutralRequest) -> String? {
         guard request.interaction.latestEvent.kind == .squareInspected,
-              request.interaction.tentativeMove != nil else {
+              request.interaction.tentativeMove != nil,
+              let inspectedPieceID = request.interaction.latestEvent.referencedIDs.first,
+              let inspectedPiece = request.pieces.first(where: { $0.id == inspectedPieceID }),
+              inspectedPiece.color != request.position.sideToMove else {
             return nil
         }
-        return request.interaction.latestEvent.referencedIDs.first
+        return inspectedPieceID
     }
 
     private static func checkStatusLine(for request: ModelCoachingNeutralRequest) -> String {
@@ -236,7 +239,7 @@ enum ModelCoachingChessNativeContextCompiler {
             return move.san
         }
         guard moveID.hasPrefix("move:") else { return moveID }
-        return String(moveID.dropFirst("move:".count)).replacingOccurrences(of: "-", with: "")
+        return String(moveID.dropFirst("move:".count))
     }
 
     private static func pieceWithArticle(

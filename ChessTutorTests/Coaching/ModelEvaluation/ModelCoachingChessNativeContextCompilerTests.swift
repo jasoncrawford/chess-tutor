@@ -167,6 +167,64 @@ final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
         )
     }
 
+    func testFriendlyInspectionAfterTentativeMoveKeepsGeneralImmediateReplies() {
+        let original = request(for: ModelCoachingNeutralPromptExamples.fixtures[5])
+        let inspectedEvent = ModelCoachingNeutralEpisodeEvent(
+            sequence: 3,
+            kind: .squareInspected,
+            referencedIDs: ["piece:white:bishop:c4"]
+        )
+        let request = replacingInteraction(
+            in: original,
+            with: ModelCoachingNeutralInteraction(
+                selectedSquare: original.interaction.selectedSquare,
+                selectedPieceReference: original.interaction.selectedPieceReference,
+                tentativeMove: original.interaction.tentativeMove,
+                latestEvent: inspectedEvent,
+                episodeEvents: Array(original.interaction.episodeEvents.dropLast()) + [inspectedEvent]
+            )
+        )
+
+        let compilation = ModelCoachingChessNativeContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v6"
+        )
+        let facts = section("Relevant legal facts", of: compilation.markdown)
+
+        XCTAssertTrue(
+            facts.contains("Opponent immediate replies that capture, check, or mate: Qxe4+, Qxf2+, Qxh2")
+        )
+        XCTAssertFalse(facts.contains("Inspected piece:"))
+        XCTAssertFalse(facts.contains("Matching immediate replies:"))
+    }
+
+    func testUnavailablePriorReplacementMoveUsesReadableSquarePair() {
+        let original = request(for: ModelCoachingNeutralPromptExamples.fixtures[3])
+        let priorEvent = ModelCoachingNeutralEpisodeEvent(
+            sequence: 2,
+            kind: .moveStaged,
+            referencedIDs: ["move:e2-e5"]
+        )
+        let interaction = ModelCoachingNeutralInteraction(
+            selectedSquare: original.interaction.selectedSquare,
+            selectedPieceReference: original.interaction.selectedPieceReference,
+            tentativeMove: original.interaction.tentativeMove,
+            latestEvent: original.interaction.latestEvent,
+            episodeEvents: [original.interaction.episodeEvents[0], priorEvent, original.interaction.latestEvent]
+        )
+        let request = replacingInteraction(in: original, with: interaction)
+
+        let compilation = ModelCoachingChessNativeContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v6"
+        )
+
+        XCTAssertEqual(
+            nonemptyBodyLines(in: section("Latest interaction", of: compilation.markdown)),
+            ["White replaced e2-e5 with Nf3."]
+        )
+    }
+
     func testLatestInteractionUsesOnlyLatestProductionEvent() throws {
         let expectedLines = [
             "Help opened.",
@@ -230,6 +288,25 @@ final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
         ModelCoachingNeutralRequestBuilder.build(
             snapshot: fixture.snapshot,
             requestID: fixture.id
+        )
+    }
+
+    private func replacingInteraction(
+        in request: ModelCoachingNeutralRequest,
+        with interaction: ModelCoachingNeutralInteraction
+    ) -> ModelCoachingNeutralRequest {
+        ModelCoachingNeutralRequest(
+            schemaVersion: request.schemaVersion,
+            requestID: request.requestID,
+            positionRevision: request.positionRevision,
+            position: request.position,
+            gameHistory: request.gameHistory,
+            interaction: interaction,
+            pieces: request.pieces,
+            legalMoves: request.legalMoves,
+            occupiedSquareRelationships: request.occupiedSquareRelationships,
+            tentativeReplies: request.tentativeReplies,
+            capabilities: request.capabilities
         )
     }
 
