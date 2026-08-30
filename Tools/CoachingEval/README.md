@@ -144,6 +144,32 @@ The runner accepts only the exact immutable ten visible IDs in that manifest, in
 
 The 2026-08-29 compact-context round stopped at its pre-inference gate: the six model/mode render-and-tokenize cells for the small `t12UnsupportedEntry` case were 5,104–5,165 tokens, above the fixed 4,000-token compiler budget. The 60-record pilot, full matrix, hidden set, and device run were therefore not performed. `tutor-v4` is the immutable zero-shot compact-context successor: it removes few-shot examples without weakening the evidence or output validators. See `docs/reports/2026-08-29-compact-markdown-coaching-evaluation.md` before starting another comparison.
 
+## Preview the neutral v5 prompts without inference
+
+The neutral v5 prompt compiler has a separate human-approval gate. First export the eight production-shaped examples from Swift into a fresh ignored directory:
+
+```bash
+COACHING_NEUTRAL_PREVIEW_DIR="$PWD/.coaching-eval/neutral-prompt-preview/swift" \
+xcodebuild test -quiet -scheme ChessTutor \
+  -destination 'platform=iOS Simulator,name=iPad (A16)' \
+  -only-testing:ChessTutorTests/ModelCoachingNeutralPromptExampleTests
+```
+
+Then render the exact system/user conversations through the pinned Qwen3 1.7B chat template and count the rendered tokens:
+
+```bash
+python3 Tools/CoachingEval/preview_neutral_prompts.py \
+  --source .coaching-eval/neutral-prompt-preview/swift \
+  --system-prompt Tools/CoachingEval/prompts/tutor-v5.md \
+  --server .coaching-eval/runtime/b10516/bin/llama-server \
+  --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json \
+  --model .coaching-eval/models/qwen3-1.7b-q4_k_m/Qwen3-1.7B-Q4_K_M.gguf \
+  --model-manifest .coaching-eval/models/qwen3-1.7b-q4_k_m/artifact-manifest.json \
+  --destination .coaching-eval/neutral-prompt-preview/final
+```
+
+This command calls only the server's template-rendering and tokenization endpoints. It does not request a completion, import evaluator scoring, or retain a model reply. It writes `preview-manifest.json` plus eight complete logical transcripts under `prompts/`, refuses any existing destination, and fails if a rendered prompt exceeds 2,500 tokens. Review those exact system and user messages before authorizing any model run.
+
 Before any `tutor-v4` pilot inference, run the token-only preflight against all three exact model artifacts. It starts one pinned server at a time, renders and tokenizes the fixed ten visible pilot cases in off and bounded modes, never calls `/completion`, writes one immutable 60-cell manifest, and exits nonzero if any exact prompt exceeds 4,000 tokens:
 
 ```bash
