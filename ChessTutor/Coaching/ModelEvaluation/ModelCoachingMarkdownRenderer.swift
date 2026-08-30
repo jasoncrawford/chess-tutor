@@ -2,7 +2,14 @@ import Foundation
 
 enum ModelCoachingMarkdownRenderer {
     static func render(_ document: ModelCoachingContextDocument) -> String {
-        var blocks = ["# Chess coaching context"]
+        render(document, title: "# Chess coaching context")
+    }
+
+    static func render(
+        _ document: ModelCoachingContextDocument,
+        title: String
+    ) -> String {
+        var blocks = [title]
 
         if !document.metadataLines.isEmpty {
             blocks.append(document.metadataLines.joined(separator: "\n"))
