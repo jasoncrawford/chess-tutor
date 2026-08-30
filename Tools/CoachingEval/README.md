@@ -170,6 +170,32 @@ python3 Tools/CoachingEval/preview_neutral_prompts.py \
 
 Apart from `/health` readiness checks while the local server starts, this command calls only the server's template-rendering and tokenization endpoints. It does not request a completion, import evaluator scoring, or retain a model reply. It writes `preview-manifest.json` plus eight complete logical transcripts under `prompts/`, refuses any existing destination, and fails if a rendered prompt exceeds 2,500 tokens. Review those exact system and user messages before authorizing any model run.
 
+## Preview the chess-native v6 prompts without inference
+
+The chess-native v6 prompt has the same human-approval gate, using its separate Swift export and preview command. Export the eight canonical production-history situations to a fresh ignored directory:
+
+```bash
+COACHING_CHESS_NATIVE_PREVIEW_DIR="$PWD/.coaching-eval/chess-native-prompt-preview/swift-export-v2" \
+xcodebuild test -quiet -scheme ChessTutor \
+  -destination 'platform=iOS Simulator,name=iPad (A16)' \
+  -only-testing:ChessTutorTests/ModelCoachingChessNativePromptExampleTests
+```
+
+Then apply the pinned Qwen3 1.7B chat template and count tokens, without requesting a model response:
+
+```bash
+python3 Tools/CoachingEval/preview_chess_native_prompts.py \
+  --source .coaching-eval/chess-native-prompt-preview/swift-export-v2 \
+  --system-prompt Tools/CoachingEval/prompts/tutor-v6.md \
+  --server .coaching-eval/runtime/b10516/bin/llama-server \
+  --runtime-manifest .coaching-eval/runtime/b10516/runtime-manifest.json \
+  --model .coaching-eval/models/qwen3-1.7b-q4_k_m/Qwen3-1.7B-Q4_K_M.gguf \
+  --model-manifest .coaching-eval/models/qwen3-1.7b-q4_k_m/artifact-manifest.json \
+  --destination .coaching-eval/chess-native-prompt-preview/final
+```
+
+The v6 preview reads the Task 3 manifest only as a role-and-hash control plane. It renders only the file declared as `modelFacingSystemMessage` and the eight ordered files declared as `modelFacingUserMessage`; it never parses or renders `auditOnly` JSON. The narrow runtime client permits only `/health`, `/apply-template`, and `/tokenize`. The immutable packet contains eight complete system/user transcripts and a hash-bound `preview-manifest.json`, with no assistant message, response, reasoning trace, hidden case, generation, scoring, or inference. Every rendered prompt must stay at or below 2,500 tokens; the manifest separately reports how many fall in the preferred 500–1,500-token range. Review these exact transcripts before authorizing any later model completion.
+
 Before any `tutor-v4` pilot inference, run the token-only preflight against all three exact model artifacts. It starts one pinned server at a time, renders and tokenizes the fixed ten visible pilot cases in off and bounded modes, never calls `/completion`, writes one immutable 60-cell manifest, and exits nonzero if any exact prompt exceeds 4,000 tokens:
 
 ```bash
