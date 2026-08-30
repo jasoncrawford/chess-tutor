@@ -91,6 +91,31 @@ final class ModelCoachingNeutralPromptExampleTests: XCTestCase {
         })
     }
 
+    func testEveryRequestPositionMatchesLegallyReplayedCompleteHistory() throws {
+        let requests = ModelCoachingNeutralPromptExamples.fixtures.map {
+            ModelCoachingNeutralRequestBuilder.build(snapshot: $0.snapshot, requestID: $0.id)
+        }
+
+        for request in requests {
+            var replayedState = GameState.startingPosition()
+            for historyMove in request.gameHistory {
+                let legalMove = try XCTUnwrap(
+                    LegalMoveGenerator.allLegalMoves(in: replayedState).first {
+                        ModelCoachingPositionEncoder.canonicalMove($0) == historyMove.canonicalMove
+                    },
+                    "\(request.requestID): \(historyMove.canonicalMove) is not legal in replay order"
+                )
+                replayedState.apply(legalMove)
+            }
+
+            XCTAssertEqual(
+                ModelCoachingPositionEncoder.fen(for: replayedState),
+                request.position.fen,
+                request.requestID
+            )
+        }
+    }
+
     func testArtifactsAreDeterministicAndCarryExactRequestCompilationAndHashes() throws {
         let first = try ModelCoachingNeutralPromptExampleExporter.artifacts()
         let second = try ModelCoachingNeutralPromptExampleExporter.artifacts()
