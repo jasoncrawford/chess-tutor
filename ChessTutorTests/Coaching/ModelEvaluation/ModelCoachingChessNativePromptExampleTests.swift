@@ -72,7 +72,7 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
             ModelCoachingChessNativePromptPreviewManifest.self,
             from: artifacts.manifestJSON
         )
-        XCTAssertEqual(manifest.schemaVersion, "model-coaching-chess-native-preview-manifest.v1")
+        XCTAssertEqual(manifest.schemaVersion, "model-coaching-chess-native-preview-manifest.v2")
         XCTAssertEqual(manifest.promptVersion, "tutor-v6")
         XCTAssertEqual(manifest.requestSchemaVersion, "model-coaching-neutral-request.v1")
         XCTAssertEqual(manifest.contextSchemaVersion, "model-coaching-chess-native-context.v1")
@@ -88,6 +88,45 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
                 userPromptSHA256: $0.userPromptSHA256
             )
         })
+    }
+
+    func testManifestInventoriesAuditOnlyAndModelFacingFilesByRole() throws {
+        let manifest = try JSONDecoder().decode(
+            ModelCoachingChessNativePromptPreviewManifest.self,
+            from: ModelCoachingChessNativePromptExampleExporter.artifacts().manifestJSON
+        )
+        XCTAssertEqual(manifest.schemaVersion, "model-coaching-chess-native-preview-manifest.v2")
+
+        XCTAssertEqual(
+            manifest.declaredFiles,
+            [
+                .init(path: "examples.jsonl", role: .auditOnly),
+                .init(path: "preview-manifest.json", role: .auditOnly),
+                .init(path: "system-prompt.md", role: .modelFacingSystemMessage),
+                .init(path: "user-prompts/01-quiet-help.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/02-attacked-piece.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/03-selected-piece.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/04-replaced-tentative-move.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/05-tactical-reply.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/06-inspected-reply.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/07-answering-check.md", role: .modelFacingUserMessage),
+                .init(path: "user-prompts/08-long-history.md", role: .modelFacingUserMessage),
+            ]
+        )
+        XCTAssertEqual(Set(manifest.declaredFiles.map(\.path)).count, 11)
+        XCTAssertEqual(
+            manifest.declaredFiles.filter { $0.role != .auditOnly }.map(\.path),
+            ["system-prompt.md"] + expectedIDs.map { "user-prompts/\($0).md" }
+        )
+        XCTAssertTrue(
+            manifest.declaredFiles
+                .filter { $0.role != .auditOnly }
+                .allSatisfy { $0.path.hasSuffix(".md") }
+        )
+        XCTAssertEqual(
+            manifest.declaredFiles.first { $0.path == "examples.jsonl" }?.role,
+            .auditOnly
+        )
     }
 
     func testEveryCompleteHistoryReplaysToFENAndTentativeMoveStaysSeparate() throws {
@@ -112,19 +151,43 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
                 record.request.position.fen,
                 record.id
             )
-            XCTAssertTrue(
-                record.compilation.markdown.contains(
-                    "Moves: \(record.request.gameHistory.isEmpty ? "none" : record.request.gameHistory.map(\.displayNotation).joined(separator: " "))"
-                ),
+            let positionLines = try sectionLines(named: "Position", in: record.compilation.markdown)
+            let expectedHistoryLine =
+                "Moves: \(record.request.gameHistory.isEmpty ? "none" : record.request.gameHistory.map(\.displayNotation).joined(separator: " "))"
+            let expectedTentativeLine =
+                "Tentative move: \(record.request.interaction.tentativeMove?.san ?? "none")"
+            XCTAssertEqual(
+                positionLines.filter { $0.hasPrefix("Moves:") },
+                [expectedHistoryLine],
                 record.id
             )
-            XCTAssertTrue(
-                record.compilation.markdown.contains(
-                    "Tentative move: \(record.request.interaction.tentativeMove?.san ?? "none")"
-                ),
+            XCTAssertEqual(
+                positionLines.filter { $0.hasPrefix("Tentative move:") },
+                [expectedTentativeLine],
                 record.id
             )
         }
+    }
+
+    func testExactPositionLineAuditRejectsMergedTentativeMoveMutation() throws {
+        let record = try XCTUnwrap(
+            decodeRecords(ModelCoachingChessNativePromptExampleExporter.artifacts().examplesJSONL)
+                .first { $0.id == "04-replaced-tentative-move" }
+        )
+        let historyLine = "Moves: e4 e5"
+        let tentativeLine = "Tentative move: Nf3"
+        let mutatedMarkdown = record.compilation.markdown.replacingOccurrences(
+            of: historyLine,
+            with: "\(historyLine) Nf3"
+        )
+        let mutatedPositionLines = try sectionLines(named: "Position", in: mutatedMarkdown)
+
+        XCTAssertTrue(mutatedMarkdown.contains(historyLine))
+        XCTAssertNotEqual(mutatedPositionLines.filter { $0.hasPrefix("Moves:") }, [historyLine])
+        XCTAssertEqual(
+            mutatedPositionLines.filter { $0.hasPrefix("Tentative move:") },
+            [tentativeLine]
+        )
     }
 
     func testExportContainsNoNumberedAliasesResponseTraceHiddenOrOracleData() throws {
@@ -136,13 +199,57 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
             + artifacts.userPrompts.values.map { String(decoding: $0, as: UTF8.self) }.joined()
 
         XCTAssertNil(sourceText.range(of: aliasPattern, options: .regularExpression))
-        XCTAssertFalse(sourceText.lowercased().contains("hidden"))
+        XCTAssertNil(ModelCoachingChessNativePromptArtifactAudit.hiddenIdentifier(in: sourceText))
         XCTAssertFalse(sourceText.lowercased().contains("oracle"))
 
         let records = try jsonValues(inJSONL: artifacts.examplesJSONL)
         let manifest = try JSONSerialization.jsonObject(with: artifacts.manifestJSON)
         assertNoForbiddenKeys(in: records)
         assertNoForbiddenKeys(in: manifest)
+    }
+
+    func testHiddenIdentifierAuditDetectsLiteralKnownAndPatternMutations() {
+        let mutations = [
+            "HIDDEN-case",
+            "t1OutsidePawnMove",
+            "t3WrongAttacker",
+            "t7UnsafeCapture",
+            "t12WrongChecker",
+            "t99WrongChecker",
+        ]
+
+        for mutation in mutations {
+            XCTAssertNotNil(
+                ModelCoachingChessNativePromptArtifactAudit.hiddenIdentifier(
+                    in: "{\"id\":\"\(mutation)\"}"
+                ),
+                mutation
+            )
+        }
+    }
+
+    func testModelFacingUserPromptsUnconditionallyOmitConclusionBearingProse() throws {
+        let artifacts = try ModelCoachingChessNativePromptExampleExporter.artifacts()
+
+        for (fileName, data) in artifacts.userPrompts {
+            XCTAssertNil(
+                ModelCoachingChessNativePromptArtifactAudit.conclusionBearingPhrase(
+                    in: String(decoding: data, as: UTF8.self)
+                ),
+                fileName
+            )
+        }
+    }
+
+    func testConclusionBearingAuditDetectsEveryForbiddenPhraseMutation() {
+        for phrase in ModelCoachingChessNativePromptArtifactAudit.conclusionBearingPhrases {
+            XCTAssertEqual(
+                ModelCoachingChessNativePromptArtifactAudit.conclusionBearingPhrase(
+                    in: "Authored conclusion: \(phrase)."
+                ),
+                phrase
+            )
+        }
     }
 
     func testExample06IsCompactAndOmitsDownstreamRelationships() throws {
@@ -198,6 +305,33 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outputURL.path), ["existing.txt"])
     }
 
+    func testWriterProducesRelativeInventoryFromAbsoluteSymlinkedTemporaryPath() throws {
+        let outputURL = URL(
+            fileURLWithPath: "/tmp/chess-native-preview-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        try ModelCoachingChessNativePromptExampleExporter.write(to: outputURL)
+
+        XCTAssertEqual(
+            try relativeFilePaths(in: outputURL),
+            [
+                "examples.jsonl",
+                "preview-manifest.json",
+                "system-prompt.md",
+                "user-prompts/01-quiet-help.md",
+                "user-prompts/02-attacked-piece.md",
+                "user-prompts/03-selected-piece.md",
+                "user-prompts/04-replaced-tentative-move.md",
+                "user-prompts/05-tactical-reply.md",
+                "user-prompts/06-inspected-reply.md",
+                "user-prompts/07-answering-check.md",
+                "user-prompts/08-long-history.md",
+            ]
+        )
+    }
+
     func testOptInWriterProducesExactlyElevenDeclaredByteIdenticalFiles() throws {
         let artifacts = try ModelCoachingChessNativePromptExampleExporter.artifacts()
         guard let outputPath = configuredValue(
@@ -235,19 +369,11 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
         )
         XCTAssertEqual(try Data(contentsOf: outputURL.appendingPathComponent("system-prompt.md")), artifacts.systemPrompt)
 
-        let conclusionBearingPhrases = [
-            "best", "useful", "important", "purpose", "needs help", "looks safe",
-            "what to teach", "selected move ideas", "danger scan", "safe captures",
-        ]
         for (fileName, expectedData) in artifacts.userPrompts {
             let exportedData = try Data(
                 contentsOf: outputURL.appendingPathComponent("user-prompts/\(fileName)")
             )
             XCTAssertEqual(exportedData, expectedData)
-            let prompt = String(decoding: exportedData, as: UTF8.self).lowercased()
-            for phrase in conclusionBearingPhrases {
-                XCTAssertFalse(prompt.contains(phrase), "\(fileName) contains \(phrase)")
-            }
         }
     }
 
@@ -266,6 +392,15 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
         try String(decoding: data, as: UTF8.self)
             .split(separator: "\n")
             .map { try JSONSerialization.jsonObject(with: Data($0.utf8)) }
+    }
+
+    private func sectionLines(named heading: String, in markdown: String) throws -> [String] {
+        let lines = markdown.components(separatedBy: "\n")
+        let headingIndex = try XCTUnwrap(lines.firstIndex(of: "## \(heading)"))
+        let nextHeadingIndex = lines[(headingIndex + 1)...]
+            .firstIndex { $0.hasPrefix("## ") }
+            ?? lines.endIndex
+        return lines[(headingIndex + 1)..<nextHeadingIndex].filter { !$0.isEmpty }
     }
 
     private func assertNoForbiddenKeys(
@@ -312,19 +447,23 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
     }
 
     private func relativeFilePaths(in directory: URL) throws -> [String] {
+        let normalizedDirectory = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let normalizedDirectoryPrefix = normalizedDirectory.path + "/"
         let keys: [URLResourceKey] = [.isRegularFileKey]
         let enumerator = try XCTUnwrap(
             FileManager.default.enumerator(
-                at: directory,
+                at: normalizedDirectory,
                 includingPropertiesForKeys: keys
             )
         )
         return try enumerator.compactMap { element -> String? in
             let url = try XCTUnwrap(element as? URL)
+                .standardizedFileURL
+                .resolvingSymlinksInPath()
             guard try url.resourceValues(forKeys: Set(keys)).isRegularFile == true else {
                 return nil
             }
-            return String(url.path.dropFirst(directory.path.count + 1))
+            return String(try XCTUnwrap(url.path.removingPrefix(normalizedDirectoryPrefix)))
         }.sorted()
     }
 
@@ -334,6 +473,42 @@ final class ModelCoachingChessNativePromptExampleTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+}
+
+enum ModelCoachingChessNativePromptArtifactAudit {
+    static let conclusionBearingPhrases = [
+        "best",
+        "useful",
+        "important",
+        "purpose",
+        "needs help",
+        "looks safe",
+        "what to teach",
+        "selected move ideas",
+        "danger scan",
+        "safe captures",
+    ]
+
+    private static let legacyHiddenIdentifierPattern =
+        #"t[0-9]+(?:OutsidePawnMove|WrongAttacker|UnsafeCapture|WrongChecker)"#
+
+    static func hiddenIdentifier(in text: String) -> String? {
+        if let range = text.range(of: "hidden", options: .caseInsensitive) {
+            return String(text[range])
+        }
+        guard let range = text.range(
+            of: legacyHiddenIdentifierPattern,
+            options: [.regularExpression, .caseInsensitive]
+        ) else {
+            return nil
+        }
+        return String(text[range])
+    }
+
+    static func conclusionBearingPhrase(in text: String) -> String? {
+        let lowered = text.lowercased()
+        return conclusionBearingPhrases.first { lowered.contains($0) }
     }
 }
 
@@ -357,6 +532,17 @@ struct ModelCoachingChessNativePromptPreviewManifest: Codable, Equatable {
         let userPromptSHA256: String
     }
 
+    struct DeclaredFile: Codable, Equatable {
+        enum Role: String, Codable, Equatable {
+            case auditOnly
+            case modelFacingSystemMessage
+            case modelFacingUserMessage
+        }
+
+        let path: String
+        let role: Role
+    }
+
     let schemaVersion: String
     let promptVersion: String
     let requestSchemaVersion: String
@@ -365,6 +551,7 @@ struct ModelCoachingChessNativePromptPreviewManifest: Codable, Equatable {
     let systemPromptSHA256: String
     let examplesJSONLSHA256: String
     let examples: [Example]
+    let declaredFiles: [DeclaredFile]
 }
 
 struct ModelCoachingChessNativePromptExampleArtifacts: Equatable {
@@ -419,7 +606,7 @@ enum ModelCoachingChessNativePromptExampleExporter {
 
         let examplesJSONL = try jsonl(records)
         let manifest = ModelCoachingChessNativePromptPreviewManifest(
-            schemaVersion: "model-coaching-chess-native-preview-manifest.v1",
+            schemaVersion: "model-coaching-chess-native-preview-manifest.v2",
             promptVersion: "tutor-v6",
             requestSchemaVersion: "model-coaching-neutral-request.v1",
             contextSchemaVersion: "model-coaching-chess-native-context.v1",
@@ -434,7 +621,8 @@ enum ModelCoachingChessNativePromptExampleExporter {
                     systemPromptSHA256: $0.systemPromptSHA256,
                     userPromptSHA256: $0.userPromptSHA256
                 )
-            }
+            },
+            declaredFiles: declaredFiles(for: records)
         )
         var manifestJSON = try sortedJSON(manifest)
         manifestJSON.append(0x0A)
@@ -449,6 +637,7 @@ enum ModelCoachingChessNativePromptExampleExporter {
 
     static func write(to outputURL: URL) throws {
         let fileManager = FileManager.default
+        let outputURL = outputURL.standardizedFileURL.resolvingSymlinksInPath()
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
             guard isDirectory.boolValue else {
@@ -493,6 +682,18 @@ enum ModelCoachingChessNativePromptExampleExporter {
         repositoryRoot.appendingPathComponent("Tools/CoachingEval/prompts/tutor-v6.md")
     }
 
+    private static func declaredFiles(
+        for records: [ModelCoachingChessNativePromptExampleRecord]
+    ) -> [ModelCoachingChessNativePromptPreviewManifest.DeclaredFile] {
+        [
+            .init(path: "examples.jsonl", role: .auditOnly),
+            .init(path: "preview-manifest.json", role: .auditOnly),
+            .init(path: "system-prompt.md", role: .modelFacingSystemMessage),
+        ] + records.map {
+            .init(path: "user-prompts/\($0.fileName)", role: .modelFacingUserMessage)
+        }
+    }
+
     private static func jsonl<T: Encodable>(_ values: [T]) throws -> Data {
         var data = Data()
         for value in values {
@@ -510,5 +711,12 @@ enum ModelCoachingChessNativePromptExampleExporter {
 
     private static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+private extension String {
+    func removingPrefix(_ prefix: String) -> String? {
+        guard hasPrefix(prefix) else { return nil }
+        return String(dropFirst(prefix.count))
     }
 }
