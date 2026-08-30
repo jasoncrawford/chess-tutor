@@ -94,6 +94,11 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
+            key = "COACHING_CHESS_NATIVE_PREVIEW_DIR"
+            value = "$(COACHING_CHESS_NATIVE_PREVIEW_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
             key = "COACHING_EVAL_OUTPUT_DIR"
             value = "$(COACHING_EVAL_OUTPUT_DIR)"
             isEnabled = "YES">
