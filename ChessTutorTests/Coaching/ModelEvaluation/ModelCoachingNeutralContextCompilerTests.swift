@@ -55,6 +55,44 @@ final class ModelCoachingNeutralContextCompilerTests: XCTestCase {
         }
     }
 
+    func testNoSelectionIncludesOpponentAttackOnLearnersOccupiedPiece() throws {
+        let attackID = "relationship:attack:piece:black:pawn:e4->piece:white:knight:f3"
+        let request = ModelCoachingNeutralRequestBuilder.build(
+            snapshot: ModelCoachingNeutralSnapshot(
+                committedState: state(
+                    sideToMove: .white,
+                    pieces: [
+                        square("g1"): Piece(kind: .king, color: .white),
+                        square("f3"): Piece(kind: .knight, color: .white),
+                        square("h8"): Piece(kind: .king, color: .black),
+                        square("e4"): Piece(kind: .pawn, color: .black),
+                    ]
+                ),
+                learner: .white,
+                positionRevision: 1,
+                selectedSquare: nil,
+                tentativeMove: nil,
+                latestEvent: event(1, .helpOpened),
+                episodeEvents: [event(1, .helpOpened)]
+            ),
+            requestID: "neutral-attacked-knight"
+        )
+        XCTAssertTrue(request.occupiedSquareRelationships.contains { $0.id == attackID })
+
+        let compilation = ModelCoachingNeutralContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v5"
+        )
+        let attackAlias = try alias(for: attackID, in: compilation)
+
+        XCTAssertTrue(
+            compilation.markdown.contains(
+                "\(attackAlias) (Black pawn on e4 attacks White knight on f3)"
+            )
+        )
+        XCTAssertFalse(compilation.markdown.contains("relationship:attack:"))
+    }
+
     func testSelectionScopeIncludesOnlySelectedPieceMovesAndRelatedRelationships() throws {
         let knight = square("f3")
         let knightID = "piece:white:knight:f3"

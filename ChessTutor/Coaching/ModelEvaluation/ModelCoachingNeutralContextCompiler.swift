@@ -227,15 +227,8 @@ enum ModelCoachingNeutralContextCompiler {
                 .filter { !$0.hasPrefix("action:") }
         )
 
-        let learnerColor = request.position.sideToMove
-        let opposingColor = learnerColor == "white" ? "black" : "white"
-
         request.occupiedSquareRelationships
-            .filter { relationship in
-                relationship.kind == .attacks
-                    && pieceColor(for: relationship.sourcePieceReference) == learnerColor
-                    && pieceColor(for: relationship.targetPieceReference) == opposingColor
-            }
+            .filter { $0.kind == .attacks }
             .forEach { stableIDs.insert($0.id) }
 
         request.legalMoves
@@ -396,14 +389,8 @@ enum ModelCoachingNeutralContextCompiler {
         pieceByID: [String: ModelCoachingNeutralPiece],
         relationshipByID: [String: ModelCoachingNeutralRelationship]
     ) -> String {
-        let learnerColor = request.position.sideToMove
-        let opposingColor = learnerColor == "white" ? "black" : "white"
         let relationships = request.occupiedSquareRelationships
-            .filter { relationship in
-                relationship.kind == .attacks
-                    && pieceColor(for: relationship.sourcePieceReference) == learnerColor
-                    && pieceColor(for: relationship.targetPieceReference) == opposingColor
-            }
+            .filter { $0.kind == .attacks }
             .sorted { $0.id < $1.id }
 
         return relationshipCategoryLine(
@@ -608,12 +595,6 @@ enum ModelCoachingNeutralContextCompiler {
 
     private static func actionLabel(for stableID: String) -> String {
         stableID.split(separator: ":", maxSplits: 1).last.map(String.init) ?? stableID
-    }
-
-    private static func pieceColor(for pieceID: String) -> String? {
-        let parts = pieceID.split(separator: ":")
-        guard parts.count >= 4, parts[0] == "piece" else { return nil }
-        return String(parts[1])
     }
 
     private static func inspectedReplyID(in request: ModelCoachingNeutralRequest) -> String? {
