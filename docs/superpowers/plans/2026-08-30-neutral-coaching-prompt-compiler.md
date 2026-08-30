@@ -264,6 +264,7 @@ git commit -m "feat: compile neutral coaching markdown"
 
 **Files:**
 - Create: `Tools/CoachingEval/prompts/tutor-v5.md`
+- Modify: `ChessTutor/Coaching/ModelEvaluation/ModelCoachingNeutralContracts.swift`
 - Create: `ChessTutor/Coaching/ModelEvaluation/ModelCoachingNeutralTurnValidator.swift`
 - Create: `ChessTutorTests/Coaching/ModelEvaluation/ModelCoachingNeutralTurnValidatorTests.swift`
 - Create: `Tools/CoachingEval/tests/test_tutor_v5_prompt.py`
@@ -337,6 +338,7 @@ Expected: both commands pass with zero failures/skips.
 
 ```bash
 git add Tools/CoachingEval/prompts/tutor-v5.md \
+  ChessTutor/Coaching/ModelEvaluation/ModelCoachingNeutralContracts.swift \
   ChessTutor/Coaching/ModelEvaluation/ModelCoachingNeutralTurnValidator.swift \
   ChessTutorTests/Coaching/ModelEvaluation/ModelCoachingNeutralTurnValidatorTests.swift \
   Tools/CoachingEval/tests/test_tutor_v5_prompt.py
