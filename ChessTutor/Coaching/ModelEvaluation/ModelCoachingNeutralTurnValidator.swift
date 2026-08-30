@@ -82,3 +82,58 @@ enum ModelCoachingNeutralTurnValidator {
         message.split(whereSeparator: { $0.isWhitespace }).count
     }
 }
+
+enum ModelCoachingNeutralTurnDecodingError: Error, Equatable {
+    case invalidTopLevelObject
+    case additionalProperties([String])
+    case invalidTurnJSON
+    case validationFailed([String])
+}
+
+enum ModelCoachingNeutralTurnDecoder {
+    private static let allowedProperties: Set<String> = [
+        "message",
+        "actions",
+        "focus",
+    ]
+
+    static func decodeAndValidate(
+        _ data: Data,
+        compilation: ModelCoachingNeutralContextCompilation
+    ) throws -> ModelCoachingNeutralTurn {
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw ModelCoachingNeutralTurnDecodingError.invalidTurnJSON
+        }
+
+        guard let dictionary = object as? [String: Any] else {
+            throw ModelCoachingNeutralTurnDecodingError.invalidTopLevelObject
+        }
+
+        let unknownProperties = Set(dictionary.keys)
+            .subtracting(allowedProperties)
+            .sorted()
+        guard unknownProperties.isEmpty else {
+            throw ModelCoachingNeutralTurnDecodingError.additionalProperties(unknownProperties)
+        }
+
+        let turn: ModelCoachingNeutralTurn
+        do {
+            turn = try JSONDecoder().decode(ModelCoachingNeutralTurn.self, from: data)
+        } catch {
+            throw ModelCoachingNeutralTurnDecodingError.invalidTurnJSON
+        }
+
+        let issues = ModelCoachingNeutralTurnValidator.issues(
+            for: turn,
+            compilation: compilation
+        )
+        guard issues.isEmpty else {
+            throw ModelCoachingNeutralTurnDecodingError.validationFailed(issues)
+        }
+
+        return turn
+    }
+}

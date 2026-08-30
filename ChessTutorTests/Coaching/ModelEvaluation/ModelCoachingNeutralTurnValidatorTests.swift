@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import ChessTutor
 
@@ -150,6 +151,98 @@ final class ModelCoachingNeutralTurnValidatorTests: XCTestCase {
             ModelCoachingNeutralTurnValidator.issues(for: turn, compilation: compilation),
             ["Unknown focus alias: action-1."]
         )
+    }
+
+    func testDecoderAcceptsExactThreeFieldObject() throws {
+        let compilation = compilation(
+            bindings: [
+                binding("action-1", category: .action),
+                binding("piece-1", category: .piece),
+            ]
+        )
+        let data = Data(
+            #"{"message":"What do you notice?","actions":["action-1"],"focus":["piece-1"]}"#.utf8
+        )
+
+        XCTAssertEqual(
+            try ModelCoachingNeutralTurnDecoder.decodeAndValidate(
+                data,
+                compilation: compilation
+            ),
+            ModelCoachingNeutralTurn(
+                message: "What do you notice?",
+                actions: ["action-1"],
+                focus: ["piece-1"]
+            )
+        )
+    }
+
+    func testDecoderRejectsMalformedJSON() {
+        let data = Data(#"{"message":"What do you notice?""#.utf8)
+
+        XCTAssertThrowsError(
+            try ModelCoachingNeutralTurnDecoder.decodeAndValidate(
+                data,
+                compilation: compilation()
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? ModelCoachingNeutralTurnDecodingError,
+                .invalidTurnJSON
+            )
+        }
+    }
+
+    func testDecoderRejectsNonObjectJSON() {
+        let data = Data(#"["What do you notice?"]"#.utf8)
+
+        XCTAssertThrowsError(
+            try ModelCoachingNeutralTurnDecoder.decodeAndValidate(
+                data,
+                compilation: compilation()
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? ModelCoachingNeutralTurnDecodingError,
+                .invalidTopLevelObject
+            )
+        }
+    }
+
+    func testDecoderRejectsUnknownExtraFields() {
+        let data = Data(
+            #"{"message":"What do you notice?","actions":[],"focus":[],"reasoning":"private","analysis":"private"}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try ModelCoachingNeutralTurnDecoder.decodeAndValidate(
+                data,
+                compilation: compilation()
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? ModelCoachingNeutralTurnDecodingError,
+                .additionalProperties(["analysis", "reasoning"])
+            )
+        }
+    }
+
+    func testDecoderAppliesMechanicalValidation() {
+        let data = Data(
+            #"{"message":"What do you notice?","actions":["action-99"],"focus":[]}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try ModelCoachingNeutralTurnDecoder.decodeAndValidate(
+                data,
+                compilation: compilation()
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? ModelCoachingNeutralTurnDecodingError,
+                .validationFailed(["Unknown action alias: action-99."])
+            )
+        }
     }
 
     private func compilation(
