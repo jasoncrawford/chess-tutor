@@ -228,20 +228,23 @@ class ChessNativePromptPreviewTests(unittest.TestCase):
                     system.read_text(encoding="utf-8"), user
                 )
                 transcript = transcript_path.read_bytes()
+                expected_transcript = (
+                    f"# Chess-native coaching prompt: {source_example['id']}\n\n"
+                    "## System message\n\n"
+                    f"{system.read_text(encoding='utf-8')}\n"
+                    "## User message\n\n"
+                    f"{user}\n"
+                ).encode("utf-8")
                 self.assertEqual(source_example["id"], cell["id"])
                 self.assertEqual(source_example["requestSHA256"], cell["requestSHA256"])
                 self.assertEqual(manifest["systemPromptSHA256"], cell["systemPromptSHA256"])
                 self.assertEqual(source_example["userPromptSHA256"], cell["userPromptSHA256"])
                 self.assertEqual(sha256(rendered.encode("utf-8")), cell["renderedPromptSHA256"])
                 self.assertEqual(640, cell["renderedPromptTokens"])
+                self.assertEqual(expected_transcript, transcript)
                 self.assertEqual(sha256(transcript), cell["transcriptSHA256"])
-                transcript_text = transcript.decode("utf-8")
                 self.assertEqual(system.read_text(), render_call["system_prompt"])
                 self.assertEqual(user, render_call["user_content"])
-                self.assertIn("## System message\n\n" + system.read_text(), transcript_text)
-                self.assertIn("## User message\n\n" + user, transcript_text)
-                self.assertNotIn("## Assistant", transcript_text)
-                self.assertNotIn("<think>", transcript_text)
 
             artifact_text = "\n".join(
                 path.read_text(encoding="utf-8")
