@@ -153,6 +153,7 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(request.interaction.tentativeMove?.id, "move:f1-e2")
+        XCTAssertEqual(request.interaction.tentativeMove?.san, "Be2")
         XCTAssertTrue(request.interaction.tentativeMove?.isLegal ?? false)
         XCTAssertFalse(request.interaction.tentativeMove?.givesCheck ?? true)
         XCTAssertFalse(request.interaction.tentativeMove?.givesCheckmate ?? true)

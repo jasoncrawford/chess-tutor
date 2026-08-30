@@ -96,7 +96,7 @@ enum ModelCoachingNeutralRequestBuilder {
 
         return ModelCoachingNeutralMove(
             id: ModelCoachingPositionEncoder.moveID(move),
-            san: notation(for: move, in: state),
+            san: MoveHistoryFormatter.notation(for: move, in: state),
             canonicalMove: ModelCoachingPositionEncoder.canonicalMove(move),
             sourcePieceReference: ModelCoachingPositionEncoder.pieceID(sourcePiece, at: move.from),
             destinationSquare: ModelCoachingPositionEncoder.squareName(move.to),
@@ -267,13 +267,5 @@ enum ModelCoachingNeutralRequestBuilder {
         case nil:
             return "none"
         }
-    }
-
-    private static func notation(
-        for move: Move,
-        in state: GameState
-    ) -> String {
-        MoveHistoryFormatter.notation(for: state.moveHistory + [move]).last
-            ?? ModelCoachingPositionEncoder.canonicalMove(move)
     }
 }

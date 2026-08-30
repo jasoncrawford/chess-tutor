@@ -18,28 +18,7 @@ enum MoveHistoryFormatter {
         notationByMove(for: moves)
     }
 
-    static func rows(for moves: [Move]) -> [MoveHistoryRow] {
-        let notation = notationByMove(for: moves)
-
-        return stride(from: 0, to: moves.count, by: 2).map { index in
-            MoveHistoryRow(
-                number: (index / 2) + 1,
-                whiteMove: notation[index],
-                blackMove: notation.indices.contains(index + 1) ? notation[index + 1] : nil
-            )
-        }
-    }
-
-    private static func notationByMove(for moves: [Move]) -> [String] {
-        var state = GameState.startingPosition()
-        return moves.map { move in
-            let notation = notation(for: move, in: state)
-            state.apply(move)
-            return notation
-        }
-    }
-
-    private static func notation(for move: Move, in state: GameState) -> String {
+    static func notation(for move: Move, in state: GameState) -> String {
         switch move.special {
         case .castleKingside:
             return "O-O\(checkSuffix(after: move, in: state))"
@@ -62,6 +41,27 @@ enum MoveHistoryFormatter {
         let promotion = promotionSuffix(for: move.special)
 
         return "\(piecePrefix)\(disambiguation)\(capture)\(move.to.notation)\(promotion)\(checkSuffix(after: move, in: state))"
+    }
+
+    static func rows(for moves: [Move]) -> [MoveHistoryRow] {
+        let notation = notationByMove(for: moves)
+
+        return stride(from: 0, to: moves.count, by: 2).map { index in
+            MoveHistoryRow(
+                number: (index / 2) + 1,
+                whiteMove: notation[index],
+                blackMove: notation.indices.contains(index + 1) ? notation[index + 1] : nil
+            )
+        }
+    }
+
+    private static func notationByMove(for moves: [Move]) -> [String] {
+        var state = GameState.startingPosition()
+        return moves.map { move in
+            let notation = notation(for: move, in: state)
+            state.apply(move)
+            return notation
+        }
     }
 
     private static func disambiguation(for move: Move, piece: Piece, in state: GameState) -> String {
