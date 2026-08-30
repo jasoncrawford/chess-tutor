@@ -128,9 +128,14 @@ def write_synthetic_source(root):
     }
 
 
-def write_synthetic_provenance_files(root):
+def write_synthetic_provenance_files(
+    root,
+    *,
+    model_id="smollm3-3b-q4_k_m",
+    filename="SmolLM3-Q4_K_M.gguf",
+):
     model_bytes = b"synthetic-smollm3-artifact"
-    model_path = root / "models" / "SmolLM3-Q4_K_M.gguf"
+    model_path = root / "models" / filename
     model_path.parent.mkdir(parents=True)
     model_path.write_bytes(model_bytes)
     revision = "1" * 40
@@ -138,7 +143,7 @@ def write_synthetic_provenance_files(root):
         "bytes": len(model_bytes),
         "filename": model_path.name,
         "license": "Apache-2.0",
-        "modelID": "smollm3-3b-q4_k_m",
+        "modelID": model_id,
         "repository": "synthetic/test-only",
         "requestedRevision": "main",
         "resolvedRevision": revision,
@@ -666,6 +671,113 @@ class ChessNativePilotRunnerTests(unittest.TestCase):
                 provenance,
             )
 
+    def test_qwen_candidate_validates_its_artifact_and_persists_its_identity(self):
+        runner = load_runner(self)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture = write_synthetic_provenance_files(
+                root,
+                model_id="qwen3-1.7b-q4_k_m",
+                filename="Qwen3-1.7B-Q4_K_M.gguf",
+            )
+            candidate = runner.ModelCandidate(
+                identifier="qwen3-1.7b-q4_k_m",
+                display_name="Qwen3 1.7B",
+                filename="Qwen3-1.7B-Q4_K_M.gguf",
+                artifact_sha256=sha256(fixture["modelBytes"]),
+                artifact_bytes=len(fixture["modelBytes"]),
+                manifest_sha256=fixture["modelManifestSHA256"],
+                resolved_revision=fixture["revision"],
+            )
+            runtime_record = {
+                "sourceTag": "b10516",
+                "sourceCommit": fixture["runtimeCommit"],
+                "binarySHA256": fixture["runtimeBinarySHA256"],
+                "versionOutput": "synthetic version output",
+            }
+            with mock.patch.multiple(
+                runner,
+                RUNTIME_SOURCE_TAG="b10516",
+                RUNTIME_SOURCE_COMMIT=fixture["runtimeCommit"],
+                RUNTIME_BINARY_SHA256=fixture["runtimeBinarySHA256"],
+                RUNTIME_MANIFEST_SHA256=fixture["runtimeManifestSHA256"],
+            ), mock.patch.object(
+                runner.runtime_provenance,
+                "verify_runtime",
+                return_value=runtime_record,
+            ):
+                verified = runner._pinned_provenance(
+                    candidate=candidate,
+                    model_path=fixture["modelPath"],
+                    model_manifest_path=fixture["modelManifestPath"],
+                    server_path=fixture["serverPath"],
+                    runtime_manifest_path=fixture["runtimeManifestPath"],
+                )
+
+            provenance = {
+                **verified,
+                "runtimeSourceTag": "b10516",
+                "runtimeSourceCommit": (
+                    "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9"
+                ),
+                "runtimeBinarySHA256": (
+                    "fa65f946a434fcb34de87520ab76a3f2d576f97ad9f5a81b3a6e4201daff137e"
+                ),
+                "runtimeManifestSHA256": (
+                    "27a5ebb2a0e3beee2c407e58173f1397ec183970cb721f0a5bf8be871340205b"
+                ),
+                "runtimeVersion": (
+                    "version: 0.1.2-dev (build 10516, commit b95502ba9a)"
+                ),
+                "serverCommand": ["fake-llama-server", "--test-only"],
+                "pilotCommand": ["python3", "run_chess_native_pilot.py", "--test-only"],
+            }
+            destination = root / "qwen-pilot"
+            manifest, _fixture = self.run_pilot(
+                root / "source",
+                destination,
+                RecordingPilotClient(),
+                candidate=candidate,
+                provenance=provenance,
+            )
+
+            self.assertEqual("qwen3-1.7b-q4_k_m", verified["modelID"])
+            self.assertEqual(
+                "qwen3-1.7b-q4_k_m", manifest["provenance"]["modelID"]
+            )
+            record = json.loads(
+                (destination / "records" / "01-quiet-help.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                "qwen3-1.7b-q4_k_m", record["provenance"]["modelID"]
+            )
+
+    def test_qwen_candidate_rejects_an_artifact_manifest_for_smollm3(self):
+        runner = load_runner(self)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture = write_synthetic_provenance_files(root)
+            candidate = runner.ModelCandidate(
+                identifier="qwen3-1.7b-q4_k_m",
+                display_name="Qwen3 1.7B",
+                filename="Qwen3-1.7B-Q4_K_M.gguf",
+                artifact_sha256=sha256(fixture["modelBytes"]),
+                artifact_bytes=len(fixture["modelBytes"]),
+                manifest_sha256=fixture["modelManifestSHA256"],
+                resolved_revision=fixture["revision"],
+            )
+
+            with self.assertRaisesRegex(ValueError, "Qwen3 1.7B artifact manifest"):
+                runner._pinned_provenance(
+                    candidate=candidate,
+                    model_path=fixture["modelPath"],
+                    model_manifest_path=fixture["modelManifestPath"],
+                    server_path=fixture["serverPath"],
+                    runtime_manifest_path=fixture["runtimeManifestPath"],
+                )
+
     def test_main_uses_one_server_and_persists_exact_cli_commands(self):
         runner = load_runner(self)
         with tempfile.TemporaryDirectory() as temporary:
@@ -726,6 +838,78 @@ class ChessNativePilotRunnerTests(unittest.TestCase):
                  "recordCount": 8, "validCount": 8},
                 json.loads(stdout.getvalue()),
             )
+
+    def test_main_selects_qwen_and_resolves_its_pinned_default_artifact_paths(self):
+        runner = load_runner(self)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture = write_synthetic_source(root)
+            destination = root / "pilot"
+            artifact_root = root / "artifacts"
+            candidate = runner.QWEN3_1_7B_CANDIDATE
+            qwen_provenance = {
+                **exact_verified_provenance(),
+                "modelID": candidate.identifier,
+                "modelArtifactSHA256": candidate.artifact_sha256,
+                "modelArtifactBytes": candidate.artifact_bytes,
+                "modelArtifactManifestSHA256": candidate.manifest_sha256,
+                "modelResolvedRevision": candidate.resolved_revision,
+            }
+            argv = [
+                "--candidate",
+                candidate.identifier,
+                "--source",
+                str(fixture["source"]),
+                "--system-prompt",
+                str(fixture["systemPath"]),
+                "--destination",
+                str(destination),
+                "--timeout",
+                "41",
+            ]
+            FakeLlamaServer.instances = []
+            with synthetic_source_pins(runner, fixture), mock.patch.object(
+                runner, "ARTIFACT_ROOT", artifact_root
+            ), mock.patch.object(
+                runner,
+                "_pinned_provenance",
+                return_value=qwen_provenance,
+            ) as provenance_call, mock.patch.object(
+                runner.llama_server, "LlamaServer", FakeLlamaServer
+            ), mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                exit_code = runner.main(argv)
+
+            self.assertEqual(0, exit_code, stdout.getvalue())
+            expected_model = (
+                artifact_root
+                / "models"
+                / candidate.identifier
+                / candidate.filename
+            )
+            expected_manifest = (
+                artifact_root
+                / "models"
+                / candidate.identifier
+                / "artifact-manifest.json"
+            )
+            server = FakeLlamaServer.instances[0]
+            self.assertEqual(expected_model, server.model_path)
+            provenance_call.assert_called_once_with(
+                candidate=candidate,
+                model_path=expected_model,
+                model_manifest_path=expected_manifest,
+                server_path=artifact_root / "runtime" / "b10516" / "bin" / "llama-server",
+                runtime_manifest_path=(
+                    artifact_root
+                    / "runtime"
+                    / "b10516"
+                    / "runtime-manifest.json"
+                ),
+            )
+            manifest = json.loads(
+                (destination / "run-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(candidate.identifier, manifest["provenance"]["modelID"])
 
     def test_refuses_overwrite_before_calling_client(self):
         with tempfile.TemporaryDirectory() as temporary:

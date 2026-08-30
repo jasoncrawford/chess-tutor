@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import chess_native_response
@@ -23,7 +24,49 @@ TOOLS_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = TOOLS_DIR.parents[1]
 ARTIFACT_ROOT = REPOSITORY_ROOT / ".coaching-eval"
 
-MODEL_ID = "smollm3-3b-q4_k_m"
+@dataclass(frozen=True)
+class ModelCandidate:
+    identifier: str
+    display_name: str
+    filename: str
+    artifact_sha256: str
+    artifact_bytes: int
+    manifest_sha256: str
+    resolved_revision: str
+
+
+SMOLLM3_CANDIDATE = ModelCandidate(
+    identifier="smollm3-3b-q4_k_m",
+    display_name="SmolLM3 3B",
+    filename="SmolLM3-Q4_K_M.gguf",
+    artifact_sha256=(
+        "8334b850b7bd46238c16b0c550df2138f0889bf433809008cc17a8b05761863e"
+    ),
+    artifact_bytes=1915305312,
+    manifest_sha256=(
+        "3037744008c5c6c656294b7998c78727dde2adfcf89bd186dee85116ef4c8bcf"
+    ),
+    resolved_revision="4965cb60b150737b68a0408c36aeefb65078f894",
+)
+QWEN3_1_7B_CANDIDATE = ModelCandidate(
+    identifier="qwen3-1.7b-q4_k_m",
+    display_name="Qwen3 1.7B",
+    filename="Qwen3-1.7B-Q4_K_M.gguf",
+    artifact_sha256=(
+        "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5"
+    ),
+    artifact_bytes=1282439264,
+    manifest_sha256=(
+        "41861a9d9ce876085d78994a2c099e0b7c8dce0d024a747d938c20e87ce6bb73"
+    ),
+    resolved_revision="daeb8e2d528a760970442092f6bf1e55c3b659eb",
+)
+MODEL_CANDIDATES = {
+    candidate.identifier: candidate
+    for candidate in (SMOLLM3_CANDIDATE, QWEN3_1_7B_CANDIDATE)
+}
+
+MODEL_ID = SMOLLM3_CANDIDATE.identifier
 PROMPT_VERSION = "tutor-v6"
 MODE = "bounded"
 SEED = 1103
@@ -52,14 +95,10 @@ EXAMPLES_JSONL_SHA256 = (
 SYSTEM_PROMPT_SHA256 = (
     "0f434c5a7b4889442fc74f5846037d96a2332e479809e68790ee6dcebc1a6051"
 )
-MODEL_ARTIFACT_SHA256 = (
-    "8334b850b7bd46238c16b0c550df2138f0889bf433809008cc17a8b05761863e"
-)
-MODEL_ARTIFACT_BYTES = 1915305312
-MODEL_MANIFEST_SHA256 = (
-    "3037744008c5c6c656294b7998c78727dde2adfcf89bd186dee85116ef4c8bcf"
-)
-MODEL_RESOLVED_REVISION = "4965cb60b150737b68a0408c36aeefb65078f894"
+MODEL_ARTIFACT_SHA256 = SMOLLM3_CANDIDATE.artifact_sha256
+MODEL_ARTIFACT_BYTES = SMOLLM3_CANDIDATE.artifact_bytes
+MODEL_MANIFEST_SHA256 = SMOLLM3_CANDIDATE.manifest_sha256
+MODEL_RESOLVED_REVISION = SMOLLM3_CANDIDATE.resolved_revision
 RUNTIME_SOURCE_TAG = "b10516"
 RUNTIME_SOURCE_COMMIT = "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9"
 RUNTIME_BINARY_SHA256 = (
@@ -149,15 +188,28 @@ def _validate_command(value, *, field):
         raise ValueError(f"Pilot provenance has an invalid {field}")
 
 
-def _validate_provenance(provenance):
+def _default_candidate():
+    return ModelCandidate(
+        identifier=MODEL_ID,
+        display_name=SMOLLM3_CANDIDATE.display_name,
+        filename=SMOLLM3_CANDIDATE.filename,
+        artifact_sha256=MODEL_ARTIFACT_SHA256,
+        artifact_bytes=MODEL_ARTIFACT_BYTES,
+        manifest_sha256=MODEL_MANIFEST_SHA256,
+        resolved_revision=MODEL_RESOLVED_REVISION,
+    )
+
+
+def _validate_provenance(provenance, *, candidate=None):
+    candidate = candidate or _default_candidate()
     if not isinstance(provenance, dict) or set(provenance) != _PROVENANCE_FIELDS:
         raise ValueError("Pilot provenance must contain only the exact bounded fields")
     expected = {
-        "modelID": MODEL_ID,
-        "modelArtifactSHA256": MODEL_ARTIFACT_SHA256,
-        "modelArtifactBytes": MODEL_ARTIFACT_BYTES,
-        "modelArtifactManifestSHA256": MODEL_MANIFEST_SHA256,
-        "modelResolvedRevision": MODEL_RESOLVED_REVISION,
+        "modelID": candidate.identifier,
+        "modelArtifactSHA256": candidate.artifact_sha256,
+        "modelArtifactBytes": candidate.artifact_bytes,
+        "modelArtifactManifestSHA256": candidate.manifest_sha256,
+        "modelResolvedRevision": candidate.resolved_revision,
         "runtimeSourceTag": RUNTIME_SOURCE_TAG,
         "runtimeSourceCommit": RUNTIME_SOURCE_COMMIT,
         "runtimeBinarySHA256": RUNTIME_BINARY_SHA256,
@@ -259,11 +311,14 @@ def _provider_error(error):
 
 
 class _PilotRunner:
-    def __init__(self, *, client, provenance, timeout):
+    def __init__(self, *, client, provenance, timeout, candidate=None):
         if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
             raise ValueError("Pilot timeout must be a positive integer")
+        self.candidate = candidate or _default_candidate()
         self.client = client
-        self.provenance = _validate_provenance(provenance)
+        self.provenance = _validate_provenance(
+            provenance, candidate=self.candidate
+        )
         self.timeout = timeout
 
     def run(self, *, source, source_dir, destination):
@@ -286,6 +341,7 @@ class _PilotRunner:
             source=source,
             records=records,
             provenance=self.provenance,
+            candidate=self.candidate,
         )
 
     def _preflight(self, source):
@@ -440,13 +496,19 @@ def run_pilot(
     client,
     provenance,
     timeout=120,
+    candidate=None,
 ):
     """Run all eight frozen cells through one injected server/client instance."""
     destination = Path(destination)
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite existing pilot directory: {destination}")
     source = _load_frozen_source(source_dir, system_prompt_path)
-    runner = _PilotRunner(client=client, provenance=provenance, timeout=timeout)
+    runner = _PilotRunner(
+        client=client,
+        provenance=provenance,
+        timeout=timeout,
+        candidate=candidate,
+    )
     return runner.run(
         source=source,
         source_dir=Path(source_dir).resolve(),
@@ -454,9 +516,9 @@ def run_pilot(
     )
 
 
-def _review_markdown(*, source_dir, records):
+def _review_markdown(*, source_dir, records, candidate):
     lines = [
-        "# Chess-native SmolLM3 pilot review",
+        f"# Chess-native {candidate.display_name} pilot review",
         "",
         "This review contains only trace-free model candidates.",
         "",
@@ -505,7 +567,10 @@ def _fsync_directory(path):
         os.close(descriptor)
 
 
-def _write_output(*, destination, source_dir, source, records, provenance):
+def _write_output(
+    *, destination, source_dir, source, records, provenance, candidate=None
+):
+    candidate = candidate or _default_candidate()
     destination = Path(destination)
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite existing pilot directory: {destination}")
@@ -530,7 +595,9 @@ def _write_output(*, destination, source_dir, source, records, provenance):
             )
         _fsync_directory(records_dir)
 
-        review = _review_markdown(source_dir=source_dir, records=records)
+        review = _review_markdown(
+            source_dir=source_dir, records=records, candidate=candidate
+        )
         if _TRACE_MARKER.search(review):
             raise ValueError("Refusing to persist a review containing a thinking trace")
         review_bytes = review.encode("utf-8")
@@ -592,28 +659,42 @@ def _write_output(*, destination, source_dir, source, records, provenance):
 
 
 def _pinned_provenance(
-    *, model_path, model_manifest_path, server_path, runtime_manifest_path
+    *,
+    model_path,
+    model_manifest_path,
+    server_path,
+    runtime_manifest_path,
+    candidate=None,
 ):
+    candidate = candidate or _default_candidate()
     model_path = Path(model_path)
     model_manifest_path = Path(model_manifest_path)
     server_path = Path(server_path)
     runtime_manifest_path = Path(runtime_manifest_path)
 
-    if _file_sha256(model_manifest_path) != MODEL_MANIFEST_SHA256:
-        raise ValueError("SmolLM3 artifact manifest does not match the frozen pilot")
+    artifact_error = (
+        f"{candidate.display_name} artifact manifest does not match the frozen pilot"
+    )
+    if _file_sha256(model_manifest_path) != candidate.manifest_sha256:
+        raise ValueError(artifact_error)
     model_manifest = _load_json(model_manifest_path)
     if (
-        model_manifest.get("modelID") != MODEL_ID
-        or model_manifest.get("filename") != model_path.name
-        or model_manifest.get("bytes") != MODEL_ARTIFACT_BYTES
-        or model_manifest.get("sha256") != MODEL_ARTIFACT_SHA256
-        or model_manifest.get("resolvedRevision") != MODEL_RESOLVED_REVISION
+        model_manifest.get("modelID") != candidate.identifier
+        or model_manifest.get("filename") != candidate.filename
+        or model_path.name != candidate.filename
+        or model_manifest.get("bytes") != candidate.artifact_bytes
+        or model_manifest.get("sha256") != candidate.artifact_sha256
+        or model_manifest.get("resolvedRevision") != candidate.resolved_revision
     ):
-        raise ValueError("SmolLM3 artifact manifest does not match the frozen pilot")
-    if model_path.stat().st_size != MODEL_ARTIFACT_BYTES:
-        raise ValueError("SmolLM3 artifact byte count does not match the frozen pilot")
-    if _file_sha256(model_path) != MODEL_ARTIFACT_SHA256:
-        raise ValueError("SmolLM3 artifact hash does not match the frozen pilot")
+        raise ValueError(artifact_error)
+    if model_path.stat().st_size != candidate.artifact_bytes:
+        raise ValueError(
+            f"{candidate.display_name} artifact byte count does not match the frozen pilot"
+        )
+    if _file_sha256(model_path) != candidate.artifact_sha256:
+        raise ValueError(
+            f"{candidate.display_name} artifact hash does not match the frozen pilot"
+        )
 
     if _file_sha256(runtime_manifest_path) != RUNTIME_MANIFEST_SHA256:
         raise ValueError("Runtime manifest does not match the frozen pilot")
@@ -629,11 +710,11 @@ def _pinned_provenance(
     ):
         raise ValueError("Runtime provenance does not match the frozen pilot")
     return {
-        "modelID": MODEL_ID,
-        "modelArtifactSHA256": MODEL_ARTIFACT_SHA256,
-        "modelArtifactBytes": MODEL_ARTIFACT_BYTES,
-        "modelArtifactManifestSHA256": MODEL_MANIFEST_SHA256,
-        "modelResolvedRevision": MODEL_RESOLVED_REVISION,
+        "modelID": candidate.identifier,
+        "modelArtifactSHA256": candidate.artifact_sha256,
+        "modelArtifactBytes": candidate.artifact_bytes,
+        "modelArtifactManifestSHA256": candidate.manifest_sha256,
+        "modelResolvedRevision": candidate.resolved_revision,
         "runtimeSourceTag": runtime["sourceTag"],
         "runtimeSourceCommit": runtime["sourceCommit"],
         "runtimeBinarySHA256": runtime["binarySHA256"],
@@ -647,15 +728,23 @@ def _execute(arguments, *, argv):
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite existing pilot directory: {destination}")
     _load_frozen_source(arguments.source, arguments.system_prompt)
+    candidate = MODEL_CANDIDATES[arguments.candidate]
+    model_path = arguments.model or (
+        ARTIFACT_ROOT / "models" / candidate.identifier / candidate.filename
+    )
+    model_manifest_path = arguments.model_manifest or (
+        ARTIFACT_ROOT / "models" / candidate.identifier / "artifact-manifest.json"
+    )
     provenance = _pinned_provenance(
-        model_path=arguments.model,
-        model_manifest_path=arguments.model_manifest,
+        candidate=candidate,
+        model_path=model_path,
+        model_manifest_path=model_manifest_path,
         server_path=arguments.server,
         runtime_manifest_path=arguments.runtime_manifest,
     )
     server = llama_server.LlamaServer(
         arguments.server,
-        arguments.model,
+        model_path,
         context_tokens=CONTEXT_TOKENS,
     )
     try:
@@ -672,6 +761,7 @@ def _execute(arguments, *, argv):
             client=server,
             provenance=provenance,
             timeout=arguments.timeout,
+            candidate=candidate,
         )
     finally:
         server.stop()
@@ -707,16 +797,19 @@ def main(argv=None):
         ),
     )
     parser.add_argument(
+        "--candidate",
+        choices=tuple(MODEL_CANDIDATES),
+        default=MODEL_ID,
+    )
+    parser.add_argument(
         "--model",
         type=Path,
-        default=(
-            ARTIFACT_ROOT / "models" / MODEL_ID / "SmolLM3-Q4_K_M.gguf"
-        ),
+        default=None,
     )
     parser.add_argument(
         "--model-manifest",
         type=Path,
-        default=ARTIFACT_ROOT / "models" / MODEL_ID / "artifact-manifest.json",
+        default=None,
     )
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=120)
