@@ -103,6 +103,11 @@
             value = "$(COACHING_EVAL_SOURCE_SHA)"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_NEUTRAL_PREVIEW_DIR"
+            value = "$(COACHING_NEUTRAL_PREVIEW_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction

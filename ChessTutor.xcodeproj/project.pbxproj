@@ -7,19 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		021B3DEFB6A459611580A8DE /* ModelCoachingNeutralContextCompiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208D443929D54E3A9EFC2639 /* ModelCoachingNeutralContextCompiler.swift */; };
 		0699611D84988312DCAB1A99 /* SidebarPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747E6891942AFE9A8B73651F /* SidebarPanelView.swift */; };
 		0746FACA8781C7FFB19FB001 /* TurnStatusPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61335372AE0753C9A624CF9D /* TurnStatusPresentationTests.swift */; };
 		083A54DB020EFC3F6BDD1433 /* CoachingContinuityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF5876081BDE54BD5891388 /* CoachingContinuityUITests.swift */; };
 		0A5EB8EB7C3DA3C8019E6C4F /* CoachingReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1879FE2B4A3D846947DFAD3 /* CoachingReconcilerTests.swift */; };
 		0AE720628604C79E18D283DE /* RemotePresencePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6250F032F949E7618A1AC7AD /* RemotePresencePolicy.swift */; };
 		0BBAC9DA3293C60DB15BE7BE /* RemoteInviteConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C2424C22CF6B5348610FF9 /* RemoteInviteConfirmation.swift */; };
-		0C1111111111111111111111 /* ModelCoachingNeutralContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1111111111111111111111 /* ModelCoachingNeutralContracts.swift */; };
-		0C2222222222222222222222 /* ModelCoachingNeutralRequestBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C2222222222222222222222 /* ModelCoachingNeutralRequestBuilder.swift */; };
-		0C3333333333333333333333 /* ModelCoachingNeutralRequestBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3333333333333333333333 /* ModelCoachingNeutralRequestBuilderTests.swift */; };
-		0C4444444444444444444444 /* ModelCoachingNeutralContextCompilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4444444444444444444444 /* ModelCoachingNeutralContextCompilerTests.swift */; };
-		0C5555555555555555555555 /* ModelCoachingNeutralContextCompiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C5555555555555555555555 /* ModelCoachingNeutralContextCompiler.swift */; };
-		0C6666666666666666666666 /* ModelCoachingNeutralTurnValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6666666666666666666666 /* ModelCoachingNeutralTurnValidator.swift */; };
-		0C7777777777777777777777 /* ModelCoachingNeutralTurnValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C7777777777777777777777 /* ModelCoachingNeutralTurnValidatorTests.swift */; };
 		11627D10A1B16FF07697B2A2 /* AboutAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354DE434F0650CD3B105FBCD /* AboutAttribution.swift */; };
 		126FEDBB6F06EB18C66BD913 /* ModelCoachingRequestBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F634298FBD80C7A0642BB8D8 /* ModelCoachingRequestBuilderTests.swift */; };
 		12B351EEED18909A7EBFCAD5 /* BeginnerAssistSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04048D1C92C2C60789823F6F /* BeginnerAssistSettings.swift */; };
@@ -27,6 +21,7 @@
 		160DCD32DCAC413D2B188998 /* RemoteOutbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14543CFAACD5CB0BA907D53 /* RemoteOutbox.swift */; };
 		16581BBDA4A3707F19C0464D /* RemoteMoveCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BA238F66FBCB26E0F7C58F9 /* RemoteMoveCodecTests.swift */; };
 		1788A08929C2E9314D8016EE /* RemoteOutboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945E8AC5340080C59B38E07A /* RemoteOutboxTests.swift */; };
+		18A8DF84DBC967F3D48AC327 /* ModelCoachingNeutralContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57660CBBCA5B428A4CBBE54 /* ModelCoachingNeutralContracts.swift */; };
 		1A40427580D75267928EE49F /* GameLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13E0EE4C35EED64A264EF55 /* GameLifecycleTests.swift */; };
 		1C16BC492A550B600532F28F /* Move.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E571D9060609ECB4FB126C /* Move.swift */; };
 		1CB06F0430E219CB8DA57644 /* LegalMoveHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9250CD456B192943686998F /* LegalMoveHighlighter.swift */; };
@@ -39,19 +34,23 @@
 		2998B9E400D89AA9D84F6791 /* SidePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8502A7E8E5A189355A4A1E1 /* SidePanelView.swift */; };
 		2E9DB9BA7139D4B6E633C919 /* ModelCoachingMarkdownRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9FE357F67B0B3DCCC785433 /* ModelCoachingMarkdownRenderer.swift */; };
 		2F72B11FD646E7CB59CF60BC /* GameControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014400D67223F02798F38023 /* GameControlsView.swift */; };
+		2F931D049132F4E1AC438F43 /* ModelCoachingNeutralTurnValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D8899C4BFA4D33CA3FC3A3 /* ModelCoachingNeutralTurnValidatorTests.swift */; };
 		2FC07340BB84B9819AE3E68C /* FakeRemoteGameLabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42A350660E86E3A3B590AD2C /* FakeRemoteGameLabTests.swift */; };
 		303FAF6C52113606B064EDA5 /* ActiveRemoteGameStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D7B913A9D9E7C689C910A57 /* ActiveRemoteGameStoreTests.swift */; };
 		30621FC967249C9DE04DA38B /* GameControlsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74C6E2BAF6CCA621D32B749 /* GameControlsPresentationTests.swift */; };
+		306E26CEBBF0BE8608A0819E /* ModelCoachingNeutralRequestBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7F3EA49D217B9E2CF54F64 /* ModelCoachingNeutralRequestBuilderTests.swift */; };
 		31797CBE0BC5E0D6DF51F48A /* RemotePushNotificationRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BC563D672A7031E80AD195 /* RemotePushNotificationRoutingTests.swift */; };
 		3194365AAE619FDD740212E8 /* RemoteInviteTransportModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D98017AFFA0B1E2F1C695A /* RemoteInviteTransportModelTests.swift */; };
 		31FF388B3A8793A4F03764AC /* CoachingReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B788CF0ACC1072CA5D80D8DF /* CoachingReconciler.swift */; };
 		35B79730214D303117267547 /* RemotePlaySheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09AF46101F78AFD88CA0FF1 /* RemotePlaySheetView.swift */; };
 		39D417FFE98FD7E79B650750 /* PieceGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4A50D9E856AEF669FAE52E /* PieceGlyph.swift */; };
+		39FCC4FEFE302725780CD261 /* ModelCoachingNeutralTurnValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58D5B89877EB9C0FCAB1977 /* ModelCoachingNeutralTurnValidator.swift */; };
 		3A09C6ED5C752E593D2CBC81 /* RemoteMoveLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6875B4601C909ED0EC7845E3 /* RemoteMoveLogTests.swift */; };
 		3B2BB09FA9B0263C77E9C5CF /* RemotePresencePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EDC053A4E5B45FA2B04601 /* RemotePresencePolicyTests.swift */; };
 		3E475A94036E66EC06309644 /* ModelCoachingEvaluationCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C84019BE98D64B70E733C266 /* ModelCoachingEvaluationCorpusTests.swift */; };
 		3E6419F184A380CA90C52662 /* CoachingTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65CE7D6785DA7589EA14E63 /* CoachingTestFixtures.swift */; };
 		4055B6D26D46FF40D5AC5B39 /* CloudKitRemoteInviteTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1603F5651C9AF18C92BFFC5D /* CloudKitRemoteInviteTransport.swift */; };
+		4208A4075CE9E94E7B052FEF /* ModelCoachingNeutralRequestBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87976591E2D0B5A556CA8E83 /* ModelCoachingNeutralRequestBuilder.swift */; };
 		4596A725A76CE902F744D826 /* ChessArt-MIT.txt in Resources */ = {isa = PBXBuildFile; fileRef = BA9030358F7EB803141CD878 /* ChessArt-MIT.txt */; };
 		46EA92E83339D15D8EFFEEA4 /* ModelCoachingContextCompiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A104A4E00422B91E68BCDA7 /* ModelCoachingContextCompiler.swift */; };
 		477E4C7C0B7864B625DA5727 /* CloudKitRemoteGameTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB256D7EECED0622E4EDFFB2 /* CloudKitRemoteGameTransportTests.swift */; };
@@ -73,6 +72,7 @@
 		5C586124F0D2D76C66E86B75 /* RemoteGameStartContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D9E331547FCF0428F764142 /* RemoteGameStartContextTests.swift */; };
 		5D6B8E5AA6CD90173D291D5E /* CoachingGoldenTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFE31F04839226C582D7C51 /* CoachingGoldenTranscriptTests.swift */; };
 		5D6C4D63867C5340AD70AA83 /* LocalCoachingInsightSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2276117FCAFEF68732876EF /* LocalCoachingInsightSource.swift */; };
+		617EE484B1B8E14BD743D6A5 /* ModelCoachingNeutralContextCompilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79155026DA3D5BA30A9E9062 /* ModelCoachingNeutralContextCompilerTests.swift */; };
 		64C6845F93B878E7F3820D1C /* MoveHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65312F4367726826F552878 /* MoveHistoryView.swift */; };
 		65A46B140B9129690D7AE8BA /* TurnStatusPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DC7E40A839A48F2D1ADBBF7 /* TurnStatusPanelView.swift */; };
 		65B3FF7D887073A1CE36085B /* CoachingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FC6E4E15016FD4D5251E3C /* CoachingSession.swift */; };
@@ -104,6 +104,7 @@
 		96E2DFD85BE941887B746E34 /* LocalCoachingAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4B97DA69E80B868E005189 /* LocalCoachingAdvisor.swift */; };
 		9B40695CBA4229B7EA7E0507 /* MoveAttemptResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2B3218C7ADFB966C6231C2 /* MoveAttemptResult.swift */; };
 		9B75141A2F1B5E68F3DCE46B /* RemoteGameStartPresentationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2AF7050703D5DCF0641C734 /* RemoteGameStartPresentationPolicyTests.swift */; };
+		9B96597CE8308BDC4F12D20B /* ModelCoachingNeutralPromptExampleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2FB96A980FAA0823F85F0D6 /* ModelCoachingNeutralPromptExampleTests.swift */; };
 		9C06C7238D46550D07EB7C58 /* CoachingPanelAccessibilityFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C06A24BB39F7F61DACF6D0 /* CoachingPanelAccessibilityFixture.swift */; };
 		9CDAE04C985BAF4F88CC8854 /* CloudKitRemoteGameTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEF32A5B744746870FF30D8 /* CloudKitRemoteGameTransport.swift */; };
 		9E628FE7B55251C40A5ED21D /* LocalCoachingExplanationSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D497B04CDEC53DC27DD635 /* LocalCoachingExplanationSourceTests.swift */; };
@@ -196,13 +197,6 @@
 		0AEF32A5B744746870FF30D8 /* CloudKitRemoteGameTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteGameTransport.swift; sourceTree = "<group>"; };
 		0B813DB68B91A5CAB90A56BF /* AppBuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuildInfo.swift; sourceTree = "<group>"; };
 		0DBF47517B526ADFBB8CAA23 /* ModelCoachingRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingRequestBuilder.swift; sourceTree = "<group>"; };
-		1C1111111111111111111111 /* ModelCoachingNeutralContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralContracts.swift; sourceTree = "<group>"; };
-		1C2222222222222222222222 /* ModelCoachingNeutralRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilder.swift; sourceTree = "<group>"; };
-		1C3333333333333333333333 /* ModelCoachingNeutralRequestBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilderTests.swift; sourceTree = "<group>"; };
-		1C4444444444444444444444 /* ModelCoachingNeutralContextCompilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralContextCompilerTests.swift; sourceTree = "<group>"; };
-		1C5555555555555555555555 /* ModelCoachingNeutralContextCompiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralContextCompiler.swift; sourceTree = "<group>"; };
-		1C6666666666666666666666 /* ModelCoachingNeutralTurnValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralTurnValidator.swift; sourceTree = "<group>"; };
-		1C7777777777777777777777 /* ModelCoachingNeutralTurnValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralTurnValidatorTests.swift; sourceTree = "<group>"; };
 		1603F5651C9AF18C92BFFC5D /* CloudKitRemoteInviteTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteInviteTransport.swift; sourceTree = "<group>"; };
 		16CEAE6DBECBB3E2DF889F02 /* DiagnosticsLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLogTests.swift; sourceTree = "<group>"; };
 		17254D614861819369535466 /* PositionAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionAnalyzer.swift; sourceTree = "<group>"; };
@@ -211,6 +205,7 @@
 		1B8925F50BCA37F4E5D0DA33 /* CloudKitRemoteGameStatusRecordCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRemoteGameStatusRecordCodec.swift; sourceTree = "<group>"; };
 		1F8CD72E41E6DCBD71ED6064 /* CloudKitPendingInviteRecordCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPendingInviteRecordCodec.swift; sourceTree = "<group>"; };
 		1FD039B8AE083CF7D10F392D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		208D443929D54E3A9EFC2639 /* ModelCoachingNeutralContextCompiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralContextCompiler.swift; sourceTree = "<group>"; };
 		20E2FB4D9CBDCF27F7223BB0 /* FakeRemoteGameLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeRemoteGameLab.swift; sourceTree = "<group>"; };
 		2397C3982A81FB4FDEB760E8 /* ChessTutorUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ChessTutorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		245895F33FA69F3435F34ABA /* SelectedPiecePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPiecePanelView.swift; sourceTree = "<group>"; };
@@ -252,6 +247,8 @@
 		743E2F9D0A9B836A2641FB93 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		747E6891942AFE9A8B73651F /* SidebarPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPanelView.swift; sourceTree = "<group>"; };
 		77A18F57D50181F0900479AA /* RemoteInviteTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteTransportTests.swift; sourceTree = "<group>"; };
+		78D8899C4BFA4D33CA3FC3A3 /* ModelCoachingNeutralTurnValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralTurnValidatorTests.swift; sourceTree = "<group>"; };
+		79155026DA3D5BA30A9E9062 /* ModelCoachingNeutralContextCompilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralContextCompilerTests.swift; sourceTree = "<group>"; };
 		7A0F3FDB75BB35C0F746BB2C /* RemoteIdentityStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteIdentityStoreTests.swift; sourceTree = "<group>"; };
 		7AD6275D096EE258A3B637E4 /* CapturedPiecesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPiecesPanelView.swift; sourceTree = "<group>"; };
 		7B21DFCD21891E4A984445C3 /* CoachingPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingPanelView.swift; sourceTree = "<group>"; };
@@ -262,8 +259,10 @@
 		80DA8C2C24DFF57C440B61B0 /* RemoteGameStartPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartPresentationPolicy.swift; sourceTree = "<group>"; };
 		843DA88957074E118D9B5F6C /* RemoteInviteConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteConfirmationTests.swift; sourceTree = "<group>"; };
 		858232DD64C12811E9351DF8 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		87976591E2D0B5A556CA8E83 /* ModelCoachingNeutralRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilder.swift; sourceTree = "<group>"; };
 		892B39ACE33796097240A052 /* ChessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessBoardView.swift; sourceTree = "<group>"; };
 		89761D36FCBA29D960341883 /* PositionFingerprinting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionFingerprinting.swift; sourceTree = "<group>"; };
+		8B7F3EA49D217B9E2CF54F64 /* ModelCoachingNeutralRequestBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilderTests.swift; sourceTree = "<group>"; };
 		8EFE31F04839226C582D7C51 /* CoachingGoldenTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingGoldenTranscriptTests.swift; sourceTree = "<group>"; };
 		90EAA3445235303F429994C6 /* RemoteGameStartAnnouncementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartAnnouncementView.swift; sourceTree = "<group>"; };
 		90F828B058294EEA95395D4A /* PositionAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionAnalyzerTests.swift; sourceTree = "<group>"; };
@@ -287,6 +286,7 @@
 		AAFF4074C210B6163B8CFCA2 /* TurnStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnStatusPresentation.swift; sourceTree = "<group>"; };
 		AB65C5819A7B114A81E68439 /* RemoteInviteTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteInviteTransport.swift; sourceTree = "<group>"; };
 		AC9B8D8BA56FC7EB2E867D6F /* RemoteGameStartAnnouncement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartAnnouncement.swift; sourceTree = "<group>"; };
+		B2FB96A980FAA0823F85F0D6 /* ModelCoachingNeutralPromptExampleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralPromptExampleTests.swift; sourceTree = "<group>"; };
 		B5EE6DF747DA36014AE79820 /* CoachingGoldenPositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingGoldenPositionTests.swift; sourceTree = "<group>"; };
 		B6D6B6AF2C346C3AF85A3603 /* BoardGuidanceStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardGuidanceStyleTests.swift; sourceTree = "<group>"; };
 		B788CF0ACC1072CA5D80D8DF /* CoachingReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingReconciler.swift; sourceTree = "<group>"; };
@@ -350,6 +350,8 @@
 		F343E0A5D8215871C1BA32A6 /* SpecialMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpecialMoveTests.swift; sourceTree = "<group>"; };
 		F4471B31F5756F99709339DF /* MoveHistoryFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveHistoryFormatterTests.swift; sourceTree = "<group>"; };
 		F476FE327EB86F6C3714E880 /* NewGameConfirmationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewGameConfirmationPresentation.swift; sourceTree = "<group>"; };
+		F57660CBBCA5B428A4CBBE54 /* ModelCoachingNeutralContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralContracts.swift; sourceTree = "<group>"; };
+		F58D5B89877EB9C0FCAB1977 /* ModelCoachingNeutralTurnValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralTurnValidator.swift; sourceTree = "<group>"; };
 		F61C3255D0D183CA716ED457 /* RemoteGameModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameModels.swift; sourceTree = "<group>"; };
 		F634298FBD80C7A0642BB8D8 /* ModelCoachingRequestBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingRequestBuilderTests.swift; sourceTree = "<group>"; };
 		F65CE7D6785DA7589EA14E63 /* CoachingTestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingTestFixtures.swift; sourceTree = "<group>"; };
@@ -609,12 +611,12 @@
 				4F107D7B1074E326601FBBD8 /* ModelCoachingCompactContext.swift */,
 				9A104A4E00422B91E68BCDA7 /* ModelCoachingContextCompiler.swift */,
 				FD3302FAFD3E1B76CC1EF1ED /* ModelCoachingContracts.swift */,
-				1C1111111111111111111111 /* ModelCoachingNeutralContracts.swift */,
-				1C5555555555555555555555 /* ModelCoachingNeutralContextCompiler.swift */,
-				1C6666666666666666666666 /* ModelCoachingNeutralTurnValidator.swift */,
 				C9FE357F67B0B3DCCC785433 /* ModelCoachingMarkdownRenderer.swift */,
+				208D443929D54E3A9EFC2639 /* ModelCoachingNeutralContextCompiler.swift */,
+				F57660CBBCA5B428A4CBBE54 /* ModelCoachingNeutralContracts.swift */,
+				87976591E2D0B5A556CA8E83 /* ModelCoachingNeutralRequestBuilder.swift */,
+				F58D5B89877EB9C0FCAB1977 /* ModelCoachingNeutralTurnValidator.swift */,
 				808465DBB203862F171B8137 /* ModelCoachingPositionEncoder.swift */,
-				1C2222222222222222222222 /* ModelCoachingNeutralRequestBuilder.swift */,
 				0DBF47517B526ADFBB8CAA23 /* ModelCoachingRequestBuilder.swift */,
 				19520990C7D6A8526F7B2A30 /* ModelCoachingTurnValidator.swift */,
 			);
@@ -690,9 +692,10 @@
 				A695B52B59F4F50BDBF5F337 /* ModelCoachingCorpusExportTests.swift */,
 				502E6F159BCF8BEEA8221189 /* ModelCoachingEvaluationCorpus.swift */,
 				C84019BE98D64B70E733C266 /* ModelCoachingEvaluationCorpusTests.swift */,
-				1C4444444444444444444444 /* ModelCoachingNeutralContextCompilerTests.swift */,
-				1C3333333333333333333333 /* ModelCoachingNeutralRequestBuilderTests.swift */,
-				1C7777777777777777777777 /* ModelCoachingNeutralTurnValidatorTests.swift */,
+				79155026DA3D5BA30A9E9062 /* ModelCoachingNeutralContextCompilerTests.swift */,
+				B2FB96A980FAA0823F85F0D6 /* ModelCoachingNeutralPromptExampleTests.swift */,
+				8B7F3EA49D217B9E2CF54F64 /* ModelCoachingNeutralRequestBuilderTests.swift */,
+				78D8899C4BFA4D33CA3FC3A3 /* ModelCoachingNeutralTurnValidatorTests.swift */,
 				F634298FBD80C7A0642BB8D8 /* ModelCoachingRequestBuilderTests.swift */,
 				A9DA043918E1AEC291EE94E0 /* ModelCoachingTurnValidatorTests.swift */,
 			);
@@ -989,12 +992,12 @@
 				C28A1B903D902445419E9004 /* ModelCoachingCompactContext.swift in Sources */,
 				46EA92E83339D15D8EFFEEA4 /* ModelCoachingContextCompiler.swift in Sources */,
 				57D1CCE36349B493E418D9BC /* ModelCoachingContracts.swift in Sources */,
-				0C1111111111111111111111 /* ModelCoachingNeutralContracts.swift in Sources */,
-				0C5555555555555555555555 /* ModelCoachingNeutralContextCompiler.swift in Sources */,
-				0C6666666666666666666666 /* ModelCoachingNeutralTurnValidator.swift in Sources */,
 				2E9DB9BA7139D4B6E633C919 /* ModelCoachingMarkdownRenderer.swift in Sources */,
+				021B3DEFB6A459611580A8DE /* ModelCoachingNeutralContextCompiler.swift in Sources */,
+				18A8DF84DBC967F3D48AC327 /* ModelCoachingNeutralContracts.swift in Sources */,
+				4208A4075CE9E94E7B052FEF /* ModelCoachingNeutralRequestBuilder.swift in Sources */,
+				39FCC4FEFE302725780CD261 /* ModelCoachingNeutralTurnValidator.swift in Sources */,
 				59E688E898DD5A041B8888C8 /* ModelCoachingPositionEncoder.swift in Sources */,
-				0C2222222222222222222222 /* ModelCoachingNeutralRequestBuilder.swift in Sources */,
 				6AF109EE664DC66EA71C25E7 /* ModelCoachingRequestBuilder.swift in Sources */,
 				87560B9C62052C3CCD6BDF1E /* ModelCoachingTurnValidator.swift in Sources */,
 				1C16BC492A550B600532F28F /* Move.swift in Sources */,
@@ -1078,9 +1081,10 @@
 				C6DB3B065019DE3B4FB80449 /* ModelCoachingCorpusExportTests.swift in Sources */,
 				4B1D60CB3107FD03D1F9FF2A /* ModelCoachingEvaluationCorpus.swift in Sources */,
 				3E475A94036E66EC06309644 /* ModelCoachingEvaluationCorpusTests.swift in Sources */,
-				0C4444444444444444444444 /* ModelCoachingNeutralContextCompilerTests.swift in Sources */,
-				0C3333333333333333333333 /* ModelCoachingNeutralRequestBuilderTests.swift in Sources */,
-				0C7777777777777777777777 /* ModelCoachingNeutralTurnValidatorTests.swift in Sources */,
+				617EE484B1B8E14BD743D6A5 /* ModelCoachingNeutralContextCompilerTests.swift in Sources */,
+				9B96597CE8308BDC4F12D20B /* ModelCoachingNeutralPromptExampleTests.swift in Sources */,
+				306E26CEBBF0BE8608A0819E /* ModelCoachingNeutralRequestBuilderTests.swift in Sources */,
+				2F931D049132F4E1AC438F43 /* ModelCoachingNeutralTurnValidatorTests.swift in Sources */,
 				126FEDBB6F06EB18C66BD913 /* ModelCoachingRequestBuilderTests.swift in Sources */,
 				C5B41E7281DA7F38077ADD86 /* ModelCoachingTurnValidatorTests.swift in Sources */,
 				D96EF46F599630BBD6A2D1C0 /* MoveHistoryFormatterTests.swift in Sources */,
