@@ -35,6 +35,30 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
         )
     }
 
+    func testDecoderRejectsDuplicateMessageKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","message":"Look at the knight.","actions":[],"focus":[]}"#
+        )
+    }
+
+    func testDecoderRejectsDuplicateActionsKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","actions":[],"actions":[],"focus":[]}"#
+        )
+    }
+
+    func testDecoderRejectsDuplicateFocusKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","actions":[],"focus":[],"focus":[]}"#
+        )
+    }
+
+    func testDecoderRejectsEscapedEquivalentDuplicateKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","mess\u0061ge":"Look at the knight.","actions":[],"focus":[]}"#
+        )
+    }
+
     func testDecoderRejectsUnknownSquareFocusFields() {
         assertRejected(
             json: #"{"message":"Look at the queen.","actions":[],"focus":[{"type":"square","square":"h4","label":"queen"}]}"#
@@ -44,6 +68,24 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
     func testDecoderRejectsUnknownMoveFocusFields() {
         assertRejected(
             json: #"{"message":"Look at the queen.","actions":[],"focus":[{"type":"move","from":"h4","to":"f2","san":"Qxf2"}]}"#
+        )
+    }
+
+    func testDecoderRejectsDuplicateSquareFocusKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","actions":[],"focus":[{"type":"square","square":"h4","square":"h4"}]}"#
+        )
+    }
+
+    func testDecoderRejectsDuplicateMoveFromKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","actions":[],"focus":[{"type":"move","from":"h4","from":"h4","to":"f2"}]}"#
+        )
+    }
+
+    func testDecoderRejectsDuplicateMoveToKey() {
+        assertRejected(
+            json: #"{"message":"Look at the queen.","actions":[],"focus":[{"type":"move","from":"h4","to":"f2","to":"f2"}]}"#
         )
     }
 
@@ -142,6 +184,18 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
                 line: #line
             )
         }
+    }
+
+    func testDecoderRejectsLowercasePieceMoveNotation() {
+        assertRejected(turnData(message: "Try nc3 next."))
+    }
+
+    func testDecoderRejectsUppercasePromotionInCoordinateMoveNotation() {
+        assertRejected(turnData(message: "Could you play e7e8Q?"))
+    }
+
+    func testDecoderRejectsFigurineMoveNotation() {
+        assertRejected(turnData(message: "Try ♘c3 next."))
     }
 
     func testDecoderAllowsStandaloneSquareInOrdinaryLanguage() throws {
