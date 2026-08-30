@@ -72,3 +72,9 @@ struct ModelCoachingNeutralCapabilities: Codable, Equatable, Sendable {
     let canReplaceMove: Bool
     let canRemoveMove: Bool
 }
+
+struct ModelCoachingNeutralTurn: Codable, Equatable, Sendable {
+    let message: String
+    let actions: [String]
+    let focus: [String]
+}
