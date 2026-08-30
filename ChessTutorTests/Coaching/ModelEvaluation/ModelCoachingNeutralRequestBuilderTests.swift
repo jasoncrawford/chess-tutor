@@ -154,7 +154,6 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
 
         XCTAssertEqual(request.interaction.tentativeMove?.id, "move:f1-e2")
         XCTAssertTrue(request.interaction.tentativeMove?.isLegal ?? false)
-        XCTAssertEqual(request.interaction.tentativeMove?.san, "Be2")
         XCTAssertFalse(request.interaction.tentativeMove?.givesCheck ?? true)
         XCTAssertFalse(request.interaction.tentativeMove?.givesCheckmate ?? true)
 
@@ -189,7 +188,8 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
         )
     }
 
-    func testLegalCaptureCarriesExactCapturedPieceReference() throws {
+    func testTentativeMoveNormalizesSelectedPieceReferenceBackToCommittedSourceSquare() {
+        let tentativeMove = Move(from: square("a1"), to: square("a4"))
         let state = state(
             sideToMove: .white,
             pieces: [
@@ -199,15 +199,76 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
                 square("a4"): Piece(kind: .pawn, color: .black),
             ]
         )
+        let snapshot = ModelCoachingNeutralSnapshot(
+            committedState: state,
+            learner: .white,
+            positionRevision: 5,
+            selectedSquare: square("a4"),
+            tentativeMove: tentativeMove,
+            latestEvent: event(5, .moveStaged, [ModelCoachingPositionEncoder.moveID(tentativeMove)]),
+            episodeEvents: [
+                event(1, .helpOpened),
+                event(5, .moveStaged, [ModelCoachingPositionEncoder.moveID(tentativeMove)]),
+            ]
+        )
 
         let request = ModelCoachingNeutralRequestBuilder.build(
-            snapshot: snapshot(for: state),
+            snapshot: snapshot,
+            requestID: "neutral-staged-capture-selection"
+        )
+
+        XCTAssertEqual(request.interaction.selectedSquare, "a4")
+        XCTAssertEqual(request.interaction.selectedPieceReference, "piece:white:rook:a1")
+        XCTAssertEqual(request.interaction.tentativeMove?.capturePieceReference, "piece:black:pawn:a4")
+    }
+
+    func testOpponentPieceSelectionDoesNotAdvertiseLearnerStagingCapability() {
+        let state = state(
+            sideToMove: .white,
+            pieces: [
+                square("e1"): Piece(kind: .king, color: .white),
+                square("h8"): Piece(kind: .king, color: .black),
+                square("e5"): Piece(kind: .pawn, color: .black),
+            ]
+        )
+        let snapshot = ModelCoachingNeutralSnapshot(
+            committedState: state,
+            learner: .white,
+            positionRevision: 2,
+            selectedSquare: square("e5"),
+            tentativeMove: nil,
+            latestEvent: event(2, .squareInspected, ["piece:black:pawn:e5"]),
+            episodeEvents: [event(1, .helpOpened), event(2, .squareInspected, ["piece:black:pawn:e5"])]
+        )
+
+        let request = ModelCoachingNeutralRequestBuilder.build(
+            snapshot: snapshot,
+            requestID: "neutral-opponent-selection"
+        )
+
+        XCTAssertEqual(request.interaction.selectedPieceReference, "piece:black:pawn:e5")
+        XCTAssertFalse(request.capabilities.canStageMove)
+        XCTAssertFalse(request.capabilities.canReplaceMove)
+        XCTAssertFalse(request.capabilities.canRemoveMove)
+    }
+
+    func testLegalCaptureCarriesExactCapturedPieceReference() throws {
+        let moves = [
+            Move(from: square("e2"), to: square("e4")),
+            Move(from: square("e7"), to: square("e5")),
+            Move(from: square("g1"), to: square("f3")),
+            Move(from: square("b8"), to: square("c6")),
+        ]
+        let state = replaying(moves)
+
+        let request = ModelCoachingNeutralRequestBuilder.build(
+            snapshot: snapshot(for: state, positionRevision: moves.count),
             requestID: "neutral-capture"
         )
 
-        let capture = try XCTUnwrap(request.legalMoves.first { $0.id == "move:a1-a4" })
-        XCTAssertEqual(capture.capturePieceReference, "piece:black:pawn:a4")
-        XCTAssertEqual(capture.san, "Rxa4")
+        let capture = try XCTUnwrap(request.legalMoves.first { $0.id == "move:f3-e5" })
+        XCTAssertEqual(capture.capturePieceReference, "piece:black:pawn:e5")
+        XCTAssertEqual(capture.san, "Nxe5")
     }
 
     func testCheckingAndMatingMovesUseAppliedRuleOutcomes() throws {
@@ -297,10 +358,14 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
             "MaterialTacticalEvaluator",
             "CoachingAdvice",
             "ModelCoachingSemanticOracle",
+            "private static func san(",
+            "private static func checkSuffix(",
+            "private static func disambiguation(",
         ].forEach { forbidden in
             XCTAssertFalse(contracts.contains(forbidden), "unexpected dependency in contracts: \(forbidden)")
             XCTAssertFalse(builder.contains(forbidden), "unexpected dependency in builder: \(forbidden)")
         }
+        XCTAssertTrue(builder.contains("MoveHistoryFormatter.notation(for:"))
     }
 
     private func snapshot(
@@ -323,6 +388,12 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
             let move = LegalMoveGenerator
                 .allLegalMoves(in: state)
                 .first { ModelCoachingPositionEncoder.canonicalMove($0) == canonicalMove }!
+            state.apply(move)
+        }
+    }
+
+    private func replaying(_ moves: [Move]) -> GameState {
+        moves.reduce(into: GameState.startingPosition()) { state, move in
             state.apply(move)
         }
     }

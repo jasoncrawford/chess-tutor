@@ -4,6 +4,7 @@ enum ModelCoachingNeutralRequestBuilder {
         requestID: String
     ) -> ModelCoachingNeutralRequest {
         let state = snapshot.committedState
+        let selectedPiece = selectedCommittedPiece(for: snapshot, in: state)
         let pieces = pieceReferences(in: state)
         let pieceIDsBySquare = Dictionary(uniqueKeysWithValues: pieces.map { ($0.square, $0.id) })
         let legalMoves = moveReferences(
@@ -26,10 +27,7 @@ enum ModelCoachingNeutralRequestBuilder {
             gameHistory: gameHistory(from: state.moveHistory),
             interaction: ModelCoachingNeutralInteraction(
                 selectedSquare: snapshot.selectedSquare.map(ModelCoachingPositionEncoder.squareName),
-                selectedPieceReference: selectedPieceReference(
-                    at: snapshot.selectedSquare,
-                    in: state
-                ),
+                selectedPieceReference: selectedPiece.map { ModelCoachingPositionEncoder.pieceID($0.piece, at: $0.square) },
                 tentativeMove: tentativeMove,
                 latestEvent: snapshot.latestEvent,
                 episodeEvents: snapshot.episodeEvents.sorted { $0.sequence < $1.sequence }
@@ -42,7 +40,8 @@ enum ModelCoachingNeutralRequestBuilder {
             ),
             tentativeReplies: tentativeReplies(for: snapshot, in: state),
             capabilities: capabilities(
-                selectedPieceReference: selectedPieceReference(at: snapshot.selectedSquare, in: state),
+                selectedPiece: selectedPiece,
+                learner: snapshot.learner,
                 hasTentativeMove: tentativeMove != nil
             )
         )
@@ -97,7 +96,7 @@ enum ModelCoachingNeutralRequestBuilder {
 
         return ModelCoachingNeutralMove(
             id: ModelCoachingPositionEncoder.moveID(move),
-            san: san(for: move, in: state),
+            san: notation(for: move, in: state),
             canonicalMove: ModelCoachingPositionEncoder.canonicalMove(move),
             sourcePieceReference: ModelCoachingPositionEncoder.pieceID(sourcePiece, at: move.from),
             destinationSquare: ModelCoachingPositionEncoder.squareName(move.to),
@@ -192,27 +191,29 @@ enum ModelCoachingNeutralRequestBuilder {
     }
 
     private static func capabilities(
-        selectedPieceReference: String?,
+        selectedPiece: (square: Square, piece: Piece)?,
+        learner: PieceColor,
         hasTentativeMove: Bool
     ) -> ModelCoachingNeutralCapabilities {
         ModelCoachingNeutralCapabilities(
             canSelectBoardPiece: true,
             canInspectSquare: true,
-            canStageMove: selectedPieceReference != nil && !hasTentativeMove,
+            canStageMove: selectedPiece?.piece.color == learner && !hasTentativeMove,
             canReplaceMove: hasTentativeMove,
             canRemoveMove: hasTentativeMove
         )
     }
 
-    private static func selectedPieceReference(
-        at selectedSquare: Square?,
+    private static func selectedCommittedPiece(
+        for snapshot: ModelCoachingNeutralSnapshot,
         in state: GameState
-    ) -> String? {
-        guard let selectedSquare,
-              let piece = state.board[selectedSquare] else {
+    ) -> (square: Square, piece: Piece)? {
+        let lookupSquare = snapshot.tentativeMove?.from ?? snapshot.selectedSquare
+        guard let lookupSquare,
+              let piece = state.board[lookupSquare] else {
             return nil
         }
-        return ModelCoachingPositionEncoder.pieceID(piece, at: selectedSquare)
+        return (lookupSquare, piece)
     }
 
     private static func gameHistory(from moves: [Move]) -> [ModelCoachingHistoryMove] {
@@ -253,100 +254,6 @@ enum ModelCoachingNeutralRequestBuilder {
         return (givesCheck, givesCheckmate)
     }
 
-    private static func san(for move: Move, in state: GameState) -> String {
-        switch move.special {
-        case .castleKingside:
-            return "O-O\(checkSuffix(after: move, in: state))"
-        case .castleQueenside:
-            return "O-O-O\(checkSuffix(after: move, in: state))"
-        case .promotion, .enPassant, nil:
-            break
-        }
-
-        guard let piece = state.board[move.from] else {
-            return "\(ModelCoachingPositionEncoder.squareName(move.from))-\(ModelCoachingPositionEncoder.squareName(move.to))"
-        }
-
-        let isCapture = LegalMoveGenerator.capture(for: move, in: state) != nil
-        let piecePrefix = piece.kind == .pawn ? "" : pieceLetter(for: piece.kind)
-        let disambiguation = piece.kind == .pawn
-            ? (isCapture ? fileName(move.from.file) : "")
-            : disambiguation(for: move, piece: piece, in: state)
-        let capture = isCapture ? "x" : ""
-        let promotion = promotionSuffix(for: move.special)
-
-        return "\(piecePrefix)\(disambiguation)\(capture)\(squareName(move.to))\(promotion)\(checkSuffix(after: move, in: state))"
-    }
-
-    private static func disambiguation(
-        for move: Move,
-        piece: Piece,
-        in state: GameState
-    ) -> String {
-        let competingMoves = LegalMoveGenerator.allLegalMoves(in: state).filter { candidate in
-            guard candidate.from != move.from,
-                  candidate.to == move.to,
-                  let candidatePiece = state.board[candidate.from] else {
-                return false
-            }
-            return candidatePiece == piece
-        }
-
-        guard !competingMoves.isEmpty else {
-            return ""
-        }
-
-        let sameFileExists = competingMoves.contains { $0.from.file == move.from.file }
-        let sameRankExists = competingMoves.contains { $0.from.rank == move.from.rank }
-
-        if !sameFileExists {
-            return fileName(move.from.file)
-        }
-        if !sameRankExists {
-            return "\(move.from.rank)"
-        }
-        return "\(fileName(move.from.file))\(move.from.rank)"
-    }
-
-    private static func promotionSuffix(for special: Move.Special?) -> String {
-        guard case .promotion(let kind) = special else {
-            return ""
-        }
-        return "=\(pieceLetter(for: kind))"
-    }
-
-    private static func checkSuffix(after move: Move, in state: GameState) -> String {
-        var next = state
-        next.apply(move)
-        switch next.result {
-        case .checkmate:
-            return "#"
-        case .stalemate:
-            return ""
-        case .ongoing:
-            return LegalMoveGenerator.isKingInCheck(next.sideToMove, in: next.board) ? "+" : ""
-        }
-    }
-
-    private static func pieceLetter(for kind: Piece.Kind) -> String {
-        switch kind {
-        case .king: return "K"
-        case .queen: return "Q"
-        case .rook: return "R"
-        case .bishop: return "B"
-        case .knight: return "N"
-        case .pawn: return ""
-        }
-    }
-
-    private static func squareName(_ square: Square) -> String {
-        "\(fileName(square.file))\(square.rank)"
-    }
-
-    private static func fileName(_ file: Square.File) -> String {
-        String(UnicodeScalar(file.rawValue + 96)!)
-    }
-
     private static func specialName(for special: Move.Special?) -> String {
         switch special {
         case .castleKingside:
@@ -360,5 +267,13 @@ enum ModelCoachingNeutralRequestBuilder {
         case nil:
             return "none"
         }
+    }
+
+    private static func notation(
+        for move: Move,
+        in state: GameState
+    ) -> String {
+        MoveHistoryFormatter.notation(for: state.moveHistory + [move]).last
+            ?? ModelCoachingPositionEncoder.canonicalMove(move)
     }
 }
