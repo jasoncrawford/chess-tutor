@@ -21,10 +21,7 @@ enum ModelCoachingNeutralContextCompiler {
             uniqueKeysWithValues: request.occupiedSquareRelationships.map { ($0.id, $0) }
         )
 
-        let inspectedReplyID = request.interaction.latestEvent.referencedIDs
-            .filter { tentativeReplyByID[$0] != nil }
-            .sorted()
-            .first
+        let inspectedReplyID = inspectedReplyID(in: request)
 
         let focusStableIDs = focusStableIDs(
             for: request,
@@ -175,8 +172,7 @@ enum ModelCoachingNeutralContextCompiler {
                     title: "Defenders of selected piece",
                     relationships: request.occupiedSquareRelationships.filter {
                         $0.kind == .defends
-                            && ($0.targetPieceReference == selectedPieceReference
-                                || $0.sourcePieceReference == selectedPieceReference)
+                            && $0.targetPieceReference == selectedPieceReference
                     },
                     bindings: bindings,
                     pieceByID: pieceByID
@@ -226,7 +222,9 @@ enum ModelCoachingNeutralContextCompiler {
         inspectedReplyID: String?
     ) -> [String] {
         var stableIDs = Set(
-            request.interaction.episodeEvents.flatMap(\.referencedIDs)
+            request.interaction.episodeEvents
+                .flatMap(\.referencedIDs)
+                .filter { !$0.hasPrefix("action:") }
         )
 
         let learnerColor = request.position.sideToMove
@@ -255,8 +253,7 @@ enum ModelCoachingNeutralContextCompiler {
             request.occupiedSquareRelationships
                 .filter {
                     ($0.kind == .attacks || $0.kind == .defends || $0.kind == .checks)
-                        && ($0.sourcePieceReference == selectedPieceReference
-                            || $0.targetPieceReference == selectedPieceReference)
+                        && $0.targetPieceReference == selectedPieceReference
                 }
                 .forEach { stableIDs.insert($0.id) }
         }
@@ -280,12 +277,18 @@ enum ModelCoachingNeutralContextCompiler {
     }
 
     private static func actionStableIDs(for request: ModelCoachingNeutralRequest) -> [String] {
-        var stableIDs = ["action:hint"]
+        var stableIDs = Set(
+            request.interaction.episodeEvents
+                .flatMap(\.referencedIDs)
+                .filter { $0.hasPrefix("action:") }
+        )
+
+        stableIDs.insert(actionStableID(for: .hint))
         if request.capabilities.canReplaceMove || request.capabilities.canRemoveMove {
-            stableIDs.append("action:try-another-move")
+            stableIDs.insert(actionStableID(for: .tryAnotherMove))
         }
         if request.interaction.tentativeMove?.isLegal == true {
-            stableIDs.append("action:play-move")
+            stableIDs.insert(actionStableID(for: .playMove))
         }
         return stableIDs.sorted()
     }
@@ -604,22 +607,31 @@ enum ModelCoachingNeutralContextCompiler {
     }
 
     private static func actionLabel(for stableID: String) -> String {
-        switch stableID {
-        case "action:hint":
-            return "hint"
-        case "action:play-move":
-            return "playMove"
-        case "action:try-another-move":
-            return "tryAnotherMove"
-        default:
-            return stableID
-        }
+        stableID.split(separator: ":", maxSplits: 1).last.map(String.init) ?? stableID
     }
 
     private static func pieceColor(for pieceID: String) -> String? {
         let parts = pieceID.split(separator: ":")
         guard parts.count >= 4, parts[0] == "piece" else { return nil }
         return String(parts[1])
+    }
+
+    private static func inspectedReplyID(in request: ModelCoachingNeutralRequest) -> String? {
+        guard request.interaction.latestEvent.kind == .squareInspected,
+              let inspectedPieceID = request.interaction.latestEvent.referencedIDs.first,
+              request.interaction.tentativeMove != nil else {
+            return nil
+        }
+
+        return request.tentativeReplies
+            .filter { $0.sourcePieceReference == inspectedPieceID }
+            .sorted { $0.id < $1.id }
+            .first?
+            .id
+    }
+
+    private static func actionStableID(for operation: ModelCoachingOperation) -> String {
+        "action:\(operation.rawValue)"
     }
 }
 
