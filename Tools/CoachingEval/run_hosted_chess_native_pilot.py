@@ -217,7 +217,16 @@ def _new_record(prompt, source):
     }
 
 
-def _complete_prompt(prompt, source, client, timeout):
+def _complete_prompt(
+    prompt,
+    source,
+    client,
+    timeout,
+    *,
+    model=MODEL,
+    reasoning_effort=REASONING_EFFORT,
+    maximum_output_tokens=MAXIMUM_OUTPUT_TOKENS,
+):
     contract = chess_native_response.ChessNativeResponseContract.from_markdown(
         prompt["userPrompt"]
     )
@@ -230,9 +239,9 @@ def _complete_prompt(prompt, source, client, timeout):
             system_prompt=source["systemPrompt"],
             user_prompt=prompt["userPrompt"],
             schema=_response_schema(contract),
-            model=MODEL,
-            reasoning_effort=REASONING_EFFORT,
-            maximum_output_tokens=MAXIMUM_OUTPUT_TOKENS,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            maximum_output_tokens=maximum_output_tokens,
             timeout=timeout,
         )
         response_id = response.get("id") if isinstance(response, dict) else None

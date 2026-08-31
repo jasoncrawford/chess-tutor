@@ -4,13 +4,17 @@ Date: 2026-08-30
 
 ## Result
 
-The small comparison answered both open questions clearly:
+The comparison answered the local-versus-hosted question and the later hosted
+model/effort question clearly:
 
 - GPT-5.6 Sol remained strong. The two new samples for each of the four hard cases were all mechanically valid and useful. Combined with the first funded pilot, the model produced 12/12 good hard-case responses across three samples per case.
 - Qwen3 1.7B followed the strict JSON grammar on all eight frozen cases, but it did not provide usable coaching. It ignored urgent facts, confused selections with moves, echoed action identifiers as child-facing copy, and made factual chess errors.
 - Gemma 4 E2B also produced 8/8 mechanically valid responses, but only one was plausibly useful without editing. It missed urgent danger, lost track of staged moves and taps, approved a losing move, confused Black's bishop with the child's bishop, and suggested moving a knight to the square it already occupied.
+- Among the hosted configurations, GPT-5.6 Sol was the most dependable family. Sol at both medium and low produced 12/12 mechanically valid turns; each setting made one questionable tactical judgment in twelve calls, while the rest were clear and current.
+- GPT-5.6 Luna at high produced 12/12 mechanically valid turns at roughly $0.00064 per call. Its coaching was useful, but it was less decisive than Sol when the child inspected an opponent reply. Dropping Luna to medium caused three contract failures in twelve calls and more chess-stage confusion.
+- GPT-5.6 Terra did not establish a useful middle ground: high had one contract failure and similar tactical ambiguity; medium was very fast but immediately missed the attacked-knight teaching purpose.
 
-This strengthens the hosted-first product direction. Neither Qwen3 1.7B nor Gemma 4 E2B is a plausible offline fallback for the current prompt and quality bar. The next work should design the stateless hosted endpoint and app-side thinking/error behavior, not run a broad model matrix.
+This strengthens the hosted-first product direction. Neither Qwen3 1.7B nor Gemma 4 E2B is a plausible offline fallback for the current prompt and quality bar. Because tutoring quality is the current priority, Sol at high remains the best default tested here; Luna at high is worth retaining as the low-cost comparison configuration. The next evaluation should broaden positions, not add more model/effort combinations.
 
 ## Frozen comparison
 
@@ -238,10 +242,68 @@ Severe factual error. The position contains check and a poor legal block, not im
 
 Generic and unrelated to the available castling opportunity that the move history establishes.
 
+## Hosted model and reasoning-effort screen
+
+The follow-up held the prompt, four hard cases, response schema, 2,048-token
+output cap, and one-shot/no-repair policy fixed. It first screened one response
+per case, then generated two more responses per case for each passing
+configuration. Sol/high below is the earlier three-sample baseline over the
+same cases. Costs are estimates from recorded token usage and the official
+[OpenAI model list prices](https://developers.openai.com/api/docs/models) on
+2026-08-30; reasoning tokens are included in output tokens.
+
+| Configuration | Calls | Strict-valid | Input / output tokens | Estimated cost | Median / p90 latency | Finding |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Sol, high | 12 | 12 | 9,921 / 5,907 | $0.15782 ($0.01315/call) | 6.56s / 17.73s | Best quality baseline; all twelve were previously accepted without editing. |
+| Sol, medium | 12 | 12 | 9,921 / 5,596 | $0.15160 ($0.01263/call) | 5.17s / 16.18s | Strong, but one queen-reply sample treated an unsafe queen capture as a real threat. |
+| Sol, low | 12 | 12 | 9,921 / 3,863 | $0.11694 ($0.00975/call) | 3.93s / 17.82s | Strong and cheaper, with the same one-in-twelve tactical lapse. |
+| Terra, high | 12 | 11 | 9,921 / 3,464 | $0.06141 ($0.00512/call) | 2.90s / 7.78s | One child-message contract failure; several replies overreacted to the queen's legal-but-losing captures. |
+| Terra, medium | 4 | 4 | 3,307 / 259 | $0.00972 ($0.00243/call) | 1.61s / 1.88s | Very fast, but missed the urgent attacked-knight purpose in the first screen. It did not advance. |
+| Luna, high | 12 | 12 | 9,921 / 4,699 | $0.00762 ($0.00064/call) | 5.05s / 6.89s | Best budget result. Useful overall, but less decisive than Sol when evaluating the inspected queen replies. |
+| Luna, medium | 12 | 9 | 9,921 / 3,779 | $0.00652 ($0.00054/call) | 3.34s / 6.56s | Three contract failures and repeated loss of the current tentative-move context. |
+
+The most revealing case was `06-inspected-reply`. After White tentatively
+plays `Nc3`, Black's queen has three legal pawn captures, but all three lose
+the queen: `Qxe4+` is met by `Nxe4`, `Qxf2+` by `Kxf2`, and `Qxh2` by
+`Rxh2`. The best responses recognized that the knight move protects the
+center pawn and returned to the current move decision. Some otherwise strong
+configurations saw a legal capture in the supplied facts and treated it as a
+real danger without finishing the exchange. This is exactly the kind of
+chess judgment the hosted model must supply rather than merely echoing the
+mechanical facts.
+
+Artifacts:
+
+- Initial Sol/medium, Terra/high, Luna/high screen: `.coaching-eval/runs/hosted-tutor-v6-tier-effort-screen-20260830` (manifest `8a5f9d657661997cd49bcbd304923b42ccf141cf96d699e7b0a8d1cf1a94206f`)
+- Sol/medium consistency: `.coaching-eval/runs/gpt-5.6-sol/hosted-tutor-v6-consistency-medium-20260830` (manifest `1e88d67546697392c716ca4dfacd1dac2a8bec140cccd72f531f8bf01042f460`)
+- Terra/high consistency: `.coaching-eval/runs/gpt-5.6-terra/hosted-tutor-v6-consistency-high-20260830` (manifest `9983aec8bb3f2d364b336f9360e454230b7e196a628ee9bd4cbc2960e1e03ac8`)
+- Luna/high consistency: `.coaching-eval/runs/gpt-5.6-luna/hosted-tutor-v6-consistency-high-20260830` (manifest `a2bd6ed2932548bcea6e3c09d6554b8a224eabd8c7dd2f8facff32109047b8d1`)
+- Lower-effort screen: `.coaching-eval/runs/hosted-tutor-v6-lower-effort-screen-20260830` (manifest `46ce5f6898ed8aee3820b0582c6a30ba1f1addab26cd4922d372c0449cc77e64`)
+- Sol/low consistency: `.coaching-eval/runs/gpt-5.6-sol/hosted-tutor-v6-consistency-low-20260830` (manifest `606b922d48860c34c6d3b9cd0966f7c32c5120d1af43d6df5cf9844c02f9acec`)
+- Luna/medium consistency: `.coaching-eval/runs/gpt-5.6-luna/hosted-tutor-v6-consistency-medium-20260830` (manifest `591d3333f7560941b88a805ff9b27e137ff482f950436b43fe8e097a4b085405`)
+
 ## Decision
 
-GPT-5.6 Sol has now passed the intended small consistency gate. Across three samples of each hard case, it consistently inferred the chess situation, followed the latest interaction, chose one useful teaching purpose, and produced UI-aligned output.
+GPT-5.6 Sol/high remains the quality winner of this small experiment. Lowering
+Sol to medium or low reduced cost and typical latency, but each lower setting
+introduced a tactical misread that did not appear in the high baseline. The
+dollar difference is less than half a cent per coaching turn, so it is not a
+useful trade while quality is the primary goal.
+
+Luna/high is the notable alternative. It was mechanically reliable and about
+twenty times cheaper than Sol/high in this sample, with a much tighter latency
+range. Its weaker handling of the inspected-reply case makes it a comparison
+or possible future routing model rather than the initial default. Terra and
+the lower Luna setting do not merit more calls on this prompt.
 
 Qwen3 1.7B and Gemma 4 E2B demonstrate why mechanical validity is not enough. The concise prompt solved the earlier context-overflow and malformed-output problems, and local latency is attractive, but both models still lack the chess and interaction judgment needed for unsupervised coaching. Gemma's larger 3.35 GB artifact did not close that gap: its most serious errors were approving `Bb5` despite `axb5`, presenting Black's `Bxd2+` as the child's move, and suggesting `Nf3` when the knight was already on f3.
 
-Recommended next step: design a stateless hosted coaching endpoint, with the app retaining deterministic prompt compilation and strict response validation. The app should show the already-approved thinking state after a short delay and offer a calm retry/close path for network or validation failure. Offline coaching should remain a future research track rather than a requirement for the first hosted iteration.
+Recommended next step: run Sol/high and Luna/high over a broader, more varied
+visible position set, including exchanges, defended captures, pins, checks,
+and harmless legal replies. If Sol/high keeps its quality advantage, design a
+stateless hosted coaching endpoint around it, with the app retaining
+deterministic prompt compilation and strict response validation. The app
+should show the already-approved thinking state after a short delay and offer
+a calm retry/close path for network or validation failure. Offline coaching
+should remain a future research track rather than a requirement for the first
+hosted iteration.

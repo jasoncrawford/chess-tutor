@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repeat the frozen tutor-v6 hard cases against the hosted flagship model."""
+"""Screen three frozen hosted configurations on the four tutor-v6 hard cases."""
 
 import argparse
 import json
@@ -18,36 +18,39 @@ HARD_CASE_IDS = (
     "06-inspected-reply",
     "07-answering-check",
 )
-SAMPLE_INDICES = (2, 3)
-HOSTED_CONFIGURATIONS = {
-    "sol-high": {"model": "gpt-5.6-sol", "reasoningEffort": "high"},
-    "sol-medium": {"model": "gpt-5.6-sol", "reasoningEffort": "medium"},
-    "sol-low": {"model": "gpt-5.6-sol", "reasoningEffort": "low"},
-    "terra-high": {"model": "gpt-5.6-terra", "reasoningEffort": "high"},
-    "luna-high": {"model": "gpt-5.6-luna", "reasoningEffort": "high"},
-    "luna-medium": {"model": "gpt-5.6-luna", "reasoningEffort": "medium"},
+CONFIGURATIONS = (
+    {"id": "sol-medium", "model": "gpt-5.6-sol", "reasoningEffort": "medium"},
+    {"id": "terra-high", "model": "gpt-5.6-terra", "reasoningEffort": "high"},
+    {"id": "luna-high", "model": "gpt-5.6-luna", "reasoningEffort": "high"},
+)
+LOWER_EFFORT_CONFIGURATIONS = (
+    {"id": "sol-low", "model": "gpt-5.6-sol", "reasoningEffort": "low"},
+    {"id": "terra-medium", "model": "gpt-5.6-terra", "reasoningEffort": "medium"},
+    {"id": "luna-medium", "model": "gpt-5.6-luna", "reasoningEffort": "medium"},
+)
+CONFIGURATION_MATRICES = {
+    "initial": CONFIGURATIONS,
+    "lower-effort": LOWER_EFFORT_CONFIGURATIONS,
 }
 
 
-def run_hosted_consistency(
+def run_hosted_screen(
     *,
     source_dir,
     system_prompt_path,
     destination,
     client,
     timeout=120,
-    configuration=None,
+    configurations=None,
 ):
-    configuration = configuration or HOSTED_CONFIGURATIONS["sol-high"]
+    configurations = configurations or CONFIGURATIONS
     destination = Path(destination)
     if os.path.lexists(destination):
-        raise ValueError(
-            f"Refusing to overwrite existing consistency directory: {destination}"
-        )
+        raise ValueError(f"Refusing to overwrite existing screen directory: {destination}")
     source = hosted_pilot._load_frozen_source(source_dir, system_prompt_path)
     prompts = {prompt["id"]: prompt for prompt in source["prompts"]}
     records = []
-    for sample_index in SAMPLE_INDICES:
+    for configuration in configurations:
         for identifier in HARD_CASE_IDS:
             record = hosted_pilot._complete_prompt(
                 prompts[identifier],
@@ -59,22 +62,24 @@ def run_hosted_consistency(
                 maximum_output_tokens=hosted_pilot.MAXIMUM_OUTPUT_TOKENS,
             )
             record["schemaVersion"] = (
-                "model-coaching-chess-native-hosted-consistency-record.v1"
+                "model-coaching-chess-native-hosted-screen-record.v1"
             )
-            record["sampleIndex"] = sample_index
+            record["configurationID"] = configuration["id"]
+            record["requestedModel"] = configuration["model"]
+            record["reasoningEffort"] = configuration["reasoningEffort"]
             records.append(record)
     return _write_output(
         destination=destination,
         source_dir=Path(source_dir).resolve(),
         source=source,
         records=records,
-        configuration=configuration,
+        configurations=configurations,
     )
 
 
 def _review_markdown(source_dir, records):
     lines = [
-        "# Chess-native hosted-model consistency review",
+        "# Chess-native hosted-model screen review",
         "",
         "This review contains only final trace-free candidates.",
         "",
@@ -82,14 +87,15 @@ def _review_markdown(source_dir, records):
     system_path = (Path(source_dir) / "system-prompt.md").resolve().as_posix()
     for record in records:
         identifier = record["caseID"]
-        sample_index = record["sampleIndex"]
         user_path = (
             Path(source_dir) / "user-prompts" / f"{identifier}.md"
         ).resolve().as_posix()
         lines.extend(
             (
-                f"## {identifier} — sample {sample_index}",
+                f"## {record['configurationID']} — {identifier}",
                 "",
+                f"- Model: `{record['requestedModel']}`",
+                f"- Reasoning effort: `{record['reasoningEffort']}`",
                 f"- System: [system-prompt.md]({system_path})",
                 f"- User: [{identifier}.md]({user_path})",
                 f"- Validation: {record['generationStatus']}",
@@ -108,12 +114,10 @@ def _review_markdown(source_dir, records):
     return "\n".join(lines)
 
 
-def _write_output(*, destination, source_dir, source, records, configuration):
+def _write_output(*, destination, source_dir, source, records, configurations):
     destination = Path(destination)
     if os.path.lexists(destination):
-        raise ValueError(
-            f"Refusing to overwrite existing consistency directory: {destination}"
-        )
+        raise ValueError(f"Refusing to overwrite existing screen directory: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(
         tempfile.mkdtemp(prefix=f".{destination.name}.tmp-", dir=str(destination.parent))
@@ -124,13 +128,13 @@ def _write_output(*, destination, source_dir, source, records, configuration):
         manifest_records = []
         for record in records:
             record_bytes = hosted_pilot._canonical_json_bytes(record)
-            stem = f"{record['caseID']}-sample-{record['sampleIndex']}"
+            stem = f"{record['configurationID']}--{record['caseID']}"
             relative_path = Path("records") / f"{stem}.json"
             hosted_pilot._write_fsynced(temporary / relative_path, record_bytes)
             manifest_records.append(
                 {
+                    "configurationID": record["configurationID"],
                     "caseID": record["caseID"],
-                    "sampleIndex": record["sampleIndex"],
                     "path": relative_path.as_posix(),
                     "sha256": hosted_pilot._sha256(record_bytes),
                 }
@@ -148,19 +152,19 @@ def _write_output(*, destination, source_dir, source, records, configuration):
             record["generationStatus"] == "generationError" for record in records
         )
         manifest = {
-            "schemaVersion": "model-coaching-chess-native-hosted-consistency.v1",
+            "schemaVersion": "model-coaching-chess-native-hosted-screen.v1",
             "promptVersion": hosted_pilot.PROMPT_VERSION,
             "caseIDs": list(HARD_CASE_IDS),
-            "sampleIndices": list(SAMPLE_INDICES),
+            "configurations": [dict(configuration) for configuration in configurations],
             "sourceDirectory": str(Path(source_dir).resolve()),
             "sourceManifestSHA256": hosted_pilot.SOURCE_MANIFEST_SHA256,
             "examplesJSONLSHA256": hosted_pilot.EXAMPLES_JSONL_SHA256,
             "systemPromptSHA256": source["systemPromptSHA256"],
             "provider": {
                 "api": "openai-responses-v1",
-                "model": configuration["model"],
-                "reasoningEffort": configuration["reasoningEffort"],
                 "maximumOutputTokens": hosted_pilot.MAXIMUM_OUTPUT_TOKENS,
+                "store": False,
+                "retries": 0,
             },
             "records": manifest_records,
             "review": {
@@ -186,7 +190,7 @@ def _write_output(*, destination, source_dir, source, records, configuration):
         hosted_pilot._fsync_directory(temporary)
         if os.path.lexists(destination):
             raise ValueError(
-                f"Refusing to overwrite existing consistency directory: {destination}"
+                f"Refusing to overwrite existing screen directory: {destination}"
             )
         os.rename(temporary, destination)
         hosted_pilot._fsync_directory(destination.parent)
@@ -203,13 +207,13 @@ def _execute(arguments):
         hosted_pilot.OPENAI_BASE_URL,
         api_key=hosted_pilot._api_key_from_environment(dict(os.environ)),
     )
-    manifest = run_hosted_consistency(
+    manifest = run_hosted_screen(
         source_dir=arguments.source,
         system_prompt_path=arguments.system_prompt,
         destination=arguments.destination,
         client=client,
         timeout=arguments.timeout,
-        configuration=HOSTED_CONFIGURATIONS[arguments.configuration],
+        configurations=CONFIGURATION_MATRICES[arguments.matrix],
     )
     print(json.dumps(manifest["summary"], sort_keys=True))
     return 0
@@ -233,9 +237,9 @@ def main(argv=None):
     )
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument(
-        "--configuration",
-        choices=tuple(HOSTED_CONFIGURATIONS),
-        default="sol-high",
+        "--matrix",
+        choices=tuple(CONFIGURATION_MATRICES),
+        default="initial",
     )
     parser.add_argument("--timeout", type=int, default=120)
     arguments = parser.parse_args(argv)

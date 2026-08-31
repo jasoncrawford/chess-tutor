@@ -47,16 +47,18 @@ class HostedChessNativeConsistencyTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def run_consistency(self, client, destination=None):
+    def run_consistency(self, client, destination=None, **overrides):
         destination = destination or self.root / "consistency-run"
+        arguments = {
+            "source_dir": self.fixture["source"],
+            "system_prompt_path": self.fixture["systemPath"],
+            "destination": destination,
+            "client": client,
+            "timeout": 9,
+        }
+        arguments.update(overrides)
         with synthetic_source_pins(self.runner.hosted_pilot, self.fixture):
-            return self.runner.run_hosted_consistency(
-                source_dir=self.fixture["source"],
-                system_prompt_path=self.fixture["systemPath"],
-                destination=destination,
-                client=client,
-                timeout=9,
-            )
+            return self.runner.run_hosted_consistency(**arguments)
 
     def test_runs_two_new_samples_of_each_hard_case_without_changing_requests(self):
         client = RecordingHostedClient()
@@ -145,6 +147,39 @@ class HostedChessNativeConsistencyTests(unittest.TestCase):
         for path in (self.root / "consistency-run").rglob("*"):
             if path.is_file():
                 self.assertNotIn(private_marker, path.read_text(encoding="utf-8"))
+
+    def test_selected_configuration_drives_every_call_and_manifest(self):
+        client = RecordingHostedClient()
+        configuration = self.runner.HOSTED_CONFIGURATIONS["terra-high"]
+
+        manifest = self.run_consistency(client, configuration=configuration)
+
+        self.assertEqual(8, len(client.calls))
+        self.assertTrue(all(call["model"] == "gpt-5.6-terra" for call in client.calls))
+        self.assertTrue(all(call["reasoning_effort"] == "high" for call in client.calls))
+        self.assertEqual(
+            {
+                "api": "openai-responses-v1",
+                "model": "gpt-5.6-terra",
+                "reasoningEffort": "high",
+                "maximumOutputTokens": 2048,
+            },
+            manifest["provider"],
+        )
+
+    def test_luna_medium_is_an_available_frozen_consistency_configuration(self):
+        client = RecordingHostedClient()
+        configuration = self.runner.HOSTED_CONFIGURATIONS["luna-medium"]
+
+        manifest = self.run_consistency(client, configuration=configuration)
+
+        self.assertEqual(8, len(client.calls))
+        self.assertTrue(all(call["model"] == "gpt-5.6-luna" for call in client.calls))
+        self.assertTrue(
+            all(call["reasoning_effort"] == "medium" for call in client.calls)
+        )
+        self.assertEqual("gpt-5.6-luna", manifest["provider"]["model"])
+        self.assertEqual("medium", manifest["provider"]["reasoningEffort"])
 
     def test_refuses_overwrite_before_any_provider_call(self):
         destination = self.root / "existing"
