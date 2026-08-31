@@ -8,12 +8,13 @@ The small comparison answered both open questions clearly:
 
 - GPT-5.6 Sol remained strong. The two new samples for each of the four hard cases were all mechanically valid and useful. Combined with the first funded pilot, the model produced 12/12 good hard-case responses across three samples per case.
 - Qwen3 1.7B followed the strict JSON grammar on all eight frozen cases, but it did not provide usable coaching. It ignored urgent facts, confused selections with moves, echoed action identifiers as child-facing copy, and made factual chess errors.
+- Gemma 4 E2B also produced 8/8 mechanically valid responses, but only one was plausibly useful without editing. It missed urgent danger, lost track of staged moves and taps, approved a losing move, confused Black's bishop with the child's bishop, and suggested moving a knight to the square it already occupied.
 
-This strengthens the hosted-first product direction. Qwen3 1.7B is not a plausible offline fallback for the current prompt and quality bar. The next work should design the stateless hosted endpoint and app-side thinking/error behavior, not run a broad model matrix.
+This strengthens the hosted-first product direction. Neither Qwen3 1.7B nor Gemma 4 E2B is a plausible offline fallback for the current prompt and quality bar. The next work should design the stateless hosted endpoint and app-side thinking/error behavior, not run a broad model matrix.
 
 ## Frozen comparison
 
-Both runs used the exact same deterministic prompt packet:
+All runs used the exact same deterministic prompt packet:
 
 - Prompt version: `tutor-v6`
 - Source manifest SHA-256: `80eb1b8f5b57ea9fc04609909922ed1377e4dd702feb0e178a070aba4d3e15c7`
@@ -69,6 +70,33 @@ Artifact directory:
 - Rendered prompt size: 607–695 tokens
 - Output tokens: 656 total
 - Latency: 1.84–3.68 seconds; median 2.00 seconds
+
+### Local Gemma settings
+
+- Model: `gemma4-e2b-it-qat-q4_0`
+- Official artifact: `google/gemma-4-E2B-it-qat-q4_0-gguf`
+- Quantization: QAT Q4_0
+- Model bytes: 3,349,516,256
+- Model SHA-256: `fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634`
+- Resolved revision: `675cff42a74c774d6cb76f76d8eacb49b48c9b93`
+- Runtime: llama.cpp b10516, commit `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9`
+- Mode: thinking off
+- Seed: 1103
+- Temperature: 0.2
+- Top-p: 0.95
+- Maximum output tokens: 512
+
+Artifact directory:
+
+`.coaching-eval/chess-native-pilot/gemma4-e2b-seed-1103-tutor-v6-v1`
+
+- Run manifest SHA-256: `d5dfd497197e3e79555f04f5b9119fae66876b25040df9ad3b788f366f138908`
+- Review SHA-256: `b7f0318bc9e56316a79f9362918b2427dcfe15fbf11e5de66726d429bfffd709`
+- Valid responses: 8/8 mechanically
+- Provider errors: 0
+- Rendered prompt size: 603–689 tokens
+- Output tokens: 331 total
+- Latency: 1.44–4.25 seconds; median 1.70 seconds
 
 ## Hosted hard-case consistency
 
@@ -214,6 +242,6 @@ Generic and unrelated to the available castling opportunity that the move histor
 
 GPT-5.6 Sol has now passed the intended small consistency gate. Across three samples of each hard case, it consistently inferred the chess situation, followed the latest interaction, chose one useful teaching purpose, and produced UI-aligned output.
 
-Qwen3 1.7B demonstrates why mechanical validity is not enough. The concise prompt solved the earlier context-overflow and malformed-output problems, and local latency is attractive, but the model still lacks the chess and interaction judgment needed for unsupervised coaching.
+Qwen3 1.7B and Gemma 4 E2B demonstrate why mechanical validity is not enough. The concise prompt solved the earlier context-overflow and malformed-output problems, and local latency is attractive, but both models still lack the chess and interaction judgment needed for unsupervised coaching. Gemma's larger 3.35 GB artifact did not close that gap: its most serious errors were approving `Bb5` despite `axb5`, presenting Black's `Bxd2+` as the child's move, and suggesting `Nf3` when the knight was already on f3.
 
 Recommended next step: design a stateless hosted coaching endpoint, with the app retaining deterministic prompt compilation and strict response validation. The app should show the already-approved thinking state after a short delay and offer a calm retry/close path for network or validation failure. Offline coaching should remain a future research track rather than a requirement for the first hosted iteration.

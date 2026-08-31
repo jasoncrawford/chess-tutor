@@ -38,6 +38,14 @@ EXPECTED_MODELS = [
         "thinkingModes": ["off"],
     },
     {
+        "id": "gemma4-e2b-it-qat-q4_0",
+        "repository": "google/gemma-4-E2B-it-qat-q4_0-gguf",
+        "selector": "Q4_0",
+        "filename": "gemma-4-E2B_q4_0-it.gguf",
+        "license": "Apache-2.0",
+        "thinkingModes": ["off"],
+    },
+    {
         "id": "qwen3-1.7b-q4_k_m",
         "repository": "ggml-org/Qwen3-1.7B-GGUF",
         "selector": "Q4_K_M",
@@ -233,7 +241,10 @@ class ModelStoreTests(unittest.TestCase):
 
         self.assertEqual([candidate["id"] for candidate in EXPECTED_MODELS], store.attempts)
         self.assertEqual([candidate["id"] for candidate in EXPECTED_MODELS], [row["modelID"] for row in outcomes])
-        self.assertEqual(["fetched", "accessError", "fetched", "fetched"], [row["status"] for row in outcomes])
+        self.assertEqual(
+            ["fetched", "accessError", "fetched", "fetched", "fetched"],
+            [row["status"] for row in outcomes],
+        )
         self.assertIn("Gemma Terms", outcomes[1]["error"])
 
     def test_fetch_all_cli_directly_reports_every_outcome_and_gated_guidance(self):

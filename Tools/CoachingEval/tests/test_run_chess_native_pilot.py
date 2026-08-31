@@ -911,6 +911,56 @@ class ChessNativePilotRunnerTests(unittest.TestCase):
             )
             self.assertEqual(candidate.identifier, manifest["provenance"]["modelID"])
 
+    def test_gemma_candidate_uses_off_mode_without_a_thinking_envelope(self):
+        runner = load_runner(self)
+        candidate = runner.GEMMA4_E2B_CANDIDATE
+        self.assertIs(candidate, runner.MODEL_CANDIDATES[candidate.identifier])
+        provenance = {
+            **exact_provenance(),
+            "modelID": candidate.identifier,
+            "modelArtifactSHA256": candidate.artifact_sha256,
+            "modelArtifactBytes": candidate.artifact_bytes,
+            "modelArtifactManifestSHA256": candidate.manifest_sha256,
+            "modelResolvedRevision": candidate.resolved_revision,
+        }
+
+        def response(index):
+            result = RecordingPilotClient._valid_response(index)
+            content = result["content"].split("\n", 1)[1]
+            result["content"] = content
+            result["choices"][0]["message"]["content"] = content
+            return result
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "pilot"
+            client = RecordingPilotClient(response_for_index=response)
+
+            manifest, _fixture = self.run_pilot(
+                root,
+                destination,
+                client,
+                candidate=candidate,
+                provenance=provenance,
+            )
+
+            render_calls = [
+                arguments for kind, arguments in client.events if kind == "render"
+            ]
+            completion_calls = [
+                arguments for kind, arguments in client.events if kind == "complete"
+            ]
+            self.assertTrue(render_calls)
+            self.assertTrue(all(call["enable_thinking"] is False for call in render_calls))
+            self.assertTrue(
+                all("thinking-block" not in call["grammar"] for call in completion_calls)
+            )
+            self.assertEqual("off", manifest["settings"]["mode"])
+            for path in (destination / "records").glob("*.json"):
+                record = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual("off", record["mode"])
+                self.assertEqual("valid", record["generationStatus"])
+
     def test_refuses_overwrite_before_calling_client(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

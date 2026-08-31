@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the one immutable, trace-free tutor-v6 SmolLM3 pilot."""
+"""Run one immutable, trace-free tutor-v6 local-model pilot."""
 
 import argparse
 import hashlib
@@ -33,6 +33,7 @@ class ModelCandidate:
     artifact_bytes: int
     manifest_sha256: str
     resolved_revision: str
+    mode: str = "bounded"
 
 
 SMOLLM3_CANDIDATE = ModelCandidate(
@@ -61,9 +62,27 @@ QWEN3_1_7B_CANDIDATE = ModelCandidate(
     ),
     resolved_revision="daeb8e2d528a760970442092f6bf1e55c3b659eb",
 )
+GEMMA4_E2B_CANDIDATE = ModelCandidate(
+    identifier="gemma4-e2b-it-qat-q4_0",
+    display_name="Gemma 4 E2B",
+    filename="gemma-4-E2B_q4_0-it.gguf",
+    artifact_sha256=(
+        "fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634"
+    ),
+    artifact_bytes=3349516256,
+    manifest_sha256=(
+        "42baf9c2170b40e70504cfdea9f94fa74bdc80b7e3fa54a391633dd29fbf17c1"
+    ),
+    resolved_revision="675cff42a74c774d6cb76f76d8eacb49b48c9b93",
+    mode="off",
+)
 MODEL_CANDIDATES = {
     candidate.identifier: candidate
-    for candidate in (SMOLLM3_CANDIDATE, QWEN3_1_7B_CANDIDATE)
+    for candidate in (
+        SMOLLM3_CANDIDATE,
+        QWEN3_1_7B_CANDIDATE,
+        GEMMA4_E2B_CANDIDATE,
+    )
 }
 
 MODEL_ID = SMOLLM3_CANDIDATE.identifier
@@ -197,6 +216,7 @@ def _default_candidate():
         artifact_bytes=MODEL_ARTIFACT_BYTES,
         manifest_sha256=MODEL_MANIFEST_SHA256,
         resolved_revision=MODEL_RESOLVED_REVISION,
+        mode=MODE,
     )
 
 
@@ -346,15 +366,16 @@ class _PilotRunner:
 
     def _preflight(self, source):
         cells = []
+        enable_thinking = self.candidate.mode == "bounded"
         for prompt in source["prompts"]:
             contract = chess_native_response.ChessNativeResponseContract.from_markdown(
                 prompt["userPrompt"]
             )
-            grammar = contract.grammar(enable_thinking=True)
+            grammar = contract.grammar(enable_thinking=enable_thinking)
             rendered_prompt = self.client.render_prompt(
                 system_prompt=source["systemPrompt"],
                 user_content=prompt["userPrompt"],
-                enable_thinking=True,
+                enable_thinking=enable_thinking,
                 timeout=self.timeout,
             )
             if not isinstance(rendered_prompt, str) or not rendered_prompt:
@@ -390,7 +411,7 @@ class _PilotRunner:
             "schemaVersion": "model-coaching-chess-native-pilot-record.v1",
             "caseID": cell["id"],
             "promptVersion": PROMPT_VERSION,
-            "mode": MODE,
+            "mode": self.candidate.mode,
             "seed": SEED,
             "generationStatus": "notStarted",
             "completionAttempts": 0,
@@ -434,7 +455,7 @@ class _PilotRunner:
             raw_content = _final_response_content(response)
             try:
                 final_content = cell["contract"].strip_thinking(
-                    raw_content, enable_thinking=True
+                    raw_content, enable_thinking=self.candidate.mode == "bounded"
                 )
             except ValueError:
                 record["generationStatus"] = "invalid"
@@ -613,7 +634,7 @@ def _write_output(
             "examplesJSONLSHA256": EXAMPLES_JSONL_SHA256,
             "systemPromptSHA256": source["systemPromptSHA256"],
             "settings": {
-                "mode": MODE,
+                "mode": candidate.mode,
                 "seed": SEED,
                 "maximumOutputTokens": MAXIMUM_OUTPUT_TOKENS,
                 "temperature": TEMPERATURE,
