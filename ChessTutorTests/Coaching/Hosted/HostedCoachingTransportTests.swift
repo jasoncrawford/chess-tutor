@@ -39,6 +39,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         XCTAssertEqual("POST", sent.httpMethod)
         XCTAssertEqual("Bearer private-token", sent.value(forHTTPHeaderField: "Authorization"))
         XCTAssertEqual("application/json", sent.value(forHTTPHeaderField: "Content-Type"))
+        XCTAssertEqual(35, sent.timeoutInterval)
         let expected = try JSONEncoder.canonical.encode(request)
         XCTAssertEqual(expected, sent.httpBody)
     }

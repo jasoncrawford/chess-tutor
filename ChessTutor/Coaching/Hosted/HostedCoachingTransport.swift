@@ -55,6 +55,7 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = body
+        urlRequest.timeoutInterval = 35
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
