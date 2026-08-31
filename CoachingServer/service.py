@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import socket
 from collections.abc import Mapping
 
 from CoachingServer.chess_native_compiler import compile_context
@@ -18,6 +19,7 @@ class HostedCoachingServiceError(RuntimeError):
 
     _MESSAGES = {
         "invalidRequest": "The coaching request is invalid.",
+        "providerTimeout": "Coaching took too long to respond.",
         "providerUnavailable": "Coaching is temporarily unavailable.",
         "invalidProviderResponse": "The coaching response was invalid.",
     }
@@ -72,7 +74,13 @@ class HostedCoachingService:
                 maximum_output_tokens=2048,
                 timeout=self._timeout,
             )
-        except Exception:
+        except Exception as error:
+            if (
+                isinstance(error, (TimeoutError, socket.timeout))
+                or getattr(error, "category", None) == "timeout"
+                or getattr(error, "http_status", None) == 504
+            ):
+                raise HostedCoachingServiceError("providerTimeout") from None
             raise HostedCoachingServiceError("providerUnavailable") from None
         elapsed_milliseconds = max(0.0, (self._clock() - started) * 1000.0)
 

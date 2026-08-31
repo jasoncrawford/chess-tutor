@@ -1,4 +1,5 @@
 import json
+import socket
 import unittest
 from pathlib import Path
 
@@ -129,6 +130,29 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         self.assertEqual("providerUnavailable", raised.exception.code)
         self.assertNotIn("secret", str(raised.exception))
+
+    def test_preserves_provider_timeout_as_a_stable_timeout_failure(self):
+        provider = RecordingProvider(error=socket.timeout("private timeout detail"))
+        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(FIXTURE["request"])
+
+        self.assertEqual("providerTimeout", raised.exception.code)
+        self.assertNotIn("private", str(raised.exception))
+
+    def test_maps_provider_gateway_timeout_to_the_same_stable_timeout_failure(self):
+        error = RuntimeError("private provider body")
+        error.category = "httpError"
+        error.http_status = 504
+        provider = RecordingProvider(error=error)
+        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(FIXTURE["request"])
+
+        self.assertEqual("providerTimeout", raised.exception.code)
+        self.assertNotIn("private", str(raised.exception))
 
 
 if __name__ == "__main__":

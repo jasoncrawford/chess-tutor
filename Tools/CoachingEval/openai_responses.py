@@ -2,6 +2,7 @@
 """Narrow, trace-free OpenAI Responses API transport for coaching pilots."""
 
 import json
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,6 +18,7 @@ __all__ = ["OpenAIResponsesClient", "OpenAIResponsesError"]
 _ERROR_CATEGORIES = frozenset(
     (
         "httpError",
+        "timeout",
         "transportError",
         "invalidResponse",
         "incompleteResponse",
@@ -135,7 +137,24 @@ class OpenAIResponsesClient:
                 category="httpError",
                 http_status=error.code,
             ) from None
-        except (OSError, ValueError, urllib.error.URLError):
+        except (TimeoutError, socket.timeout):
+            raise OpenAIResponsesError(
+                "OpenAI Responses API request timed out",
+                category="timeout",
+            ) from None
+        except urllib.error.URLError as error:
+            category = (
+                "timeout"
+                if isinstance(error.reason, (TimeoutError, socket.timeout))
+                else "transportError"
+            )
+            message = (
+                "OpenAI Responses API request timed out"
+                if category == "timeout"
+                else "OpenAI Responses API request failed"
+            )
+            raise OpenAIResponsesError(message, category=category) from None
+        except (OSError, ValueError):
             raise OpenAIResponsesError(
                 "OpenAI Responses API request failed",
                 category="transportError",

@@ -37,12 +37,17 @@ child identity, conversation, provider response ID, or hidden reasoning.
   coaching shell never falls back to the ordinary sidebar or shows stale copy.
 - Existing local coaching remains unchanged when hosted configuration is absent.
 - Configuration is resolved once and carried into new or restored games.
+- The server rejects noncanonical chess strings before prompt compilation, and
+  the iPad streams responses through a hard 64 KiB limit instead of buffering
+  an unbounded body.
+- Provider timeouts, including upstream HTTP 504 responses, remain a distinct
+  retryable timeout at the API boundary.
 
 Final verification on iPad (A16), iOS 26.5 Simulator:
 
-- Swift unit/UI suite: **946 passed, 0 failed, 0 skipped**
-- Coaching evaluator Python suite: **175 passed**
-- Hosted server Python suite: **8 passed**
+- Swift unit/UI suite: **948 passed, 0 failed, 0 skipped**
+- Coaching evaluator Python suite: **177 passed**
+- Hosted server Python suite: **11 passed**
 - Standalone simulator build: **succeeded**
 - `git diff --check`: clean
 

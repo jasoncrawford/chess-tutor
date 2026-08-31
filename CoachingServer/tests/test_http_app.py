@@ -110,6 +110,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
             ("invalidRequest", "400 Bad Request"),
             ("invalidProviderResponse", "502 Bad Gateway"),
             ("providerUnavailable", "503 Service Unavailable"),
+            ("providerTimeout", "504 Gateway Timeout"),
         )
         for code, expected_status in cases:
             with self.subTest(code=code):

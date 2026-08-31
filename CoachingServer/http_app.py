@@ -14,6 +14,7 @@ _MAXIMUM_BODY_BYTES = 128 * 1024
 _ERROR_STATUS = {
     "invalidRequest": "400 Bad Request",
     "invalidProviderResponse": "502 Bad Gateway",
+    "providerTimeout": "504 Gateway Timeout",
     "providerUnavailable": "503 Service Unavailable",
 }
 

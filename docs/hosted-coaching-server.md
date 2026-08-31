@@ -37,7 +37,8 @@ time out after 35 seconds.
 ## Vercel
 
 The committed `api/index.py` exposes the same WSGI app and `vercel.json` routes
-both endpoints to it. Configure `OPENAI_API_KEY` and
+both endpoints to it. The committed `.python-version` selects Python 3.12.
+Configure `OPENAI_API_KEY` and
 `CHESS_TUTOR_COACHING_ACCESS_TOKEN` as encrypted Vercel environment variables,
 then deploy from the repository root:
 

@@ -1,10 +1,51 @@
 import Foundation
 
 protocol HostedCoachingHTTPDataLoading: Sendable {
-    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+    func data(for request: URLRequest, maximumBytes: Int) async throws -> (Data, URLResponse)
 }
 
-extension URLSession: HostedCoachingHTTPDataLoading {}
+enum HostedCoachingHTTPDataLoadingError: Error, Equatable {
+    case responseTooLarge
+}
+
+struct HostedCoachingResponseBuffer {
+    let maximumBytes: Int
+    private(set) var data = Data()
+
+    init(maximumBytes: Int, expectedBytes: Int = 0) {
+        self.maximumBytes = maximumBytes
+        data.reserveCapacity(min(max(0, expectedBytes), maximumBytes))
+    }
+
+    mutating func append(_ byte: UInt8) throws {
+        guard data.count < maximumBytes else {
+            throw HostedCoachingHTTPDataLoadingError.responseTooLarge
+        }
+        data.append(byte)
+    }
+}
+
+extension URLSession: HostedCoachingHTTPDataLoading {
+    func data(
+        for request: URLRequest,
+        maximumBytes: Int
+    ) async throws -> (Data, URLResponse) {
+        let (bytes, response) = try await bytes(for: request)
+        let expectedLength = response.expectedContentLength
+        guard expectedLength < 0 || expectedLength <= maximumBytes else {
+            throw HostedCoachingHTTPDataLoadingError.responseTooLarge
+        }
+
+        var buffer = HostedCoachingResponseBuffer(
+            maximumBytes: maximumBytes,
+            expectedBytes: expectedLength > 0 ? Int(expectedLength) : 0
+        )
+        for try await byte in bytes {
+            try buffer.append(byte)
+        }
+        return (buffer.data, response)
+    }
+}
 
 struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
     private static let maximumResponseBytes = 64 * 1024
@@ -64,9 +105,14 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await loader.data(for: urlRequest)
+            (data, response) = try await loader.data(
+                for: urlRequest,
+                maximumBytes: Self.maximumResponseBytes
+            )
         } catch is CancellationError {
             throw CancellationError()
+        } catch HostedCoachingHTTPDataLoadingError.responseTooLarge {
+            throw HostedCoachingTransportError.invalidResponse
         } catch {
             if Task.isCancelled {
                 throw CancellationError()

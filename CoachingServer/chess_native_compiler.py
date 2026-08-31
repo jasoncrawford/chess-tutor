@@ -10,6 +10,12 @@ from typing import Any
 
 _SQUARE = re.compile(r"[a-h][1-8]\Z")
 _CANONICAL_MOVE = re.compile(r"[a-h][1-8][a-h][1-8][qrbn]?\Z")
+_IDENTIFIER = re.compile(r"[A-Za-z0-9:._+=>#-]{1,512}\Z")
+_SAN = re.compile(
+    r"(?:O-O(?:-O)?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?)[+#]?\Z"
+)
+_STATUS = re.compile(r"(?:ongoing|stalemate|checkmate:(?:white|black))\Z")
+_CASTLING = re.compile(r"(?:-|K?Q?k?q?)\Z")
 _REQUEST_FIELDS = {
     "schemaVersion",
     "requestID",
@@ -101,7 +107,7 @@ def _parse_neutral_request(request: Mapping[str, object]) -> dict[str, Any]:
     if root["schemaVersion"] != "model-coaching-neutral-request.v1":
         raise ValueError("Unsupported neutral request schema version")
 
-    request_id = _nonempty_string(root["requestID"], "request.requestID")
+    request_id = _identifier(root["requestID"], "request.requestID")
     position_revision = _nonnegative_int(
         root["positionRevision"], "request.positionRevision"
     )
@@ -159,9 +165,9 @@ def _parse_position(value: object) -> dict[str, Any]:
     _exact_fields(item, {"fen", "sideToMove", "status"}, "request.position")
     side = _enum(item["sideToMove"], {"white", "black"}, "request.position.sideToMove")
     return {
-        "fen": _nonempty_string(item["fen"], "request.position.fen"),
+        "fen": _fen(item["fen"], "request.position.fen"),
         "sideToMove": side,
-        "status": _nonempty_string(item["status"], "request.position.status"),
+        "status": _status(item["status"], "request.position.status"),
     }
 
 
@@ -178,7 +184,7 @@ def _parse_history(value: object) -> tuple[dict[str, Any], ...]:
         history.append({
             "ply": ply,
             "canonicalMove": _canonical_move(item["canonicalMove"], f"request.gameHistory[{index}].canonicalMove"),
-            "displayNotation": _nonempty_string(item["displayNotation"], f"request.gameHistory[{index}].displayNotation"),
+            "displayNotation": _san(item["displayNotation"], f"request.gameHistory[{index}].displayNotation"),
         })
     return tuple(history)
 
@@ -192,7 +198,7 @@ def _parse_interaction(value: object) -> dict[str, Any]:
         path="request.interaction",
     )
     selected_square = _optional_square(item.get("selectedSquare"), "request.interaction.selectedSquare")
-    selected_piece = _optional_string(item.get("selectedPieceReference"), "request.interaction.selectedPieceReference")
+    selected_piece = _optional_identifier(item.get("selectedPieceReference"), "request.interaction.selectedPieceReference")
     latest = _parse_event(item["latestEvent"], "request.interaction.latestEvent")
     events = tuple(
         _parse_event(raw, f"request.interaction.episodeEvents[{index}]")
@@ -219,7 +225,7 @@ def _parse_event(value: object, path: str) -> dict[str, Any]:
     item = _object(value, path)
     _exact_fields(item, {"sequence", "kind", "referencedIDs"}, path)
     references = tuple(
-        _nonempty_string(reference, f"{path}.referencedIDs[{index}]")
+        _identifier(reference, f"{path}.referencedIDs[{index}]")
         for index, reference in enumerate(_array(item["referencedIDs"], f"{path}.referencedIDs"))
     )
     return {
@@ -234,7 +240,7 @@ def _parse_piece(value: object, index: int) -> dict[str, str]:
     item = _object(value, path)
     _exact_fields(item, {"id", "color", "kind", "square"}, path)
     return {
-        "id": _nonempty_string(item["id"], f"{path}.id"),
+        "id": _identifier(item["id"], f"{path}.id"),
         "color": _enum(item["color"], {"white", "black"}, f"{path}.color"),
         "kind": _enum(item["kind"], {"king", "queen", "rook", "bishop", "knight", "pawn"}, f"{path}.kind"),
         "square": _square(item["square"], f"{path}.square"),
@@ -249,8 +255,8 @@ def _parse_move(value: object, path: str, piece_ids: set[str]) -> dict[str, Any]
         optional={"capturePieceReference"},
         path=path,
     )
-    source = _nonempty_string(item["sourcePieceReference"], f"{path}.sourcePieceReference")
-    capture = _optional_string(item.get("capturePieceReference"), f"{path}.capturePieceReference")
+    source = _identifier(item["sourcePieceReference"], f"{path}.sourcePieceReference")
+    capture = _optional_identifier(item.get("capturePieceReference"), f"{path}.capturePieceReference")
     if source not in piece_ids:
         raise ValueError(f"{path} contains an unknown source piece reference")
     canonical = _canonical_move(item["canonicalMove"], f"{path}.canonicalMove")
@@ -258,13 +264,17 @@ def _parse_move(value: object, path: str, piece_ids: set[str]) -> dict[str, Any]
     if canonical[2:4] != destination:
         raise ValueError(f"{path} destination does not match canonical move")
     return {
-        "id": _nonempty_string(item["id"], f"{path}.id"),
-        "san": _nonempty_string(item["san"], f"{path}.san"),
+        "id": _identifier(item["id"], f"{path}.id"),
+        "san": _san(item["san"], f"{path}.san"),
         "canonicalMove": canonical,
         "sourcePieceReference": source,
         "destinationSquare": destination,
         "capturePieceReference": capture,
-        "special": _nonempty_string(item["special"], f"{path}.special"),
+        "special": _enum(
+            item["special"],
+            {"none", "castle-kingside", "castle-queenside", "en-passant", "promote-queen", "promote-rook", "promote-bishop", "promote-knight"},
+            f"{path}.special",
+        ),
         "isLegal": _boolean(item["isLegal"], f"{path}.isLegal"),
         "givesCheck": _boolean(item["givesCheck"], f"{path}.givesCheck"),
         "givesCheckmate": _boolean(item["givesCheckmate"], f"{path}.givesCheckmate"),
@@ -275,12 +285,12 @@ def _parse_relationship(value: object, index: int, piece_ids: set[str]) -> dict[
     path = f"request.occupiedSquareRelationships[{index}]"
     item = _object(value, path)
     _exact_fields(item, {"id", "kind", "sourcePieceReference", "targetPieceReference"}, path)
-    source = _nonempty_string(item["sourcePieceReference"], f"{path}.sourcePieceReference")
-    target = _nonempty_string(item["targetPieceReference"], f"{path}.targetPieceReference")
+    source = _identifier(item["sourcePieceReference"], f"{path}.sourcePieceReference")
+    target = _identifier(item["targetPieceReference"], f"{path}.targetPieceReference")
     if source not in piece_ids or target not in piece_ids:
         raise ValueError(f"{path} contains an unknown piece reference")
     return {
-        "id": _nonempty_string(item["id"], f"{path}.id"),
+        "id": _identifier(item["id"], f"{path}.id"),
         "kind": _enum(item["kind"], _RELATIONSHIP_KINDS, f"{path}.kind"),
         "sourcePieceReference": source,
         "targetPieceReference": target,
@@ -303,7 +313,7 @@ def _parse_reply_relationship(value: object, path: str) -> dict[str, Any]:
     item = _object(value, path)
     _exact_fields(item, {"id", "phase", "kind", "sourcePiece", "targetPiece"}, path)
     return {
-        "id": _nonempty_string(item["id"], f"{path}.id"),
+        "id": _identifier(item["id"], f"{path}.id"),
         "phase": _enum(item["phase"], {"afterTentative", "afterReply"}, f"{path}.phase"),
         "kind": _enum(item["kind"], _RELATIONSHIP_KINDS, f"{path}.kind"),
         "sourcePiece": _parse_embedded_piece(item["sourcePiece"], f"{path}.sourcePiece"),
@@ -315,7 +325,7 @@ def _parse_embedded_piece(value: object, path: str) -> dict[str, str]:
     item = _object(value, path)
     _exact_fields(item, {"id", "color", "kind", "square"}, path)
     return {
-        "id": _nonempty_string(item["id"], f"{path}.id"),
+        "id": _identifier(item["id"], f"{path}.id"),
         "color": _enum(item["color"], {"white", "black"}, f"{path}.color"),
         "kind": _enum(item["kind"], {"king", "queen", "rook", "bishop", "knight", "pawn"}, f"{path}.kind"),
         "square": _square(item["square"], f"{path}.square"),
@@ -537,11 +547,70 @@ def _fields(
 def _nonempty_string(value: object, path: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{path} must be a nonempty string")
+    if len(value.encode("utf-8")) > 512 or any(
+        ord(character) < 0x20 or ord(character) == 0x7F for character in value
+    ):
+        raise ValueError(f"{path} contains unsupported text")
     return value
 
 
 def _optional_string(value: object, path: str) -> str | None:
     return None if value is None else _nonempty_string(value, path)
+
+
+def _identifier(value: object, path: str) -> str:
+    result = _nonempty_string(value, path)
+    if _IDENTIFIER.fullmatch(result) is None:
+        raise ValueError(f"{path} must be a canonical identifier")
+    return result
+
+
+def _optional_identifier(value: object, path: str) -> str | None:
+    return None if value is None else _identifier(value, path)
+
+
+def _san(value: object, path: str) -> str:
+    result = _nonempty_string(value, path)
+    if _SAN.fullmatch(result) is None:
+        raise ValueError(f"{path} must be standard chess notation")
+    return result
+
+
+def _status(value: object, path: str) -> str:
+    result = _nonempty_string(value, path)
+    if _STATUS.fullmatch(result) is None:
+        raise ValueError(f"{path} must be a canonical game status")
+    return result
+
+
+def _fen(value: object, path: str) -> str:
+    result = _nonempty_string(value, path)
+    fields = result.split(" ")
+    if len(fields) != 6:
+        raise ValueError(f"{path} must be a canonical FEN")
+    board, side, castling, en_passant, halfmove, fullmove = fields
+    ranks = board.split("/")
+    if len(ranks) != 8 or any(not _valid_fen_rank(rank) for rank in ranks):
+        raise ValueError(f"{path} must be a canonical FEN")
+    if side not in {"w", "b"} or _CASTLING.fullmatch(castling) is None:
+        raise ValueError(f"{path} must be a canonical FEN")
+    if en_passant != "-" and re.fullmatch(r"[a-h][36]", en_passant) is None:
+        raise ValueError(f"{path} must be a canonical FEN")
+    if not _canonical_decimal(halfmove, allow_zero=True) or not _canonical_decimal(fullmove, allow_zero=False):
+        raise ValueError(f"{path} must be a canonical FEN")
+    return result
+
+
+def _valid_fen_rank(rank: str) -> bool:
+    if not rank or re.fullmatch(r"[prnbqkPRNBQK1-8]+", rank) is None:
+        return False
+    return sum(int(token) if token.isdigit() else 1 for token in rank) == 8
+
+
+def _canonical_decimal(value: str, *, allow_zero: bool) -> bool:
+    if re.fullmatch(r"0|[1-9][0-9]*", value) is None:
+        return False
+    return allow_zero or value != "0"
 
 
 def _square(value: object, path: str) -> str:

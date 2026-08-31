@@ -40,6 +40,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         XCTAssertEqual("Bearer private-token", sent.value(forHTTPHeaderField: "Authorization"))
         XCTAssertEqual("application/json", sent.value(forHTTPHeaderField: "Content-Type"))
         XCTAssertEqual(35, sent.timeoutInterval)
+        XCTAssertEqual([64 * 1024], loader.maximumByteCounts)
         let expected = try JSONEncoder.canonical.encode(request)
         XCTAssertEqual(expected, sent.httpBody)
     }
@@ -119,6 +120,44 @@ final class HostedCoachingTransportTests: XCTestCase {
         }
     }
 
+    func testRejectsStreamingResponseWhenLoaderStopsAtByteLimit() async throws {
+        let request = try sharedRequest()
+        let loader = RecordingHostedLoader(error: HostedCoachingHTTPDataLoadingError.responseTooLarge)
+        let transport = URLSessionHostedCoachingTransport(
+            baseURL: URL(string: "https://coach.example")!,
+            accessToken: "token",
+            loader: loader
+        )
+
+        do {
+            _ = try await transport.turn(
+                for: request,
+                contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request)
+            )
+            XCTFail("Expected an invalid response")
+        } catch let error as HostedCoachingTransportError {
+            XCTAssertEqual(.invalidResponse, error)
+        }
+        XCTAssertEqual([64 * 1024], loader.maximumByteCounts)
+    }
+
+    func testStreamingBufferNeverStoresTheByteBeyondItsLimit() throws {
+        var buffer = HostedCoachingResponseBuffer(maximumBytes: 64 * 1024)
+
+        for _ in 0..<(64 * 1024) {
+            try buffer.append(0)
+        }
+
+        XCTAssertEqual(64 * 1024, buffer.data.count)
+        XCTAssertThrowsError(try buffer.append(0)) { error in
+            XCTAssertEqual(
+                .responseTooLarge,
+                error as? HostedCoachingHTTPDataLoadingError
+            )
+        }
+        XCTAssertEqual(64 * 1024, buffer.data.count)
+    }
+
     private func makeTransport(data: Data, status: Int) -> URLSessionHostedCoachingTransport {
         URLSessionHostedCoachingTransport(
             baseURL: URL(string: "https://coach.example")!,
@@ -190,6 +229,7 @@ final class HostedCoachingTransportTests: XCTestCase {
 
 private final class RecordingHostedLoader: HostedCoachingHTTPDataLoading, @unchecked Sendable {
     private(set) var requests: [URLRequest] = []
+    private(set) var maximumByteCounts: [Int] = []
     let data: Data
     let response: URLResponse
     let error: Error?
@@ -200,8 +240,9 @@ private final class RecordingHostedLoader: HostedCoachingHTTPDataLoading, @unche
         self.error = error
     }
 
-    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+    func data(for request: URLRequest, maximumBytes: Int) async throws -> (Data, URLResponse) {
         requests.append(request)
+        maximumByteCounts.append(maximumBytes)
         if let error { throw error }
         return (data, response)
     }

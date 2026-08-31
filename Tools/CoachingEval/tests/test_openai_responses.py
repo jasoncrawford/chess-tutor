@@ -1,5 +1,6 @@
 import email.message
 import json
+import socket
 import sys
 import threading
 import unittest
@@ -249,6 +250,24 @@ class OpenAIResponsesClientTests(unittest.TestCase):
         lowered = str(error).lower()
         for forbidden in ("private", "reasoning", "developer-secret", "think", "trace"):
             self.assertNotIn(forbidden, lowered)
+
+    def test_classifies_socket_timeout_without_retaining_details(self):
+        client = openai_responses.OpenAIResponsesClient("http://127.0.0.1:8080")
+
+        class TimeoutOpener:
+            def open(self, _request, timeout):
+                self.timeout = timeout
+                raise socket.timeout("PRIVATE timeout body")
+
+        opener = TimeoutOpener()
+        client.opener = opener
+
+        with self.assertRaises(openai_responses.OpenAIResponsesError) as raised:
+            complete(client)
+
+        self.assertEqual(2, opener.timeout)
+        self.assertEqual("timeout", raised.exception.category)
+        self.assertNotIn("private", str(raised.exception).lower())
 
     def test_malformed_success_body_is_rejected_without_echoing_it(self):
         private_body = b'{"PRIVATE_REASONING":"developer-secret"'
