@@ -1,7 +1,12 @@
-import io
+import http.client
 import json
 import logging
+import threading
+import time
 import unittest
+
+from flask import Flask
+from werkzeug.serving import make_server
 
 from CoachingServer.http_app import create_application
 from CoachingServer.service import HostedCoachingServiceError
@@ -35,28 +40,64 @@ class RecordingHandler(logging.Handler):
 
 
 def invoke(app, method, path, *, token=None, body=b"", content_type="application/json"):
-    status = None
-    headers = None
-
-    def start_response(value, response_headers):
-        nonlocal status, headers
-        status = value
-        headers = dict(response_headers)
-
-    environ = {
-        "REQUEST_METHOD": method,
-        "PATH_INFO": path,
-        "CONTENT_LENGTH": str(len(body)),
-        "CONTENT_TYPE": content_type,
-        "wsgi.input": io.BytesIO(body),
-    }
+    headers = {}
     if token is not None:
-        environ["HTTP_AUTHORIZATION"] = f"Bearer {token}"
-    payload = b"".join(app(environ, start_response))
-    return status, headers, json.loads(payload)
+        headers["Authorization"] = f"Bearer {token}"
+    with app.test_client() as client:
+        response = client.open(
+            path,
+            method=method,
+            data=body,
+            content_type=content_type,
+            headers=headers,
+        )
+    return response.status, dict(response.headers), json.loads(response.data)
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
+    def test_uses_flask_for_the_http_boundary(self):
+        app = create_application(
+            service=FakeService(),
+            access_token="prototype-token",
+        )
+
+        self.assertIsInstance(app, Flask)
+
+    def test_real_socket_request_body_is_processed_without_waiting_for_client_close(self):
+        service = FakeService()
+        app = create_application(service=service, access_token="prototype-token")
+        server = make_server("127.0.0.1", 0, app)
+        server_thread = threading.Thread(target=server.handle_request, daemon=True)
+        server_thread.start()
+        connection = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_port,
+            timeout=0.75,
+        )
+        encoded = json.dumps({"schemaVersion": "request.v1"}).encode("utf-8")
+
+        started = time.monotonic()
+        try:
+            connection.request(
+                "POST",
+                "/v1/coaching-turn",
+                body=encoded,
+                headers={
+                    "Authorization": "Bearer prototype-token",
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            response.read()
+        finally:
+            connection.close()
+            server.server_close()
+            server_thread.join(timeout=2)
+
+        self.assertEqual(200, response.status)
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual([{"schemaVersion": "request.v1"}], service.requests)
+
     def test_logs_http_lifecycle_with_matching_trace_and_total_elapsed_time(self):
         service = FakeService()
         clock = iter((5.0, 5.25))

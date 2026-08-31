@@ -1,9 +1,7 @@
-"""Run the hosted coaching WSGI app locally."""
+"""Run the hosted coaching Flask app locally."""
 
 import argparse
 import logging
-from wsgiref.simple_server import make_server
-
 from CoachingServer.http_app import create_environment_application
 
 
@@ -20,9 +18,12 @@ def main(argv=None):
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
     application = create_environment_application()
-    with make_server(arguments.host, arguments.port, application) as server:
-        print(f"ChessTutor coaching server listening on http://{arguments.host}:{arguments.port}")
-        server.serve_forever()
+    application.run(
+        host=arguments.host,
+        port=arguments.port,
+        debug=False,
+        use_reloader=False,
+    )
 
 
 if __name__ == "__main__":
