@@ -97,7 +97,7 @@ def _validated_relative_path(raw_path):
     return path
 
 
-def _expected_declared_files():
+def _expected_declared_files(example_ids=EXAMPLE_IDS):
     return [
         {"path": "examples.jsonl", "role": AUDIT_ONLY_ROLE},
         {"path": "preview-manifest.json", "role": AUDIT_ONLY_ROLE},
@@ -107,11 +107,20 @@ def _expected_declared_files():
             "path": f"user-prompts/{identifier}.md",
             "role": MODEL_FACING_USER_ROLE,
         }
-        for identifier in EXAMPLE_IDS
+        for identifier in example_ids
     ]
 
 
-def _load_and_validate_source(source_dir, system_prompt_path):
+def _load_and_validate_source(
+    source_dir, system_prompt_path, *, example_ids=EXAMPLE_IDS
+):
+    example_ids = tuple(example_ids)
+    if (
+        not example_ids
+        or any(not isinstance(identifier, str) or not identifier for identifier in example_ids)
+        or len(example_ids) != len(set(example_ids))
+    ):
+        raise ValueError("Prompt preview requires unique visible IDs")
     source_dir = Path(source_dir)
     system_prompt_path = Path(system_prompt_path)
     if not source_dir.is_dir():
@@ -129,11 +138,11 @@ def _load_and_validate_source(source_dir, system_prompt_path):
         raise ValueError("Swift prompt export has an unsupported manifest schema")
     if source_manifest.get("promptVersion") != PROMPT_VERSION:
         raise ValueError(f"Swift prompt export must use exact {PROMPT_VERSION}")
-    if source_manifest.get("exampleIDs") != list(EXAMPLE_IDS):
-        raise ValueError("Swift prompt export does not have the exact eight-case order")
+    if source_manifest.get("exampleIDs") != list(example_ids):
+        raise ValueError("Swift prompt export does not have the exact requested case order")
 
     declared_files = source_manifest.get("declaredFiles")
-    if declared_files != _expected_declared_files():
+    if declared_files != _expected_declared_files(example_ids):
         raise ValueError(
             "Swift prompt export roles must identify the exact model-facing files"
         )
@@ -154,7 +163,7 @@ def _load_and_validate_source(source_dir, system_prompt_path):
     user_declarations = [
         item for item in declared_files if item["role"] == MODEL_FACING_USER_ROLE
     ]
-    if len(system_declarations) != 1 or len(user_declarations) != len(EXAMPLE_IDS):
+    if len(system_declarations) != 1 or len(user_declarations) != len(example_ids):
         raise ValueError("Swift prompt export has invalid model-facing roles")
 
     system_bytes = system_prompt_path.read_bytes()
@@ -172,13 +181,13 @@ def _load_and_validate_source(source_dir, system_prompt_path):
 
     manifest_examples = source_manifest.get("examples")
     if not isinstance(manifest_examples, list) or len(manifest_examples) != len(
-        EXAMPLE_IDS
+        example_ids
     ):
-        raise ValueError("Swift prompt manifest must bind all eight examples")
+        raise ValueError("Swift prompt manifest must bind every requested example")
 
     prompts = []
     for identifier, declaration, example in zip(
-        EXAMPLE_IDS, user_declarations, manifest_examples
+        example_ids, user_declarations, manifest_examples
     ):
         file_name = f"{identifier}.md"
         if set(example) != {
@@ -253,15 +262,19 @@ def build_preview(
     client,
     tokenizer_provenance,
     timeout=30,
+    example_ids=EXAMPLE_IDS,
 ):
-    """Render, tokenize, and persist eight logical prompts without inference."""
+    """Render, tokenize, and persist exact logical prompts without inference."""
     destination = Path(destination)
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite existing prompt preview: {destination}")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
         raise ValueError("Tokenizer timeout must be a positive integer")
     _validate_tokenizer_provenance(tokenizer_provenance)
-    source = _load_and_validate_source(source_dir, system_prompt_path)
+    example_ids = tuple(example_ids)
+    source = _load_and_validate_source(
+        source_dir, system_prompt_path, example_ids=example_ids
+    )
 
     prompt_cells = []
     transcript_files = {}
@@ -336,7 +349,7 @@ def build_preview(
             MODEL_FACING_USER_ROLE,
         ],
         "permittedServerEndpoints": list(PERMITTED_ENDPOINTS),
-        "exampleIDs": list(EXAMPLE_IDS),
+        "exampleIDs": list(example_ids),
         "systemPromptSHA256": source["systemPromptSHA256"],
         "sourceManifestSHA256": _sha256(source["sourceManifestBytes"]),
         "tokenizerProvenance": dict(tokenizer_provenance),
@@ -414,7 +427,9 @@ def main(argv=None):
     parser.add_argument("--model-manifest", required=True, type=Path)
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=30)
+    parser.add_argument("--example-id", action="append", dest="example_ids")
     arguments = parser.parse_args(argv)
+    example_ids = tuple(arguments.example_ids or EXAMPLE_IDS)
 
     server = None
     try:
@@ -443,6 +458,7 @@ def main(argv=None):
             client=_TokenizerOnlyClient(server),
             tokenizer_provenance=provenance,
             timeout=arguments.timeout,
+            example_ids=example_ids,
         )
     except (
         ValueError,

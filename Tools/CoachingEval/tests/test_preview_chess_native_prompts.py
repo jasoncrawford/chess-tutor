@@ -58,7 +58,7 @@ class TokenizerOnlyFake:
 
 
 class ChessNativePromptPreviewTests(unittest.TestCase):
-    def _write_source(self, root):
+    def _write_source(self, root, *, example_ids=EXAMPLE_IDS):
         source = root / "swift"
         users = source / "user-prompts"
         users.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,7 @@ class ChessNativePromptPreviewTests(unittest.TestCase):
                 "role": "modelFacingSystemMessage",
             },
         ]
-        for index, identifier in enumerate(EXAMPLE_IDS, start=1):
+        for index, identifier in enumerate(example_ids, start=1):
             file_name = f"{identifier}.md"
             markdown = (
                 "# Chess coaching situation\n\n"
@@ -124,7 +124,7 @@ class ChessNativePromptPreviewTests(unittest.TestCase):
         manifest = {
             "contextSchemaVersion": "model-coaching-chess-native-context.v1",
             "declaredFiles": declared_files,
-            "exampleIDs": list(EXAMPLE_IDS),
+            "exampleIDs": list(example_ids),
             "examples": examples,
             "examplesJSONLSHA256": sha256(audit_bytes),
             "promptVersion": "tutor-v6",
@@ -137,9 +137,18 @@ class ChessNativePromptPreviewTests(unittest.TestCase):
         system_path.write_bytes(system_bytes)
         return source, system_path, manifest
 
-    def _build(self, root, *, destination_name="final", client=None):
-        source, system, source_manifest = self._write_source(root)
-        client = client or TokenizerOnlyFake()
+    def _build(
+        self,
+        root,
+        *,
+        destination_name="final",
+        client=None,
+        example_ids=EXAMPLE_IDS,
+    ):
+        source, system, source_manifest = self._write_source(
+            root, example_ids=example_ids
+        )
+        client = client or TokenizerOnlyFake([640] * len(example_ids))
         destination = root / destination_name
         manifest = preview_chess_native_prompts.build_preview(
             source_dir=source,
@@ -153,6 +162,7 @@ class ChessNativePromptPreviewTests(unittest.TestCase):
                 "runtimeSourceCommit": "b" * 40,
                 "runtimeBinarySHA256": "c" * 64,
             },
+            example_ids=example_ids,
         )
         return (
             manifest,
@@ -162,6 +172,55 @@ class ChessNativePromptPreviewTests(unittest.TestCase):
             source_manifest,
             client,
         )
+
+    def test_explicit_visible_ids_drive_exact_twelve_prompt_preview(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ids = tuple(f"b{index:02}-case" for index in range(1, 13))
+            client = TokenizerOnlyFake([700] * 12)
+            manifest, destination, _source, _system, _source_manifest, client = (
+                self._build(root, client=client, example_ids=ids)
+            )
+
+            self.assertEqual(list(ids), manifest["exampleIDs"])
+            self.assertEqual(12, manifest["summary"]["promptCount"])
+            self.assertEqual(12, len(client.render_calls))
+            self.assertEqual(12, len(client.token_calls))
+            self.assertEqual(
+                [f"{identifier}.md" for identifier in ids],
+                [path.name for path in sorted((destination / "prompts").glob("*.md"))],
+            )
+
+    def test_explicit_ids_fail_closed_for_duplicates_and_manifest_reordering(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ids = ("b01-case", "b02-case")
+            source, system, manifest = self._write_source(root, example_ids=ids)
+            client = TokenizerOnlyFake([700] * 2)
+
+            with self.assertRaisesRegex(ValueError, "unique"):
+                preview_chess_native_prompts.build_preview(
+                    source_dir=source,
+                    system_prompt_path=system,
+                    destination=root / "duplicate",
+                    client=client,
+                    tokenizer_provenance={"modelID": "qwen3-1.7b-q4_k_m"},
+                    example_ids=("b01-case", "b01-case"),
+                )
+            self.assertEqual([], client.render_calls)
+
+            manifest["exampleIDs"] = list(reversed(ids))
+            (source / "preview-manifest.json").write_bytes(canonical_json(manifest))
+            with self.assertRaisesRegex(ValueError, "order"):
+                preview_chess_native_prompts.build_preview(
+                    source_dir=source,
+                    system_prompt_path=system,
+                    destination=root / "reordered",
+                    client=client,
+                    tokenizer_provenance={"modelID": "qwen3-1.7b-q4_k_m"},
+                    example_ids=ids,
+                )
+            self.assertEqual([], client.render_calls)
 
     def test_builds_exact_role_driven_hash_bound_tokenizer_only_packet(self):
         with tempfile.TemporaryDirectory() as temporary:
