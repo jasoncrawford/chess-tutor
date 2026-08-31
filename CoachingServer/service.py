@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -44,6 +45,7 @@ class HostedCoachingService:
         system_prompt: str,
         timeout: float = 30.0,
         follow_up_reasoning_effort: str = "low",
+        log_content: bool = False,
         clock=time.monotonic,
     ):
         if not callable(getattr(provider, "complete", None)):
@@ -56,10 +58,13 @@ class HostedCoachingService:
             raise ValueError("clock must be callable")
         if follow_up_reasoning_effort not in {"low", "none"}:
             raise ValueError("follow-up reasoning effort must be low or none")
+        if not isinstance(log_content, bool):
+            raise ValueError("log_content must be a boolean")
         self._provider = provider
         self._system_prompt = system_prompt
         self._timeout = float(timeout)
         self._follow_up_reasoning_effort = follow_up_reasoning_effort
+        self._log_content = log_content
         self._clock = clock
 
     def complete(
@@ -175,8 +180,7 @@ class HostedCoachingService:
             )
             raise HostedCoachingServiceError("invalidProviderResponse") from None
         _LOGGER.info("event=provider_response_validated trace_id=%s", trace_id)
-
-        return {
+        response = {
             "schemaVersion": "hosted-coaching-turn.v2",
             "requestID": compilation.request_id,
             "positionRevision": compilation.position_revision,
@@ -185,6 +189,70 @@ class HostedCoachingService:
             "turn": turn,
             "metrics": metrics,
         }
+        if self._log_content:
+            _LOGGER.info(
+                "%s",
+                _content_trace(
+                    trace_id=trace_id,
+                    request_kind=request_kind,
+                    reasoning_effort=reasoning_effort,
+                    client_request=neutral_request,
+                    server_response=response,
+                ),
+            )
+
+        return response
+
+
+def _content_trace(
+    *,
+    trace_id: str,
+    request_kind: str,
+    reasoning_effort: str,
+    client_request: Mapping[str, object],
+    server_response: Mapping[str, object],
+) -> str:
+    position = client_request["position"]
+    history = client_request["gameHistory"]
+    interaction = client_request["interaction"]
+    tentative = interaction.get("tentativeMove")
+    staged = None
+    if tentative is not None:
+        staged = {
+            "move": tentative["canonicalMove"],
+            "notation": tentative["san"],
+            "legal": tentative["isLegal"],
+        }
+    trace = {
+        "kind": request_kind,
+        "reasoning": reasoning_effort,
+        "revision": client_request["positionRevision"],
+        "position": {
+            "fen": position["fen"],
+            "moves": [move["displayNotation"] for move in history],
+            "side": position["sideToMove"],
+            "status": position["status"],
+        },
+        "interaction": {
+            "selected": interaction.get("selectedPieceReference"),
+            "selectedSquare": interaction.get("selectedSquare"),
+            "staged": staged,
+            "events": [
+                {
+                    "sequence": event["sequence"],
+                    "kind": event["kind"],
+                    "references": event["referencedIDs"],
+                }
+                for event in interaction["episodeEvents"]
+            ],
+        },
+        "advice": server_response["turn"],
+        "latencyMs": server_response["metrics"]["latencyMilliseconds"],
+    }
+    return "event=coaching_trace trace_id={} data={}".format(
+        trace_id,
+        json.dumps(trace, ensure_ascii=False, separators=(",", ":")),
+    )
 
 
 def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:

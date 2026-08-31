@@ -151,6 +151,7 @@ def create_environment_application():
             "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT",
             "low",
         ),
+        log_content=os.environ.get("CHESS_TUTOR_COACHING_LOG_CONTENT") == "1",
     )
     return create_application(service=service, access_token=access_token)
 
