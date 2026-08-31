@@ -281,7 +281,7 @@ enum ModelCoachingChessNativeTurnDecoder {
     }
 }
 
-private struct ModelCoachingRawJSONValidator {
+struct ModelCoachingRawJSONValidator {
     enum ValidationError: Error {
         case malformed
         case duplicateObjectKey(String)
