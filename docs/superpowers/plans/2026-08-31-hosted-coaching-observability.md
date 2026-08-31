@@ -112,6 +112,6 @@ Use the real `Try again` UI control. Record the lifecycle event timestamps throu
 
 Confirm the output contains no prompt, board, response, provider identifier, or credentials. Identify whether the app timed out before the provider, server, or validation boundary completed.
 
-- [ ] **Step 4: Final verification and PR**
+- [x] **Step 4: Final verification and PR**
 
 Run the complete server suite, `git diff --check`, request code review, push the branch, and open a PR against `codex/chess-coaching-comparison`.
