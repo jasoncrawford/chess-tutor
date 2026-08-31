@@ -26,8 +26,8 @@ jobs:
       - name: Run Python tests
         run: |
           set -o pipefail
-          python -m unittest discover -s CoachingServer/tests -v | tee python-test-output.txt
-          python -m unittest discover -s Tools/CoachingEval/tests -v | tee -a python-test-output.txt
+          python -m unittest discover -s CoachingServer/tests -v 2>&1 | tee python-test-output.txt
+          python -m unittest discover -s Tools/CoachingEval/tests -v 2>&1 | tee -a python-test-output.txt
       - name: Upload Python test output
         uses: actions/upload-artifact@v7
         if: failure()
