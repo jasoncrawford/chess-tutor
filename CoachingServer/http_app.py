@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
+import re
+import time
+import uuid
 
 from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
 
@@ -17,9 +21,17 @@ _ERROR_STATUS = {
     "providerTimeout": "504 Gateway Timeout",
     "providerUnavailable": "503 Service Unavailable",
 }
+_LOGGER = logging.getLogger("ChessTutor.CoachingServer")
+_TRACE_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
 
-def create_application(*, service, access_token: str):
+def create_application(
+    *,
+    service,
+    access_token: str,
+    clock=time.monotonic,
+    trace_id_factory=lambda: uuid.uuid4().hex[:12],
+):
     if not callable(getattr(service, "complete", None)):
         raise ValueError("service must implement complete")
     if not isinstance(access_token, str) or not access_token:
@@ -67,20 +79,43 @@ def create_application(*, service, access_token: str):
             return _error(start_response, "400 Bad Request", "invalidJSON")
         if not isinstance(request, dict):
             return _error(start_response, "400 Bad Request", "invalidJSON")
+        trace_id = _safe_trace_id(trace_id_factory())
+        started = clock()
+        _LOGGER.info("event=http_request_started trace_id=%s", trace_id)
         try:
-            response = service.complete(request)
+            response = service.complete(request, trace_id=trace_id)
         except HostedCoachingServiceError as error:
+            status = _ERROR_STATUS[error.code]
+            _log_http_completed(
+                trace_id=trace_id,
+                elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+                outcome=error.code,
+                status=status,
+            )
             return _error(
                 start_response,
-                _ERROR_STATUS[error.code],
+                status,
                 error.code,
             )
         except Exception:
+            status = "503 Service Unavailable"
+            _log_http_completed(
+                trace_id=trace_id,
+                elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+                outcome="providerUnavailable",
+                status=status,
+            )
             return _error(
                 start_response,
-                "503 Service Unavailable",
+                status,
                 "providerUnavailable",
             )
+        _log_http_completed(
+            trace_id=trace_id,
+            elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+            outcome="success",
+            status="200 OK",
+        )
         return _respond(start_response, "200 OK", response)
 
     return application
@@ -144,3 +179,32 @@ def _respond(start_response, status: str, value: object):
         ],
     )
     return [body]
+
+
+def _safe_trace_id(value: object) -> str:
+    if isinstance(value, str) and _TRACE_ID_PATTERN.fullmatch(value):
+        return value
+    return "invalid"
+
+
+def _elapsed_milliseconds(finished: float, started: float) -> float:
+    return round(max(0.0, (finished - started) * 1000.0), 3)
+
+
+def _log_http_completed(
+    *,
+    trace_id: str,
+    elapsed_milliseconds: float,
+    outcome: str,
+    status: str,
+) -> None:
+    _LOGGER.info(
+        (
+            "event=http_request_completed trace_id=%s "
+            "elapsed_ms=%s outcome=%s status=%s"
+        ),
+        trace_id,
+        elapsed_milliseconds,
+        outcome,
+        status.split(" ", 1)[0],
+    )

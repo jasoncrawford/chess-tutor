@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 import socket
 from collections.abc import Mapping
@@ -12,6 +13,7 @@ from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
 
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
 _MAXIMUM_LATENCY_MILLISECONDS = 120_000.0
+_LOGGER = logging.getLogger("ChessTutor.CoachingServer")
 
 
 class HostedCoachingServiceError(RuntimeError):
@@ -53,17 +55,31 @@ class HostedCoachingService:
         self._timeout = float(timeout)
         self._clock = clock
 
-    def complete(self, request: Mapping[str, object]) -> dict[str, object]:
+    def complete(
+        self,
+        request: Mapping[str, object],
+        *,
+        trace_id: str = "direct",
+    ) -> dict[str, object]:
         try:
             compilation = compile_context(request, "tutor-v6")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
+        _LOGGER.info("event=request_compiled trace_id=%s", trace_id)
 
         contract = ChessNativeResponseContract(
             actions=compilation.actions,
             allowable_moves=compilation.allowable_moves,
         )
         started = self._clock()
+        _LOGGER.info(
+            (
+                "event=provider_request_started trace_id=%s "
+                "model=gpt-5.6-sol reasoning_effort=high timeout_seconds=%s"
+            ),
+            trace_id,
+            f"{self._timeout:g}",
+        )
         try:
             provider_response = self._provider.complete(
                 system_prompt=self._system_prompt,
@@ -75,14 +91,40 @@ class HostedCoachingService:
                 timeout=self._timeout,
             )
         except Exception as error:
-            if (
+            elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
+            is_timeout = (
                 isinstance(error, (TimeoutError, socket.timeout))
                 or getattr(error, "category", None) == "timeout"
                 or getattr(error, "http_status", None) == 504
-            ):
+            )
+            _LOGGER.info(
+                (
+                    "event=provider_request_failed trace_id=%s "
+                    "elapsed_ms=%s outcome=%s"
+                ),
+                trace_id,
+                elapsed_milliseconds,
+                "timeout" if is_timeout else "unavailable",
+            )
+            if is_timeout:
                 raise HostedCoachingServiceError("providerTimeout") from None
             raise HostedCoachingServiceError("providerUnavailable") from None
-        elapsed_milliseconds = max(0.0, (self._clock() - started) * 1000.0)
+        elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
+        provider_outcome = (
+            "completed"
+            if isinstance(provider_response, dict)
+            and provider_response.get("status") == "completed"
+            else "noncompleted"
+        )
+        _LOGGER.info(
+            (
+                "event=provider_request_completed trace_id=%s "
+                "elapsed_ms=%s outcome=%s"
+            ),
+            trace_id,
+            elapsed_milliseconds,
+            provider_outcome,
+        )
 
         try:
             if not isinstance(provider_response, dict):
@@ -94,7 +136,12 @@ class HostedCoachingService:
                 raise ValueError
             turn = contract.parse_and_validate(output_text)
         except (KeyError, TypeError, ValueError):
+            _LOGGER.info(
+                "event=provider_response_failed trace_id=%s outcome=invalid_response",
+                trace_id,
+            )
             raise HostedCoachingServiceError("invalidProviderResponse") from None
+        _LOGGER.info("event=provider_response_validated trace_id=%s", trace_id)
 
         return {
             "schemaVersion": "hosted-coaching-turn.v1",
@@ -121,6 +168,10 @@ def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
             3,
         ),
     }
+
+
+def _elapsed_milliseconds(finished: float, started: float) -> float:
+    return round(max(0.0, (finished - started) * 1000.0), 3)
 
 
 def _bounded_int(value: object) -> int:

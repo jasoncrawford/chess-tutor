@@ -46,6 +46,64 @@ class RecordingProvider:
 
 
 class HostedCoachingServiceTests(unittest.TestCase):
+    def test_logs_provider_lifecycle_with_trace_and_elapsed_time(self):
+        provider = RecordingProvider()
+        clock = iter((10.0, 10.123))
+        service = HostedCoachingService(
+            provider=provider,
+            system_prompt=SYSTEM_PROMPT,
+            clock=lambda: next(clock),
+        )
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            service.complete(FIXTURE["request"], trace_id="trace-1")
+
+        self.assertEqual(
+            [
+                "event=request_compiled trace_id=trace-1",
+                (
+                    "event=provider_request_started trace_id=trace-1 "
+                    "model=gpt-5.6-sol reasoning_effort=high timeout_seconds=30"
+                ),
+                (
+                    "event=provider_request_completed trace_id=trace-1 "
+                    "elapsed_ms=123.0 outcome=completed"
+                ),
+                "event=provider_response_validated trace_id=trace-1",
+            ],
+            [record.getMessage() for record in captured.records],
+        )
+
+    def test_logs_timeout_category_without_private_exception_text(self):
+        provider = RecordingProvider(error=socket.timeout("private timeout detail"))
+        clock = iter((20.0, 50.5))
+        service = HostedCoachingService(
+            provider=provider,
+            system_prompt=SYSTEM_PROMPT,
+            clock=lambda: next(clock),
+        )
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(FIXTURE["request"], trace_id="trace-2")
+
+        messages = [record.getMessage() for record in captured.records]
+        self.assertEqual(
+            [
+                "event=request_compiled trace_id=trace-2",
+                (
+                    "event=provider_request_started trace_id=trace-2 "
+                    "model=gpt-5.6-sol reasoning_effort=high timeout_seconds=30"
+                ),
+                (
+                    "event=provider_request_failed trace_id=trace-2 "
+                    "elapsed_ms=30500.0 outcome=timeout"
+                ),
+            ],
+            messages,
+        )
+        self.assertNotIn("private timeout detail", "\n".join(messages))
+
     def test_calls_provider_once_with_server_owned_prompt_settings_and_schema(self):
         provider = RecordingProvider()
         clock = iter((10.0, 10.123))

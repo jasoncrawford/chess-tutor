@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import unittest
 
 from CoachingServer.http_app import create_application
@@ -14,12 +15,23 @@ class FakeService:
             "requestID": "request-1",
         }
         self.error = error
+        self.trace_ids = []
 
-    def complete(self, request):
+    def complete(self, request, *, trace_id="direct"):
         self.requests.append(request)
+        self.trace_ids.append(trace_id)
         if self.error is not None:
             raise self.error
         return self.response
+
+
+class RecordingHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
 
 
 def invoke(app, method, path, *, token=None, body=b"", content_type="application/json"):
@@ -45,6 +57,59 @@ def invoke(app, method, path, *, token=None, body=b"", content_type="application
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
+    def test_logs_http_lifecycle_with_matching_trace_and_total_elapsed_time(self):
+        service = FakeService()
+        clock = iter((5.0, 5.25))
+        app = create_application(
+            service=service,
+            access_token="prototype-token",
+            clock=lambda: next(clock),
+            trace_id_factory=lambda: "trace-http",
+        )
+        encoded = json.dumps({"schemaVersion": "request.v1"}).encode("utf-8")
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            status, _, _ = invoke(
+                app,
+                "POST",
+                "/v1/coaching-turn",
+                token="prototype-token",
+                body=encoded,
+            )
+
+        self.assertEqual("200 OK", status)
+        self.assertEqual(["trace-http"], service.trace_ids)
+        self.assertEqual(
+            [
+                "event=http_request_started trace_id=trace-http",
+                (
+                    "event=http_request_completed trace_id=trace-http "
+                    "elapsed_ms=250.0 outcome=success status=200"
+                ),
+            ],
+            [record.getMessage() for record in captured.records],
+        )
+
+    def test_rejected_input_does_not_log_payload_content(self):
+        service = FakeService()
+        app = create_application(service=service, access_token="prototype-token")
+        logger = logging.getLogger("ChessTutor.CoachingServer")
+        handler = RecordingHandler()
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        try:
+            invoke(
+                app,
+                "POST",
+                "/v1/coaching-turn",
+                token="wrong-token",
+                body=b'{"private":"CHILD-BOARD-SECRET"}',
+            )
+        finally:
+            logger.removeHandler(handler)
+
+        self.assertNotIn("CHILD-BOARD-SECRET", "\n".join(handler.messages))
+
     def test_health_is_public_and_does_not_call_service(self):
         service = FakeService()
         app = create_application(service=service, access_token="prototype-token")
