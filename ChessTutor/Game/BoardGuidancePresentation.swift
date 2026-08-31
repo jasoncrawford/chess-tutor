@@ -11,12 +11,6 @@ struct BoardGuidancePath: Equatable, Hashable, Sendable {
     let role: Role
 }
 
-struct BoardCoveragePresentation: Equatable, Sendable {
-    let sideToMove: PieceColor
-    let sideToMoveSquares: Set<Square>
-    let otherSideSquares: Set<Square>
-}
-
 struct BoardGuidancePresentation: Equatable, Sendable {
     let sideToMove: PieceColor
     let threatenedSquares: Set<Square>
@@ -26,7 +20,6 @@ struct BoardGuidancePresentation: Equatable, Sendable {
     let selectedSquare: Square?
     let selectedPaths: Set<BoardGuidancePath>
     let supporterSquares: Set<Square>
-    let coverage: BoardCoveragePresentation?
 
     func accessibilityLabel(for square: Square, piece: Piece) -> String {
         let identity = "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue) on \(squareName(square))"
@@ -45,26 +38,6 @@ struct BoardGuidancePresentation: Equatable, Sendable {
         }
     }
 
-    func coverageAccessibilityLabel(for square: Square) -> String {
-        let identity = squareName(square)
-        guard let coverage else {
-            return identity
-        }
-
-        let sideToMoveCovers = coverage.sideToMoveSquares.contains(square)
-        let otherSideCovers = coverage.otherSideSquares.contains(square)
-        switch (sideToMoveCovers, otherSideCovers) {
-        case (true, true):
-            return "\(identity), covered by \(coverage.sideToMove.rawValue.capitalized) and \(coverage.sideToMove.opposite.rawValue.capitalized)"
-        case (true, false):
-            return "\(identity), covered by \(coverage.sideToMove.rawValue.capitalized)"
-        case (false, true):
-            return "\(identity), covered by \(coverage.sideToMove.opposite.rawValue.capitalized)"
-        case (false, false):
-            return identity
-        }
-    }
-
     static func empty(sideToMove: PieceColor) -> BoardGuidancePresentation {
         BoardGuidancePresentation(
             sideToMove: sideToMove,
@@ -74,8 +47,7 @@ struct BoardGuidancePresentation: Equatable, Sendable {
             visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
-            supporterSquares: [],
-            coverage: nil
+            supporterSquares: []
         )
     }
 
@@ -84,7 +56,6 @@ struct BoardGuidancePresentation: Equatable, Sendable {
         analysis: PositionAnalysis,
         selectedSquare: Square?,
         showsSelectedReach: Bool,
-        showsCoverage: Bool,
         keepsOnlyCheckmateKingThreat: Bool
     ) -> BoardGuidancePresentation {
         if keepsOnlyCheckmateKingThreat {
@@ -101,8 +72,7 @@ struct BoardGuidancePresentation: Equatable, Sendable {
                 visibleDefenseSquares: [],
                 selectedSquare: selectedSquare,
                 selectedPaths: [],
-                supporterSquares: [],
-                coverage: nil
+                supporterSquares: []
             )
         }
 
@@ -168,14 +138,6 @@ struct BoardGuidancePresentation: Equatable, Sendable {
         let prominentThreatSquares = analysis.threatenedSquares.intersection(relevantSquares)
         let visibleDefenseSquares = defendedSquares.intersection(relevantSquares)
 
-        let coverage = showsCoverage
-            ? BoardCoveragePresentation(
-                sideToMove: state.sideToMove,
-                sideToMoveSquares: analysis.coverage(for: state.sideToMove),
-                otherSideSquares: analysis.coverage(for: state.sideToMove.opposite)
-            )
-            : nil
-
         return BoardGuidancePresentation(
             sideToMove: state.sideToMove,
             threatenedSquares: analysis.threatenedSquares,
@@ -184,8 +146,7 @@ struct BoardGuidancePresentation: Equatable, Sendable {
             visibleDefenseSquares: visibleDefenseSquares,
             selectedSquare: selectedSquare,
             selectedPaths: selectedPaths,
-            supporterSquares: supporterSquares,
-            coverage: coverage
+            supporterSquares: supporterSquares
         )
     }
 

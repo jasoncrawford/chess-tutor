@@ -7,9 +7,7 @@ struct SelectedPiecePanelLayout: Equatable {
         squareBadgeHeight: 22,
         titleLineHeight: 24,
         titleSummarySpacing: 3,
-        twoLineSummaryHeight: 41,
-        coverageButtonSpacing: 8,
-        coverageButtonHeight: 36
+        twoLineSummaryHeight: 41
     )
 
     let iconSlotHeight: CGFloat
@@ -18,8 +16,6 @@ struct SelectedPiecePanelLayout: Equatable {
     let titleLineHeight: CGFloat
     let titleSummarySpacing: CGFloat
     let twoLineSummaryHeight: CGFloat
-    let coverageButtonSpacing: CGFloat
-    let coverageButtonHeight: CGFloat
 
     var textSlotHeight: CGFloat {
         titleLineHeight + titleSummarySpacing + twoLineSummaryHeight
@@ -27,10 +23,6 @@ struct SelectedPiecePanelLayout: Equatable {
 
     var requiredContentHeight: CGFloat {
         iconSlotHeight + selectedPieceSpacing + textSlotHeight
-    }
-
-    var coverageFooterHeight: CGFloat {
-        coverageButtonSpacing + coverageButtonHeight
     }
 
     func remainingSlack(inPanelLength panelLength: CGFloat) -> CGFloat {
@@ -49,34 +41,12 @@ struct SelectedPiecePanelLayout: Equatable {
     }
 }
 
-struct CoverageButtonPresentation: Equatable {
-    let isVisible: Bool
-
-    var title: String {
-        isVisible ? "Hide coverage" : "Show coverage"
-    }
-
-    var systemImage: String {
-        isVisible ? "eye.slash" : "eye"
-    }
-}
-
 struct SelectedPiecePanelView: View {
     let selectedPieceInfo: SelectedPieceInfo?
-    let isCoverageVisible: Bool
-    let isCoverageAvailable: Bool
-    let onToggleCoverage: () -> Void
     private let layout = SelectedPiecePanelLayout.current
 
     var body: some View {
-        VStack(spacing: 0) {
-            pieceContent
-
-            if isCoverageAvailable {
-                coverageButton
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        pieceContent
     }
 
     private var pieceContent: some View {
@@ -132,20 +102,6 @@ struct SelectedPiecePanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var coverageButton: some View {
-        let presentation = CoverageButtonPresentation(isVisible: isCoverageVisible)
-
-        return Button(action: onToggleCoverage) {
-            Label(presentation.title, systemImage: presentation.systemImage)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .buttonStyle(CoverageButtonStyle(isVisible: isCoverageVisible))
-        .frame(height: layout.coverageFooterHeight)
-        .contentShape(Rectangle())
-        .accessibilityValue(isCoverageVisible ? "Shown" : "Hidden")
-    }
-
     private func selectedPieceIcon(_ piece: Piece, slotHeight: CGFloat) -> some View {
         let iconSize = min(78, slotHeight - 14)
 
@@ -181,34 +137,5 @@ struct SelectedPiecePanelView: View {
                 .minimumScaleFactor(0.82)
         }
         .frame(height: layout.titleLineHeight, alignment: .leading)
-    }
-}
-
-private struct CoverageButtonStyle: ButtonStyle {
-    let isVisible: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isVisible ? AppTheme.lightSquare : AppTheme.boardFrame)
-            .frame(height: SelectedPiecePanelLayout.current.coverageButtonHeight)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(
-                        isVisible
-                            ? AppTheme.coverageControlActive
-                            : AppTheme.coverageControlFill
-                    )
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(AppTheme.panelStroke.opacity(0.92), lineWidth: 1)
-            }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(
-                .spring(response: 0.22, dampingFraction: 0.84),
-                value: configuration.isPressed
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .contentShape(Rectangle())
     }
 }

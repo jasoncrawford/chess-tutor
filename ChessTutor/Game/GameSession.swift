@@ -29,7 +29,6 @@ final class GameSession {
     private var actionableMovesForSelection: [Move] = []
     var selectedSquare: Square?
     private(set) var analysisRevision = 0
-    var isCoverageVisible = false
     var assistSettings = BeginnerAssistSettings()
     var whitePlayer: PlayerSeat = .humanLocal
     var blackPlayer: PlayerSeat = .humanLocal
@@ -135,7 +134,6 @@ final class GameSession {
                 analysis: displayedAnalysis,
                 selectedSquare: selectedSquare,
                 showsSelectedReach: assistSettings.showLegalMovesOnSelection,
-                showsCoverage: isCoverageVisible,
                 keepsOnlyCheckmateKingThreat: false
             )
         case .checkmate:
@@ -144,7 +142,6 @@ final class GameSession {
                 analysis: displayedAnalysis,
                 selectedSquare: selectedSquare,
                 showsSelectedReach: false,
-                showsCoverage: false,
                 keepsOnlyCheckmateKingThreat: true
             )
         case .stalemate:
@@ -248,13 +245,6 @@ final class GameSession {
         return moveSelectedPiece(to: square)
     }
 
-    func toggleCoverage() {
-        guard committedState.result == .ongoing, boardLockMessage == nil else {
-            return
-        }
-        isCoverageVisible.toggle()
-    }
-
     func prepareDrag(from square: Square) -> Square? {
         guard committedState.result == .ongoing,
               localCanActForCurrentTurn,
@@ -352,7 +342,6 @@ final class GameSession {
         self.tentativeMove = nil
         selectedSquare = nil
         actionableMovesForSelection = []
-        isCoverageVisible = false
         refreshDisplayedAnalysis()
         message = committedState.result == .ongoing ? nil : statusText
         return committedMove
@@ -385,7 +374,6 @@ final class GameSession {
         tentativeMove = nil
         selectedSquare = nil
         actionableMovesForSelection = []
-        isCoverageVisible = false
         refreshDisplayedAnalysis()
         message = committedState.result == .ongoing ? nil : statusText
         return true
@@ -397,7 +385,6 @@ final class GameSession {
         committedCapturedPieces = []
         selectedSquare = nil
         actionableMovesForSelection = []
-        isCoverageVisible = false
         boardLockMessage = nil
         boardLockStatusText = nil
         message = nil
@@ -414,7 +401,6 @@ final class GameSession {
         boardLockStatusText = statusText
         tentativeMove = nil
         actionableMovesForSelection = []
-        isCoverageVisible = false
         if wasShowingTentativePosition {
             refreshDisplayedAnalysis()
         }
@@ -443,7 +429,6 @@ final class GameSession {
         tentativeMove = nil
         selectedSquare = nil
         actionableMovesForSelection = []
-        isCoverageVisible = false
         refreshDisplayedAnalysis()
         message = committedState.result == .ongoing ? nil : statusText
     }
@@ -545,8 +530,7 @@ final class GameSession {
             return PositionAnalysis(
                 allowedMovesBySource: [:],
                 threatsByTarget: [:],
-                supportersByTarget: [:],
-                coverageByColor: [:]
+                supportersByTarget: [:]
             )
         }
         return PositionAnalyzer.analyze(state)

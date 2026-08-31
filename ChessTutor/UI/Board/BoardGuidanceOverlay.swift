@@ -1,16 +1,5 @@
 import SwiftUI
 
-struct CoverageSurfaceColor: Equatable {
-    let red: Double
-    let green: Double
-    let blue: Double
-    let alpha: Double
-
-    var color: Color {
-        Color(red: red, green: green, blue: blue, opacity: alpha)
-    }
-}
-
 struct BoardGuidanceStyle: Equatable {
     static let current = BoardGuidanceStyle(
         arrowheadLengthInCells: 0.14,
@@ -18,29 +7,7 @@ struct BoardGuidanceStyle: Equatable {
         ambientDangerBadgeScale: 0.28,
         prominentDangerBurstScale: 0.92,
         shieldScale: 0.22,
-        supporterEchoScale: 0.94,
-        coverageSideToMoveColor: CoverageSurfaceColor(
-            red: 0.94,
-            green: 0.78,
-            blue: 0.37,
-            alpha: 1
-        ),
-        coverageOtherSideColor: CoverageSurfaceColor(
-            red: 0.86,
-            green: 0.50,
-            blue: 0.42,
-            alpha: 1
-        ),
-        coverageNeitherColor: CoverageSurfaceColor(
-            red: 0.50,
-            green: 0.51,
-            blue: 0.47,
-            alpha: 1
-        ),
-        coverageGridLineWidth: 0.75,
-        coverageGridOpacity: 0.18,
-        coverageRecessedPieceOpacity: 0.68,
-        coverageTransitionDuration: 0.18
+        supporterEchoScale: 0.94
     )
 
     let arrowheadLengthInCells: CGFloat
@@ -49,154 +16,6 @@ struct BoardGuidanceStyle: Equatable {
     let prominentDangerBurstScale: CGFloat
     let shieldScale: CGFloat
     let supporterEchoScale: CGFloat
-    let coverageSideToMoveColor: CoverageSurfaceColor
-    let coverageOtherSideColor: CoverageSurfaceColor
-    let coverageNeitherColor: CoverageSurfaceColor
-    let coverageGridLineWidth: CGFloat
-    let coverageGridOpacity: Double
-    let coverageRecessedPieceOpacity: Double
-    let coverageTransitionDuration: Double
-}
-
-enum CoverageSurfaceState: Equatable {
-    case neither
-    case sideToMoveOnly
-    case otherSideOnly
-    case both
-
-    init(sideToMoveCovers: Bool, otherSideCovers: Bool) {
-        switch (sideToMoveCovers, otherSideCovers) {
-        case (false, false):
-            self = .neither
-        case (true, false):
-            self = .sideToMoveOnly
-        case (false, true):
-            self = .otherSideOnly
-        case (true, true):
-            self = .both
-        }
-    }
-}
-
-struct CoverageDiagonalHalfShape: Shape {
-    enum Half {
-        case sideToMove
-        case otherSide
-    }
-
-    let half: Half
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        switch half {
-        case .sideToMove:
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        case .otherSide:
-            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        }
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct CoverageSurfaceView: View {
-    let state: CoverageSurfaceState
-
-    var body: some View {
-        let style = BoardGuidanceStyle.current
-
-        switch state {
-        case .neither:
-            Rectangle()
-                .fill(style.coverageNeitherColor.color)
-        case .sideToMoveOnly:
-            Rectangle()
-                .fill(style.coverageSideToMoveColor.color)
-        case .otherSideOnly:
-            Rectangle()
-                .fill(style.coverageOtherSideColor.color)
-        case .both:
-            ZStack {
-                CoverageDiagonalHalfShape(half: .sideToMove)
-                    .fill(style.coverageSideToMoveColor.color)
-                CoverageDiagonalHalfShape(half: .otherSide)
-                    .fill(style.coverageOtherSideColor.color)
-            }
-        }
-    }
-}
-
-struct CoverageGridShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        for index in 1..<8 {
-            let progress = CGFloat(index) / 8
-            let x = rect.minX + rect.width * progress
-            let y = rect.minY + rect.height * progress
-            path.move(to: CGPoint(x: x, y: rect.minY))
-            path.addLine(to: CGPoint(x: x, y: rect.maxY))
-            path.move(to: CGPoint(x: rect.minX, y: y))
-            path.addLine(to: CGPoint(x: rect.maxX, y: y))
-        }
-        return path
-    }
-}
-
-struct CoverageGridView: View {
-    var body: some View {
-        let style = BoardGuidanceStyle.current
-        CoverageGridShape()
-            .stroke(
-                AppTheme.boardFrame.opacity(style.coverageGridOpacity),
-                lineWidth: style.coverageGridLineWidth
-            )
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-}
-
-struct CoverageMapRenderingPolicy: Equatable {
-    let isCoverageVisible: Bool
-
-    var showsCoordinates: Bool {
-        !isCoverageVisible
-    }
-
-    var showsAmbientThreats: Bool {
-        !isCoverageVisible
-    }
-
-    func pieceOpacity(isContextual: Bool) -> Double {
-        guard isCoverageVisible, !isContextual else {
-            return 1
-        }
-        return BoardGuidanceStyle.current.coverageRecessedPieceOpacity
-    }
-}
-
-enum CoverageContext {
-    static func squares(in guidance: BoardGuidancePresentation) -> Set<Square> {
-        guard let selectedSquare = guidance.selectedSquare else {
-            return []
-        }
-
-        var squares: Set<Square> = [selectedSquare]
-        for path in guidance.selectedPaths {
-            squares.insert(path.source)
-            squares.insert(path.destination)
-            if let captureSquare = path.captureSquare {
-                squares.insert(captureSquare)
-            }
-        }
-        squares.formUnion(guidance.supporterSquares)
-        squares.formUnion(guidance.prominentThreatSquares)
-        squares.formUnion(guidance.visibleDefenseSquares)
-        return squares
-    }
 }
 
 struct GuidancePathLayout: Equatable {

@@ -273,12 +273,6 @@ struct ChessBoardView: View {
                 }
             }
         }
-        .overlay {
-            if guidance.coverage != nil {
-                CoverageGridView()
-                    .transition(.opacity)
-            }
-        }
     }
 
     @ViewBuilder
@@ -286,34 +280,14 @@ struct ChessBoardView: View {
         _ square: Square,
         guidance: BoardGuidancePresentation
     ) -> some View {
-        let renderingPolicy = CoverageMapRenderingPolicy(
-            isCoverageVisible: guidance.coverage != nil
-        )
         let content = ZStack {
             Rectangle()
                 .fill(square.isLightSquare ? AppTheme.lightSquare : AppTheme.darkSquare)
-            if let coverage = guidance.coverage {
-                CoverageSurfaceView(
-                    state: CoverageSurfaceState(
-                        sideToMoveCovers: coverage.sideToMoveSquares.contains(square),
-                        otherSideCovers: coverage.otherSideSquares.contains(square)
-                    )
-                )
-                .transition(.opacity)
-            }
             if session.selectedSquare == square {
                 selectedSquareHighlight()
             }
-            if renderingPolicy.showsCoordinates {
-                coordinateLabels(for: square)
-            }
+            coordinateLabels(for: square)
         }
-        .animation(
-            accessibilityReduceMotion
-                ? nil
-                : .easeInOut(duration: BoardGuidanceStyle.current.coverageTransitionDuration),
-            value: guidance.coverage
-        )
         let accessibleContent = content
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel(for: square, guidance: guidance))
@@ -401,11 +375,6 @@ struct ChessBoardView: View {
             viewingAngle: viewingAngle
         )
         let footOffset = geometry.readableFootOffset(distance: cellSize * 0.31)
-        let renderingPolicy = CoverageMapRenderingPolicy(
-            isCoverageVisible: guidance.coverage != nil
-        )
-        let contextualSquares = CoverageContext.squares(in: guidance)
-
         return ZStack {
             ForEach(visualPieces) { visualPiece in
                 if dragState?.visualPieceID != visualPiece.id, settlingPieceID != visualPiece.id {
@@ -416,9 +385,6 @@ struct ChessBoardView: View {
                     )
                     let isThreatened = guidance.threatenedSquares.contains(visualPiece.square)
                     let isProminentThreat = guidance.prominentThreatSquares.contains(visualPiece.square)
-                    let pieceOpacity = renderingPolicy.pieceOpacity(
-                        isContextual: contextualSquares.contains(visualPiece.square)
-                    )
 
                     if isThreatened {
                         DangerBurstView(
@@ -447,18 +413,11 @@ struct ChessBoardView: View {
                         .rotationEffect(.degrees(readableRotationDegrees))
                         .frame(width: cellSize * 0.82, height: cellSize * 0.82)
                         .position(pieceCenter)
-                        .opacity(pieceOpacity)
                         .zIndex(BoardPieceMarkerLayer.piece.zIndex)
                         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: visualPiece.square)
-                        .animation(
-                            accessibilityReduceMotion
-                                ? nil
-                                : .easeInOut(duration: BoardGuidanceStyle.current.coverageTransitionDuration),
-                            value: pieceOpacity
-                        )
                         .accessibilityHidden(true)
 
-                    if isThreatened && renderingPolicy.showsAmbientThreats {
+                    if isThreatened {
                         DangerBurstView(
                             cellSize: cellSize,
                             treatment: .ambient,
@@ -489,17 +448,10 @@ struct ChessBoardView: View {
         for square: Square,
         guidance: BoardGuidancePresentation
     ) -> String {
-        guard let piece = session.state.board[square] else {
-            return guidance.coverageAccessibilityLabel(for: square)
+        if let piece = session.state.board[square] {
+            return guidance.accessibilityLabel(for: square, piece: piece)
         }
-        let pieceLabel = guidance.accessibilityLabel(for: square, piece: piece)
-        let coverageLabel = guidance.coverageAccessibilityLabel(for: square)
-        guard guidance.coverage != nil, coverageLabel != "\(square.file)\(square.rank)" else {
-            return pieceLabel
-        }
-        let coverageStatus = coverageLabel.split(separator: ",", maxSplits: 1).last?
-            .trimmingCharacters(in: .whitespaces) ?? ""
-        return coverageStatus.isEmpty ? pieceLabel : "\(pieceLabel), \(coverageStatus)"
+        return "\(square.file)\(square.rank)"
     }
 
     private func coordinateLabels(for square: Square) -> some View {
