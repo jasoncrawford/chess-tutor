@@ -22,12 +22,17 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt -r requirements-ci.txt
       - name: Run Python tests
         run: |
           set -o pipefail
-          python -m unittest discover -s CoachingServer/tests -v 2>&1 | tee python-test-output.txt
-          python -m unittest discover -s Tools/CoachingEval/tests -v 2>&1 | tee -a python-test-output.txt
+          coaching_server_status=0
+          python -m unittest discover -s CoachingServer/tests -v 2>&1 | tee python-test-output.txt || coaching_server_status=$?
+          coaching_eval_status=0
+          python -m unittest discover -s Tools/CoachingEval/tests -v 2>&1 | tee -a python-test-output.txt || coaching_eval_status=$?
+          if [ "$coaching_server_status" -ne 0 ] || [ "$coaching_eval_status" -ne 0 ]; then
+            exit 1
+          fi
       - name: Upload Python test output
         uses: actions/upload-artifact@v7
         if: failure()
