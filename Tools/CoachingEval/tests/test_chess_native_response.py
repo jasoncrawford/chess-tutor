@@ -92,6 +92,16 @@ class ChessNativeResponseContractTests(unittest.TestCase):
             grammar,
         )
 
+    def test_builds_strict_request_specific_json_schema(self):
+        schema = self.contract().json_schema()
+
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(["message", "actions", "focus"], schema["required"])
+        self.assertEqual(
+            ["hint", "playMove", "tryAnotherMove"],
+            schema["properties"]["actions"]["items"]["enum"],
+        )
+
     def test_bounded_grammar_requires_one_short_closed_thinking_envelope(self):
         grammar = self.contract().grammar(enable_thinking=True)
 

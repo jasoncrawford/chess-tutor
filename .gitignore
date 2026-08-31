@@ -6,3 +6,5 @@ xcuserdata/
 *.xcuserstate
 .derived-data-log-*
 .coaching-eval/
+__pycache__/
+*.py[cod]

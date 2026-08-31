@@ -99,50 +99,6 @@ def _load_frozen_source(source_dir, system_prompt_path):
     return source
 
 
-def _response_schema(contract):
-    square_focus = {
-        "type": "object",
-        "properties": {
-            "type": {"type": "string", "enum": ["square"]},
-            "square": {"type": "string", "pattern": "^[a-h][1-8]$"},
-        },
-        "required": ["type", "square"],
-        "additionalProperties": False,
-    }
-    focus_variants = [square_focus]
-    for origin, destination in contract.allowable_moves:
-        focus_variants.append(
-            {
-                "type": "object",
-                "properties": {
-                    "type": {"type": "string", "enum": ["move"]},
-                    "from": {"type": "string", "enum": [origin]},
-                    "to": {"type": "string", "enum": [destination]},
-                },
-                "required": ["type", "from", "to"],
-                "additionalProperties": False,
-            }
-        )
-    return {
-        "type": "object",
-        "properties": {
-            "message": {"type": "string", "minLength": 1, "maxLength": 256},
-            "actions": {
-                "type": "array",
-                "items": {"type": "string", "enum": list(contract.actions)},
-                "maxItems": 3,
-            },
-            "focus": {
-                "type": "array",
-                "items": {"anyOf": focus_variants},
-                "maxItems": 4,
-            },
-        },
-        "required": ["message", "actions", "focus"],
-        "additionalProperties": False,
-    }
-
-
 def _bounded_int(value):
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         return 0
@@ -238,7 +194,7 @@ def _complete_prompt(
         response = client.complete(
             system_prompt=source["systemPrompt"],
             user_prompt=prompt["userPrompt"],
-            schema=_response_schema(contract),
+            schema=contract.json_schema(),
             model=model,
             reasoning_effort=reasoning_effort,
             maximum_output_tokens=maximum_output_tokens,

@@ -33,14 +33,26 @@ final class GameSession {
         let mismatchRetryCount: Int
     }
 
+    private struct PendingHostedCoachingRequest: Sendable {
+        let id: Int
+        let request: ModelCoachingNeutralRequest
+        let contract: ModelCoachingChessNativeResponseContract
+        let committedState: GameState
+        let tentativeMove: Move?
+        let selectedSquare: Square?
+    }
+
     private var committedState: GameState
     private var tentativeMove: Move?
     private var committedCapturedPieces: [CapturedPiece] = []
     private var displayedAnalysis: PositionAnalysis
     private var actionableMovesForSelection: [Move] = []
     private let coachingAdvisor: any CoachingAdvising
+    private let hostedCoachingProvider: (any HostedCoachingTurning)?
     private var coachingSession: CoachingSession?
     private var pendingCoachingRequest: PendingCoachingRequest?
+    private var hostedCoachingSession: HostedCoachingSession?
+    private var pendingHostedCoachingRequest: PendingHostedCoachingRequest?
     private var nextCoachingRequestID = 0
     private var coachingPositionRevision = 0
     var selectedSquare: Square?
@@ -89,23 +101,32 @@ final class GameSession {
     }
 
     var coachingPresentation: CoachingPresentation? {
-        coachingSession?.presentation
+        if let hostedCoachingSession {
+            return HostedCoachingPresentationProjector().presentation(
+                for: hostedCoachingSession.phase,
+                pulseID: hostedCoachingSession.pulseID
+            )
+        }
+        return coachingSession?.presentation
     }
 
     var isCoachingActive: Bool {
-        coachingSession != nil
+        coachingSession != nil || hostedCoachingSession != nil
     }
 
     var isCoachingPanelVisible: Bool {
-        coachingSession != nil
+        isCoachingActive
     }
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
-        coachingSession?.authoritativeBoardTask ?? .none
+        if hostedCoachingSession != nil {
+            return .none
+        }
+        return coachingSession?.authoritativeBoardTask ?? .none
     }
 
     var pendingCoachingRequestID: Int? {
-        pendingCoachingRequest?.id
+        pendingHostedCoachingRequest?.id ?? pendingCoachingRequest?.id
     }
 
     private var coachingInteractionSnapshot: CoachingInteractionSnapshot {
@@ -121,6 +142,7 @@ final class GameSession {
             && localCanActForCurrentTurn
             && !isAwaitingPromotionChoice
             && coachingSession == nil
+            && hostedCoachingSession == nil
     }
 
     var localCanActForCurrentTurn: Bool {
@@ -255,15 +277,20 @@ final class GameSession {
 
     init(
         state: GameState = .startingPosition(),
-        coachingAdvisor: any CoachingAdvising = LocalCoachingAdvisor()
+        coachingAdvisor: any CoachingAdvising = LocalCoachingAdvisor(),
+        hostedCoachingProvider: (any HostedCoachingTurning)? = nil
     ) {
         self.committedState = state
         self.displayedAnalysis = Self.makeAnalysis(for: state)
         self.coachingAdvisor = coachingAdvisor
+        self.hostedCoachingProvider = hostedCoachingProvider
     }
 
-    convenience init(replayingCommittedMoves moves: [Move]) {
-        self.init()
+    convenience init(
+        replayingCommittedMoves moves: [Move],
+        hostedCoachingProvider: (any HostedCoachingTurning)? = nil
+    ) {
+        self.init(hostedCoachingProvider: hostedCoachingProvider)
         for move in moves {
             commitRestoredMove(move)
         }
@@ -649,6 +676,17 @@ final class GameSession {
     func startCoaching() {
         guard canRequestCoaching else { return }
 
+        if hostedCoachingProvider != nil {
+            var hostedSession = HostedCoachingSession(learner: committedState.sideToMove)
+            hostedSession.openHelp(
+                selectedSquare: selectedSquare,
+                tentativeMove: tentativeMove
+            )
+            hostedCoachingSession = hostedSession
+            queueHostedCoachingRequest()
+            return
+        }
+
         let context: CoachingRequest.Context
         if tentativeMove != nil {
             context = .tentativeMove(origin: .preexisting)
@@ -665,6 +703,23 @@ final class GameSession {
 
     @MainActor
     func resolvePendingCoachingAdvice() async {
+        if let pending = pendingHostedCoachingRequest,
+           let hostedCoachingProvider,
+           hostedCoachingSession != nil {
+            do {
+                let response = try await hostedCoachingProvider.turn(
+                    for: pending.request,
+                    contract: pending.contract
+                )
+                receiveHostedCoachingResponse(response, for: pending)
+            } catch is CancellationError {
+                return
+            } catch {
+                failHostedCoachingRequest(pending)
+            }
+            return
+        }
+
         guard let pending = pendingCoachingRequest,
               coachingSession != nil else { return }
 
@@ -718,6 +773,33 @@ final class GameSession {
 
     @discardableResult
     func chooseCoachingAction(_ action: CoachingAction) -> Move? {
+        if hostedCoachingSession != nil {
+            switch action {
+            case .hint:
+                guard var hostedSession = hostedCoachingSession else { return nil }
+                if hostedSession.phase == .failed {
+                    hostedSession.recordRetry()
+                } else {
+                    hostedSession.recordHintAction()
+                }
+                hostedCoachingSession = hostedSession
+                queueHostedCoachingRequest()
+                return nil
+            case .keepLooking:
+                guard tentativeMove != nil else { return nil }
+                restoreCommittedPosition()
+                _ = synchronizeCoachingInteraction()
+                return nil
+            case .done:
+                return finishTurn()
+            case .stop:
+                stopCoaching()
+                return nil
+            default:
+                return nil
+            }
+        }
+
         let directives = coachingSession?.handle(.actionChosen(action)) ?? []
         return applyCoachingDirectives(directives)
     }
@@ -725,6 +807,62 @@ final class GameSession {
     func stopCoaching() {
         coachingSession = nil
         pendingCoachingRequest = nil
+        hostedCoachingSession = nil
+        pendingHostedCoachingRequest = nil
+    }
+
+    private func queueHostedCoachingRequest() {
+        guard var hostedSession = hostedCoachingSession else { return }
+        nextCoachingRequestID += 1
+        let id = nextCoachingRequestID
+        let request = hostedSession.request(
+            committedState: committedState,
+            selectedSquare: selectedSquare,
+            tentativeMove: tentativeMove,
+            positionRevision: coachingPositionRevision,
+            requestID: "hosted-\(id)"
+        )
+        hostedCoachingSession = hostedSession
+        pendingHostedCoachingRequest = PendingHostedCoachingRequest(
+            id: id,
+            request: request,
+            contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
+            committedState: committedState,
+            tentativeMove: tentativeMove,
+            selectedSquare: selectedSquare
+        )
+    }
+
+    private func receiveHostedCoachingResponse(
+        _ response: HostedCoachingResponse,
+        for pending: PendingHostedCoachingRequest
+    ) {
+        guard pendingHostedCoachingRequestIsApplicable(pending),
+              response.requestID == pending.request.requestID,
+              response.positionRevision == pending.request.positionRevision,
+              var hostedSession = hostedCoachingSession else { return }
+        pendingHostedCoachingRequest = nil
+        hostedSession.receive(response.turn)
+        hostedCoachingSession = hostedSession
+    }
+
+    private func failHostedCoachingRequest(_ pending: PendingHostedCoachingRequest) {
+        guard pendingHostedCoachingRequestIsApplicable(pending),
+              var hostedSession = hostedCoachingSession else { return }
+        pendingHostedCoachingRequest = nil
+        hostedSession.fail()
+        hostedCoachingSession = hostedSession
+    }
+
+    private func pendingHostedCoachingRequestIsApplicable(
+        _ pending: PendingHostedCoachingRequest
+    ) -> Bool {
+        pendingHostedCoachingRequest?.id == pending.id
+            && pending.committedState == committedState
+            && pending.tentativeMove == tentativeMove
+            && pending.selectedSquare == selectedSquare
+            && pending.request.positionRevision == coachingPositionRevision
+            && hostedCoachingSession != nil
     }
 
     private func queueCoachingRequest(
@@ -821,6 +959,19 @@ final class GameSession {
 
     @discardableResult
     private func synchronizeCoachingInteraction() -> Move? {
+        if var hostedSession = hostedCoachingSession {
+            let changed = hostedSession.recordInteraction(
+                committedState: committedState,
+                selectedSquare: selectedSquare,
+                tentativeMove: tentativeMove
+            )
+            hostedCoachingSession = hostedSession
+            if changed {
+                queueHostedCoachingRequest()
+            }
+            return nil
+        }
+
         guard coachingSession != nil else { return nil }
         let directives = coachingSession?.handle(
             .interactionChanged(coachingInteractionSnapshot)
@@ -876,7 +1027,7 @@ final class GameSession {
         guard committedState.sideToMove == color,
               previous.isLocal,
               !current.isLocal,
-              coachingSession != nil else { return }
+              isCoachingActive else { return }
         stopCoaching()
     }
 

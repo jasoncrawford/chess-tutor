@@ -199,7 +199,7 @@ struct CoachingPanelAccessibilityFixture: View {
 
 private struct DelayedLocalCoachingAdvisor: CoachingAdvising {
     func advice(for request: CoachingRequest) async throws -> CoachingAdvice {
-        try await Task.sleep(for: .milliseconds(850))
+        try await Task.sleep(for: .seconds(4))
         return try await LocalCoachingAdvisor().advice(for: request)
     }
 }
@@ -245,6 +245,95 @@ struct CoachingContinuityUITestFixture: View {
                 }
 
                 Button("Stage knight move for continuity test") {
+                    let move = Move(
+                        from: Square(file: .g, rank: 1),
+                        to: Square(file: .f, rank: 3)
+                    )
+                    session.select(move.from)
+                    _ = session.moveSelectedPiece(to: move.to)
+                }
+            }
+            .padding()
+        }
+        .task(id: session.pendingCoachingRequestID) {
+            await session.resolvePendingCoachingAdvice()
+        }
+    }
+}
+
+private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
+    func turn(
+        for request: ModelCoachingNeutralRequest,
+        contract: ModelCoachingChessNativeResponseContract
+    ) async throws -> HostedCoachingResponse {
+        try await Task.sleep(for: .milliseconds(850))
+        let isStagedMove = request.interaction.latestEvent.kind == .moveStaged
+        return HostedCoachingResponse(
+            schemaVersion: "hosted-coaching-turn.v1",
+            requestID: request.requestID,
+            positionRevision: request.positionRevision,
+            promptVersion: "tutor-v6",
+            turn: ModelCoachingChessNativeTurn(
+                message: isStagedMove
+                    ? "How does your knight help from f3?"
+                    : "This opening answer is stale.",
+                actions: isStagedMove ? ["playMove", "tryAnotherMove"] : [],
+                focus: isStagedMove
+                    ? [.move(from: "g1", to: "f3")]
+                    : []
+            ),
+            metrics: HostedCoachingMetrics(
+                inputTokens: 100,
+                outputTokens: 20,
+                reasoningTokens: 5,
+                totalTokens: 120,
+                latencyMilliseconds: 4_000
+            )
+        )
+    }
+}
+
+struct HostedCoachingContinuityUITestFixture: View {
+    @State private var session = GameSession(
+        hostedCoachingProvider: DelayedHostedCoachingProvider()
+    )
+    @Namespace private var captureNamespace
+
+    static var isEnabled: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ui-test-hosted-coaching-continuity")
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            AppTheme.table.ignoresSafeArea()
+            SidePanelView(
+                session: session,
+                viewingAngle: .normal,
+                readableRotationDegrees: 0,
+                captureNamespace: captureNamespace,
+                sideLength: 720,
+                remotePlayFlow: nil,
+                onAbout: {},
+                onPlayRemotely: {},
+                onNewGame: {},
+                remoteNewGameOpponentName: nil,
+                remotePresence: nil,
+                onInviteRemoteNewGame: {},
+                onCommittedMove: { _ in },
+                fakeRemoteLab: nil
+            )
+            .frame(
+                width: PlaySurfaceLayout.sidePanelWidth,
+                height: 720,
+                alignment: .top
+            )
+
+            VStack {
+                Button("Start hosted coaching continuity test") {
+                    session.startCoaching()
+                }
+
+                Button("Stage hosted knight move for continuity test") {
                     let move = Move(
                         from: Square(file: .g, rank: 1),
                         to: Square(file: .f, rank: 3)

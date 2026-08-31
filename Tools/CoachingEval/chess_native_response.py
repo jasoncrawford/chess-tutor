@@ -149,6 +149,49 @@ class ChessNativeResponseContract:
             grammar += f"move-focus ::= ({move_values})\n"
         return grammar + _GRAMMAR_SUFFIX
 
+    def json_schema(self):
+        square_focus = {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["square"]},
+                "square": {"type": "string", "pattern": "^[a-h][1-8]$"},
+            },
+            "required": ["type", "square"],
+            "additionalProperties": False,
+        }
+        focus_variants = [square_focus]
+        for origin, destination in self.allowable_moves:
+            focus_variants.append(
+                {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "enum": ["move"]},
+                        "from": {"type": "string", "enum": [origin]},
+                        "to": {"type": "string", "enum": [destination]},
+                    },
+                    "required": ["type", "from", "to"],
+                    "additionalProperties": False,
+                }
+            )
+        return {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "minLength": 1, "maxLength": 256},
+                "actions": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": list(self.actions)},
+                    "maxItems": 3,
+                },
+                "focus": {
+                    "type": "array",
+                    "items": {"anyOf": focus_variants},
+                    "maxItems": 4,
+                },
+            },
+            "required": ["message", "actions", "focus"],
+            "additionalProperties": False,
+        }
+
     def strip_thinking(self, response, *, enable_thinking):
         if not isinstance(enable_thinking, bool):
             raise ValueError("enable_thinking must be a boolean")

@@ -1,0 +1,1 @@
+"""Hosted coaching server tests."""
