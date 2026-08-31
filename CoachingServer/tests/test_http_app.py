@@ -1,14 +1,16 @@
 import http.client
 import json
 import logging
+import os
 import threading
 import time
 import unittest
+from unittest import mock
 
 from flask import Flask
 from werkzeug.serving import make_server
 
-from CoachingServer.http_app import create_application
+from CoachingServer.http_app import create_application, create_environment_application
 from CoachingServer.service import HostedCoachingServiceError
 
 
@@ -16,7 +18,7 @@ class FakeService:
     def __init__(self, response=None, error=None):
         self.requests = []
         self.response = response or {
-            "schemaVersion": "hosted-coaching-turn.v1",
+            "schemaVersion": "hosted-coaching-turn.v2",
             "requestID": "request-1",
         }
         self.error = error
@@ -56,6 +58,30 @@ def invoke(app, method, path, *, token=None, body=b"", content_type="application
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
+    def test_environment_application_owns_v7_prompt_and_follow_up_effort(self):
+        fake_service = FakeService()
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "private-key",
+                "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
+                "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT": "none",
+            },
+            clear=True,
+        ), mock.patch(
+            "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
+        ) as client_type, mock.patch(
+            "CoachingServer.http_app.HostedCoachingService",
+            return_value=fake_service,
+        ) as service_type:
+            application = create_environment_application()
+
+        self.assertIsInstance(application, Flask)
+        client_type.assert_called_once_with(api_key="private-key")
+        arguments = service_type.call_args.kwargs
+        self.assertEqual("none", arguments["follow_up_reasoning_effort"])
+        self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v7\n"))
+
     def test_uses_flask_for_the_http_boundary(self):
         app = create_application(
             service=FakeService(),

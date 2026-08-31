@@ -3,7 +3,7 @@ import copy
 import unittest
 from pathlib import Path
 
-from CoachingServer.chess_native_compiler import compile_context
+from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
 
 
 FIXTURE_PATH = (
@@ -25,6 +25,22 @@ class ChessNativeCompilerTests(unittest.TestCase):
             tuple(self.fixture["expectedActions"]),
             compilation.actions,
         )
+
+    def test_follow_up_is_an_authoritative_compact_update(self):
+        compilation = compile_follow_up_context(
+            self.fixture["request"],
+            "tutor-v7",
+        )
+
+        self.assertTrue(compilation.markdown.startswith("# Chess coaching update\n"))
+        self.assertIn("## Latest interaction", compilation.markdown)
+        self.assertIn("## Relevant legal facts", compilation.markdown)
+        self.assertIn("## Available UI response", compilation.markdown)
+        self.assertNotIn("## Position", compilation.markdown)
+        self.assertNotIn("FEN:", compilation.markdown)
+        self.assertNotIn("Moves:", compilation.markdown)
+        self.assertLess(len(compilation.markdown), len(self.fixture["expectedMarkdown"]))
+        self.assertEqual(tuple(self.fixture["expectedActions"]), compilation.actions)
         self.assertEqual(
             tuple(tuple(move) for move in self.fixture["expectedMoveFocus"]),
             compilation.allowable_moves,

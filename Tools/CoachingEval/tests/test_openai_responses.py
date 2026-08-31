@@ -126,7 +126,7 @@ class FakeResponsesServer:
         self.server.server_close()
 
 
-def complete(client):
+def complete(client, *, previous_response_id=None, store=False):
     return client.complete(
         system_prompt=SYSTEM_PROMPT,
         user_prompt=USER_PROMPT,
@@ -135,6 +135,8 @@ def complete(client):
         reasoning_effort="high",
         maximum_output_tokens=256,
         timeout=2,
+        previous_response_id=previous_response_id,
+        store=store,
     )
 
 
@@ -177,6 +179,7 @@ class OpenAIResponsesClientTests(unittest.TestCase):
                 "output_text": OUTPUT_TEXT,
                 "usage": {
                     "input_tokens": 641,
+                    "cached_input_tokens": 0,
                     "output_tokens": 79,
                     "reasoning_tokens": 61,
                     "total_tokens": 720,
@@ -189,6 +192,43 @@ class OpenAIResponsesClientTests(unittest.TestCase):
         self.assertNotIn("summary", serialized)
         self.assertNotIn("private", serialized)
         self.assertNotIn("encrypted", serialized)
+
+    def test_continues_a_stored_response_without_using_a_premium_service_tier(self):
+        response = completed_response()
+        response["usage"]["input_tokens_details"]["cached_tokens"] = 411
+        with FakeResponsesServer(response_body=response) as server:
+            client = openai_responses.OpenAIResponsesClient(server.base_url)
+            result = complete(
+                client,
+                previous_response_id="resp_previous-123",
+                store=True,
+            )
+
+        payload = server.requests[0]["body"]
+        self.assertEqual("resp_previous-123", payload["previous_response_id"])
+        self.assertTrue(payload["store"])
+        self.assertEqual(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": USER_PROMPT},
+            ],
+            payload["input"],
+        )
+        self.assertNotIn("service_tier", payload)
+        self.assertEqual(411, result["usage"]["cached_input_tokens"])
+
+    def test_rejects_invalid_conversation_arguments_before_transport(self):
+        client = openai_responses.OpenAIResponsesClient("http://127.0.0.1:8080")
+        for previous_response_id in ("", "response-123", "resp bad", "resp_" + "x" * 257):
+            with self.subTest(previous_response_id=previous_response_id):
+                with self.assertRaisesRegex(ValueError, "previous response ID"):
+                    complete(
+                        client,
+                        previous_response_id=previous_response_id,
+                        store=True,
+                    )
+        with self.assertRaisesRegex(ValueError, "store must be a boolean"):
+            complete(client, store="yes")
 
     def test_credentials_require_https_but_unauthenticated_local_http_is_allowed(self):
         with self.assertRaisesRegex(ValueError, "credentials require an HTTPS endpoint"):

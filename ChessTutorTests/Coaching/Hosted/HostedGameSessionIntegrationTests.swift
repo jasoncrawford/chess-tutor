@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
-    func testHostedEpisodeKeepsThinkingVisibleAndRejectsAStaleResponse() async throws {
+    func testHostedEpisodeKeepsCurrentAdviceWhilePieceSelectionStaysLocal() async throws {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)
 
@@ -16,42 +16,34 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
 
         let firstTask = Task { await session.resolvePendingCoachingAdvice() }
         let firstRequest = await provider.waitForRequest(id: "hosted-\(firstID)")
+        let firstContinuation = await provider.waitForContinuation(id: firstRequest.requestID)
+        XCTAssertNil(firstContinuation)
 
         let knight = Square(file: .b, rank: 1)
         XCTAssertFalse(session.handleCoachingSquareTap(knight))
         session.select(knight)
-        let secondID = try XCTUnwrap(session.pendingCoachingRequestID)
-        XCTAssertGreaterThan(secondID, firstID)
+        XCTAssertEqual(firstID, session.pendingCoachingRequestID)
         XCTAssertEqual("Thinking…", session.coachingPresentation?.primaryMessage)
 
         await provider.succeed(
             requestID: firstRequest.requestID,
-            message: "This old answer must not appear."
+            message: "What could you notice near the center?",
+            continuationID: "resp_opening-123"
         )
         await firstTask.value
 
-        XCTAssertEqual(secondID, session.pendingCoachingRequestID)
-        XCTAssertEqual("Thinking…", session.coachingPresentation?.primaryMessage)
-
-        let secondTask = Task { await session.resolvePendingCoachingAdvice() }
-        let secondRequest = await provider.waitForRequest(id: "hosted-\(secondID)")
-        XCTAssertEqual(.pieceSelected, secondRequest.interaction.latestEvent.kind)
-        XCTAssertEqual(["piece:white:knight:b1"], secondRequest.interaction.latestEvent.referencedIDs)
-        await provider.succeed(
-            requestID: secondRequest.requestID,
-            message: "What useful square could this knight reach?",
-            actions: ["hint"],
-            focus: [.square("b1")]
-        )
-        await secondTask.value
-
         XCTAssertNil(session.pendingCoachingRequestID)
         XCTAssertEqual(
-            "What useful square could this knight reach?",
+            "What could you notice near the center?",
             session.coachingPresentation?.primaryMessage
         )
-        XCTAssertEqual([.hint, .stop], session.coachingPresentation?.actions.map(\.action))
-        XCTAssertEqual([knight], session.coachingPresentation?.focus.emphasizedSquares)
+
+        session.select(Square(file: .g, rank: 1))
+        XCTAssertNil(session.pendingCoachingRequestID)
+        XCTAssertEqual(
+            "What could you notice near the center?",
+            session.coachingPresentation?.primaryMessage
+        )
     }
 
     func testHostedEpisodeRecalculatesAfterMoveFailureRetryAndRemovalWithoutLocalFallback() async throws {
@@ -74,6 +66,11 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         let stagedID = try XCTUnwrap(session.pendingCoachingRequestID)
         let stagedTask = Task { await session.resolvePendingCoachingAdvice() }
         let stagedRequest = await provider.waitForRequest(id: "hosted-\(stagedID)")
+        let stagedContinuation = await provider.waitForContinuation(id: stagedRequest.requestID)
+        XCTAssertEqual(
+            "resp_\(openingRequest.requestID)",
+            stagedContinuation
+        )
         XCTAssertEqual(.moveStaged, stagedRequest.interaction.latestEvent.kind)
         XCTAssertEqual(["move:g1-f3"], stagedRequest.interaction.latestEvent.referencedIDs)
 
@@ -146,6 +143,7 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
 private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
     private struct PendingCall {
         let request: ModelCoachingNeutralRequest
+        let continuationID: String?
         let continuation: CheckedContinuation<HostedCoachingResponse, Error>
     }
 
@@ -153,11 +151,13 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
 
     func turn(
         for request: ModelCoachingNeutralRequest,
-        contract: ModelCoachingChessNativeResponseContract
+        contract: ModelCoachingChessNativeResponseContract,
+        continuationID: String?
     ) async throws -> HostedCoachingResponse {
         try await withCheckedThrowingContinuation { continuation in
             pending[request.requestID] = PendingCall(
                 request: request,
+                continuationID: continuationID,
                 continuation: continuation
             )
         }
@@ -183,21 +183,33 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
         fatalError("Hosted provider did not receive request \(id)")
     }
 
+    func waitForContinuation(id: String) async -> String? {
+        for _ in 0..<1_000 {
+            if let call = pending[id] {
+                return call.continuationID
+            }
+            await Task.yield()
+        }
+        fatalError("Hosted provider did not receive request \(id)")
+    }
+
     func succeed(
         requestID: String,
         message: String,
         actions: [String] = [],
-        focus: [ModelCoachingChessNativeFocus] = []
+        focus: [ModelCoachingChessNativeFocus] = [],
+        continuationID: String? = nil
     ) {
         guard let call = pending.removeValue(forKey: requestID) else {
             fatalError("Missing hosted request \(requestID)")
         }
         call.continuation.resume(
             returning: HostedCoachingResponse(
-                schemaVersion: "hosted-coaching-turn.v1",
+                schemaVersion: "hosted-coaching-turn.v2",
                 requestID: call.request.requestID,
                 positionRevision: call.request.positionRevision,
-                promptVersion: "tutor-v6",
+                promptVersion: "tutor-v7",
+                continuationID: continuationID ?? "resp_\(requestID)",
                 turn: ModelCoachingChessNativeTurn(
                     message: message,
                     actions: actions,
@@ -205,6 +217,7 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
                 ),
                 metrics: HostedCoachingMetrics(
                     inputTokens: 100,
+                    cachedInputTokens: 0,
                     outputTokens: 20,
                     reasoningTokens: 5,
                     totalTokens: 120,

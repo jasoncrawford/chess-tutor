@@ -176,7 +176,8 @@ enum HostedCoachingRuntime {
 private struct UnavailableHostedCoachingProvider: HostedCoachingTurning {
     func turn(
         for request: ModelCoachingNeutralRequest,
-        contract: ModelCoachingChessNativeResponseContract
+        contract: ModelCoachingChessNativeResponseContract,
+        continuationID: String?
     ) async throws -> HostedCoachingResponse {
         throw HostedCoachingTransportError.serverUnavailable
     }

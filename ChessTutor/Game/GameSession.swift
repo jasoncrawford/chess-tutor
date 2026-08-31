@@ -37,9 +37,9 @@ final class GameSession {
         let id: Int
         let request: ModelCoachingNeutralRequest
         let contract: ModelCoachingChessNativeResponseContract
+        let continuationID: String?
         let committedState: GameState
         let tentativeMove: Move?
-        let selectedSquare: Square?
     }
 
     private var committedState: GameState
@@ -709,7 +709,8 @@ final class GameSession {
             do {
                 let response = try await hostedCoachingProvider.turn(
                     for: pending.request,
-                    contract: pending.contract
+                    contract: pending.contract,
+                    continuationID: pending.continuationID
                 )
                 receiveHostedCoachingResponse(response, for: pending)
             } catch is CancellationError {
@@ -827,9 +828,9 @@ final class GameSession {
             id: id,
             request: request,
             contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
+            continuationID: hostedSession.continuationID,
             committedState: committedState,
-            tentativeMove: tentativeMove,
-            selectedSquare: selectedSquare
+            tentativeMove: tentativeMove
         )
     }
 
@@ -842,7 +843,10 @@ final class GameSession {
               response.positionRevision == pending.request.positionRevision,
               var hostedSession = hostedCoachingSession else { return }
         pendingHostedCoachingRequest = nil
-        hostedSession.receive(response.turn)
+        hostedSession.receive(
+            response.turn,
+            continuationID: response.continuationID
+        )
         hostedCoachingSession = hostedSession
     }
 
@@ -860,7 +864,6 @@ final class GameSession {
         pendingHostedCoachingRequest?.id == pending.id
             && pending.committedState == committedState
             && pending.tentativeMove == tentativeMove
-            && pending.selectedSquare == selectedSquare
             && pending.request.positionRevision == coachingPositionRevision
             && hostedCoachingSession != nil
     }

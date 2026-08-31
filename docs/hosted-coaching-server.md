@@ -4,10 +4,12 @@ The private prototype accepts mechanically generated chess facts from the iPad,
 renders the coaching prompts on the server, and returns one validated coaching
 turn. The device never receives the OpenAI key.
 
-The server owns the `tutor-v6` system prompt, converts the structured device
-request into the model-facing Markdown situation, calls GPT-5.6 Sol with high
-reasoning, and validates the model's strict JSON before returning it. The iPad
-validates the JSON again before showing it.
+The server owns the `tutor-v7` system prompt, converts the structured device
+request into model-facing Markdown, and validates the model's strict JSON
+before returning it. Opening Help uses GPT-5.6 Sol with high reasoning. A
+meaningful follow-up continues that Responses API chain with a compact update
+and low reasoning. Selecting or inspecting a piece remains local and does not
+call the server. The iPad validates the JSON again before showing it.
 
 ## Local development
 
@@ -35,6 +37,11 @@ for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 ```bash
 .venv/bin/python -m CoachingServer.local --host 127.0.0.1 --port 8787
 ```
+
+Follow-ups default to `low` reasoning. For a short local latency comparison,
+set `CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT=none` before starting the
+launcher or server. The server accepts only `low` or `none`; the app cannot
+choose the policy. No Fast service tier is used.
 
 Check readiness with `GET http://127.0.0.1:8787/health`. Coaching requests use
 `POST /v1/coaching-turn`, `Content-Type: application/json`, and
@@ -68,18 +75,25 @@ Set the app base URL to the resulting HTTPS origin. Do not commit either
 secret. Vercel recognizes `app` as a WSGI entry point for a Python Function;
 see the [Vercel Python runtime documentation](https://vercel.com/docs/functions/runtimes/python).
 
-The endpoint is intentionally private and stateless. It stores no child data,
-conversation, provider response IDs, prompts, or reasoning.
+The endpoint is intentionally private and stateless. It keeps no in-process
+conversation map. The app holds one opaque Responses API ID in memory while
+Help is open and returns it with meaningful follow-ups; OpenAI stores the
+linked responses needed for that chain. Closing Help or changing the committed
+turn discards the ID. No reasoning trace is returned or logged.
 
 ## API boundary
 
-`POST /v1/coaching-turn` accepts one strict `model-coaching-neutral-request.v1`
-object. The successful response contains only:
+`POST /v1/coaching-turn` accepts one strict `hosted-coaching-request.v2`
+envelope containing a `model-coaching-neutral-request.v1` object and an
+optional previous response ID. The successful response contains only:
 
 - request identity and position revision;
+- the opaque continuation ID for this Help episode;
 - the validated child-facing message, actions, and board focus; and
-- bounded token and latency counts.
+- bounded input, cached-input, output, reasoning, total-token, and latency
+  counts.
 
 The server uses the OpenAI [Responses API](https://developers.openai.com/api/docs/guides/structured-outputs)
-with Structured Outputs and `store: false`. It does not expose provider IDs,
-raw provider output, or reasoning.
+with Structured Outputs and stored response chaining. It exposes only the
+opaque response ID needed to continue the active episode, never raw provider
+output or reasoning.

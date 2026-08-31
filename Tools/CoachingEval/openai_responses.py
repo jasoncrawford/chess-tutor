@@ -2,6 +2,7 @@
 """Narrow, trace-free OpenAI Responses API transport for coaching pilots."""
 
 import json
+import re
 import socket
 import urllib.error
 import urllib.parse
@@ -31,6 +32,7 @@ _MAXIMUM_RESPONSE_BODY_BYTES = 1024 * 1024
 _MAXIMUM_IDENTIFIER_BYTES = 256
 _MAXIMUM_OUTPUT_TEXT_BYTES = 64 * 1024
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
+_PREVIOUS_RESPONSE_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
 
 
 class OpenAIResponsesError(RuntimeError):
@@ -85,6 +87,8 @@ class OpenAIResponsesClient:
         reasoning_effort,
         maximum_output_tokens,
         timeout,
+        previous_response_id=None,
+        store=False,
     ):
         _validate_arguments(
             system_prompt=system_prompt,
@@ -94,6 +98,8 @@ class OpenAIResponsesClient:
             reasoning_effort=reasoning_effort,
             maximum_output_tokens=maximum_output_tokens,
             timeout=timeout,
+            previous_response_id=previous_response_id,
+            store=store,
         )
         payload = {
             "model": model,
@@ -111,8 +117,10 @@ class OpenAIResponsesClient:
                     "schema": schema,
                 }
             },
-            "store": False,
+            "store": store,
         }
+        if previous_response_id is not None:
+            payload["previous_response_id"] = previous_response_id
         try:
             request_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         except (TypeError, ValueError):
@@ -184,6 +192,8 @@ def _validate_arguments(
     reasoning_effort,
     maximum_output_tokens,
     timeout,
+    previous_response_id,
+    store,
 ):
     if not isinstance(system_prompt, str) or not isinstance(user_prompt, str):
         raise ValueError("Responses API prompts must be strings")
@@ -201,6 +211,13 @@ def _validate_arguments(
         raise ValueError("Responses API maximum output tokens must be positive")
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
         raise ValueError("Responses API timeout must be positive")
+    if previous_response_id is not None and (
+        not isinstance(previous_response_id, str)
+        or not _PREVIOUS_RESPONSE_ID.fullmatch(previous_response_id)
+    ):
+        raise ValueError("Responses API previous response ID is invalid")
+    if not isinstance(store, bool):
+        raise ValueError("Responses API store must be a boolean")
 
 
 def _read_bounded_response(response):
@@ -302,6 +319,16 @@ def _extract_completed_output(response):
         key: _bounded_token_count(usage.get(key))
         for key in ("input_tokens", "output_tokens", "total_tokens")
     }
+    input_details = usage.get("input_tokens_details")
+    if input_details is None:
+        cached_input_tokens = 0
+    elif isinstance(input_details, dict):
+        cached_input_tokens = _bounded_token_count(
+            input_details.get("cached_tokens", 0)
+        )
+    else:
+        raise _invalid_response()
+    bounded_usage["cached_input_tokens"] = cached_input_tokens
     output_details = usage.get("output_tokens_details")
     if output_details is None:
         reasoning_tokens = 0
