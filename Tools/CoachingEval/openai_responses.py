@@ -6,7 +6,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from http_security import SameOriginAuthorizationRedirectHandler
+try:
+    from .http_security import SameOriginAuthorizationRedirectHandler
+except ImportError:
+    from http_security import SameOriginAuthorizationRedirectHandler
 
 
 __all__ = ["OpenAIResponsesClient", "OpenAIResponsesError"]
