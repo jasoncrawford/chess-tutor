@@ -3,6 +3,42 @@ import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
+    func testResponseContractMatchesCompilationWithoutRenderingDependency() {
+        for fixture in ModelCoachingNeutralPromptExamples.fixtures {
+            let request = request(for: fixture)
+            let contract = ModelCoachingChessNativeContextCompiler.responseContract(for: request)
+            let compilation = ModelCoachingChessNativeContextCompiler.compile(
+                request,
+                promptVersion: "tutor-v6"
+            )
+
+            XCTAssertEqual(contract.availableActions, compilation.availableActions, fixture.id)
+            XCTAssertEqual(contract.availableMoveFocus, compilation.availableMoveFocus, fixture.id)
+        }
+    }
+
+    func testSharedPythonSwiftContextFixtureCompilesExactly() throws {
+        let fixtureURL = repositoryRoot.appendingPathComponent(
+            "Tools/CoachingEval/fixtures/chess-native-context-v1.json"
+        )
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any]
+        )
+        let requestObject = try XCTUnwrap(root["request"] as? [String: Any])
+        let requestData = try JSONSerialization.data(withJSONObject: requestObject)
+        let request = try JSONDecoder().decode(ModelCoachingNeutralRequest.self, from: requestData)
+        let compilation = ModelCoachingChessNativeContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v6"
+        )
+        let expectedMoves = try XCTUnwrap(root["expectedMoveFocus"] as? [[String]])
+            .map { ModelCoachingChessNativeMoveFocus(from: $0[0], to: $0[1]) }
+
+        XCTAssertEqual(compilation.markdown, root["expectedMarkdown"] as? String)
+        XCTAssertEqual(compilation.availableActions, root["expectedActions"] as? [String])
+        XCTAssertEqual(compilation.availableMoveFocus, expectedMoves)
+    }
+
     func testEightProductionFixturesUseFixedSectionsWithoutNumberedAliases() throws {
         for fixture in ModelCoachingNeutralPromptExamples.fixtures {
             let compilation = compile(fixture)
@@ -280,6 +316,14 @@ final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
             request(for: fixture),
             promptVersion: "tutor-v6"
         )
+    }
+
+    private var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 
     private func request(

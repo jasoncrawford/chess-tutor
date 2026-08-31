@@ -110,7 +110,7 @@ def _preflight(source):
         contract = chess_native_response.ChessNativeResponseContract.from_markdown(
             prompt["userPrompt"]
         )
-        schema = hosted_pilot._response_schema(contract)
+        schema = contract.json_schema()
         json.dumps(schema, sort_keys=True)
         cells.append((prompt, contract, schema))
     return cells

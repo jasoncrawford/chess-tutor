@@ -9,6 +9,19 @@ enum ModelCoachingChessNativeTurnValidator {
         for turn: ModelCoachingChessNativeTurn,
         compilation: ModelCoachingChessNativeContextCompilation
     ) -> [String] {
+        issues(
+            for: turn,
+            contract: ModelCoachingChessNativeResponseContract(
+                availableActions: compilation.availableActions,
+                availableMoveFocus: compilation.availableMoveFocus
+            )
+        )
+    }
+
+    static func issues(
+        for turn: ModelCoachingChessNativeTurn,
+        contract: ModelCoachingChessNativeResponseContract
+    ) -> [String] {
         var issues: [String] = []
 
         if turn.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -22,14 +35,14 @@ enum ModelCoachingChessNativeTurnValidator {
             }
         }
 
-        let permittedActions = Set(compilation.availableActions)
+        let permittedActions = Set(contract.availableActions)
         issues.append(contentsOf: unknownActions(in: turn.actions, permitted: permittedActions))
         issues.append(contentsOf: duplicateActions(in: turn.actions))
         if turn.actions.count > maximumActions {
             issues.append("Actions must contain at most 3 names.")
         }
 
-        let permittedMoves = Set(compilation.availableMoveFocus)
+        let permittedMoves = Set(contract.availableMoveFocus)
         issues.append(contentsOf: invalidFocus(in: turn.focus, permittedMoves: permittedMoves))
         issues.append(contentsOf: duplicateFocus(in: turn.focus))
         if turn.focus.count > maximumFocus {
@@ -174,6 +187,19 @@ enum ModelCoachingChessNativeTurnDecoder {
         _ data: Data,
         compilation: ModelCoachingChessNativeContextCompilation
     ) throws -> ModelCoachingChessNativeTurn {
+        try decodeAndValidate(
+            data,
+            contract: ModelCoachingChessNativeResponseContract(
+                availableActions: compilation.availableActions,
+                availableMoveFocus: compilation.availableMoveFocus
+            )
+        )
+    }
+
+    static func decodeAndValidate(
+        _ data: Data,
+        contract: ModelCoachingChessNativeResponseContract
+    ) throws -> ModelCoachingChessNativeTurn {
         do {
             var validator = ModelCoachingRawJSONValidator(data: data)
             try validator.validate()
@@ -212,7 +238,7 @@ enum ModelCoachingChessNativeTurnDecoder {
 
         let issues = ModelCoachingChessNativeTurnValidator.issues(
             for: turn,
-            compilation: compilation
+            contract: contract
         )
         guard issues.isEmpty else {
             throw ModelCoachingChessNativeTurnDecodingError.validationFailed(issues)

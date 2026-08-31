@@ -8,6 +8,11 @@ struct ModelCoachingChessNativeContextCompilation: Codable, Equatable, Sendable 
     let availableMoveFocus: [ModelCoachingChessNativeMoveFocus]
 }
 
+struct ModelCoachingChessNativeResponseContract: Codable, Equatable, Sendable {
+    let availableActions: [String]
+    let availableMoveFocus: [ModelCoachingChessNativeMoveFocus]
+}
+
 struct ModelCoachingChessNativeMoveFocus: Codable, Equatable, Hashable, Sendable {
     let from: String
     let to: String

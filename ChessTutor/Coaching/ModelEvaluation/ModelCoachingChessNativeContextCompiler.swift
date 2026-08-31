@@ -5,8 +5,10 @@ enum ModelCoachingChessNativeContextCompiler {
     ) -> ModelCoachingChessNativeContextCompilation {
         let piecesByID = Dictionary(uniqueKeysWithValues: request.pieces.map { ($0.id, $0) })
         let scopedReplies = repliesForCurrentInteraction(in: request)
-        let moveFocus = availableMoveFocus(in: request, scopedReplies: scopedReplies)
-        let actions = availableActions(in: request)
+        let responseContract = responseContract(
+            for: request,
+            scopedReplies: scopedReplies
+        )
         let document = ModelCoachingContextDocument(
             metadataLines: [],
             sections: [
@@ -28,7 +30,10 @@ enum ModelCoachingChessNativeContextCompiler {
                 ),
                 ModelCoachingMarkdownSection(
                     heading: "Available UI response",
-                    lines: availableResponseLines(actions: actions, moveFocus: moveFocus)
+                    lines: availableResponseLines(
+                        actions: responseContract.availableActions,
+                        moveFocus: responseContract.availableMoveFocus
+                    )
                 ),
             ]
         )
@@ -42,8 +47,30 @@ enum ModelCoachingChessNativeContextCompiler {
                 document,
                 title: "# Chess coaching situation"
             ),
-            availableActions: actions,
-            availableMoveFocus: moveFocus
+            availableActions: responseContract.availableActions,
+            availableMoveFocus: responseContract.availableMoveFocus
+        )
+    }
+
+    static func responseContract(
+        for request: ModelCoachingNeutralRequest
+    ) -> ModelCoachingChessNativeResponseContract {
+        responseContract(
+            for: request,
+            scopedReplies: repliesForCurrentInteraction(in: request)
+        )
+    }
+
+    private static func responseContract(
+        for request: ModelCoachingNeutralRequest,
+        scopedReplies: [ModelCoachingNeutralReply]
+    ) -> ModelCoachingChessNativeResponseContract {
+        ModelCoachingChessNativeResponseContract(
+            availableActions: availableActions(in: request),
+            availableMoveFocus: availableMoveFocus(
+                in: request,
+                scopedReplies: scopedReplies
+            )
         )
     }
 
