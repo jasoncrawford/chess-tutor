@@ -13,15 +13,15 @@ final class HostedCoachingSessionTests: XCTestCase {
         session.openHelp(selectedSquare: nil, tentativeMove: nil)
         XCTAssertEqual(.helpOpened, session.latestEvent.kind)
 
-        XCTAssertTrue(
+        XCTAssertFalse(
             session.recordInteraction(
                 committedState: state,
                 selectedSquare: b1,
                 tentativeMove: nil
             )
         )
-        XCTAssertEqual(.pieceSelected, session.latestEvent.kind)
-        XCTAssertEqual(["piece:white:knight:b1"], session.latestEvent.referencedIDs)
+        XCTAssertEqual(.helpOpened, session.latestEvent.kind)
+        XCTAssertEqual(1, session.events.count)
 
         let firstMove = Move(from: b1, to: c3)
         XCTAssertTrue(
@@ -54,15 +54,14 @@ final class HostedCoachingSessionTests: XCTestCase {
         XCTAssertEqual(.moveRemoved, session.latestEvent.kind)
         XCTAssertEqual(["move:b1-a3"], session.latestEvent.referencedIDs)
 
-        XCTAssertTrue(
+        XCTAssertFalse(
             session.recordInteraction(
                 committedState: state,
                 selectedSquare: b8,
                 tentativeMove: nil
             )
         )
-        XCTAssertEqual(.squareInspected, session.latestEvent.kind)
-        XCTAssertEqual(["piece:black:knight:b8"], session.latestEvent.referencedIDs)
+        XCTAssertEqual(.moveRemoved, session.latestEvent.kind)
 
         session.recordHintAction()
         XCTAssertEqual(.actionChosen, session.latestEvent.kind)
@@ -80,6 +79,20 @@ final class HostedCoachingSessionTests: XCTestCase {
         XCTAssertEqual(session.events, request.interaction.episodeEvents)
         XCTAssertEqual(session.latestEvent, request.interaction.latestEvent)
         XCTAssertEqual(.thinking, session.phase)
+        XCTAssertNil(session.continuationID)
+
+        session.receive(
+            ModelCoachingChessNativeTurn(
+                message: "What could you notice?",
+                actions: [],
+                focus: []
+            ),
+            continuationID: "resp_first-123"
+        )
+        XCTAssertEqual("resp_first-123", session.continuationID)
+
+        session.openHelp(selectedSquare: nil, tentativeMove: nil)
+        XCTAssertNil(session.continuationID)
     }
 
     func testDuplicateInteractionDoesNotAddAnEventAndPhaseTransitionsAreExplicit() {
@@ -101,7 +114,7 @@ final class HostedCoachingSessionTests: XCTestCase {
             actions: ["hint"],
             focus: [.square("b1")]
         )
-        session.receive(turn)
+        session.receive(turn, continuationID: "resp_ready-123")
         XCTAssertEqual(.ready(turn), session.phase)
         session.fail()
         XCTAssertEqual(.failed, session.phase)

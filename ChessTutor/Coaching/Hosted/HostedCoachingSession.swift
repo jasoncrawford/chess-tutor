@@ -3,6 +3,7 @@ struct HostedCoachingSession: Equatable, Sendable {
     private(set) var phase: HostedCoachingPhase = .thinking
     private(set) var events: [ModelCoachingNeutralEpisodeEvent] = []
     private(set) var pulseID = 0
+    private(set) var continuationID: String?
 
     private var lastSelectedSquare: Square?
     private var lastTentativeMove: Move?
@@ -18,6 +19,7 @@ struct HostedCoachingSession: Equatable, Sendable {
 
     mutating func openHelp(selectedSquare: Square?, tentativeMove: Move?) {
         events = []
+        continuationID = nil
         lastSelectedSquare = selectedSquare
         lastTentativeMove = tentativeMove
         append(kind: .helpOpened, referencedIDs: [])
@@ -51,17 +53,8 @@ struct HostedCoachingSession: Equatable, Sendable {
             return true
         }
 
-        guard selectedSquare != lastSelectedSquare,
-              let selectedSquare,
-              let piece = committedState.board[selectedSquare] else {
-            return false
-        }
-        append(
-            kind: piece.color == learner ? .pieceSelected : .squareInspected,
-            referencedIDs: [ModelCoachingPositionEncoder.pieceID(piece, at: selectedSquare)]
-        )
-        phase = .thinking
-        return true
+        _ = committedState
+        return false
     }
 
     mutating func recordHintAction() {
@@ -96,7 +89,11 @@ struct HostedCoachingSession: Equatable, Sendable {
         )
     }
 
-    mutating func receive(_ turn: ModelCoachingChessNativeTurn) {
+    mutating func receive(
+        _ turn: ModelCoachingChessNativeTurn,
+        continuationID: String
+    ) {
+        self.continuationID = continuationID
         phase = .ready(turn)
         pulseID += 1
     }

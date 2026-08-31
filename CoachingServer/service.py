@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import socket
 from collections.abc import Mapping
 
-from CoachingServer.chess_native_compiler import compile_context
+from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
 
 
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
 _MAXIMUM_LATENCY_MILLISECONDS = 120_000.0
 _LOGGER = logging.getLogger("ChessTutor.CoachingServer")
+_CONTINUATION_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
+_ENVELOPE_FIELDS = {"schemaVersion", "request", "previousResponseID"}
 
 
 class HostedCoachingServiceError(RuntimeError):
@@ -40,6 +43,7 @@ class HostedCoachingService:
         provider,
         system_prompt: str,
         timeout: float = 30.0,
+        follow_up_reasoning_effort: str = "low",
         clock=time.monotonic,
     ):
         if not callable(getattr(provider, "complete", None)):
@@ -50,9 +54,12 @@ class HostedCoachingService:
             raise ValueError("timeout must be positive")
         if not callable(clock):
             raise ValueError("clock must be callable")
+        if follow_up_reasoning_effort not in {"low", "none"}:
+            raise ValueError("follow-up reasoning effort must be low or none")
         self._provider = provider
         self._system_prompt = system_prompt
         self._timeout = float(timeout)
+        self._follow_up_reasoning_effort = follow_up_reasoning_effort
         self._clock = clock
 
     def complete(
@@ -62,10 +69,21 @@ class HostedCoachingService:
         trace_id: str = "direct",
     ) -> dict[str, object]:
         try:
-            compilation = compile_context(request, "tutor-v6")
+            neutral_request, previous_response_id = _parse_envelope(request)
+            is_follow_up = previous_response_id is not None
+            compiler = compile_follow_up_context if is_follow_up else compile_context
+            compilation = compiler(neutral_request, "tutor-v7")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
-        _LOGGER.info("event=request_compiled trace_id=%s", trace_id)
+        request_kind = "follow_up" if is_follow_up else "initial"
+        reasoning_effort = (
+            self._follow_up_reasoning_effort if is_follow_up else "high"
+        )
+        _LOGGER.info(
+            "event=request_compiled trace_id=%s request_kind=%s",
+            trace_id,
+            request_kind,
+        )
 
         contract = ChessNativeResponseContract(
             actions=compilation.actions,
@@ -75,9 +93,12 @@ class HostedCoachingService:
         _LOGGER.info(
             (
                 "event=provider_request_started trace_id=%s "
-                "model=gpt-5.6-sol reasoning_effort=high timeout_seconds=%s"
+                "request_kind=%s model=gpt-5.6-sol "
+                "reasoning_effort=%s timeout_seconds=%s"
             ),
             trace_id,
+            request_kind,
+            reasoning_effort,
             f"{self._timeout:g}",
         )
         try:
@@ -86,9 +107,11 @@ class HostedCoachingService:
                 user_prompt=compilation.markdown,
                 schema=contract.json_schema(),
                 model="gpt-5.6-sol",
-                reasoning_effort="high",
+                reasoning_effort=reasoning_effort,
                 maximum_output_tokens=2048,
                 timeout=self._timeout,
+                previous_response_id=previous_response_id,
+                store=True,
             )
         except Exception as error:
             elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
@@ -116,14 +139,23 @@ class HostedCoachingService:
             and provider_response.get("status") == "completed"
             else "noncompleted"
         )
+        metrics = _metrics(
+            provider_response.get("usage") if isinstance(provider_response, dict) else None,
+            elapsed_milliseconds,
+        )
         _LOGGER.info(
             (
                 "event=provider_request_completed trace_id=%s "
-                "elapsed_ms=%s outcome=%s"
+                "elapsed_ms=%s outcome=%s input_tokens=%s "
+                "cached_input_tokens=%s output_tokens=%s reasoning_tokens=%s"
             ),
             trace_id,
             elapsed_milliseconds,
             provider_outcome,
+            metrics["inputTokens"],
+            metrics["cachedInputTokens"],
+            metrics["outputTokens"],
+            metrics["reasoningTokens"],
         )
 
         try:
@@ -134,6 +166,7 @@ class HostedCoachingService:
             output_text = provider_response.get("output_text")
             if not isinstance(output_text, str):
                 raise ValueError
+            continuation_id = _continuation_id(provider_response.get("id"))
             turn = contract.parse_and_validate(output_text)
         except (KeyError, TypeError, ValueError):
             _LOGGER.info(
@@ -144,15 +177,13 @@ class HostedCoachingService:
         _LOGGER.info("event=provider_response_validated trace_id=%s", trace_id)
 
         return {
-            "schemaVersion": "hosted-coaching-turn.v1",
+            "schemaVersion": "hosted-coaching-turn.v2",
             "requestID": compilation.request_id,
             "positionRevision": compilation.position_revision,
             "promptVersion": compilation.prompt_version,
+            "continuationID": continuation_id,
             "turn": turn,
-            "metrics": _metrics(
-                provider_response.get("usage"),
-                elapsed_milliseconds,
-            ),
+            "metrics": metrics,
         }
 
 
@@ -160,6 +191,7 @@ def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
     usage = usage if isinstance(usage, dict) else {}
     return {
         "inputTokens": _bounded_int(usage.get("input_tokens")),
+        "cachedInputTokens": _bounded_int(usage.get("cached_input_tokens")),
         "outputTokens": _bounded_int(usage.get("output_tokens")),
         "reasoningTokens": _bounded_int(usage.get("reasoning_tokens")),
         "totalTokens": _bounded_int(usage.get("total_tokens")),
@@ -178,3 +210,23 @@ def _bounded_int(value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         return 0
     return min(value, _MAXIMUM_TOKEN_COUNT)
+
+
+def _parse_envelope(value: Mapping[str, object]) -> tuple[Mapping[str, object], str | None]:
+    if not isinstance(value, Mapping) or set(value.keys()) != _ENVELOPE_FIELDS:
+        raise ValueError("Invalid hosted coaching request envelope")
+    if value["schemaVersion"] != "hosted-coaching-request.v2":
+        raise ValueError("Unsupported hosted coaching request schema")
+    neutral_request = value["request"]
+    if not isinstance(neutral_request, Mapping):
+        raise ValueError("Hosted coaching request must be an object")
+    previous_response_id = value["previousResponseID"]
+    if previous_response_id is not None:
+        previous_response_id = _continuation_id(previous_response_id)
+    return neutral_request, previous_response_id
+
+
+def _continuation_id(value: object) -> str:
+    if not isinstance(value, str) or not _CONTINUATION_ID.fullmatch(value):
+        raise ValueError("Invalid continuation ID")
+    return value

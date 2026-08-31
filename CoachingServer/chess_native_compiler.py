@@ -63,6 +63,22 @@ def compile_context(
     request: Mapping[str, object],
     prompt_version: str,
 ) -> ChessNativeCompilation:
+    return _compile_context(request, prompt_version, is_follow_up=False)
+
+
+def compile_follow_up_context(
+    request: Mapping[str, object],
+    prompt_version: str,
+) -> ChessNativeCompilation:
+    return _compile_context(request, prompt_version, is_follow_up=True)
+
+
+def _compile_context(
+    request: Mapping[str, object],
+    prompt_version: str,
+    *,
+    is_follow_up: bool,
+) -> ChessNativeCompilation:
     parsed = _parse_neutral_request(request)
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
     pieces_by_id = {piece["id"]: piece for piece in parsed["pieces"]}
@@ -70,8 +86,7 @@ def compile_context(
     actions = _available_actions(parsed)
     allowable_moves = _available_move_focus(parsed, scoped_replies)
 
-    sections = (
-        ("Position", _position_lines(parsed)),
+    shared_sections = (
         ("Latest interaction", _latest_interaction_lines(parsed, pieces_by_id)),
         (
             "Relevant legal facts",
@@ -82,7 +97,11 @@ def compile_context(
             _available_response_lines(actions, allowable_moves),
         ),
     )
-    markdown = "# Chess coaching situation\n\n" + "\n\n".join(
+    sections = shared_sections if is_follow_up else (
+        ("Position", _position_lines(parsed)),
+    ) + shared_sections
+    title = "# Chess coaching update\n\n" if is_follow_up else "# Chess coaching situation\n\n"
+    markdown = title + "\n\n".join(
         "## " + heading + "\n\n" + "\n".join(lines)
         for heading, lines in sections
     )

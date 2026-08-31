@@ -13,15 +13,23 @@ FIXTURE = json.loads(
     )
 )
 SYSTEM_PROMPT = (
-    ROOT / "Tools/CoachingEval/prompts/tutor-v6.md"
+    ROOT / "Tools/CoachingEval/prompts/tutor-v7.md"
 ).read_text(encoding="utf-8")
+
+
+def hosted_request(*, previous_response_id=None, request=None):
+    return {
+        "schemaVersion": "hosted-coaching-request.v2",
+        "request": FIXTURE["request"] if request is None else request,
+        "previousResponseID": previous_response_id,
+    }
 
 
 class RecordingProvider:
     def __init__(self, response=None, error=None):
         self.calls = []
         self.response = response or {
-            "id": "provider-private-id",
+            "id": "resp_provider-private-id",
             "model": "gpt-5.6-sol-2026-08-01",
             "status": "completed",
             "output_text": (
@@ -31,6 +39,7 @@ class RecordingProvider:
             ),
             "usage": {
                 "input_tokens": 500,
+                "cached_input_tokens": 25,
                 "output_tokens": 80,
                 "reasoning_tokens": 50,
                 "total_tokens": 580,
@@ -56,18 +65,20 @@ class HostedCoachingServiceTests(unittest.TestCase):
         )
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
-            service.complete(FIXTURE["request"], trace_id="trace-1")
+            service.complete(hosted_request(), trace_id="trace-1")
 
         self.assertEqual(
             [
-                "event=request_compiled trace_id=trace-1",
+                "event=request_compiled trace_id=trace-1 request_kind=initial",
                 (
                     "event=provider_request_started trace_id=trace-1 "
-                    "model=gpt-5.6-sol reasoning_effort=high timeout_seconds=30"
+                    "request_kind=initial model=gpt-5.6-sol "
+                    "reasoning_effort=high timeout_seconds=30"
                 ),
                 (
                     "event=provider_request_completed trace_id=trace-1 "
-                    "elapsed_ms=123.0 outcome=completed"
+                    "elapsed_ms=123.0 outcome=completed input_tokens=500 "
+                    "cached_input_tokens=25 output_tokens=80 reasoning_tokens=50"
                 ),
                 "event=provider_response_validated trace_id=trace-1",
             ],
@@ -85,15 +96,16 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
             with self.assertRaises(HostedCoachingServiceError):
-                service.complete(FIXTURE["request"], trace_id="trace-2")
+                service.complete(hosted_request(), trace_id="trace-2")
 
         messages = [record.getMessage() for record in captured.records]
         self.assertEqual(
             [
-                "event=request_compiled trace_id=trace-2",
+                "event=request_compiled trace_id=trace-2 request_kind=initial",
                 (
                     "event=provider_request_started trace_id=trace-2 "
-                    "model=gpt-5.6-sol reasoning_effort=high timeout_seconds=30"
+                    "request_kind=initial model=gpt-5.6-sol "
+                    "reasoning_effort=high timeout_seconds=30"
                 ),
                 (
                     "event=provider_request_failed trace_id=trace-2 "
@@ -113,7 +125,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             clock=lambda: next(clock),
         )
 
-        response = service.complete(FIXTURE["request"])
+        response = service.complete(hosted_request())
 
         self.assertEqual(1, len(provider.calls))
         call = provider.calls[0]
@@ -121,15 +133,18 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertEqual("high", call["reasoning_effort"])
         self.assertEqual(2048, call["maximum_output_tokens"])
         self.assertEqual(30.0, call["timeout"])
+        self.assertIsNone(call["previous_response_id"])
+        self.assertTrue(call["store"])
         self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
         self.assertEqual(FIXTURE["expectedMarkdown"], call["user_prompt"])
         self.assertFalse(call["schema"]["additionalProperties"])
         self.assertEqual(
             {
-                "schemaVersion": "hosted-coaching-turn.v1",
+                "schemaVersion": "hosted-coaching-turn.v2",
                 "requestID": "shared-selected-knight",
                 "positionRevision": 0,
-                "promptVersion": "tutor-v6",
+                "promptVersion": "tutor-v7",
+                "continuationID": "resp_provider-private-id",
                 "turn": {
                     "message": "Where could this knight help in the center?",
                     "actions": ["hint"],
@@ -137,6 +152,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 },
                 "metrics": {
                     "inputTokens": 500,
+                    "cachedInputTokens": 25,
                     "outputTokens": 80,
                     "reasoningTokens": 50,
                     "totalTokens": 580,
@@ -146,8 +162,43 @@ class HostedCoachingServiceTests(unittest.TestCase):
             response,
         )
         serialized = json.dumps(response)
-        self.assertNotIn("provider-private-id", serialized)
         self.assertNotIn("gpt-5.6-sol-2026", serialized)
+
+    def test_follow_up_uses_compact_update_previous_response_and_low_reasoning(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(
+            provider=provider,
+            system_prompt=SYSTEM_PROMPT,
+        )
+
+        response = service.complete(
+            hosted_request(previous_response_id="resp_previous-123")
+        )
+
+        call = provider.calls[0]
+        self.assertEqual("low", call["reasoning_effort"])
+        self.assertEqual("resp_previous-123", call["previous_response_id"])
+        self.assertTrue(call["store"])
+        self.assertTrue(call["user_prompt"].startswith("# Chess coaching update\n"))
+        self.assertNotIn("## Position", call["user_prompt"])
+        self.assertEqual("resp_provider-private-id", response["continuationID"])
+
+    def test_follow_up_reasoning_can_be_configured_to_none_but_not_other_values(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(
+            provider=provider,
+            system_prompt=SYSTEM_PROMPT,
+            follow_up_reasoning_effort="none",
+        )
+        service.complete(hosted_request(previous_response_id="resp_previous-123"))
+        self.assertEqual("none", provider.calls[0]["reasoning_effort"])
+
+        with self.assertRaisesRegex(ValueError, "follow-up reasoning effort"):
+            HostedCoachingService(
+                provider=provider,
+                system_prompt=SYSTEM_PROMPT,
+                follow_up_reasoning_effort="medium",
+            )
 
     def test_rejects_invalid_request_before_provider_call(self):
         provider = RecordingProvider()
@@ -155,7 +206,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         request = dict(FIXTURE["request"], authoredAdvice="Play the knight.")
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
-            service.complete(request)
+            service.complete(hosted_request(request=request))
 
         self.assertEqual("invalidRequest", raised.exception.code)
         self.assertEqual([], provider.calls)
@@ -174,7 +225,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
-            service.complete(FIXTURE["request"])
+            service.complete(hosted_request())
 
         self.assertEqual("invalidProviderResponse", raised.exception.code)
         self.assertNotIn("PRIVATE", str(raised.exception))
@@ -184,7 +235,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
-            service.complete(FIXTURE["request"])
+            service.complete(hosted_request())
 
         self.assertEqual("providerUnavailable", raised.exception.code)
         self.assertNotIn("secret", str(raised.exception))
@@ -194,7 +245,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
-            service.complete(FIXTURE["request"])
+            service.complete(hosted_request())
 
         self.assertEqual("providerTimeout", raised.exception.code)
         self.assertNotIn("private", str(raised.exception))
@@ -207,10 +258,22 @@ class HostedCoachingServiceTests(unittest.TestCase):
         service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
-            service.complete(FIXTURE["request"])
+            service.complete(hosted_request())
 
         self.assertEqual("providerTimeout", raised.exception.code)
         self.assertNotIn("private", str(raised.exception))
+
+    def test_rejects_invalid_or_extra_envelope_fields_before_provider_call(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        invalid = hosted_request(previous_response_id="not-a-response-id")
+        invalid["clientReasoningEffort"] = "max"
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(invalid)
+
+        self.assertEqual("invalidRequest", raised.exception.code)
+        self.assertEqual([], provider.calls)
 
 
 if __name__ == "__main__":

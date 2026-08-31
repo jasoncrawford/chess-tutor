@@ -264,15 +264,17 @@ struct CoachingContinuityUITestFixture: View {
 private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
     func turn(
         for request: ModelCoachingNeutralRequest,
-        contract: ModelCoachingChessNativeResponseContract
+        contract: ModelCoachingChessNativeResponseContract,
+        continuationID: String?
     ) async throws -> HostedCoachingResponse {
         try await Task.sleep(for: .milliseconds(850))
         let isStagedMove = request.interaction.latestEvent.kind == .moveStaged
         return HostedCoachingResponse(
-            schemaVersion: "hosted-coaching-turn.v1",
+            schemaVersion: "hosted-coaching-turn.v2",
             requestID: request.requestID,
             positionRevision: request.positionRevision,
-            promptVersion: "tutor-v6",
+            promptVersion: "tutor-v7",
+            continuationID: "resp_ui-fixture",
             turn: ModelCoachingChessNativeTurn(
                 message: isStagedMove
                     ? "How does your knight help from f3?"
@@ -284,6 +286,7 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
             ),
             metrics: HostedCoachingMetrics(
                 inputTokens: 100,
+                cachedInputTokens: 0,
                 outputTokens: 20,
                 reasoningTokens: 5,
                 totalTokens: 120,

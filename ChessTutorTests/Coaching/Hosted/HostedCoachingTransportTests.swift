@@ -29,10 +29,16 @@ final class HostedCoachingTransportTests: XCTestCase {
             loader: loader
         )
 
-        let response = try await transport.turn(for: request, contract: contract)
+        let response = try await transport.turn(
+            for: request,
+            contract: contract,
+            continuationID: nil
+        )
 
         XCTAssertEqual(request.requestID, response.requestID)
         XCTAssertEqual(request.positionRevision, response.positionRevision)
+        XCTAssertEqual("resp_next-123", response.continuationID)
+        XCTAssertEqual(12, response.metrics.cachedInputTokens)
         XCTAssertEqual("Where could this knight help in the center?", response.turn.message)
         let sent = try XCTUnwrap(loader.requests.first)
         XCTAssertEqual(URL(string: "https://coach.example/v1/coaching-turn"), sent.url)
@@ -41,8 +47,29 @@ final class HostedCoachingTransportTests: XCTestCase {
         XCTAssertEqual("application/json", sent.value(forHTTPHeaderField: "Content-Type"))
         XCTAssertEqual(35, sent.timeoutInterval)
         XCTAssertEqual([64 * 1024], loader.maximumByteCounts)
-        let expected = try JSONEncoder.canonical.encode(request)
-        XCTAssertEqual(expected, sent.httpBody)
+        let sentBody = try XCTUnwrap(sent.httpBody)
+        let sentObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: sentBody) as? [String: Any]
+        )
+        XCTAssertEqual(
+            ["previousResponseID", "request", "schemaVersion"],
+            sentObject.keys.sorted()
+        )
+        XCTAssertEqual("hosted-coaching-request.v2", sentObject["schemaVersion"] as? String)
+        XCTAssertTrue(sentObject["previousResponseID"] is NSNull)
+        let sentRequest = try XCTUnwrap(sentObject["request"] as? [String: Any])
+        XCTAssertEqual(request.requestID, sentRequest["requestID"] as? String)
+
+        _ = try await transport.turn(
+            for: request,
+            contract: contract,
+            continuationID: "resp_previous-456"
+        )
+        let followUpBody = try XCTUnwrap(loader.requests.last?.httpBody)
+        let followUpObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: followUpBody) as? [String: Any]
+        )
+        XCTAssertEqual("resp_previous-456", followUpObject["previousResponseID"] as? String)
     }
 
     func testRejectsHTTPFailuresIdentityMismatchUnknownFieldsAndInvalidTurn() async throws {
@@ -77,7 +104,11 @@ final class HostedCoachingTransportTests: XCTestCase {
                 loader: loader
             )
             do {
-                _ = try await transport.turn(for: request, contract: contract)
+                _ = try await transport.turn(
+                    for: request,
+                    contract: contract,
+                    continuationID: nil
+                )
                 XCTFail("Expected \(item.expected)")
             } catch let error as HostedCoachingTransportError {
                 XCTAssertEqual(item.expected, error)
@@ -86,14 +117,18 @@ final class HostedCoachingTransportTests: XCTestCase {
 
         var extra = try hostedResponseObject(request: request, turn: validTurn)
         extra["providerID"] = "private"
-        let duplicate = #"{"schemaVersion":"hosted-coaching-turn.v1","schemaVersion":"hosted-coaching-turn.v1"}"#
+        let duplicate = #"{"schemaVersion":"hosted-coaching-turn.v2","schemaVersion":"hosted-coaching-turn.v2"}"#
         for data in [
             try JSONSerialization.data(withJSONObject: extra),
             Data(duplicate.utf8),
         ] {
             let transport = makeTransport(data: data, status: 200)
             do {
-                _ = try await transport.turn(for: request, contract: contract)
+                _ = try await transport.turn(
+                    for: request,
+                    contract: contract,
+                    continuationID: nil
+                )
                 XCTFail("Expected invalid response")
             } catch let error as HostedCoachingTransportError {
                 XCTAssertEqual(.invalidResponse, error)
@@ -113,7 +148,8 @@ final class HostedCoachingTransportTests: XCTestCase {
         do {
             _ = try await transport.turn(
                 for: request,
-                contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request)
+                contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
+                continuationID: nil
             )
             XCTFail("Expected cancellation")
         } catch is CancellationError {
@@ -132,7 +168,8 @@ final class HostedCoachingTransportTests: XCTestCase {
         do {
             _ = try await transport.turn(
                 for: request,
-                contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request)
+                contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
+                continuationID: nil
             )
             XCTFail("Expected an invalid response")
         } catch let error as HostedCoachingTransportError {
@@ -203,13 +240,15 @@ final class HostedCoachingTransportTests: XCTestCase {
         turn: [String: Any]
     ) throws -> [String: Any] {
         [
-            "schemaVersion": "hosted-coaching-turn.v1",
+            "schemaVersion": "hosted-coaching-turn.v2",
             "requestID": requestID ?? request.requestID,
             "positionRevision": revision ?? request.positionRevision,
-            "promptVersion": "tutor-v6",
+            "promptVersion": "tutor-v7",
+            "continuationID": "resp_next-123",
             "turn": turn,
             "metrics": [
                 "inputTokens": 100,
+                "cachedInputTokens": 12,
                 "outputTokens": 30,
                 "reasoningTokens": 10,
                 "totalTokens": 130,

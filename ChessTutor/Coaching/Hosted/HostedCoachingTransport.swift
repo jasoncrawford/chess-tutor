@@ -54,11 +54,13 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
         "requestID",
         "positionRevision",
         "promptVersion",
+        "continuationID",
         "turn",
         "metrics",
     ]
     private static let metricsFields: Set<String> = [
         "inputTokens",
+        "cachedInputTokens",
         "outputTokens",
         "reasoningTokens",
         "totalTokens",
@@ -82,13 +84,23 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
 
     func turn(
         for request: ModelCoachingNeutralRequest,
-        contract: ModelCoachingChessNativeResponseContract
+        contract: ModelCoachingChessNativeResponseContract,
+        continuationID: String?
     ) async throws -> HostedCoachingResponse {
+        guard continuationID == nil || Self.isValidContinuationID(continuationID!) else {
+            throw HostedCoachingTransportError.invalidRequest
+        }
         let body: Data
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            body = try encoder.encode(request)
+            body = try encoder.encode(
+                HostedCoachingWireRequest(
+                    schemaVersion: "hosted-coaching-request.v2",
+                    request: request,
+                    previousResponseID: continuationID
+                )
+            )
         } catch {
             throw HostedCoachingTransportError.invalidRequest
         }
@@ -155,8 +167,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             }
 
             let wire = try JSONDecoder().decode(HostedCoachingWireResponse.self, from: data)
-            guard wire.schemaVersion == "hosted-coaching-turn.v1",
-                  wire.promptVersion == "tutor-v6" else {
+            guard wire.schemaVersion == "hosted-coaching-turn.v2",
+                  wire.promptVersion == "tutor-v7",
+                  Self.isValidContinuationID(wire.continuationID) else {
                 throw HostedCoachingTransportError.invalidResponse
             }
             guard wire.requestID == request.requestID,
@@ -180,6 +193,7 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
                 requestID: wire.requestID,
                 positionRevision: wire.positionRevision,
                 promptVersion: wire.promptVersion,
+                continuationID: wire.continuationID,
                 turn: turn,
                 metrics: wire.metrics
             )
@@ -189,6 +203,42 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             throw HostedCoachingTransportError.invalidResponse
         }
     }
+
+    private static func isValidContinuationID(_ value: String) -> Bool {
+        guard value.utf8.count <= 256,
+              value.hasPrefix("resp_") else { return false }
+        let suffix = value.dropFirst(5)
+        return !suffix.isEmpty && suffix.utf8.allSatisfy { byte in
+            (48...57).contains(byte)
+                || (65...90).contains(byte)
+                || (97...122).contains(byte)
+                || byte == 45
+                || byte == 95
+        }
+    }
+}
+
+private struct HostedCoachingWireRequest: Encodable {
+    let schemaVersion: String
+    let request: ModelCoachingNeutralRequest
+    let previousResponseID: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case request
+        case previousResponseID
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(request, forKey: .request)
+        if let previousResponseID {
+            try container.encode(previousResponseID, forKey: .previousResponseID)
+        } else {
+            try container.encodeNil(forKey: .previousResponseID)
+        }
+    }
 }
 
 private struct HostedCoachingWireResponse: Decodable {
@@ -196,13 +246,20 @@ private struct HostedCoachingWireResponse: Decodable {
     let requestID: String
     let positionRevision: Int
     let promptVersion: String
+    let continuationID: String
     let turn: ModelCoachingChessNativeTurn
     let metrics: HostedCoachingMetrics
 }
 
 private extension HostedCoachingMetrics {
     var isBounded: Bool {
-        let counts = [inputTokens, outputTokens, reasoningTokens, totalTokens]
+        let counts = [
+            inputTokens,
+            cachedInputTokens,
+            outputTokens,
+            reasoningTokens,
+            totalTokens,
+        ]
         return counts.allSatisfy { (0...1_000_000_000).contains($0) }
             && latencyMilliseconds.isFinite
             && (0...120_000).contains(latencyMilliseconds)
