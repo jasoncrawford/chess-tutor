@@ -43,6 +43,21 @@ def create_application(
     application = Flask(__name__)
     application.config["MAX_CONTENT_LENGTH"] = _MAXIMUM_BODY_BYTES
 
+    @application.before_request
+    def preserve_api_method_contract():
+        if request.path == "/health":
+            if request.method != "GET":
+                return _error_response("404 Not Found", "notFound")
+            return None
+        if request.path == "/v1/coaching-turn":
+            if request.method != "POST":
+                return _error_response(
+                    "405 Method Not Allowed",
+                    "methodNotAllowed",
+                )
+            return None
+        return _error_response("404 Not Found", "notFound")
+
     @application.errorhandler(404)
     def not_found(_error):
         return _error_response("404 Not Found", "notFound")

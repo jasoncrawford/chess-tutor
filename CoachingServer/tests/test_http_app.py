@@ -51,7 +51,8 @@ def invoke(app, method, path, *, token=None, body=b"", content_type="application
             content_type=content_type,
             headers=headers,
         )
-    return response.status, dict(response.headers), json.loads(response.data)
+    value = json.loads(response.data) if response.data else None
+    return response.status, dict(response.headers), value
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
@@ -160,6 +161,30 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
         self.assertEqual("200 OK", status)
         self.assertEqual("application/json; charset=utf-8", headers["Content-Type"])
         self.assertEqual({"status": "ok"}, body)
+        self.assertEqual([], service.requests)
+
+    def test_preserves_method_errors_without_flask_automatic_head_or_options(self):
+        service = FakeService()
+        app = create_application(service=service, access_token="prototype-token")
+
+        cases = (
+            ("POST", "/health", "404 Not Found", "notFound"),
+            ("HEAD", "/health", "404 Not Found", None),
+            ("OPTIONS", "/health", "404 Not Found", "notFound"),
+            (
+                "OPTIONS",
+                "/v1/coaching-turn",
+                "405 Method Not Allowed",
+                "methodNotAllowed",
+            ),
+        )
+        for method, path, expected_status, expected_code in cases:
+            with self.subTest(method=method, path=path):
+                status, _, body = invoke(app, method, path)
+                self.assertEqual(expected_status, status)
+                if expected_code is not None:
+                    self.assertEqual({"error": {"code": expected_code}}, body)
+
         self.assertEqual([], service.requests)
 
     def test_post_requires_exact_bearer_and_forwards_json_object(self):
