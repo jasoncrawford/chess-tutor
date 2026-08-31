@@ -24,6 +24,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 "PATH": f"{self.fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
                 "FAKE_COMMAND_LOG": str(self.command_log),
                 "CHESS_TUTOR_COACHING_DEV_PORT": "18787",
+                "SIMCTL_CHILD_UNRELATED_SECRET": "do-not-forward",
             }
         )
         self._install_successful_fakes()
@@ -69,7 +70,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("simctl install AA821CF0", command_log)
         self.assertIn(
             "simctl launch --terminate-running-process AA821CF0 "
-            "org.jasoncrawford.chesstutor base-url=set token=set",
+            "org.jasoncrawford.chesstutor base-url=set token=set extra-child=missing",
             command_log,
         )
         self.assertIn("server-start key=set token=set", command_log)
@@ -99,6 +100,25 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("ChessTutor-CoachingEval-OpenAI", combined_output)
         self.assertIn("Keychain", combined_output)
         self.assertNotIn("xcodebuild", command_log)
+
+    def test_does_not_launch_app_when_spawned_server_exits_before_health_check(self):
+        self.env["FAKE_SERVER_EXITS_IMMEDIATELY"] = "1"
+
+        result = subprocess.run(
+            [str(LAUNCHER)],
+            cwd=REPOSITORY_ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        combined_output = result.stdout + result.stderr
+        command_log = self.command_log.read_text() if self.command_log.exists() else ""
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("server stopped before it became ready", combined_output)
+        self.assertNotIn("xcodebuild", command_log)
+        self.assertNotIn("simctl install", command_log)
 
     def test_optional_simulator_name_selects_that_device(self):
         result = subprocess.Popen(
@@ -150,6 +170,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             [ -n "${OPENAI_API_KEY:-}" ] && key_state=set
             [ -n "${CHESS_TUTOR_COACHING_ACCESS_TOKEN:-}" ] && token_state=set
             printf 'server-start key=%s token=%s\n' "$key_state" "$token_state" >> "$FAKE_COMMAND_LOG"
+            [ "${FAKE_SERVER_EXITS_IMMEDIATELY:-}" = "1" ] && exit 0
             trap 'printf "%s\n" server-stopped >> "$FAKE_COMMAND_LOG"; exit 0' TERM INT
             while true; do sleep 1; done
             """,
@@ -172,9 +193,11 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             if [ "${1:-}" = "simctl" ] && [ "${2:-}" = "launch" ]; then
               base_state=missing
               token_state=missing
+              extra_child_state=missing
               [ -n "${SIMCTL_CHILD_CHESS_TUTOR_COACHING_BASE_URL:-}" ] && base_state=set
               [ -n "${SIMCTL_CHILD_CHESS_TUTOR_COACHING_ACCESS_TOKEN:-}" ] && token_state=set
-              printf '%s base-url=%s token=%s\n' "$*" "$base_state" "$token_state" >> "$FAKE_COMMAND_LOG"
+              [ -n "${SIMCTL_CHILD_UNRELATED_SECRET:-}" ] && extra_child_state=present
+              printf '%s base-url=%s token=%s extra-child=%s\n' "$*" "$base_state" "$token_state" "$extra_child_state" >> "$FAKE_COMMAND_LOG"
               printf '%s\n' 'org.jasoncrawford.chesstutor: 12345'
               exit 0
             fi

@@ -76,13 +76,15 @@ unset openai_api_key
 
 server_ready=false
 for _ in {1..100}; do
-  if curl -fsS --max-time 1 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
-    server_ready=true
-    break
-  fi
   if ! kill -0 "$server_pid" 2>/dev/null; then
     echo "The coaching server stopped before it became ready." >&2
     exit 1
+  fi
+  if curl -fsS --max-time 1 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+    if kill -0 "$server_pid" 2>/dev/null; then
+      server_ready=true
+      break
+    fi
   fi
   sleep 0.1
 done
@@ -110,9 +112,21 @@ fi
 echo "Installing and launching ChessTutor..."
 xcrun simctl terminate "$simulator_udid" "$BUNDLE_IDENTIFIER" >/dev/null 2>&1 || true
 xcrun simctl install "$simulator_udid" "$app_path"
+
+launch_environment=(/usr/bin/env)
+while IFS='=' read -r variable_name _; do
+  case "$variable_name" in
+    SIMCTL_CHILD_CHESS_TUTOR_COACHING_BASE_URL|SIMCTL_CHILD_CHESS_TUTOR_COACHING_ACCESS_TOKEN)
+      ;;
+    SIMCTL_CHILD_*)
+      launch_environment+=(-u "$variable_name")
+      ;;
+  esac
+done < <(/usr/bin/env)
+
 SIMCTL_CHILD_CHESS_TUTOR_COACHING_BASE_URL="http://127.0.0.1:$port" \
 SIMCTL_CHILD_CHESS_TUTOR_COACHING_ACCESS_TOKEN="$access_token" \
-  xcrun simctl launch --terminate-running-process "$simulator_udid" "$BUNDLE_IDENTIFIER" >/dev/null
+  "${launch_environment[@]}" xcrun simctl launch --terminate-running-process "$simulator_udid" "$BUNDLE_IDENTIFIER" >/dev/null
 
 echo "ChessTutor is ready with hosted coaching."
 echo "Leave this terminal open while you use the app. Press Ctrl-C when finished."
