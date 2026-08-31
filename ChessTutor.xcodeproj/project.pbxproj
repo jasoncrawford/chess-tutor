@@ -174,6 +174,7 @@
 		FC0D4EE21EA4C5486A78ECCB /* RemoteNotificationPermissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D6FE364A75A39D0558E368 /* RemoteNotificationPermissionPolicy.swift */; };
 		FC860691205E22BE1F0D07B4 /* CoachingPanelLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D265BFC81E90DFAB44B84E63 /* CoachingPanelLayoutTests.swift */; };
 		FCFA0B46EB4FD66EF135D6D0 /* RemoteGameStartAnnouncementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EAA3445235303F429994C6 /* RemoteGameStartAnnouncementView.swift */; };
+		FF00C9153EAC081E387F11F3 /* ModelCoachingChessNativeBroadEvaluationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4D1C4CB86DF1CBA811E060 /* ModelCoachingChessNativeBroadEvaluationTests.swift */; };
 		FF08B2DC05C4A77D6DA9DF51 /* GameLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0849550B4C1E31C47EAC9E2B /* GameLifecycle.swift */; };
 		FF1A4E606ECAC222294EA3A7 /* CoachingPresentationProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9FE75C1FF528E4F4DDF13D1 /* CoachingPresentationProjector.swift */; };
 /* End PBXBuildFile section */
@@ -270,6 +271,7 @@
 		87976591E2D0B5A556CA8E83 /* ModelCoachingNeutralRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilder.swift; sourceTree = "<group>"; };
 		892B39ACE33796097240A052 /* ChessBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChessBoardView.swift; sourceTree = "<group>"; };
 		89761D36FCBA29D960341883 /* PositionFingerprinting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionFingerprinting.swift; sourceTree = "<group>"; };
+		8B4D1C4CB86DF1CBA811E060 /* ModelCoachingChessNativeBroadEvaluationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingChessNativeBroadEvaluationTests.swift; sourceTree = "<group>"; };
 		8B7F3EA49D217B9E2CF54F64 /* ModelCoachingNeutralRequestBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCoachingNeutralRequestBuilderTests.swift; sourceTree = "<group>"; };
 		8EFE31F04839226C582D7C51 /* CoachingGoldenTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingGoldenTranscriptTests.swift; sourceTree = "<group>"; };
 		90EAA3445235303F429994C6 /* RemoteGameStartAnnouncementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteGameStartAnnouncementView.swift; sourceTree = "<group>"; };
@@ -702,6 +704,7 @@
 		D4FAEBC546E5AAEAFF8B88E5 /* ModelEvaluation */ = {
 			isa = PBXGroup;
 			children = (
+				8B4D1C4CB86DF1CBA811E060 /* ModelCoachingChessNativeBroadEvaluationTests.swift */,
 				F215543CC93140E640B9FCD6 /* ModelCoachingChessNativeContextCompilerTests.swift */,
 				00DF071B3C4C17311C1A661C /* ModelCoachingChessNativePromptExampleTests.swift */,
 				EA36903BF6FBCD111B35C3A8 /* ModelCoachingChessNativeTurnValidatorTests.swift */,
@@ -1097,6 +1100,7 @@
 				D4CA8F2592EF3AF138FF8F50 /* LocalCoachingAdvisorTests.swift in Sources */,
 				9E628FE7B55251C40A5ED21D /* LocalCoachingExplanationSourceTests.swift in Sources */,
 				C5AD9BCA93BE3E38D0130525 /* MaterialTacticalEvaluatorTests.swift in Sources */,
+				FF00C9153EAC081E387F11F3 /* ModelCoachingChessNativeBroadEvaluationTests.swift in Sources */,
 				73517258C21ADB969122CC40 /* ModelCoachingChessNativeContextCompilerTests.swift in Sources */,
 				E052E016DAD90C82532CFD30 /* ModelCoachingChessNativePromptExampleTests.swift in Sources */,
 				2CC03EEA83B001A9F2479291 /* ModelCoachingChessNativeTurnValidatorTests.swift in Sources */,

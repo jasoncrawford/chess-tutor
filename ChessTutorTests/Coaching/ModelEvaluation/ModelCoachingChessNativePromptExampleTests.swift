@@ -575,6 +575,21 @@ enum ModelCoachingChessNativePromptExampleExporter {
             throw ModelCoachingChessNativePromptExportError.invalidFixtureSet
         }
 
+        return try ModelCoachingChessNativePromptArtifactFactory.artifacts(fixtures: fixtures)
+    }
+
+    static func write(to outputURL: URL) throws {
+        try ModelCoachingChessNativePromptArtifactFactory.write(
+            try artifacts(),
+            to: outputURL
+        )
+    }
+}
+
+enum ModelCoachingChessNativePromptArtifactFactory {
+    static func artifacts(
+        fixtures: [ModelCoachingNeutralPromptFixture]
+    ) throws -> ModelCoachingChessNativePromptExampleArtifacts {
         let systemPrompt = try Data(contentsOf: systemPromptURL)
         let systemPromptSHA256 = sha256(systemPrompt)
         var records: [ModelCoachingChessNativePromptExampleRecord] = []
@@ -635,7 +650,10 @@ enum ModelCoachingChessNativePromptExampleExporter {
         )
     }
 
-    static func write(to outputURL: URL) throws {
+    static func write(
+        _ artifacts: ModelCoachingChessNativePromptExampleArtifacts,
+        to outputURL: URL
+    ) throws {
         let fileManager = FileManager.default
         let outputURL = outputURL.standardizedFileURL.resolvingSymlinksInPath()
         var isDirectory: ObjCBool = false
@@ -650,7 +668,6 @@ enum ModelCoachingChessNativePromptExampleExporter {
             try fileManager.createDirectory(at: outputURL, withIntermediateDirectories: true)
         }
 
-        let artifacts = try artifacts()
         let userPromptsURL = outputURL.appendingPathComponent("user-prompts", isDirectory: true)
         try fileManager.createDirectory(at: userPromptsURL, withIntermediateDirectories: false)
         try artifacts.examplesJSONL.write(
