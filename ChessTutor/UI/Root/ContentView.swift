@@ -8,7 +8,7 @@ private enum RemoteSyncMessage {
 }
 
 struct ContentView: View {
-    @State private var session = GameSession()
+    @State private var session: GameSession
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
     @State private var remotePlayFlow: RemotePlayFlow
@@ -34,13 +34,15 @@ struct ContentView: View {
     private let remoteGameTransport: any RemoteGameTransport
     private let remotePlayRuntimeMode: RemotePlayRuntimeMode
     private let diagnosticsLog: DiagnosticsLog
+    private let hostedCoachingProvider: (any HostedCoachingTurning)?
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
     @State private var fakeRemoteLab = FakeRemoteGameLab()
     #endif
     @Namespace private var captureNamespace
 
-    init() {
+    init(hostedCoachingProvider: (any HostedCoachingTurning)? = nil) {
+        self.hostedCoachingProvider = hostedCoachingProvider
         let remoteIdentityStore = RemoteIdentityStore()
         self.remoteIdentityStore = remoteIdentityStore
         let activeRemoteGameStore = ActiveRemoteGameStore()
@@ -64,7 +66,10 @@ struct ContentView: View {
         let initialSession: GameSession
         let initialActiveRemoteGameController: RemoteGameSessionController?
         if let snapshot = try? activeRemoteGameStore.load(),
-           let restoredSession = try? Self.restoredSession(from: snapshot),
+           let restoredSession = try? Self.restoredSession(
+                from: snapshot,
+                hostedCoachingProvider: hostedCoachingProvider
+           ),
            let restoredController = try? RemoteGameSessionController(
                 snapshot: snapshot,
                 transport: self.remoteGameTransport
@@ -76,7 +81,7 @@ struct ContentView: View {
             if (try? activeRemoteGameStore.load()) != nil {
                 try? activeRemoteGameStore.clear()
             }
-            initialSession = GameSession()
+            initialSession = GameSession(hostedCoachingProvider: hostedCoachingProvider)
             initialActiveRemoteGameController = nil
         }
         _session = State(initialValue: initialSession)
@@ -1688,12 +1693,18 @@ struct ContentView: View {
         return descriptor.blackPlayer
     }
 
-    private static func restoredSession(from snapshot: ActiveRemoteGameSnapshot) throws -> GameSession {
+    private static func restoredSession(
+        from snapshot: ActiveRemoteGameSnapshot,
+        hostedCoachingProvider: (any HostedCoachingTurning)?
+    ) throws -> GameSession {
         let projectedState = try RemoteGameSessionController.projectedState(from: snapshot)
         let moves = try snapshot.acceptedEvents
             .sorted { $0.sequenceNumber < $1.sequenceNumber }
             .map { try RemoteMoveCodec.decode($0.move) }
-        let session = GameSession(replayingCommittedMoves: moves)
+        let session = GameSession(
+            replayingCommittedMoves: moves,
+            hostedCoachingProvider: hostedCoachingProvider
+        )
         guard session.state == projectedState else {
             throw RemoteGameSessionController.Error.invalidSnapshot
         }

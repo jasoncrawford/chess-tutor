@@ -147,3 +147,37 @@ struct KeychainHostedCoachingCredentialStore: HostedCoachingCredentialStoring, S
         }
     }
 }
+
+enum HostedCoachingRuntime {
+    static func resolveProvider(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        credentialStore: any HostedCoachingCredentialStoring = KeychainHostedCoachingCredentialStore()
+    ) -> (any HostedCoachingTurning)? {
+        guard environment["CHESS_TUTOR_COACHING_BASE_URL"]?.isEmpty == false else {
+            return nil
+        }
+        do {
+            guard let configuration = try HostedCoachingConfiguration.resolve(
+                environment: environment,
+                credentialStore: credentialStore
+            ) else {
+                return nil
+            }
+            return URLSessionHostedCoachingTransport(
+                baseURL: configuration.baseURL,
+                accessToken: configuration.accessToken
+            )
+        } catch {
+            return UnavailableHostedCoachingProvider()
+        }
+    }
+}
+
+private struct UnavailableHostedCoachingProvider: HostedCoachingTurning {
+    func turn(
+        for request: ModelCoachingNeutralRequest,
+        contract: ModelCoachingChessNativeResponseContract
+    ) async throws -> HostedCoachingResponse {
+        throw HostedCoachingTransportError.serverUnavailable
+    }
+}
