@@ -11,9 +11,25 @@ validates the JSON again before showing it.
 
 ## Local development
 
-Copy `.env.example` into your preferred local secret manager or export both
-variables in the shell. Use a long random value for
-`CHESS_TUTOR_COACHING_ACCESS_TOKEN`.
+For Simulator development, store the OpenAI key once in the macOS Keychain
+service `ChessTutor-CoachingEval-OpenAI`, then run:
+
+```bash
+./scripts/run_hosted_coaching_dev.sh
+```
+
+The script chooses and boots `iPad (A16)`, starts the server, builds the app,
+and installs and launches it with hosted coaching configured. Leave the
+terminal open while testing; Ctrl-C stops the server. To use another available
+Simulator, pass its name as the only argument:
+
+```bash
+./scripts/run_hosted_coaching_dev.sh "ChessTutor Coaching Smoke"
+```
+
+For lower-level server work, copy `.env.example` into your preferred local
+secret manager or export both variables in the shell. Use a long random value
+for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 
 ```bash
 python3 -m CoachingServer.local --host 127.0.0.1 --port 8787
