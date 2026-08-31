@@ -1091,7 +1091,6 @@ final class GameSessionTests: XCTestCase {
         let initialRevision = session.analysisRevision
 
         session.select(pawn)
-        session.toggleCoverage()
 
         XCTAssertEqual(session.analysisRevision, initialRevision)
 
@@ -1101,84 +1100,6 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.analysisRevision, initialRevision + 1)
         XCTAssertTrue(session.boardGuidance.threatenedSquares.contains(destination))
         XCTAssertTrue(session.boardGuidance.prominentThreatSquares.contains(destination))
-        XCTAssertTrue(session.isCoverageVisible)
-    }
-
-    func testCoveragePersistsThroughTentativeMoveAndReversion() {
-        let start = Square(file: .e, rank: 2)
-        let destination = Square(file: .e, rank: 4)
-        let session = GameSession()
-        session.toggleCoverage()
-        session.select(start)
-        _ = session.moveSelectedPiece(to: destination)
-
-        XCTAssertTrue(session.isCoverageVisible)
-        XCTAssertEqual(session.selectedSquare, destination)
-
-        _ = session.moveSelectedPiece(to: start)
-
-        XCTAssertTrue(session.isCoverageVisible)
-        XCTAssertFalse(session.canFinishTurn)
-        XCTAssertEqual(session.analysisRevision, 2)
-    }
-
-    func testFailedDoneKeepsCoverageVisible() {
-        let pinnedRook = Square(file: .e, rank: 2)
-        let session = GameSession(
-            state: GameState(
-                board: Board(
-                    pieces: [
-                        Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
-                        pinnedRook: Piece(kind: .rook, color: .white),
-                        Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
-                        Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
-                    ]
-                ),
-                sideToMove: .white
-            )
-        )
-        session.toggleCoverage()
-        session.select(pinnedRook)
-        _ = session.moveSelectedPiece(to: Square(file: .a, rank: 2))
-
-        XCTAssertNil(session.finishTurn())
-        XCTAssertTrue(session.isCoverageVisible)
-    }
-
-    func testSuccessfulLocalAndRemoteCommitsCloseCoverage() {
-        let session = GameSession()
-        session.blackPlayer = .remote(playerID: "maya")
-        session.toggleCoverage()
-        session.select(Square(file: .e, rank: 2))
-        _ = session.moveSelectedPiece(to: Square(file: .e, rank: 4))
-
-        XCTAssertNotNil(session.finishTurn())
-        XCTAssertFalse(session.isCoverageVisible)
-
-        session.toggleCoverage()
-        XCTAssertTrue(session.isCoverageVisible)
-
-        XCTAssertTrue(
-            session.commitRemoteMove(
-                Move(from: Square(file: .e, rank: 7), to: Square(file: .e, rank: 5))
-            )
-        )
-        XCTAssertFalse(session.isCoverageVisible)
-    }
-
-    func testNewGameAndRemoteGameEndCloseCoverage() {
-        let session = GameSession()
-        session.toggleCoverage()
-
-        session.newGame()
-
-        XCTAssertFalse(session.isCoverageVisible)
-
-        session.toggleCoverage()
-        session.endRemoteGame(message: "Maya ended this game.")
-
-        XCTAssertFalse(session.isCoverageVisible)
-        XCTAssertEqual(session.boardGuidance, .empty(sideToMove: .white))
     }
 
     func testPromotionKeepsPromotedPieceSelectedAndRefreshesAnalysis() {
@@ -1223,13 +1144,10 @@ final class GameSessionTests: XCTestCase {
         )
 
         checkmateSession.select(whiteRook)
-        checkmateSession.toggleCoverage()
 
         XCTAssertEqual(checkmateSession.selectedSquare, whiteRook)
         XCTAssertEqual(checkmateSession.boardGuidance.threatenedSquares, [losingKing])
         XCTAssertTrue(checkmateSession.boardGuidance.selectedPaths.isEmpty)
-        XCTAssertNil(checkmateSession.boardGuidance.coverage)
-        XCTAssertFalse(checkmateSession.isCoverageVisible)
 
         let stalemateKing = Square(file: .h, rank: 8)
         let stalemateSession = GameSession(
@@ -1252,29 +1170,25 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(stalemateSession.boardGuidance, .empty(sideToMove: .black))
     }
 
-    func testRemoteTurnStillAllowsReadOnlyInspectionAndCoverage() {
+    func testRemoteTurnStillAllowsReadOnlyInspection() {
         let session = GameSession()
         session.whitePlayer = .remote(playerID: "maya")
         let blackPawn = Square(file: .e, rank: 7)
 
         session.select(blackPawn)
-        session.toggleCoverage()
 
         XCTAssertEqual(session.selectedSquare, blackPawn)
         XCTAssertFalse(session.boardGuidance.selectedPaths.isEmpty)
-        XCTAssertNotNil(session.boardGuidance.coverage)
         XCTAssertTrue(session.legalDestinations.isEmpty)
     }
 
-    func testSelectionAndCoverageReuseAnalysisUntilPositionChanges() {
+    func testSelectionReusesAnalysisUntilPositionChanges() {
         let session = GameSession()
         let initialRevision = session.analysisRevision
 
         session.select(Square(file: .e, rank: 2))
         session.select(Square(file: .g, rank: 1))
         session.select(Square(file: .e, rank: 7))
-        session.toggleCoverage()
-        session.toggleCoverage()
 
         XCTAssertEqual(session.analysisRevision, initialRevision)
 
@@ -1289,7 +1203,6 @@ final class GameSessionTests: XCTestCase {
         let stagedDestination = Square(file: .e, rank: 4)
         let emptySquare = Square(file: .a, rank: 3)
         let session = GameSession()
-        session.toggleCoverage()
         session.select(origin)
         _ = session.moveSelectedPiece(to: stagedDestination)
 
@@ -1300,7 +1213,6 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.state.board[stagedDestination])
         XCTAssertFalse(session.canFinishTurn)
         XCTAssertNil(session.selectedSquare)
-        XCTAssertTrue(session.isCoverageVisible)
     }
 
     func testTappingAlternativeDestinationAtomicallyRedirectsTentativeMove() {
@@ -1321,7 +1233,6 @@ final class GameSessionTests: XCTestCase {
             )
         )
         session.assistSettings.showLegalMovesOnSelection = false
-        session.toggleCoverage()
         session.select(origin)
         _ = session.moveSelectedPiece(to: stagedDestination)
         let revisionAfterFirstMove = session.analysisRevision
@@ -1334,7 +1245,6 @@ final class GameSessionTests: XCTestCase {
         XCTAssertNil(session.state.board[stagedDestination])
         XCTAssertEqual(session.selectedSquare, alternativeDestination)
         XCTAssertTrue(session.canFinishTurn)
-        XCTAssertTrue(session.isCoverageVisible)
         XCTAssertEqual(session.analysisRevision, revisionAfterFirstMove + 1)
     }
 
@@ -1343,7 +1253,6 @@ final class GameSessionTests: XCTestCase {
         let stagedDestination = Square(file: .e, rank: 4)
         let alternativeDestination = Square(file: .e, rank: 3)
         let session = GameSession()
-        session.toggleCoverage()
         session.select(origin)
         _ = session.moveSelectedPiece(to: stagedDestination)
 
@@ -1355,7 +1264,6 @@ final class GameSessionTests: XCTestCase {
         XCTAssertEqual(session.selectedSquare, origin)
         XCTAssertEqual(session.boardGuidance.selectedSquare, origin)
         XCTAssertTrue(session.legalDestinations.contains(alternativeDestination))
-        XCTAssertTrue(session.isCoverageVisible)
 
         let result = session.moveSelectedPiece(to: alternativeDestination)
 

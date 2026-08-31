@@ -35,7 +35,6 @@ final class PositionFingerprintingTests: XCTestCase {
         let before = PositionFingerprinting.fingerprint(for: session.state)
 
         session.select(Square(file: .e, rank: 2))
-        session.toggleCoverage()
         let after = PositionFingerprinting.fingerprint(for: session.state)
 
         XCTAssertEqual(after, before)

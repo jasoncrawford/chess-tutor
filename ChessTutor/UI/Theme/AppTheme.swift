@@ -12,8 +12,6 @@ enum AppTheme {
     static let captureBoxFelt = Color(red: 0.26, green: 0.43, blue: 0.35)
     static let captureBoxShadow = Color.black.opacity(0.15)
     static let selectedPiecePlinth = Color(red: 0.32, green: 0.23, blue: 0.14).opacity(0.12)
-    static let coverageControlFill = Color(red: 0.96, green: 0.91, blue: 0.80).opacity(0.76)
-    static let coverageControlActive = Color(red: 0.35, green: 0.28, blue: 0.20).opacity(0.90)
     static let ink = Color(red: 0.13, green: 0.13, blue: 0.11)
     static let mutedInk = Color(red: 0.43, green: 0.42, blue: 0.36)
     static let boardFrame = Color(red: 0.35, green: 0.28, blue: 0.20)

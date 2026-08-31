@@ -151,10 +151,7 @@ struct SidePanelView: View {
         case .selectedPiece:
             SidebarPanelView(panelSize: panelSize) {
                 SelectedPiecePanelView(
-                    selectedPieceInfo: session.selectedPieceInfo,
-                    isCoverageVisible: session.isCoverageVisible,
-                    isCoverageAvailable: session.state.result == .ongoing && !session.isRemoteGameEnded,
-                    onToggleCoverage: session.toggleCoverage
+                    selectedPieceInfo: session.selectedPieceInfo
                 )
             }
         case .capturedPieces:

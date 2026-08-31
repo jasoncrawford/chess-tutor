@@ -29,12 +29,10 @@ final class PositionAnalyzerTests: XCTestCase {
             [bishopAttacker, knightAttacker]
         )
         XCTAssertEqual(analysis.supporters(of: target), [supportingRook])
-        XCTAssertTrue(analysis.coverage(for: .white).contains(target))
-        XCTAssertTrue(analysis.coverage(for: .black).contains(target))
         XCTAssertEqual(state, before)
     }
 
-    func testPinnedPieceKeepsBroadCoverageWithoutCreatingIllegalThreat() {
+    func testPinnedPieceDoesNotCreateIllegalThreat() {
         let pinnedRook = Square(file: .e, rank: 2)
         let target = Square(file: .d, rank: 2)
         let state = GameState(
@@ -52,7 +50,6 @@ final class PositionAnalyzerTests: XCTestCase {
 
         let analysis = PositionAnalyzer.analyze(state)
 
-        XCTAssertTrue(analysis.coverage(for: .white).contains(target))
         XCTAssertFalse(
             analysis.threats(targeting: target).contains { relation in
                 relation.source == pinnedRook
@@ -85,7 +82,7 @@ final class PositionAnalyzerTests: XCTestCase {
         )
     }
 
-    func testCastlingIsCoverageButNotThreatOrSupport() {
+    func testCastlingIsNotThreatOrSupport() {
         let king = Square(file: .e, rank: 1)
         let destination = Square(file: .g, rank: 1)
         let state = GameState(
@@ -107,29 +104,8 @@ final class PositionAnalyzerTests: XCTestCase {
                 Move(from: king, to: destination, special: .castleKingside)
             )
         )
-        XCTAssertTrue(analysis.coverage(for: .white).contains(destination))
         XCTAssertTrue(analysis.threats(targeting: destination).isEmpty)
         XCTAssertTrue(analysis.supporters(of: destination).isEmpty)
-    }
-
-    func testPromotionMovesProduceOneCoverageSquare() {
-        let pawn = Square(file: .a, rank: 7)
-        let destination = Square(file: .a, rank: 8)
-        let state = GameState(
-            board: Board(
-                pieces: [
-                    Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
-                    pawn: Piece(kind: .pawn, color: .white),
-                    Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
-                ]
-            ),
-            sideToMove: .white
-        )
-
-        let analysis = PositionAnalyzer.analyze(state)
-
-        XCTAssertEqual(analysis.allowedMoves(from: pawn).filter { $0.to == destination }.count, 4)
-        XCTAssertTrue(analysis.coverage(for: .white).contains(destination))
     }
 
     func testCheckedKingIsThreatenedButNeverDefended() {
@@ -162,13 +138,6 @@ final class PositionAnalyzerTests: XCTestCase {
                 Set(analysis.allowedMoves(from: source)),
                 Set(LegalMoveGenerator.allowedMoves(for: source, by: piece.color, in: state))
             )
-
-            let expectedCoverage = Set(
-                LegalMoveGenerator.allowedMoves(for: source, by: piece.color, in: state).map(\.to)
-            ).union(
-                LegalMoveGenerator.controlledSquares(for: source, by: piece.color, in: state)
-            )
-            XCTAssertTrue(expectedCoverage.isSubset(of: analysis.coverage(for: piece.color)))
         }
     }
 

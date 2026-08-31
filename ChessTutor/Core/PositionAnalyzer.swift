@@ -9,7 +9,6 @@ struct PositionAnalysis: Equatable, Sendable {
     let allowedMovesBySource: [Square: [Move]]
     let threatsByTarget: [Square: Set<ThreatRelation>]
     let supportersByTarget: [Square: Set<Square>]
-    let coverageByColor: [PieceColor: Set<Square>]
 
     func allowedMoves(from square: Square) -> [Move] {
         allowedMovesBySource[square] ?? []
@@ -27,10 +26,6 @@ struct PositionAnalysis: Equatable, Sendable {
         supportersByTarget[square] ?? []
     }
 
-    func coverage(for color: PieceColor) -> Set<Square> {
-        coverageByColor[color] ?? []
-    }
-
     var threatenedSquares: Set<Square> {
         Set(threatsByTarget.keys)
     }
@@ -45,10 +40,6 @@ enum PositionAnalyzer {
         var allowedMovesBySource: [Square: [Move]] = [:]
         var threatsByTarget: [Square: Set<ThreatRelation>] = [:]
         var supportersByTarget: [Square: Set<Square>] = [:]
-        var coverageByColor: [PieceColor: Set<Square>] = [
-            .white: [],
-            .black: [],
-        ]
 
         for (source, piece) in state.board.pieces {
             let allowedMoves = LegalMoveGenerator.allowedMoves(
@@ -57,10 +48,6 @@ enum PositionAnalyzer {
                 in: state
             )
             allowedMovesBySource[source] = allowedMoves
-            coverageByColor[piece.color, default: []].formUnion(allowedMoves.map(\.to))
-            coverageByColor[piece.color, default: []].formUnion(
-                LegalMoveGenerator.controlledSquares(for: source, by: piece.color, in: state)
-            )
 
             for move in LegalMoveGenerator.legalMoves(for: source, by: piece.color, in: state) {
                 guard let capture = LegalMoveGenerator.capture(for: move, in: state) else {
@@ -107,8 +94,7 @@ enum PositionAnalyzer {
         return PositionAnalysis(
             allowedMovesBySource: allowedMovesBySource,
             threatsByTarget: threatsByTarget,
-            supportersByTarget: supportersByTarget,
-            coverageByColor: coverageByColor
+            supportersByTarget: supportersByTarget
         )
     }
 }

@@ -12,7 +12,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: blackRook,
             showsSelectedReach: true,
-            showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
 
@@ -51,7 +50,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: blackRook,
             showsSelectedReach: true,
-            showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
 
@@ -88,7 +86,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: selected,
             showsSelectedReach: true,
-            showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
 
@@ -122,7 +119,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: blackPawn,
             showsSelectedReach: true,
-            showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
 
@@ -161,7 +157,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: whitePawn,
             showsSelectedReach: true,
-            showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
 
@@ -203,24 +198,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
         XCTAssertTrue(presentation.visibleDefenseSquares.isEmpty)
     }
 
-    func testCoverageSeparatesSideToMoveFromOtherSide() {
-        let state = inspectionPosition()
-        let analysis = PositionAnalyzer.analyze(state)
-
-        let presentation = BoardGuidancePresentation.make(
-            state: state,
-            analysis: analysis,
-            selectedSquare: nil,
-            showsSelectedReach: true,
-            showsCoverage: true,
-            keepsOnlyCheckmateKingThreat: false
-        )
-
-        XCTAssertEqual(presentation.coverage?.sideToMove, .white)
-        XCTAssertEqual(presentation.coverage?.sideToMoveSquares, analysis.coverage(for: .white))
-        XCTAssertEqual(presentation.coverage?.otherSideSquares, analysis.coverage(for: .black))
-    }
-
     func testCheckmateGuidanceKeepsOnlyLosingKingDanger() {
         let losingKing = Square(file: .h, rank: 1)
         let state = GameState(
@@ -240,7 +217,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: Square(file: .f, rank: 2),
             showsSelectedReach: true,
-            showsCoverage: true,
             keepsOnlyCheckmateKingThreat: true
         )
 
@@ -250,7 +226,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
         XCTAssertTrue(presentation.visibleDefenseSquares.isEmpty)
         XCTAssertTrue(presentation.selectedPaths.isEmpty)
         XCTAssertTrue(presentation.supporterSquares.isEmpty)
-        XCTAssertNil(presentation.coverage)
     }
 
     func testPieceAccessibilityIncludesThreatAndDefenseStatus() {
@@ -263,8 +238,7 @@ final class BoardGuidancePresentationTests: XCTestCase {
             visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
-            supporterSquares: [],
-            coverage: nil
+            supporterSquares: []
         )
 
         XCTAssertEqual(
@@ -288,8 +262,7 @@ final class BoardGuidancePresentationTests: XCTestCase {
             visibleDefenseSquares: [],
             selectedSquare: nil,
             selectedPaths: [],
-            supporterSquares: [],
-            coverage: nil
+            supporterSquares: []
         )
 
         XCTAssertEqual(
@@ -312,59 +285,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
                 piece: Piece(kind: .rook, color: .white)
             ),
             "White rook on c2"
-        )
-    }
-
-    func testCoverageAccessibilityNamesBothSidesOnContestedSquare() {
-        let contested = Square(file: .d, rank: 5)
-        let presentation = BoardGuidancePresentation(
-            sideToMove: .white,
-            threatenedSquares: [],
-            prominentThreatSquares: [],
-            defendedSquares: [],
-            visibleDefenseSquares: [],
-            selectedSquare: nil,
-            selectedPaths: [],
-            supporterSquares: [],
-            coverage: BoardCoveragePresentation(
-                sideToMove: .white,
-                sideToMoveSquares: [contested],
-                otherSideSquares: [contested]
-            )
-        )
-
-        XCTAssertEqual(
-            presentation.coverageAccessibilityLabel(for: contested),
-            "d5, covered by White and Black"
-        )
-    }
-
-    func testCoverageAccessibilityNamesOneSideOrBareSquare() {
-        let blackOnly = Square(file: .f, rank: 6)
-        let uncovered = Square(file: .g, rank: 6)
-        let presentation = BoardGuidancePresentation(
-            sideToMove: .black,
-            threatenedSquares: [],
-            prominentThreatSquares: [],
-            defendedSquares: [],
-            visibleDefenseSquares: [],
-            selectedSquare: nil,
-            selectedPaths: [],
-            supporterSquares: [],
-            coverage: BoardCoveragePresentation(
-                sideToMove: .black,
-                sideToMoveSquares: [blackOnly],
-                otherSideSquares: []
-            )
-        )
-
-        XCTAssertEqual(
-            presentation.coverageAccessibilityLabel(for: blackOnly),
-            "f6, covered by Black"
-        )
-        XCTAssertEqual(
-            presentation.coverageAccessibilityLabel(for: uncovered),
-            "g6"
         )
     }
 
@@ -408,7 +328,6 @@ final class BoardGuidancePresentationTests: XCTestCase {
             analysis: PositionAnalyzer.analyze(state),
             selectedSquare: selectedSquare,
             showsSelectedReach: true,
-            showsCoverage: false,
             keepsOnlyCheckmateKingThreat: false
         )
     }
