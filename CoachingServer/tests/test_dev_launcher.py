@@ -24,6 +24,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 "PATH": f"{self.fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
                 "FAKE_COMMAND_LOG": str(self.command_log),
                 "CHESS_TUTOR_COACHING_DEV_PORT": "18787",
+                "CHESS_TUTOR_COACHING_VENV_DIR": str(self.temp_path / "venv"),
                 "SIMCTL_CHILD_UNRELATED_SECRET": "do-not-forward",
             }
         )
@@ -75,6 +76,8 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         )
         self.assertIn("server-start key=set token=set", command_log)
         self.assertIn("server-stopped", command_log)
+        self.assertIn("venv-create", command_log)
+        self.assertIn("dependency-install requirements.txt", command_log)
 
     def test_reports_actionable_error_when_keychain_item_is_missing(self):
         self._write_executable(
@@ -182,6 +185,16 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             "python3",
             """
             #!/bin/bash
+            if [ "${1:-}" = "-m" ] && [ "${2:-}" = "venv" ]; then
+              printf '%s\n' 'venv-create' >> "$FAKE_COMMAND_LOG"
+              mkdir -p "$3/bin"
+              cp "$0" "$3/bin/python"
+              exit 0
+            fi
+            if [ "${1:-}" = "-m" ] && [ "${2:-}" = "pip" ]; then
+              printf '%s\n' 'dependency-install requirements.txt' >> "$FAKE_COMMAND_LOG"
+              exit 0
+            fi
             key_state=missing
             token_state=missing
             [ -n "${OPENAI_API_KEY:-}" ] && key_state=set

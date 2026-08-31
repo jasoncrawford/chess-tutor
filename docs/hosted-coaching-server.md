@@ -18,7 +18,8 @@ service `ChessTutor-CoachingEval-OpenAI`, then run:
 ./scripts/run_hosted_coaching_dev.sh
 ```
 
-The script chooses and boots `iPad (A16)`, starts the server, builds the app,
+The script creates an ignored `.venv` when needed, installs the pinned server
+dependency, chooses and boots `iPad (A16)`, starts the server, builds the app,
 and installs and launches it with hosted coaching configured. Leave the
 terminal open while testing; Ctrl-C stops the server. To use another available
 Simulator, pass its name as the only argument:
@@ -32,7 +33,7 @@ secret manager or export both variables in the shell. Use a long random value
 for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 
 ```bash
-python3 -m CoachingServer.local --host 127.0.0.1 --port 8787
+.venv/bin/python -m CoachingServer.local --host 127.0.0.1 --port 8787
 ```
 
 Check readiness with `GET http://127.0.0.1:8787/health`. Coaching requests use

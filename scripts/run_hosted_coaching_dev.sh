@@ -8,6 +8,7 @@ readonly BUNDLE_IDENTIFIER="org.jasoncrawford.chesstutor"
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 simulator_name="${1:-$DEFAULT_SIMULATOR}"
+venv_directory="${CHESS_TUTOR_COACHING_VENV_DIR:-$repository_root/.venv}"
 server_pid=""
 
 if [ "$#" -gt 1 ]; then
@@ -35,6 +36,16 @@ if ! openai_api_key="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 
 fi
 
 access_token="$(openssl rand -hex 32)"
+
+if [ ! -x "$venv_directory/bin/python" ]; then
+  echo "Preparing the coaching server..."
+  python3 -m venv "$venv_directory"
+fi
+"$venv_directory/bin/python" -m pip install \
+  --disable-pip-version-check \
+  --quiet \
+  --requirement "$repository_root/requirements.txt"
+
 port="${CHESS_TUTOR_COACHING_DEV_PORT:-}"
 if [ -z "$port" ]; then
   port="$(/usr/bin/python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
@@ -70,7 +81,7 @@ open -a Simulator
 echo "Starting the coaching server..."
 OPENAI_API_KEY="$openai_api_key" \
 CHESS_TUTOR_COACHING_ACCESS_TOKEN="$access_token" \
-  python3 -m CoachingServer.local --host 127.0.0.1 --port "$port" &
+  "$venv_directory/bin/python" -m CoachingServer.local --host 127.0.0.1 --port "$port" &
 server_pid=$!
 unset openai_api_key
 

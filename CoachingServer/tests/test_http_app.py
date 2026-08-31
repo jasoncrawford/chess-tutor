@@ -1,6 +1,12 @@
-import io
+import http.client
 import json
+import logging
+import threading
+import time
 import unittest
+
+from flask import Flask
+from werkzeug.serving import make_server
 
 from CoachingServer.http_app import create_application
 from CoachingServer.service import HostedCoachingServiceError
@@ -14,37 +20,138 @@ class FakeService:
             "requestID": "request-1",
         }
         self.error = error
+        self.trace_ids = []
 
-    def complete(self, request):
+    def complete(self, request, *, trace_id="direct"):
         self.requests.append(request)
+        self.trace_ids.append(trace_id)
         if self.error is not None:
             raise self.error
         return self.response
 
 
+class RecordingHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
 def invoke(app, method, path, *, token=None, body=b"", content_type="application/json"):
-    status = None
-    headers = None
-
-    def start_response(value, response_headers):
-        nonlocal status, headers
-        status = value
-        headers = dict(response_headers)
-
-    environ = {
-        "REQUEST_METHOD": method,
-        "PATH_INFO": path,
-        "CONTENT_LENGTH": str(len(body)),
-        "CONTENT_TYPE": content_type,
-        "wsgi.input": io.BytesIO(body),
-    }
+    headers = {}
     if token is not None:
-        environ["HTTP_AUTHORIZATION"] = f"Bearer {token}"
-    payload = b"".join(app(environ, start_response))
-    return status, headers, json.loads(payload)
+        headers["Authorization"] = f"Bearer {token}"
+    with app.test_client() as client:
+        response = client.open(
+            path,
+            method=method,
+            data=body,
+            content_type=content_type,
+            headers=headers,
+        )
+    value = json.loads(response.data) if response.data else None
+    return response.status, dict(response.headers), value
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
+    def test_uses_flask_for_the_http_boundary(self):
+        app = create_application(
+            service=FakeService(),
+            access_token="prototype-token",
+        )
+
+        self.assertIsInstance(app, Flask)
+
+    def test_real_socket_request_body_is_processed_without_waiting_for_client_close(self):
+        service = FakeService()
+        app = create_application(service=service, access_token="prototype-token")
+        server = make_server("127.0.0.1", 0, app)
+        server_thread = threading.Thread(target=server.handle_request, daemon=True)
+        server_thread.start()
+        connection = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_port,
+            timeout=0.75,
+        )
+        encoded = json.dumps({"schemaVersion": "request.v1"}).encode("utf-8")
+
+        started = time.monotonic()
+        try:
+            connection.request(
+                "POST",
+                "/v1/coaching-turn",
+                body=encoded,
+                headers={
+                    "Authorization": "Bearer prototype-token",
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            response.read()
+        finally:
+            connection.close()
+            server.server_close()
+            server_thread.join(timeout=2)
+
+        self.assertEqual(200, response.status)
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertEqual([{"schemaVersion": "request.v1"}], service.requests)
+
+    def test_logs_http_lifecycle_with_matching_trace_and_total_elapsed_time(self):
+        service = FakeService()
+        clock = iter((5.0, 5.25))
+        app = create_application(
+            service=service,
+            access_token="prototype-token",
+            clock=lambda: next(clock),
+            trace_id_factory=lambda: "trace-http",
+        )
+        encoded = json.dumps({"schemaVersion": "request.v1"}).encode("utf-8")
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            status, _, _ = invoke(
+                app,
+                "POST",
+                "/v1/coaching-turn",
+                token="prototype-token",
+                body=encoded,
+            )
+
+        self.assertEqual("200 OK", status)
+        self.assertEqual(["trace-http"], service.trace_ids)
+        self.assertEqual(
+            [
+                "event=http_request_started trace_id=trace-http",
+                (
+                    "event=http_request_completed trace_id=trace-http "
+                    "elapsed_ms=250.0 outcome=success status=200"
+                ),
+            ],
+            [record.getMessage() for record in captured.records],
+        )
+
+    def test_rejected_input_does_not_log_payload_content(self):
+        service = FakeService()
+        app = create_application(service=service, access_token="prototype-token")
+        logger = logging.getLogger("ChessTutor.CoachingServer")
+        handler = RecordingHandler()
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        try:
+            invoke(
+                app,
+                "POST",
+                "/v1/coaching-turn",
+                token="wrong-token",
+                body=b'{"private":"CHILD-BOARD-SECRET"}',
+            )
+        finally:
+            logger.removeHandler(handler)
+
+        self.assertNotIn("CHILD-BOARD-SECRET", "\n".join(handler.messages))
+
     def test_health_is_public_and_does_not_call_service(self):
         service = FakeService()
         app = create_application(service=service, access_token="prototype-token")
@@ -54,6 +161,30 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
         self.assertEqual("200 OK", status)
         self.assertEqual("application/json; charset=utf-8", headers["Content-Type"])
         self.assertEqual({"status": "ok"}, body)
+        self.assertEqual([], service.requests)
+
+    def test_preserves_method_errors_without_flask_automatic_head_or_options(self):
+        service = FakeService()
+        app = create_application(service=service, access_token="prototype-token")
+
+        cases = (
+            ("POST", "/health", "404 Not Found", "notFound"),
+            ("HEAD", "/health", "404 Not Found", None),
+            ("OPTIONS", "/health", "404 Not Found", "notFound"),
+            (
+                "OPTIONS",
+                "/v1/coaching-turn",
+                "405 Method Not Allowed",
+                "methodNotAllowed",
+            ),
+        )
+        for method, path, expected_status, expected_code in cases:
+            with self.subTest(method=method, path=path):
+                status, _, body = invoke(app, method, path)
+                self.assertEqual(expected_status, status)
+                if expected_code is not None:
+                    self.assertEqual({"error": {"code": expected_code}}, body)
+
         self.assertEqual([], service.requests)
 
     def test_post_requires_exact_bearer_and_forwards_json_object(self):
