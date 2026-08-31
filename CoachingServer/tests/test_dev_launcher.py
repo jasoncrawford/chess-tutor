@@ -120,6 +120,23 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertNotIn("xcodebuild", command_log)
         self.assertNotIn("simctl install", command_log)
 
+    def test_does_not_accept_health_from_listener_unowned_by_spawned_server(self):
+        self.env["FAKE_SERVER_FAILS_AFTER_DELAY"] = "1"
+
+        result = subprocess.run(
+            [str(LAUNCHER)],
+            cwd=REPOSITORY_ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        command_log = self.command_log.read_text() if self.command_log.exists() else ""
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("xcodebuild", command_log)
+        self.assertNotIn("simctl install", command_log)
+
     def test_optional_simulator_name_selects_that_device(self):
         result = subprocess.Popen(
             [str(LAUNCHER), "ChessTutor Coaching Smoke"],
@@ -171,8 +188,17 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             [ -n "${CHESS_TUTOR_COACHING_ACCESS_TOKEN:-}" ] && token_state=set
             printf 'server-start key=%s token=%s\n' "$key_state" "$token_state" >> "$FAKE_COMMAND_LOG"
             [ "${FAKE_SERVER_EXITS_IMMEDIATELY:-}" = "1" ] && exit 0
+            [ "${FAKE_SERVER_FAILS_AFTER_DELAY:-}" = "1" ] && sleep 2 && exit 0
             trap 'printf "%s\n" server-stopped >> "$FAKE_COMMAND_LOG"; exit 0' TERM INT
             while true; do sleep 1; done
+            """,
+        )
+        self._write_executable(
+            "lsof",
+            """
+            #!/bin/bash
+            [ "${FAKE_SERVER_FAILS_AFTER_DELAY:-}" = "1" ] && exit 1
+            printf '%s\n' '12345'
             """,
         )
         self._write_executable(

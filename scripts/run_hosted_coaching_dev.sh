@@ -80,7 +80,8 @@ for _ in {1..100}; do
     echo "The coaching server stopped before it became ready." >&2
     exit 1
   fi
-  if curl -fsS --max-time 1 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+  if lsof -nP -a -p "$server_pid" -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1 && \
+     curl -fsS --max-time 1 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
     if kill -0 "$server_pid" 2>/dev/null; then
       server_ready=true
       break
