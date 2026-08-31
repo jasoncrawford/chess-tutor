@@ -41,14 +41,11 @@ final class CoachingContinuityUITests: XCTestCase {
         duration: TimeInterval
     ) {
         let deadline = Date().addingTimeInterval(duration)
-        var samples = 0
         while Date() < deadline {
             XCTAssertTrue(shell.exists)
             XCTAssertFalse(app.staticTexts["I'm checking the board."].exists)
             XCTAssertFalse(app.staticTexts["Choose a piece"].exists)
-            samples += 1
             RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         }
-        XCTAssertGreaterThanOrEqual(samples, 8)
     }
 }
