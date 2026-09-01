@@ -1,7 +1,7 @@
 import Foundation
 
 enum ModelCoachingChessNativeTurnValidator {
-    private static let maximumMessageWords = 18
+    private static let maximumMessageCodePoints = 256
     private static let maximumActions = 3
     private static let maximumFocus = 4
 
@@ -27,8 +27,8 @@ enum ModelCoachingChessNativeTurnValidator {
         if turn.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             issues.append("Message must not be empty.")
         } else {
-            if wordCount(in: turn.message) > maximumMessageWords {
-                issues.append("Message must be 18 words or fewer.")
+            if turn.message.unicodeScalars.count > maximumMessageCodePoints {
+                issues.append("Message must contain at most 256 Unicode code points.")
             }
             if containsChessNotation(turn.message) {
                 issues.append("Message must use ordinary language without chess notation.")
@@ -47,6 +47,9 @@ enum ModelCoachingChessNativeTurnValidator {
         issues.append(contentsOf: duplicateFocus(in: turn.focus))
         if turn.focus.count > maximumFocus {
             issues.append("Focus must contain at most 4 objects.")
+        }
+        if [.findEndangeredPiece, .findSafeCapture].contains(turn.expects), !turn.focus.isEmpty {
+            issues.append("Discovery responses must not reveal the answer with focus.")
         }
 
         return issues
@@ -161,9 +164,6 @@ enum ModelCoachingChessNativeTurnValidator {
         }
     }
 
-    private static func wordCount(in message: String) -> Int {
-        message.split(whereSeparator: { $0.isWhitespace }).count
-    }
 }
 
 enum ModelCoachingChessNativeTurnDecodingError: Error, Equatable {
