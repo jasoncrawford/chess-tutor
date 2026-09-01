@@ -2,6 +2,45 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedCoachingPresentationProjectorTests: XCTestCase {
+    func testSelectionQuestionAndNegativeAnswerHaveVisibleInteractionAffordances() {
+        let turn = ModelCoachingChessNativeTurn(
+            message: "Can you find the pawn in danger?",
+            actions: ["noPieceNeedsHelp"],
+            focus: [.square("f2")],
+            expects: .selectPiece
+        )
+
+        let presentation = HostedCoachingPresentationProjector().presentation(
+            for: .ready(turn),
+            pulseID: 3
+        )
+
+        XCTAssertEqual(.identify(allowsMoveRevision: false), presentation.boardTask)
+        XCTAssertEqual([.noAnswer, .stop], presentation.actions.map(\.action))
+        XCTAssertEqual(
+            ["Everything looks safe", "Close help"],
+            presentation.actions.map(\.title)
+        )
+    }
+
+    func testStagedMoveQuestionUsesMoveTaskAndLooksSafeAction() {
+        let turn = ModelCoachingChessNativeTurn(
+            message: "What might your opponent do next?",
+            actions: ["looksSafe"],
+            focus: [],
+            expects: .stageMove
+        )
+
+        let presentation = HostedCoachingPresentationProjector().presentation(
+            for: .ready(turn),
+            pulseID: 4
+        )
+
+        XCTAssertEqual(.move, presentation.boardTask)
+        XCTAssertEqual([.looksSafe, .stop], presentation.actions.map(\.action))
+        XCTAssertEqual(["Looks safe", "Close help"], presentation.actions.map(\.title))
+    }
+
     func testThinkingAndFailureRemainVisibleWithOnlyUsefulActions() {
         let projector = HostedCoachingPresentationProjector()
 

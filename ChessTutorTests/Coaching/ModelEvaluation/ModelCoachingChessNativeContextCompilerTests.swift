@@ -3,6 +3,26 @@ import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
+    func testHostedV10ContractMatchesServerInteractionActions() throws {
+        let request = request(for: ModelCoachingNeutralPromptExamples.fixtures[0])
+        let compilation = ModelCoachingChessNativeContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v10"
+        )
+        let contract = ModelCoachingChessNativeContextCompiler.responseContract(
+            for: request,
+            promptVersion: "tutor-v10"
+        )
+
+        XCTAssertEqual(["hint", "noPieceNeedsHelp"], compilation.availableActions)
+        XCTAssertEqual(compilation.availableActions, contract.availableActions)
+        XCTAssertTrue(
+            compilation.markdown.contains(
+                "Expected response: none, selectPiece, stageMove"
+            )
+        )
+    }
+
     func testResponseContractMatchesCompilationWithoutRenderingDependency() {
         for fixture in ModelCoachingNeutralPromptExamples.fixtures {
             let request = request(for: fixture)

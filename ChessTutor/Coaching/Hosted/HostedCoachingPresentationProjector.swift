@@ -28,7 +28,8 @@ struct HostedCoachingPresentationProjector: Sendable {
             return makePresentation(
                 message: turn.message,
                 actions: turn.actions.compactMap(actionPresentation) + [closeAction],
-                focus: focusPresentation(for: turn.focus, pulseID: pulseID)
+                focus: focusPresentation(for: turn.focus, pulseID: pulseID),
+                boardTask: boardTask(for: turn.expects)
             )
         }
     }
@@ -36,7 +37,8 @@ struct HostedCoachingPresentationProjector: Sendable {
     private func makePresentation(
         message: String,
         actions: [CoachingActionPresentation],
-        focus: CoachFocusPresentation
+        focus: CoachFocusPresentation,
+        boardTask: CoachingBoardTask = .none
     ) -> CoachingPresentation {
         CoachingPresentation(
             primaryMessage: message,
@@ -45,13 +47,27 @@ struct HostedCoachingPresentationProjector: Sendable {
             hint: nil,
             routine: [],
             actions: actions,
-            boardTask: .none,
+            boardTask: boardTask,
             focus: focus
         )
     }
 
     private func actionPresentation(_ action: String) -> CoachingActionPresentation? {
         switch action {
+        case "noPieceNeedsHelp":
+            return CoachingActionPresentation(
+                action: .noAnswer,
+                title: "Everything looks safe",
+                accessibilityLabel: "No piece needs help",
+                prominence: .secondary
+            )
+        case "looksSafe":
+            return CoachingActionPresentation(
+                action: .looksSafe,
+                title: "Looks safe",
+                accessibilityLabel: "The move looks safe",
+                prominence: .secondary
+            )
         case "hint":
             return CoachingActionPresentation(
                 action: .hint,
@@ -75,6 +91,19 @@ struct HostedCoachingPresentationProjector: Sendable {
             )
         default:
             return nil
+        }
+    }
+
+    private func boardTask(
+        for expectedResponse: ModelCoachingChessNativeExpectedResponse
+    ) -> CoachingBoardTask {
+        switch expectedResponse {
+        case .none:
+            return .none
+        case .selectPiece:
+            return .identify(allowsMoveRevision: false)
+        case .stageMove:
+            return .move
         }
     }
 

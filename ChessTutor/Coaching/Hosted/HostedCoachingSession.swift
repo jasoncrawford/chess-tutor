@@ -62,6 +62,31 @@ struct HostedCoachingSession: Equatable, Sendable {
         phase = .thinking
     }
 
+    @discardableResult
+    mutating func recordAction(_ action: String) -> Bool {
+        guard case .ready(let turn) = phase,
+              turn.actions.contains(action) else { return false }
+        append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
+        phase = .thinking
+        return true
+    }
+
+    @discardableResult
+    mutating func recordPieceSelectionAnswer(
+        at square: Square,
+        in committedState: GameState
+    ) -> Bool {
+        guard case .ready(let turn) = phase,
+              turn.expects == .selectPiece,
+              let piece = committedState.board[square] else { return false }
+        append(
+            kind: .pieceSelected,
+            referencedIDs: [ModelCoachingPositionEncoder.pieceID(piece, at: square)]
+        )
+        phase = .thinking
+        return true
+    }
+
     mutating func recordRetry() {
         append(kind: .helpReopened, referencedIDs: [])
         phase = .thinking

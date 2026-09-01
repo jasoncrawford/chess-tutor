@@ -2,6 +2,38 @@ import XCTest
 
 final class HostedCoachingContinuityUITests: XCTestCase {
     @MainActor
+    func testHostedQuestionAcceptsPieceTapAndEverythingLooksSafe() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-test-hosted-coaching-continuity"]
+        app.launch()
+
+        app.buttons["Start hosted coaching continuity test"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Can you find the pawn in danger?"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.buttons["No piece needs help"].exists)
+
+        app.buttons["Tap hosted pawn answer"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Yes, that is the pawn to notice."]
+                .waitForExistence(timeout: 5)
+        )
+
+        app.terminate()
+        app.launch()
+        app.buttons["Start hosted coaching continuity test"].tap()
+        XCTAssertTrue(
+            app.buttons["No piece needs help"].waitForExistence(timeout: 5)
+        )
+        app.buttons["No piece needs help"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Good check. Nothing needs help right now."]
+                .waitForExistence(timeout: 5)
+        )
+    }
+
+    @MainActor
     func testSupersedingMoveKeepsThinkingShellThenReplacesItAtomically() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-test-hosted-coaching-continuity"]

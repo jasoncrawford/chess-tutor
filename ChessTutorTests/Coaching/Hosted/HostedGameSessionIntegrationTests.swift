@@ -3,6 +3,56 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testHostedSelectionQuestionAcceptsPieceTapAndNegativeAnswerAsFastFollowUps() async throws {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        session.startCoaching()
+
+        let openingTask = Task { await session.resolvePendingCoachingAdvice() }
+        let openingRequest = await provider.waitForOnlyRequest()
+        await provider.succeed(
+            requestID: openingRequest.requestID,
+            message: "Can you find the pawn in danger?",
+            actions: ["noPieceNeedsHelp"],
+            focus: [.square("f2")],
+            expects: .selectPiece
+        )
+        await openingTask.value
+
+        XCTAssertEqual(
+            .identify(allowsMoveRevision: false),
+            session.authoritativeCoachingBoardTask
+        )
+        XCTAssertEqual([.noAnswer, .stop], session.coachingPresentation?.actions.map(\.action))
+
+        let pawn = Square(file: .f, rank: 2)
+        XCTAssertTrue(session.handleCoachingSquareTap(pawn))
+        let selectionID = try XCTUnwrap(session.pendingCoachingRequestID)
+        let selectionTask = Task { await session.resolvePendingCoachingAdvice() }
+        let selectionRequest = await provider.waitForRequest(id: "hosted-\(selectionID)")
+        XCTAssertEqual(.pieceSelected, selectionRequest.interaction.latestEvent.kind)
+        XCTAssertEqual(["piece:white:pawn:f2"], selectionRequest.interaction.latestEvent.referencedIDs)
+
+        await provider.succeed(
+            requestID: selectionRequest.requestID,
+            message: "Yes, that pawn needs attention.",
+            actions: ["noPieceNeedsHelp"]
+        )
+        await selectionTask.value
+
+        XCTAssertNil(session.chooseCoachingAction(.noAnswer))
+        let absenceID = try XCTUnwrap(session.pendingCoachingRequestID)
+        let absenceTask = Task { await session.resolvePendingCoachingAdvice() }
+        let absenceRequest = await provider.waitForRequest(id: "hosted-\(absenceID)")
+        XCTAssertEqual(.actionChosen, absenceRequest.interaction.latestEvent.kind)
+        XCTAssertEqual(["action:noPieceNeedsHelp"], absenceRequest.interaction.latestEvent.referencedIDs)
+        await provider.succeed(
+            requestID: absenceRequest.requestID,
+            message: "Good check. Now look for a useful capture."
+        )
+        await absenceTask.value
+    }
+
     func testHostedEpisodeKeepsCurrentAdviceWhilePieceSelectionStaysLocal() async throws {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)
@@ -198,6 +248,7 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
         message: String,
         actions: [String] = [],
         focus: [ModelCoachingChessNativeFocus] = [],
+        expects: ModelCoachingChessNativeExpectedResponse = .none,
         continuationID: String? = nil
     ) {
         guard let call = pending.removeValue(forKey: requestID) else {
@@ -205,15 +256,16 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
         }
         call.continuation.resume(
             returning: HostedCoachingResponse(
-                schemaVersion: "hosted-coaching-turn.v2",
+                schemaVersion: "hosted-coaching-turn.v3",
                 requestID: call.request.requestID,
                 positionRevision: call.request.positionRevision,
-                promptVersion: "tutor-v9",
+                promptVersion: "tutor-v10",
                 continuationID: continuationID ?? "resp_\(requestID)",
                 turn: ModelCoachingChessNativeTurn(
                     message: message,
                     actions: actions,
-                    focus: focus
+                    focus: focus,
+                    expects: expects
                 ),
                 metrics: HostedCoachingMetrics(
                     inputTokens: 100,

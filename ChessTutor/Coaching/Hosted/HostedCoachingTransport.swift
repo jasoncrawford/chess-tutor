@@ -167,8 +167,8 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             }
 
             let wire = try JSONDecoder().decode(HostedCoachingWireResponse.self, from: data)
-            guard wire.schemaVersion == "hosted-coaching-turn.v2",
-                  wire.promptVersion == "tutor-v9",
+            guard wire.schemaVersion == "hosted-coaching-turn.v3",
+                  wire.promptVersion == "tutor-v10",
                   Self.isValidContinuationID(wire.continuationID) else {
                 throw HostedCoachingTransportError.invalidResponse
             }
@@ -186,7 +186,8 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             )
             let turn = try ModelCoachingChessNativeTurnDecoder.decodeAndValidate(
                 turnData,
-                contract: contract
+                contract: contract,
+                requiresExpectedResponse: true
             )
             return HostedCoachingResponse(
                 schemaVersion: wire.schemaVersion,

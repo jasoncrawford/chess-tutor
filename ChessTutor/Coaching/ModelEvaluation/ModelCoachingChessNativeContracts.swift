@@ -61,8 +61,45 @@ enum ModelCoachingChessNativeFocus: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+enum ModelCoachingChessNativeExpectedResponse: String, Codable, Equatable, Sendable {
+    case none
+    case selectPiece
+    case stageMove
+}
+
 struct ModelCoachingChessNativeTurn: Codable, Equatable, Sendable {
     let message: String
     let actions: [String]
     let focus: [ModelCoachingChessNativeFocus]
+    let expects: ModelCoachingChessNativeExpectedResponse
+
+    init(
+        message: String,
+        actions: [String],
+        focus: [ModelCoachingChessNativeFocus],
+        expects: ModelCoachingChessNativeExpectedResponse = .none
+    ) {
+        self.message = message
+        self.actions = actions
+        self.focus = focus
+        self.expects = expects
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case message
+        case actions
+        case focus
+        case expects
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        message = try container.decode(String.self, forKey: .message)
+        actions = try container.decode([String].self, forKey: .actions)
+        focus = try container.decode([ModelCoachingChessNativeFocus].self, forKey: .focus)
+        expects = try container.decodeIfPresent(
+            ModelCoachingChessNativeExpectedResponse.self,
+            forKey: .expects
+        ) ?? .none
+    }
 }

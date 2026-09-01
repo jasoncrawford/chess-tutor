@@ -46,6 +46,22 @@ class ChessNativeCompilerTests(unittest.TestCase):
             compilation.allowable_moves,
         )
 
+    def test_v10_exposes_board_reply_channels_and_negative_answer_actions(self):
+        initial = compile_context(self.fixture["request"], "tutor-v10")
+        staged_request = copy.deepcopy(self.fixture["request"])
+        staged_request["interaction"]["tentativeMove"] = copy.deepcopy(
+            staged_request["legalMoves"][0]
+        )
+        staged = compile_context(staged_request, "tutor-v10")
+
+        self.assertIn(
+            "Expected response: none, selectPiece, stageMove",
+            initial.markdown,
+        )
+        self.assertIn("noPieceNeedsHelp", initial.actions)
+        self.assertNotIn("looksSafe", initial.actions)
+        self.assertIn("looksSafe", staged.actions)
+
     def test_rejects_unknown_request_fields_and_schema_versions(self):
         request = dict(self.fixture["request"])
         request["authoredAdvice"] = "Tell the child what to do."
