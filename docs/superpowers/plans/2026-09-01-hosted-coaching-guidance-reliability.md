@@ -28,10 +28,10 @@
 **Interfaces:**
 - Produces: immutable `tutor-v12` system prompt consumed by the hosted server.
 
-- [ ] Write prompt tests that require plain or quoted control titles, forbid Markdown emphasis instructions, require empty focus for discovery response types, and retain concise-language guidance.
-- [ ] Run `python3 -B -m unittest Tools.CoachingEval.tests.test_tutor_v12_prompt -v` and verify RED because the prompt is absent.
-- [ ] Copy v11 to v12 and minimally revise the control-title, focus, and message-length guidance.
-- [ ] Rerun the focused test and verify GREEN.
+- [x] Write prompt tests that require plain or quoted control titles, forbid Markdown emphasis instructions, require empty focus for discovery response types, and retain concise-language guidance.
+- [x] Run `python3 -B -m unittest Tools.CoachingEval.tests.test_tutor_v12_prompt -v` and verify RED because the prompt is absent.
+- [x] Copy v11 to v12 and minimally revise the control-title, focus, and message-length guidance.
+- [x] Rerun the focused test and verify GREEN.
 
 ### Task 2: Python response validation and diagnostics
 
@@ -44,10 +44,10 @@
 - Produces: `ChessNativeResponseContract.validation_issues(_:)` accepting 19-plus-word messages up to 256 code points and rejecting focus on discovery turns.
 - Produces: safe categories `emptyMessage`, `messageTooLong`, `chessNotation`, and `discoveryFocus`.
 
-- [ ] Add failing Python tests for a 19-word valid message, a 257-code-point invalid message, both discovery response types rejecting focus, and the exact safe diagnostic categories.
-- [ ] Run the focused Python tests and verify the intended failures.
-- [ ] Replace the 18-word validator/grammar boundary with the 256-code-point validator boundary, add discovery-focus validation, and refine safe categories.
-- [ ] Rerun the focused Python tests and verify GREEN.
+- [x] Add failing Python tests for a 19-word valid message, a 257-code-point invalid message, both discovery response types rejecting focus, and the exact safe diagnostic categories.
+- [x] Run the focused Python tests and verify the intended failures.
+- [x] Replace the 18-word validator/grammar boundary with the 256-code-point validator boundary, add discovery-focus validation, and refine safe categories.
+- [x] Rerun the focused Python tests and verify GREEN.
 
 ### Task 3: Swift response validation
 
@@ -58,10 +58,10 @@
 **Interfaces:**
 - Produces: device validation matching the Python 256-code-point and discovery-focus rules.
 
-- [ ] Add failing XCTest cases accepting 19 words, rejecting 257 Unicode code points, and rejecting focus for each discovery expected response.
-- [ ] Run the selected XCTest class and verify RED.
-- [ ] Implement the matching Swift validation rules using `unicodeScalars.count`.
-- [ ] Rerun the selected XCTest class and verify GREEN.
+- [x] Add failing XCTest cases accepting 19 words, rejecting 257 Unicode code points, and rejecting focus for each discovery expected response.
+- [x] Run the selected XCTest class and verify RED.
+- [x] Implement the matching Swift validation rules using `unicodeScalars.count`.
+- [x] Rerun the selected XCTest class and verify GREEN.
 
 ### Task 4: Adopt tutor-v12 end to end
 
@@ -82,9 +82,9 @@
 - Consumes: `tutor-v12` and the v11-compatible response compiler.
 - Produces: requests and hosted responses labeled `tutor-v12`.
 
-- [ ] Update tests first to expect v12 server compilation, system prompt loading, app request creation, and transport acceptance; run them and verify RED.
-- [ ] Extend v11 compiler branches to v12 and update the production server/device version constants.
-- [ ] Rerun the affected Python and Swift tests and verify GREEN.
+- [x] Update tests first to expect v12 server compilation, system prompt loading, app request creation, and transport acceptance; run them and verify RED.
+- [x] Extend v11 compiler branches to v12 and update the production server/device version constants.
+- [x] Rerun the affected Python and Swift tests and verify GREEN.
 
 ### Task 5: Verification and delivery
 
@@ -94,7 +94,7 @@
 **Interfaces:**
 - Produces: a reviewed branch and pull request for user merge.
 
-- [ ] Run all `CoachingServer` and `Tools/CoachingEval` Python tests.
-- [ ] Run affected Swift tests, then the full iPad scheme and standalone build.
-- [ ] Run `git diff --check` and scan the diff for private content.
-- [ ] Commit, push, open a PR without auto-merge, and monitor CI until merge-ready.
+- [x] Run all `CoachingServer` and `Tools/CoachingEval` Python tests.
+- [x] Run affected Swift tests, then the full iPad scheme and standalone build.
+- [x] Run `git diff --check` and scan the diff for private content.
+- [x] Commit, push, open a PR without auto-merge, and monitor CI until merge-ready.
