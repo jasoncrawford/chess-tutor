@@ -854,7 +854,7 @@ final class GameSession {
             request: request,
             contract: ModelCoachingChessNativeContextCompiler.responseContract(
                 for: request,
-                promptVersion: "tutor-v11"
+                promptVersion: "tutor-v12"
             ),
             continuationID: hostedSession.continuationID,
             committedState: committedState,
