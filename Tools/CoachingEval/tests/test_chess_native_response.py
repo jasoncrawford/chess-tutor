@@ -101,6 +101,36 @@ class ChessNativeResponseContractTests(unittest.TestCase):
             )["expects"],
         )
 
+    def test_discovery_responses_reject_answer_revealing_focus(self):
+        contract = chess_native_response.ChessNativeResponseContract.from_markdown(
+            "# Chess coaching situation\n\n"
+            "## Available UI response\n\n"
+            "Actions: hint\n"
+            "Expected response: findEndangeredPiece, findSafeCapture\n"
+            "Square focus: any board square\n"
+            "Allowable move focus: g1-f3"
+        )
+
+        for expected_response, focus in (
+            ("findEndangeredPiece", [{"type": "square", "square": "e4"}]),
+            ("findSafeCapture", [{"type": "move", "from": "g1", "to": "f3"}]),
+        ):
+            candidate = json.dumps(
+                {
+                    "message": "Can you find it?",
+                    "actions": [],
+                    "focus": focus,
+                    "expects": expected_response,
+                },
+                separators=(",", ":"),
+            )
+            with self.subTest(expected_response=expected_response):
+                with self.assertRaises(
+                    chess_native_response.ChessNativeResponseValidationError
+                ) as raised:
+                    contract.parse_and_validate(candidate)
+                self.assertEqual(("discoveryFocus",), raised.exception.categories)
+
     def test_validation_errors_expose_only_safe_reason_categories(self):
         contract = chess_native_response.ChessNativeResponseContract.from_markdown(
             "# Chess coaching situation\n\n"
@@ -127,6 +157,28 @@ class ChessNativeResponseContractTests(unittest.TestCase):
                 '{"message":"Look here","actions":[],"focus":[],'
                 '"expects":"privateResponse"}',
                 ("unavailableExpectedResponse",),
+            ),
+            (
+                '{"message":"   ","actions":[],"focus":[],'
+                '"expects":"none"}',
+                ("emptyMessage",),
+            ),
+            (
+                json.dumps(
+                    {
+                        "message": "x" * 257,
+                        "actions": [],
+                        "focus": [],
+                        "expects": "none",
+                    },
+                    separators=(",", ":"),
+                ),
+                ("messageTooLong",),
+            ),
+            (
+                '{"message":"Try Nc3 next.","actions":[],"focus":[],'
+                '"expects":"none"}',
+                ("chessNotation",),
             ),
         ]
 
@@ -179,7 +231,8 @@ class ChessNativeResponseContractTests(unittest.TestCase):
             'turn ::= "{" space message-kv "," space actions-kv "," space focus-kv space "}"',
             grammar,
         )
-        self.assertIn("message-tail{0,17}", grammar)
+        self.assertIn("message-unit{1,256}", grammar)
+        self.assertNotIn("message-tail{0,17}", grammar)
         self.assertIn('actions ::= "[" space "]" | "[" space action', grammar)
         self.assertIn('action ::= ("\\\"hint\\\""', grammar)
         self.assertIn('"\\\"playMove\\\""', grammar)
@@ -371,7 +424,7 @@ class ChessNativeResponseContractTests(unittest.TestCase):
     def test_enforces_swift_message_limits_and_notation_rules(self):
         invalid_messages = (
             "  \n ",
-            " ".join(f"word{index}" for index in range(1, 20)),
+            "x" * 257,
             "Try Nc3 next.",
             "Try nc3 next.",
             "What happens after Qxf2+?",
@@ -391,12 +444,12 @@ class ChessNativeResponseContractTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaises(ValueError):
                 self.contract().parse_and_validate(candidate)
 
-        eighteen_words = " ".join(f"word{index}" for index in range(1, 19))
+        nineteen_words = " ".join(f"word{index}" for index in range(1, 20))
         self.assertEqual(
-            eighteen_words,
+            nineteen_words,
             self.contract().parse_and_validate(
                 json.dumps(
-                    {"message": eighteen_words, "actions": [], "focus": []},
+                    {"message": nineteen_words, "actions": [], "focus": []},
                     separators=(",", ":"),
                 )
             )["message"],

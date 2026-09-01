@@ -30,6 +30,22 @@ final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
         )
     }
 
+    func testHostedV12PreservesAuthoritativeExpectedResponseContract() throws {
+        let request = request(for: ModelCoachingNeutralPromptExamples.fixtures[0])
+        let compilation = ModelCoachingChessNativeContextCompiler.compile(
+            request,
+            promptVersion: "tutor-v12"
+        )
+
+        XCTAssertEqual(["hint"], compilation.availableActions)
+        XCTAssertTrue(
+            compilation.markdown.contains(
+                "Expected response: none, findEndangeredPiece, findSafeCapture, "
+                    + "stageMove, judgeMoveSafety, chooseWhetherToPlay"
+            )
+        )
+    }
+
     func testHostedV10ContractMatchesServerInteractionActions() throws {
         let request = request(for: ModelCoachingNeutralPromptExamples.fixtures[0])
         let compilation = ModelCoachingChessNativeContextCompiler.compile(

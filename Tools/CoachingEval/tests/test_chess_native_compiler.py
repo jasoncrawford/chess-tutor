@@ -86,6 +86,22 @@ class ChessNativeCompilerTests(unittest.TestCase):
             initial.markdown,
         )
 
+    def test_v12_preserves_authoritative_expected_response_contract(self):
+        compilation = compile_context(self.fixture["request"], "tutor-v12")
+
+        self.assertEqual(("hint",), compilation.actions)
+        self.assertEqual(
+            (
+                "none",
+                "findEndangeredPiece",
+                "findSafeCapture",
+                "stageMove",
+                "judgeMoveSafety",
+                "chooseWhetherToPlay",
+            ),
+            compilation.expected_responses,
+        )
+
     def test_rejects_unknown_request_fields_and_schema_versions(self):
         request = dict(self.fixture["request"])
         request["authoredAdvice"] = "Tell the child what to do."

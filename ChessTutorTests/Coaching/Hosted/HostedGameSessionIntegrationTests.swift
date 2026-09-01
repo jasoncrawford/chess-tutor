@@ -14,7 +14,7 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
             requestID: openingRequest.requestID,
             message: "Can you find the pawn in danger?",
             actions: ["hint"],
-            focus: [.square("f2")],
+            focus: [],
             expects: .findEndangeredPiece
         )
         await openingTask.value
@@ -267,7 +267,7 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
                 schemaVersion: "hosted-coaching-turn.v3",
                 requestID: call.request.requestID,
                 positionRevision: call.request.positionRevision,
-                promptVersion: "tutor-v11",
+                promptVersion: "tutor-v12",
                 continuationID: continuationID ?? "resp_\(requestID)",
                 turn: ModelCoachingChessNativeTurn(
                     message: message,

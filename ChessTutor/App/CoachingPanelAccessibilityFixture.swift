@@ -293,7 +293,7 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
             turn = ModelCoachingChessNativeTurn(
                 message: "Can you find the pawn in danger?",
                 actions: [],
-                focus: [.square("f2")],
+                focus: [],
                 expects: .findEndangeredPiece
             )
         }
@@ -301,7 +301,7 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
             schemaVersion: "hosted-coaching-turn.v3",
             requestID: request.requestID,
             positionRevision: request.positionRevision,
-            promptVersion: "tutor-v11",
+            promptVersion: "tutor-v12",
             continuationID: "resp_ui-fixture",
             turn: turn,
             metrics: HostedCoachingMetrics(

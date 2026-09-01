@@ -15,7 +15,7 @@ FIXTURE = json.loads(
     )
 )
 SYSTEM_PROMPT = (
-    ROOT / "Tools/CoachingEval/prompts/tutor-v11.md"
+    ROOT / "Tools/CoachingEval/prompts/tutor-v12.md"
 ).read_text(encoding="utf-8")
 
 
@@ -50,7 +50,7 @@ class RecordingProvider:
                 '{"message":"Where could this knight help in the center?",'
                 '"actions":["hint"],'
                 '"focus":[{"type":"square","square":"b1"}],'
-                '"expects":"findEndangeredPiece"}'
+                '"expects":"stageMove"}'
             ),
             "usage": {
                 "input_tokens": 500,
@@ -130,7 +130,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "message": "Where could this knight help in the center?",
                 "actions": ["hint"],
                 "focus": [{"type": "square", "square": "b1"}],
-                "expects": "findEndangeredPiece",
+                "expects": "stageMove",
             },
             "latencyMs": 123.0,
         }
@@ -139,7 +139,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             + json.dumps(expected_trace, ensure_ascii=False, separators=(",", ":")),
             content,
         )
-        self.assertNotIn("# Chess Tutor v11", content)
+        self.assertNotIn("# Chess Tutor v12", content)
         self.assertNotIn("# Chess coaching context", content)
         self.assertNotIn('"pieces":', content)
         self.assertNotIn('"legalMoves":', content)
@@ -200,6 +200,34 @@ class HostedCoachingServiceTests(unittest.TestCase):
         joined = "\n".join(record.getMessage() for record in captured.records)
         self.assertIn("reasons=invalidJSON", joined)
         self.assertNotIn("PRIVATE not-json body", joined)
+
+    def test_overlong_provider_message_logs_specific_safe_reason(self):
+        private_message = "PRIVATE" + ("x" * 251)
+        provider = RecordingProvider(
+            response={
+                "id": "resp_overlong-message",
+                "status": "completed",
+                "output_text": json.dumps(
+                    {
+                        "message": private_message,
+                        "actions": [],
+                        "focus": [],
+                        "expects": "findEndangeredPiece",
+                    },
+                    separators=(",", ":"),
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(hosted_request(), trace_id="trace-overlong")
+
+        joined = "\n".join(record.getMessage() for record in captured.records)
+        self.assertIn("reasons=messageTooLong", joined)
+        self.assertNotIn(private_message, joined)
 
     def test_follow_up_content_trace_excludes_continuation_identifiers(self):
         service = HostedCoachingService(
@@ -313,7 +341,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertTrue(call["store"])
         self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
         self.assertEqual(
-            compile_context(FIXTURE["request"], "tutor-v11").markdown,
+            compile_context(FIXTURE["request"], "tutor-v12").markdown,
             call["user_prompt"],
         )
         self.assertFalse(call["schema"]["additionalProperties"])
@@ -322,13 +350,13 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "schemaVersion": "hosted-coaching-turn.v3",
                 "requestID": "shared-selected-knight",
                 "positionRevision": 0,
-                "promptVersion": "tutor-v11",
+                "promptVersion": "tutor-v12",
                 "continuationID": "resp_provider-private-id",
                 "turn": {
                     "message": "Where could this knight help in the center?",
                     "actions": ["hint"],
                     "focus": [{"type": "square", "square": "b1"}],
-                    "expects": "findEndangeredPiece",
+                    "expects": "stageMove",
                 },
                 "metrics": {
                     "inputTokens": 500,

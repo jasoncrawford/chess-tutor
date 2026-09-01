@@ -165,8 +165,8 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
     }
 
     func testDecoderEnforcesMessageActionAndFocusBounds() throws {
-        let eighteenWords = (1...18).map { "word\($0)" }.joined(separator: " ")
         let nineteenWords = (1...19).map { "word\($0)" }.joined(separator: " ")
+        let overlongMessage = String(repeating: "x", count: 257)
         let boundedCompilation = compilation(
             availableActions: ["hint", "playMove", "tryAnotherMove", "extraAction"],
             availableMoveFocus: []
@@ -174,12 +174,12 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
 
         XCTAssertNoThrow(
             try ModelCoachingChessNativeTurnDecoder.decodeAndValidate(
-                turnData(message: eighteenWords),
+                turnData(message: nineteenWords),
                 compilation: boundedCompilation
             )
         )
         assertRejected(turnData(message: "  \n "), compilation: boundedCompilation)
-        assertRejected(turnData(message: nineteenWords), compilation: boundedCompilation)
+        assertRejected(turnData(message: overlongMessage), compilation: boundedCompilation)
         assertRejected(
             turnData(actions: ["hint", "playMove", "tryAnotherMove", "extraAction"]),
             compilation: boundedCompilation
@@ -188,6 +188,17 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
             turnData(focus: (1...5).map { ["type": "square", "square": "a\($0)"] }),
             compilation: boundedCompilation
         )
+    }
+
+    func testDecoderRejectsFocusThatRevealsDiscoveryAnswer() {
+        for expectedResponse in ["findEndangeredPiece", "findSafeCapture"] {
+            assertRejected(
+                json: #"{"message":"Can you find it?","actions":[],"focus":[{"type":"square","square":"e4"}],"expects":"\#(expectedResponse)"}"#,
+                requiresExpectedResponse: true,
+                file: #filePath,
+                line: #line
+            )
+        }
     }
 
     func testDecoderRejectsChessNotationInChildFacingMessage() {
