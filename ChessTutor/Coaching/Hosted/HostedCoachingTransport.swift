@@ -168,7 +168,7 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
 
             let wire = try JSONDecoder().decode(HostedCoachingWireResponse.self, from: data)
             guard wire.schemaVersion == "hosted-coaching-turn.v2",
-                  wire.promptVersion == "tutor-v7",
+                  wire.promptVersion == "tutor-v9",
                   Self.isValidContinuationID(wire.continuationID) else {
                 throw HostedCoachingTransportError.invalidResponse
             }

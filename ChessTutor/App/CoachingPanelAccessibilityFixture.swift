@@ -273,7 +273,7 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
             schemaVersion: "hosted-coaching-turn.v2",
             requestID: request.requestID,
             positionRevision: request.positionRevision,
-            promptVersion: "tutor-v7",
+            promptVersion: "tutor-v9",
             continuationID: "resp_ui-fixture",
             turn: ModelCoachingChessNativeTurn(
                 message: isStagedMove

@@ -140,7 +140,7 @@ def create_environment_application():
     access_token = _required_environment("CHESS_TUTOR_COACHING_ACCESS_TOKEN")
     root = Path(__file__).resolve().parents[1]
     system_prompt = (
-        root / "Tools/CoachingEval/prompts/tutor-v7.md"
+        root / "Tools/CoachingEval/prompts/tutor-v9.md"
     ).read_text(encoding="utf-8")
     from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 
@@ -149,8 +149,9 @@ def create_environment_application():
         system_prompt=system_prompt,
         follow_up_reasoning_effort=os.environ.get(
             "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT",
-            "low",
+            "none",
         ),
+        log_content=os.environ.get("CHESS_TUTOR_COACHING_LOG_CONTENT") == "1",
     )
     return create_application(service=service, access_token=access_token)
 

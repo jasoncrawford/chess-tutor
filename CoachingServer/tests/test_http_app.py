@@ -58,7 +58,7 @@ def invoke(app, method, path, *, token=None, body=b"", content_type="application
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
-    def test_environment_application_owns_v7_prompt_and_follow_up_effort(self):
+    def test_environment_application_owns_v9_prompt_and_simple_follow_up_effort(self):
         fake_service = FakeService()
         with mock.patch.dict(
             os.environ,
@@ -66,6 +66,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
                 "OPENAI_API_KEY": "private-key",
                 "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
                 "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT": "none",
+                "CHESS_TUTOR_COACHING_LOG_CONTENT": "1",
             },
             clear=True,
         ), mock.patch(
@@ -80,7 +81,27 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
         client_type.assert_called_once_with(api_key="private-key")
         arguments = service_type.call_args.kwargs
         self.assertEqual("none", arguments["follow_up_reasoning_effort"])
-        self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v7\n"))
+        self.assertIs(True, arguments["log_content"])
+        self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v9\n"))
+
+    def test_environment_application_requires_exact_one_to_log_content(self):
+        for configured_value in (None, "", "true", "yes", "0"):
+            with self.subTest(configured_value=configured_value):
+                environment = {
+                    "OPENAI_API_KEY": "private-key",
+                    "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
+                }
+                if configured_value is not None:
+                    environment["CHESS_TUTOR_COACHING_LOG_CONTENT"] = configured_value
+                with mock.patch.dict(os.environ, environment, clear=True), mock.patch(
+                    "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
+                ), mock.patch(
+                    "CoachingServer.http_app.HostedCoachingService",
+                    return_value=FakeService(),
+                ) as service_type:
+                    create_environment_application()
+
+                self.assertIs(False, service_type.call_args.kwargs["log_content"])
 
     def test_uses_flask_for_the_http_boundary(self):
         app = create_application(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -17,6 +18,7 @@ _MAXIMUM_LATENCY_MILLISECONDS = 120_000.0
 _LOGGER = logging.getLogger("ChessTutor.CoachingServer")
 _CONTINUATION_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
 _ENVELOPE_FIELDS = {"schemaVersion", "request", "previousResponseID"}
+_TACTICAL_FOLLOW_UP_EVENTS = {"moveStaged", "moveReplaced", "squareInspected"}
 
 
 class HostedCoachingServiceError(RuntimeError):
@@ -43,7 +45,8 @@ class HostedCoachingService:
         provider,
         system_prompt: str,
         timeout: float = 30.0,
-        follow_up_reasoning_effort: str = "low",
+        follow_up_reasoning_effort: str = "none",
+        log_content: bool = False,
         clock=time.monotonic,
     ):
         if not callable(getattr(provider, "complete", None)):
@@ -56,10 +59,13 @@ class HostedCoachingService:
             raise ValueError("clock must be callable")
         if follow_up_reasoning_effort not in {"low", "none"}:
             raise ValueError("follow-up reasoning effort must be low or none")
+        if not isinstance(log_content, bool):
+            raise ValueError("log_content must be a boolean")
         self._provider = provider
         self._system_prompt = system_prompt
         self._timeout = float(timeout)
         self._follow_up_reasoning_effort = follow_up_reasoning_effort
+        self._log_content = log_content
         self._clock = clock
 
     def complete(
@@ -72,12 +78,14 @@ class HostedCoachingService:
             neutral_request, previous_response_id = _parse_envelope(request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
-            compilation = compiler(neutral_request, "tutor-v7")
+            compilation = compiler(neutral_request, "tutor-v9")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
-        reasoning_effort = (
-            self._follow_up_reasoning_effort if is_follow_up else "high"
+        reasoning_effort = _reasoning_effort(
+            neutral_request,
+            is_follow_up=is_follow_up,
+            simple_follow_up_effort=self._follow_up_reasoning_effort,
         )
         _LOGGER.info(
             "event=request_compiled trace_id=%s request_kind=%s",
@@ -175,8 +183,7 @@ class HostedCoachingService:
             )
             raise HostedCoachingServiceError("invalidProviderResponse") from None
         _LOGGER.info("event=provider_response_validated trace_id=%s", trace_id)
-
-        return {
+        response = {
             "schemaVersion": "hosted-coaching-turn.v2",
             "requestID": compilation.request_id,
             "positionRevision": compilation.position_revision,
@@ -185,6 +192,70 @@ class HostedCoachingService:
             "turn": turn,
             "metrics": metrics,
         }
+        if self._log_content:
+            _LOGGER.info(
+                "%s",
+                _content_trace(
+                    trace_id=trace_id,
+                    request_kind=request_kind,
+                    reasoning_effort=reasoning_effort,
+                    client_request=neutral_request,
+                    server_response=response,
+                ),
+            )
+
+        return response
+
+
+def _content_trace(
+    *,
+    trace_id: str,
+    request_kind: str,
+    reasoning_effort: str,
+    client_request: Mapping[str, object],
+    server_response: Mapping[str, object],
+) -> str:
+    position = client_request["position"]
+    history = client_request["gameHistory"]
+    interaction = client_request["interaction"]
+    tentative = interaction.get("tentativeMove")
+    staged = None
+    if tentative is not None:
+        staged = {
+            "move": tentative["canonicalMove"],
+            "notation": tentative["san"],
+            "legal": tentative["isLegal"],
+        }
+    trace = {
+        "kind": request_kind,
+        "reasoning": reasoning_effort,
+        "revision": client_request["positionRevision"],
+        "position": {
+            "fen": position["fen"],
+            "moves": [move["displayNotation"] for move in history],
+            "side": position["sideToMove"],
+            "status": position["status"],
+        },
+        "interaction": {
+            "selected": interaction.get("selectedPieceReference"),
+            "selectedSquare": interaction.get("selectedSquare"),
+            "staged": staged,
+            "events": [
+                {
+                    "sequence": event["sequence"],
+                    "kind": event["kind"],
+                    "references": event["referencedIDs"],
+                }
+                for event in interaction["episodeEvents"]
+            ],
+        },
+        "advice": server_response["turn"],
+        "latencyMs": server_response["metrics"]["latencyMilliseconds"],
+    }
+    return "event=coaching_trace trace_id={} data={}".format(
+        trace_id,
+        json.dumps(trace, ensure_ascii=False, separators=(",", ":")),
+    )
 
 
 def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
@@ -200,6 +271,25 @@ def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
             3,
         ),
     }
+
+
+def _reasoning_effort(
+    request: Mapping[str, object],
+    *,
+    is_follow_up: bool,
+    simple_follow_up_effort: str,
+) -> str:
+    if not is_follow_up:
+        return "high"
+    interaction = request["interaction"]
+    latest_event = interaction["latestEvent"]
+    kind = latest_event["kind"]
+    references = latest_event["referencedIDs"]
+    if kind in _TACTICAL_FOLLOW_UP_EVENTS:
+        return "low"
+    if kind == "actionChosen" and "action:hint" in references:
+        return "low"
+    return simple_follow_up_effort
 
 
 def _elapsed_milliseconds(finished: float, started: float) -> float:

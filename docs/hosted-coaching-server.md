@@ -4,12 +4,13 @@ The private prototype accepts mechanically generated chess facts from the iPad,
 renders the coaching prompts on the server, and returns one validated coaching
 turn. The device never receives the OpenAI key.
 
-The server owns the `tutor-v7` system prompt, converts the structured device
+The server owns the `tutor-v9` system prompt, converts the structured device
 request into model-facing Markdown, and validates the model's strict JSON
 before returning it. Opening Help uses GPT-5.6 Sol with high reasoning. A
-meaningful follow-up continues that Responses API chain with a compact update
-and low reasoning. Selecting or inspecting a piece remains local and does not
-call the server. The iPad validates the JSON again before showing it.
+meaningful follow-up continues that Responses API chain with a compact update.
+Move evaluation, inspected tactical replies, and Hint use low reasoning; simple
+episode updates use none. Selecting a piece remains local and does not call the
+server. The iPad validates the JSON again before showing it.
 
 ## Local development
 
@@ -38,10 +39,10 @@ for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 .venv/bin/python -m CoachingServer.local --host 127.0.0.1 --port 8787
 ```
 
-Follow-ups default to `low` reasoning. For a short local latency comparison,
-set `CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT=none` before starting the
-launcher or server. The server accepts only `low` or `none`; the app cannot
-choose the policy. No Fast service tier is used.
+Simple follow-ups default to `none` reasoning. Set
+`CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT=low` to compare their quality
+and latency locally. Tactical follow-ups still use low. The server accepts only
+`low` or `none`; the app cannot choose the policy. No Fast service tier is used.
 
 Check readiness with `GET http://127.0.0.1:8787/health`. Coaching requests use
 `POST /v1/coaching-turn`, `Content-Type: application/json`, and
