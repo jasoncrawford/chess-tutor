@@ -10,7 +10,10 @@ import socket
 from collections.abc import Mapping
 
 from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
-from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
+from Tools.CoachingEval.chess_native_response import (
+    ChessNativeResponseContract,
+    ChessNativeResponseValidationError,
+)
 
 
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
@@ -78,7 +81,7 @@ class HostedCoachingService:
             neutral_request, previous_response_id = _parse_envelope(request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
-            compilation = compiler(neutral_request, "tutor-v10")
+            compilation = compiler(neutral_request, "tutor-v11")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
@@ -177,9 +180,22 @@ class HostedCoachingService:
                 raise ValueError
             continuation_id = _continuation_id(provider_response.get("id"))
             turn = contract.parse_and_validate(output_text)
+        except ChessNativeResponseValidationError as error:
+            _LOGGER.info(
+                (
+                    "event=provider_response_failed trace_id=%s "
+                    "outcome=invalid_response reasons=%s"
+                ),
+                trace_id,
+                ",".join(error.categories),
+            )
+            raise HostedCoachingServiceError("invalidProviderResponse") from None
         except (KeyError, TypeError, ValueError):
             _LOGGER.info(
-                "event=provider_response_failed trace_id=%s outcome=invalid_response",
+                (
+                    "event=provider_response_failed trace_id=%s "
+                    "outcome=invalid_response reasons=providerEnvelope"
+                ),
                 trace_id,
             )
             raise HostedCoachingServiceError("invalidProviderResponse") from None

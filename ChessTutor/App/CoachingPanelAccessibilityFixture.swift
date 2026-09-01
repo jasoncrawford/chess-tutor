@@ -273,9 +273,9 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
         case .moveStaged:
             turn = ModelCoachingChessNativeTurn(
                 message: "How does your knight help from f3?",
-                actions: ["playMove", "tryAnotherMove"],
+                actions: [],
                 focus: [.move(from: "g1", to: "f3")],
-                expects: .stageMove
+                expects: .chooseWhetherToPlay
             )
         case .pieceSelected:
             turn = ModelCoachingChessNativeTurn(
@@ -292,16 +292,16 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
         default:
             turn = ModelCoachingChessNativeTurn(
                 message: "Can you find the pawn in danger?",
-                actions: ["noPieceNeedsHelp"],
+                actions: [],
                 focus: [.square("f2")],
-                expects: .selectPiece
+                expects: .findEndangeredPiece
             )
         }
         return HostedCoachingResponse(
             schemaVersion: "hosted-coaching-turn.v3",
             requestID: request.requestID,
             positionRevision: request.positionRevision,
-            promptVersion: "tutor-v10",
+            promptVersion: "tutor-v11",
             continuationID: "resp_ui-fixture",
             turn: turn,
             metrics: HostedCoachingMetrics(

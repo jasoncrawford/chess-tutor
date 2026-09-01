@@ -75,7 +75,7 @@ class PullRequestCIConfigurationTests(unittest.TestCase):
             {
                 "name": "iPad",
                 "runs-on": "macos-26",
-                "timeout-minutes": "20",
+                "timeout-minutes": "40",
                 "env": {"DEVELOPER_DIR": "/Applications/Xcode_26.6.app/Contents/Developer"},
                 "steps": [
                     {"uses": "actions/checkout@v6"},

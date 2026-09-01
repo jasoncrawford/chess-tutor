@@ -65,6 +65,10 @@ enum ModelCoachingChessNativeExpectedResponse: String, Codable, Equatable, Senda
     case none
     case selectPiece
     case stageMove
+    case findEndangeredPiece
+    case findSafeCapture
+    case judgeMoveSafety
+    case chooseWhetherToPlay
 }
 
 struct ModelCoachingChessNativeTurn: Codable, Equatable, Sendable {

@@ -175,6 +175,12 @@ enum ModelCoachingChessNativeContextCompiler {
                 "Expected response: none, selectPiece, stageMove",
                 at: 1
             )
+        } else if promptVersion == "tutor-v11" {
+            lines.insert(
+                "Expected response: none, findEndangeredPiece, findSafeCapture, "
+                    + "stageMove, judgeMoveSafety, chooseWhetherToPlay",
+                at: 1
+            )
         }
         return lines
     }
@@ -184,6 +190,9 @@ enum ModelCoachingChessNativeContextCompiler {
         promptVersion: String
     ) -> [String] {
         var actions = ["hint"]
+        if promptVersion == "tutor-v11" {
+            return actions
+        }
         if promptVersion == "tutor-v10" {
             actions.append(
                 request.interaction.tentativeMove == nil

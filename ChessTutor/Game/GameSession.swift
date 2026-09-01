@@ -803,7 +803,7 @@ final class GameSession {
                 return nil
             case .noAnswer:
                 guard var hostedSession = hostedCoachingSession,
-                      hostedSession.recordAction("noPieceNeedsHelp") else { return nil }
+                      hostedSession.recordNegativeAnswer() else { return nil }
                 hostedCoachingSession = hostedSession
                 queueHostedCoachingRequest()
                 return nil
@@ -854,7 +854,7 @@ final class GameSession {
             request: request,
             contract: ModelCoachingChessNativeContextCompiler.responseContract(
                 for: request,
-                promptVersion: "tutor-v10"
+                promptVersion: "tutor-v11"
             ),
             continuationID: hostedSession.continuationID,
             committedState: committedState,

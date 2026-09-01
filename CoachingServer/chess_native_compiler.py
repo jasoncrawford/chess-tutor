@@ -117,11 +117,7 @@ def _compile_context(
         markdown=markdown,
         actions=actions,
         allowable_moves=allowable_moves,
-        expected_responses=(
-            ("none", "selectPiece", "stageMove")
-            if prompt_version == "tutor-v10"
-            else ()
-        ),
+        expected_responses=_expected_responses(prompt_version),
     )
 
 
@@ -444,6 +440,11 @@ def _available_response_lines(
     )
     if prompt_version == "tutor-v10":
         return (lines[0], "Expected response: none, selectPiece, stageMove") + lines[1:]
+    if prompt_version == "tutor-v11":
+        return (
+            lines[0],
+            "Expected response: " + ", ".join(_expected_responses(prompt_version)),
+        ) + lines[1:]
     return lines
 
 
@@ -453,6 +454,8 @@ def _available_actions(
     prompt_version: str,
 ) -> tuple[str, ...]:
     actions = ["hint"]
+    if prompt_version == "tutor-v11":
+        return tuple(actions)
     tentative = request["interaction"]["tentativeMove"]
     if prompt_version == "tutor-v10":
         actions.append("looksSafe" if tentative else "noPieceNeedsHelp")
@@ -462,6 +465,21 @@ def _available_actions(
     if capabilities["canReplaceMove"] or capabilities["canRemoveMove"]:
         actions.append("tryAnotherMove")
     return tuple(actions)
+
+
+def _expected_responses(prompt_version: str) -> tuple[str, ...]:
+    if prompt_version == "tutor-v10":
+        return ("none", "selectPiece", "stageMove")
+    if prompt_version == "tutor-v11":
+        return (
+            "none",
+            "findEndangeredPiece",
+            "findSafeCapture",
+            "stageMove",
+            "judgeMoveSafety",
+            "chooseWhetherToPlay",
+        )
+    return ()
 
 
 def _available_move_focus(request: dict[str, Any], scoped_replies: tuple[dict[str, Any], ...]) -> tuple[tuple[str, str], ...]:
