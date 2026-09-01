@@ -26,19 +26,26 @@ _THINKING_ENVELOPE = re.compile(
 )
 _THINKING_MARKER = re.compile(r"<\s*/?\s*think\b", re.IGNORECASE)
 _FIGURINES = frozenset("♔♕♖♗♘♙♚♛♜♝♞♟")
+_MAXIMUM_MESSAGE_CODE_POINTS = 256
+_DISCOVERY_EXPECTED_RESPONSES = frozenset(
+    ("findEndangeredPiece", "findSafeCapture")
+)
 _SAFE_VALIDATION_CATEGORIES = frozenset(
     (
         "invalidJSON",
         "duplicateKey",
         "invalidUnicode",
         "shape",
-        "message",
+        "emptyMessage",
+        "messageTooLong",
+        "chessNotation",
         "unavailableAction",
         "actions",
         "offBoardFocus",
         "unavailableMoveFocus",
         "focus",
         "unavailableExpectedResponse",
+        "discoveryFocus",
         "validation",
     )
 )
@@ -350,8 +357,8 @@ class ChessNativeResponseContract:
         if not message.strip():
             issues.append("message.empty")
         else:
-            if len(message.split()) > 18:
-                issues.append("message.wordLimitExceeded")
+            if len(message) > _MAXIMUM_MESSAGE_CODE_POINTS:
+                issues.append("message.lengthExceeded")
             if _contains_chess_notation(message):
                 issues.append("message.chessNotation")
 
@@ -409,6 +416,12 @@ class ChessNativeResponseContract:
             and turn["expects"] not in set(self.expected_responses)
         ):
             issues.append(f"expects.unavailable:{turn['expects']}")
+        elif (
+            self.expected_responses
+            and turn["expects"] in _DISCOVERY_EXPECTED_RESPONSES
+            and turn["focus"]
+        ):
+            issues.append("focus.discoveryAnswer")
         return issues
 
     @staticmethod
@@ -426,8 +439,12 @@ def _safe_validation_category(issue):
     prefix = issue.split(":", 1)[0]
     if prefix.startswith("shape."):
         return "shape"
-    if prefix.startswith("message."):
-        return "message"
+    if prefix == "message.empty":
+        return "emptyMessage"
+    if prefix == "message.lengthExceeded":
+        return "messageTooLong"
+    if prefix == "message.chessNotation":
+        return "chessNotation"
     if prefix == "actions.unavailable":
         return "unavailableAction"
     if prefix.startswith("actions."):
@@ -436,6 +453,8 @@ def _safe_validation_category(issue):
         return "offBoardFocus"
     if prefix == "focus.unavailableMove":
         return "unavailableMoveFocus"
+    if prefix == "focus.discoveryAnswer":
+        return "discoveryFocus"
     if prefix.startswith("focus."):
         return "focus"
     if prefix == "expects.unavailable":
@@ -444,8 +463,8 @@ def _safe_validation_category(issue):
 
 
 _GRAMMAR_FIELDS = r'''message-kv ::= "\"message\"" space ":" space message
-message ::= "\"" message-space* message-word message-tail{0,17} message-space* "\""
-message-tail ::= message-space+ message-word
+message ::= "\"" message-unit{1,256} "\""
+message-unit ::= message-char | message-space
 actions-kv ::= "\"actions\"" space ":" space actions
 actions ::= "[" space "]" | "[" space action actions-tail{0,2} space "]"
 actions-tail ::= "," space action
@@ -456,7 +475,6 @@ focus-tail ::= "," space focus-object
 
 _GRAMMAR_SUFFIX = r'''square-focus ::= "{" space "\"type\"" space ":" space "\"square\"" "," space "\"square\"" space ":" space board-square space "}"
 board-square ::= "\"" [a-h] [1-8] "\""
-message-word ::= message-char+
 message-char ::= [^"\\ \x7F\x00-\x1F] | [\\] ["\\/bf]
 message-space ::= [ \t\r\n] | [\\] [nrt]
 space ::= [ \t\r\n]*

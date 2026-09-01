@@ -50,7 +50,7 @@ class RecordingProvider:
                 '{"message":"Where could this knight help in the center?",'
                 '"actions":["hint"],'
                 '"focus":[{"type":"square","square":"b1"}],'
-                '"expects":"findEndangeredPiece"}'
+                '"expects":"stageMove"}'
             ),
             "usage": {
                 "input_tokens": 500,
@@ -130,7 +130,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "message": "Where could this knight help in the center?",
                 "actions": ["hint"],
                 "focus": [{"type": "square", "square": "b1"}],
-                "expects": "findEndangeredPiece",
+                "expects": "stageMove",
             },
             "latencyMs": 123.0,
         }
@@ -200,6 +200,34 @@ class HostedCoachingServiceTests(unittest.TestCase):
         joined = "\n".join(record.getMessage() for record in captured.records)
         self.assertIn("reasons=invalidJSON", joined)
         self.assertNotIn("PRIVATE not-json body", joined)
+
+    def test_overlong_provider_message_logs_specific_safe_reason(self):
+        private_message = "PRIVATE" + ("x" * 251)
+        provider = RecordingProvider(
+            response={
+                "id": "resp_overlong-message",
+                "status": "completed",
+                "output_text": json.dumps(
+                    {
+                        "message": private_message,
+                        "actions": [],
+                        "focus": [],
+                        "expects": "findEndangeredPiece",
+                    },
+                    separators=(",", ":"),
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(hosted_request(), trace_id="trace-overlong")
+
+        joined = "\n".join(record.getMessage() for record in captured.records)
+        self.assertIn("reasons=messageTooLong", joined)
+        self.assertNotIn(private_message, joined)
 
     def test_follow_up_content_trace_excludes_continuation_identifiers(self):
         service = HostedCoachingService(
@@ -328,7 +356,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                     "message": "Where could this knight help in the center?",
                     "actions": ["hint"],
                     "focus": [{"type": "square", "square": "b1"}],
-                    "expects": "findEndangeredPiece",
+                    "expects": "stageMove",
                 },
                 "metrics": {
                     "inputTokens": 500,
