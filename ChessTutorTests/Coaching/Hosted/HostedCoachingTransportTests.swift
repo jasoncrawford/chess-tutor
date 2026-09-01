@@ -243,7 +243,7 @@ final class HostedCoachingTransportTests: XCTestCase {
             "schemaVersion": "hosted-coaching-turn.v2",
             "requestID": requestID ?? request.requestID,
             "positionRevision": revision ?? request.positionRevision,
-            "promptVersion": "tutor-v7",
+            "promptVersion": "tutor-v9",
             "continuationID": "resp_next-123",
             "turn": turn,
             "metrics": [

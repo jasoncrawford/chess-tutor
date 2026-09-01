@@ -1,3 +1,4 @@
+import copy
 import json
 import socket
 import unittest
@@ -13,7 +14,7 @@ FIXTURE = json.loads(
     )
 )
 SYSTEM_PROMPT = (
-    ROOT / "Tools/CoachingEval/prompts/tutor-v7.md"
+    ROOT / "Tools/CoachingEval/prompts/tutor-v9.md"
 ).read_text(encoding="utf-8")
 
 
@@ -23,6 +24,18 @@ def hosted_request(*, previous_response_id=None, request=None):
         "request": FIXTURE["request"] if request is None else request,
         "previousResponseID": previous_response_id,
     }
+
+
+def request_with_latest_event(kind, references=()):
+    request = copy.deepcopy(FIXTURE["request"])
+    event = {
+        "sequence": 1,
+        "kind": kind,
+        "referencedIDs": list(references),
+    }
+    request["interaction"]["latestEvent"] = event
+    request["interaction"]["episodeEvents"] = [event]
+    return request
 
 
 class RecordingProvider:
@@ -123,7 +136,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             + json.dumps(expected_trace, ensure_ascii=False, separators=(",", ":")),
             content,
         )
-        self.assertNotIn("# Chess Tutor v7", content)
+        self.assertNotIn("# Chess Tutor v9", content)
         self.assertNotIn("# Chess coaching context", content)
         self.assertNotIn('"pieces":', content)
         self.assertNotIn('"legalMoves":', content)
@@ -276,7 +289,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "schemaVersion": "hosted-coaching-turn.v2",
                 "requestID": "shared-selected-knight",
                 "positionRevision": 0,
-                "promptVersion": "tutor-v7",
+                "promptVersion": "tutor-v9",
                 "continuationID": "resp_provider-private-id",
                 "turn": {
                     "message": "Where could this knight help in the center?",
@@ -297,7 +310,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         serialized = json.dumps(response)
         self.assertNotIn("gpt-5.6-sol-2026", serialized)
 
-    def test_follow_up_uses_compact_update_previous_response_and_low_reasoning(self):
+    def test_simple_follow_up_uses_compact_update_previous_response_and_no_reasoning(self):
         provider = RecordingProvider()
         service = HostedCoachingService(
             provider=provider,
@@ -309,22 +322,45 @@ class HostedCoachingServiceTests(unittest.TestCase):
         )
 
         call = provider.calls[0]
-        self.assertEqual("low", call["reasoning_effort"])
+        self.assertEqual("none", call["reasoning_effort"])
         self.assertEqual("resp_previous-123", call["previous_response_id"])
         self.assertTrue(call["store"])
         self.assertTrue(call["user_prompt"].startswith("# Chess coaching update\n"))
         self.assertNotIn("## Position", call["user_prompt"])
         self.assertEqual("resp_provider-private-id", response["continuationID"])
 
-    def test_follow_up_reasoning_can_be_configured_to_none_but_not_other_values(self):
+    def test_tactical_follow_ups_use_low_reasoning(self):
+        cases = (
+            ("moveStaged", ("move:b1-c3",)),
+            ("moveReplaced", ("move:b1-c3",)),
+            ("squareInspected", ("piece:white:knight:b1",)),
+            ("actionChosen", ("action:hint",)),
+        )
+
+        for kind, references in cases:
+            with self.subTest(kind=kind):
+                provider = RecordingProvider()
+                service = HostedCoachingService(
+                    provider=provider,
+                    system_prompt=SYSTEM_PROMPT,
+                )
+                service.complete(
+                    hosted_request(
+                        previous_response_id="resp_previous-123",
+                        request=request_with_latest_event(kind, references),
+                    )
+                )
+                self.assertEqual("low", provider.calls[0]["reasoning_effort"])
+
+    def test_simple_follow_up_effort_can_be_configured_to_low_but_not_other_values(self):
         provider = RecordingProvider()
         service = HostedCoachingService(
             provider=provider,
             system_prompt=SYSTEM_PROMPT,
-            follow_up_reasoning_effort="none",
+            follow_up_reasoning_effort="low",
         )
         service.complete(hosted_request(previous_response_id="resp_previous-123"))
-        self.assertEqual("none", provider.calls[0]["reasoning_effort"])
+        self.assertEqual("low", provider.calls[0]["reasoning_effort"])
 
         with self.assertRaisesRegex(ValueError, "follow-up reasoning effort"):
             HostedCoachingService(

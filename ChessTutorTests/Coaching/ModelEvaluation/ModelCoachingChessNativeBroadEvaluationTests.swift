@@ -16,6 +16,7 @@ final class ModelCoachingChessNativeBroadEvaluationTests: XCTestCase {
         "b10-harmless-check-trade",
         "b11-inspected-losing-queen-capture",
         "b12-replaced-knight-move",
+        "b13-recapturable-pawn",
     ]
 
     func testBroadFixturesHaveExactOrderAndDistinctPositions() throws {
@@ -26,9 +27,9 @@ final class ModelCoachingChessNativeBroadEvaluationTests: XCTestCase {
         })
 
         XCTAssertEqual(fixtures.map(\.id), expectedIDs)
-        XCTAssertEqual(Set(fixtures.map(\.id)).count, 12)
+        XCTAssertEqual(Set(fixtures.map(\.id)).count, expectedIDs.count)
         XCTAssertTrue(fixtures.allSatisfy { $0.visibility == .visible })
-        XCTAssertEqual(broadFENs.count, 12)
+        XCTAssertEqual(broadFENs.count, expectedIDs.count)
         XCTAssertTrue(broadFENs.isDisjoint(with: canonicalFENs))
     }
 
@@ -99,6 +100,18 @@ final class ModelCoachingChessNativeBroadEvaluationTests: XCTestCase {
             ["piece:black:queen:f6"]
         )
         XCTAssertEqual(records["b12-replaced-knight-move"]?.request.interaction.latestEvent.kind, .moveReplaced)
+        XCTAssertEqual(records["b13-recapturable-pawn"]?.request.interaction.latestEvent.kind, .moveStaged)
+        XCTAssertEqual(records["b13-recapturable-pawn"]?.request.interaction.tentativeMove?.canonicalMove, "a2a3")
+        let recapturablePawnReplies = records["b13-recapturable-pawn"]?.request.tentativeReplies ?? []
+        XCTAssertTrue(recapturablePawnReplies.contains {
+            $0.canonicalMove == "f8a3"
+                && $0.directRelationships.contains {
+                    $0.phase == .afterReply
+                        && $0.kind == .attacks
+                        && $0.sourcePiece.square == "b2"
+                        && $0.targetPiece.square == "a3"
+                }
+        })
 
         let expectedReplies: [String: Set<String>] = [
             "b05-poisoned-bishop-capture": ["e8f7"],
@@ -319,6 +332,16 @@ enum ModelCoachingChessNativeBroadEvaluationExamples {
                 event(1, .helpOpened),
                 event(2, .moveStaged, [moveID("h2", "h3")]),
                 event(3, .moveReplaced, [moveID("e5", "f3")]),
+            ]
+        ),
+        fixture(
+            id: "b13-recapturable-pawn",
+            history: ["g1f3", "e7e6"],
+            selectedSquare: square("a3"),
+            tentativeMove: move("a2", "a3"),
+            events: [
+                event(1, .helpOpened),
+                event(2, .moveStaged, [moveID("a2", "a3")]),
             ]
         ),
     ]

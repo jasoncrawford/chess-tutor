@@ -208,7 +208,7 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
                 schemaVersion: "hosted-coaching-turn.v2",
                 requestID: call.request.requestID,
                 positionRevision: call.request.positionRevision,
-                promptVersion: "tutor-v7",
+                promptVersion: "tutor-v9",
                 continuationID: continuationID ?? "resp_\(requestID)",
                 turn: ModelCoachingChessNativeTurn(
                     message: message,

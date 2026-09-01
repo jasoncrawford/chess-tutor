@@ -18,6 +18,7 @@ _MAXIMUM_LATENCY_MILLISECONDS = 120_000.0
 _LOGGER = logging.getLogger("ChessTutor.CoachingServer")
 _CONTINUATION_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
 _ENVELOPE_FIELDS = {"schemaVersion", "request", "previousResponseID"}
+_TACTICAL_FOLLOW_UP_EVENTS = {"moveStaged", "moveReplaced", "squareInspected"}
 
 
 class HostedCoachingServiceError(RuntimeError):
@@ -44,7 +45,7 @@ class HostedCoachingService:
         provider,
         system_prompt: str,
         timeout: float = 30.0,
-        follow_up_reasoning_effort: str = "low",
+        follow_up_reasoning_effort: str = "none",
         log_content: bool = False,
         clock=time.monotonic,
     ):
@@ -77,12 +78,14 @@ class HostedCoachingService:
             neutral_request, previous_response_id = _parse_envelope(request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
-            compilation = compiler(neutral_request, "tutor-v7")
+            compilation = compiler(neutral_request, "tutor-v9")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
-        reasoning_effort = (
-            self._follow_up_reasoning_effort if is_follow_up else "high"
+        reasoning_effort = _reasoning_effort(
+            neutral_request,
+            is_follow_up=is_follow_up,
+            simple_follow_up_effort=self._follow_up_reasoning_effort,
         )
         _LOGGER.info(
             "event=request_compiled trace_id=%s request_kind=%s",
@@ -268,6 +271,25 @@ def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
             3,
         ),
     }
+
+
+def _reasoning_effort(
+    request: Mapping[str, object],
+    *,
+    is_follow_up: bool,
+    simple_follow_up_effort: str,
+) -> str:
+    if not is_follow_up:
+        return "high"
+    interaction = request["interaction"]
+    latest_event = interaction["latestEvent"]
+    kind = latest_event["kind"]
+    references = latest_event["referencedIDs"]
+    if kind in _TACTICAL_FOLLOW_UP_EVENTS:
+        return "low"
+    if kind == "actionChosen" and "action:hint" in references:
+        return "low"
+    return simple_follow_up_effort
 
 
 def _elapsed_milliseconds(finished: float, started: float) -> float:
