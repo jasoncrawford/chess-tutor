@@ -76,4 +76,4 @@
 - [x] Run all `CoachingServer` and `Tools/CoachingEval` Python tests.
 - [x] Run affected Swift hosted-coaching tests, then the full iPad scheme if the focused run is green.
 - [x] Launch the normal app through `scripts/run_hosted_coaching_dev.sh`; verify a real initial response and that simple piece selection causes no request. Tactical v9 behavior is verified through the bounded live probe.
-- [ ] Run `git diff --check`, review the diff for private data, commit, push, and open a PR without merging it.
+- [x] Run `git diff --check`, review the diff for private data, commit, push, and open a PR without merging it.
