@@ -78,7 +78,7 @@ class HostedCoachingService:
             neutral_request, previous_response_id = _parse_envelope(request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
-            compilation = compiler(neutral_request, "tutor-v9")
+            compilation = compiler(neutral_request, "tutor-v10")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
@@ -96,6 +96,7 @@ class HostedCoachingService:
         contract = ChessNativeResponseContract(
             actions=compilation.actions,
             allowable_moves=compilation.allowable_moves,
+            expected_responses=compilation.expected_responses,
         )
         started = self._clock()
         _LOGGER.info(
@@ -184,7 +185,7 @@ class HostedCoachingService:
             raise HostedCoachingServiceError("invalidProviderResponse") from None
         _LOGGER.info("event=provider_response_validated trace_id=%s", trace_id)
         response = {
-            "schemaVersion": "hosted-coaching-turn.v2",
+            "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": compilation.request_id,
             "positionRevision": compilation.position_revision,
             "promptVersion": compilation.prompt_version,

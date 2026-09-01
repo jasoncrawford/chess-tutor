@@ -7,7 +7,8 @@ enum ModelCoachingChessNativeContextCompiler {
         let scopedReplies = repliesForCurrentInteraction(in: request)
         let responseContract = responseContract(
             for: request,
-            scopedReplies: scopedReplies
+            scopedReplies: scopedReplies,
+            promptVersion: promptVersion
         )
         let document = ModelCoachingContextDocument(
             metadataLines: [],
@@ -32,7 +33,8 @@ enum ModelCoachingChessNativeContextCompiler {
                     heading: "Available UI response",
                     lines: availableResponseLines(
                         actions: responseContract.availableActions,
-                        moveFocus: responseContract.availableMoveFocus
+                        moveFocus: responseContract.availableMoveFocus,
+                        promptVersion: promptVersion
                     )
                 ),
             ]
@@ -53,20 +55,26 @@ enum ModelCoachingChessNativeContextCompiler {
     }
 
     static func responseContract(
-        for request: ModelCoachingNeutralRequest
+        for request: ModelCoachingNeutralRequest,
+        promptVersion: String = "tutor-v6"
     ) -> ModelCoachingChessNativeResponseContract {
         responseContract(
             for: request,
-            scopedReplies: repliesForCurrentInteraction(in: request)
+            scopedReplies: repliesForCurrentInteraction(in: request),
+            promptVersion: promptVersion
         )
     }
 
     private static func responseContract(
         for request: ModelCoachingNeutralRequest,
-        scopedReplies: [ModelCoachingNeutralReply]
+        scopedReplies: [ModelCoachingNeutralReply],
+        promptVersion: String
     ) -> ModelCoachingChessNativeResponseContract {
         ModelCoachingChessNativeResponseContract(
-            availableActions: availableActions(in: request),
+            availableActions: availableActions(
+                in: request,
+                promptVersion: promptVersion
+            ),
             availableMoveFocus: availableMoveFocus(
                 in: request,
                 scopedReplies: scopedReplies
@@ -153,18 +161,36 @@ enum ModelCoachingChessNativeContextCompiler {
 
     private static func availableResponseLines(
         actions: [String],
-        moveFocus: [ModelCoachingChessNativeMoveFocus]
+        moveFocus: [ModelCoachingChessNativeMoveFocus],
+        promptVersion: String
     ) -> [String] {
         let moves = moveFocus.map { "\($0.from)-\($0.to)" }
-        return [
+        var lines = [
             "Actions: \(actions.isEmpty ? "none" : actions.joined(separator: ", "))",
             "Square focus: any board square",
             "Allowable move focus: \(moves.isEmpty ? "none" : moves.joined(separator: ", "))",
         ]
+        if promptVersion == "tutor-v10" {
+            lines.insert(
+                "Expected response: none, selectPiece, stageMove",
+                at: 1
+            )
+        }
+        return lines
     }
 
-    private static func availableActions(in request: ModelCoachingNeutralRequest) -> [String] {
+    private static func availableActions(
+        in request: ModelCoachingNeutralRequest,
+        promptVersion: String
+    ) -> [String] {
         var actions = ["hint"]
+        if promptVersion == "tutor-v10" {
+            actions.append(
+                request.interaction.tentativeMove == nil
+                    ? "noPieceNeedsHelp"
+                    : "looksSafe"
+            )
+        }
         if request.interaction.tentativeMove?.isLegal == true {
             actions.append("playMove")
         }

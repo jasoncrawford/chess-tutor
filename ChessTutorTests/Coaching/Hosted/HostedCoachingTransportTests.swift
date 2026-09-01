@@ -5,13 +5,17 @@ import XCTest
 final class HostedCoachingTransportTests: XCTestCase {
     func testSendsCanonicalAuthenticatedRequestAndValidatesResponseAgainOnDevice() async throws {
         let request = try sharedRequest()
-        let contract = ModelCoachingChessNativeContextCompiler.responseContract(for: request)
+        let contract = ModelCoachingChessNativeContextCompiler.responseContract(
+            for: request,
+            promptVersion: "tutor-v10"
+        )
         let responseData = try hostedResponseData(
             request: request,
             turn: [
                 "message": "Where could this knight help in the center?",
                 "actions": ["hint"],
                 "focus": [["type": "square", "square": "b1"]],
+                "expects": "selectPiece",
             ]
         )
         let loader = RecordingHostedLoader(
@@ -74,17 +78,21 @@ final class HostedCoachingTransportTests: XCTestCase {
 
     func testRejectsHTTPFailuresIdentityMismatchUnknownFieldsAndInvalidTurn() async throws {
         let request = try sharedRequest()
-        let contract = ModelCoachingChessNativeContextCompiler.responseContract(for: request)
+        let contract = ModelCoachingChessNativeContextCompiler.responseContract(
+            for: request,
+            promptVersion: "tutor-v10"
+        )
         let validTurn: [String: Any] = [
             "message": "Look at the knight.",
             "actions": [],
             "focus": [],
+            "expects": "none",
         ]
         let cases: [(status: Int, response: [String: Any], expected: HostedCoachingTransportError)] = [
             (503, try hostedResponseObject(request: request, turn: validTurn), .serverUnavailable),
             (200, try hostedResponseObject(request: request, requestID: "stale", turn: validTurn), .staleResponse),
             (200, try hostedResponseObject(request: request, revision: 999, turn: validTurn), .staleResponse),
-            (200, try hostedResponseObject(request: request, turn: ["message": "Look.", "actions": ["playMove"], "focus": []]), .invalidResponse),
+            (200, try hostedResponseObject(request: request, turn: ["message": "Look.", "actions": ["playMove"], "focus": [], "expects": "none"]), .invalidResponse),
         ]
 
         for item in cases {
@@ -117,7 +125,7 @@ final class HostedCoachingTransportTests: XCTestCase {
 
         var extra = try hostedResponseObject(request: request, turn: validTurn)
         extra["providerID"] = "private"
-        let duplicate = #"{"schemaVersion":"hosted-coaching-turn.v2","schemaVersion":"hosted-coaching-turn.v2"}"#
+        let duplicate = #"{"schemaVersion":"hosted-coaching-turn.v3","schemaVersion":"hosted-coaching-turn.v3"}"#
         for data in [
             try JSONSerialization.data(withJSONObject: extra),
             Data(duplicate.utf8),
@@ -240,10 +248,10 @@ final class HostedCoachingTransportTests: XCTestCase {
         turn: [String: Any]
     ) throws -> [String: Any] {
         [
-            "schemaVersion": "hosted-coaching-turn.v2",
+            "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": requestID ?? request.requestID,
             "positionRevision": revision ?? request.positionRevision,
-            "promptVersion": "tutor-v9",
+            "promptVersion": "tutor-v10",
             "continuationID": "resp_next-123",
             "turn": turn,
             "metrics": [

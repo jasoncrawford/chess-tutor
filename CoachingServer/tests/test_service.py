@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
+from CoachingServer.chess_native_compiler import compile_context
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,7 +15,7 @@ FIXTURE = json.loads(
     )
 )
 SYSTEM_PROMPT = (
-    ROOT / "Tools/CoachingEval/prompts/tutor-v9.md"
+    ROOT / "Tools/CoachingEval/prompts/tutor-v10.md"
 ).read_text(encoding="utf-8")
 
 
@@ -48,7 +49,8 @@ class RecordingProvider:
             "output_text": (
                 '{"message":"Where could this knight help in the center?",'
                 '"actions":["hint"],'
-                '"focus":[{"type":"square","square":"b1"}]}'
+                '"focus":[{"type":"square","square":"b1"}],'
+                '"expects":"selectPiece"}'
             ),
             "usage": {
                 "input_tokens": 500,
@@ -128,6 +130,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "message": "Where could this knight help in the center?",
                 "actions": ["hint"],
                 "focus": [{"type": "square", "square": "b1"}],
+                "expects": "selectPiece",
             },
             "latencyMs": 123.0,
         }
@@ -136,7 +139,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             + json.dumps(expected_trace, ensure_ascii=False, separators=(",", ":")),
             content,
         )
-        self.assertNotIn("# Chess Tutor v9", content)
+        self.assertNotIn("# Chess Tutor v10", content)
         self.assertNotIn("# Chess coaching context", content)
         self.assertNotIn('"pieces":', content)
         self.assertNotIn('"legalMoves":', content)
@@ -282,19 +285,23 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertIsNone(call["previous_response_id"])
         self.assertTrue(call["store"])
         self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
-        self.assertEqual(FIXTURE["expectedMarkdown"], call["user_prompt"])
+        self.assertEqual(
+            compile_context(FIXTURE["request"], "tutor-v10").markdown,
+            call["user_prompt"],
+        )
         self.assertFalse(call["schema"]["additionalProperties"])
         self.assertEqual(
             {
-                "schemaVersion": "hosted-coaching-turn.v2",
+                "schemaVersion": "hosted-coaching-turn.v3",
                 "requestID": "shared-selected-knight",
                 "positionRevision": 0,
-                "promptVersion": "tutor-v9",
+                "promptVersion": "tutor-v10",
                 "continuationID": "resp_provider-private-id",
                 "turn": {
                     "message": "Where could this knight help in the center?",
                     "actions": ["hint"],
                     "focus": [{"type": "square", "square": "b1"}],
+                    "expects": "selectPiece",
                 },
                 "metrics": {
                     "inputTokens": 500,

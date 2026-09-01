@@ -42,6 +42,35 @@ class ChessNativeResponseContractTests(unittest.TestCase):
             contract.allowable_moves,
         )
 
+    def test_v10_contract_requires_one_declared_interaction_channel(self):
+        contract = chess_native_response.ChessNativeResponseContract.from_markdown(
+            "# Chess coaching situation\n\n"
+            "## Available UI response\n\n"
+            "Actions: hint, noPieceNeedsHelp\n"
+            "Expected response: none, selectPiece, stageMove\n"
+            "Square focus: any board square\n"
+            "Allowable move focus: none"
+        )
+        candidate = (
+            '{"message":"Can you find the piece in danger?",'
+            '"actions":["noPieceNeedsHelp"],"focus":[],'
+            '"expects":"selectPiece"}'
+        )
+
+        self.assertEqual(
+            ("none", "selectPiece", "stageMove"),
+            contract.expected_responses,
+        )
+        self.assertEqual("selectPiece", contract.parse_and_validate(candidate)["expects"])
+        self.assertEqual(
+            ["none", "selectPiece", "stageMove"],
+            contract.json_schema()["properties"]["expects"]["enum"],
+        )
+        with self.assertRaises(ValueError):
+            contract.parse_and_validate(
+                '{"message":"Look.","actions":[],"focus":[],"expects":"tapSquare"}'
+            )
+
     def test_rejects_malformed_available_ui_response_contracts(self):
         invalid_sections = (
             "Actions: hint, hint\nSquare focus: any board square\nAllowable move focus: none",

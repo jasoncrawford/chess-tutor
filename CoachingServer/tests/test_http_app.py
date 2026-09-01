@@ -18,7 +18,7 @@ class FakeService:
     def __init__(self, response=None, error=None):
         self.requests = []
         self.response = response or {
-            "schemaVersion": "hosted-coaching-turn.v2",
+            "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": "request-1",
         }
         self.error = error
@@ -58,7 +58,7 @@ def invoke(app, method, path, *, token=None, body=b"", content_type="application
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
-    def test_environment_application_owns_v9_prompt_and_simple_follow_up_effort(self):
+    def test_environment_application_owns_v10_prompt_and_simple_follow_up_effort(self):
         fake_service = FakeService()
         with mock.patch.dict(
             os.environ,
@@ -82,7 +82,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
         arguments = service_type.call_args.kwargs
         self.assertEqual("none", arguments["follow_up_reasoning_effort"])
         self.assertIs(True, arguments["log_content"])
-        self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v9\n"))
+        self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v10\n"))
 
     def test_environment_application_requires_exact_one_to_log_content(self):
         for configured_value in (None, "", "true", "yes", "0"):

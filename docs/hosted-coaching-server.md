@@ -4,7 +4,7 @@ The private prototype accepts mechanically generated chess facts from the iPad,
 renders the coaching prompts on the server, and returns one validated coaching
 turn. The device never receives the OpenAI key.
 
-The server owns the `tutor-v9` system prompt, converts the structured device
+The server owns the `tutor-v10` system prompt, converts the structured device
 request into model-facing Markdown, and validates the model's strict JSON
 before returning it. Opening Help uses GPT-5.6 Sol with high reasoning. A
 meaningful follow-up continues that Responses API chain with a compact update.

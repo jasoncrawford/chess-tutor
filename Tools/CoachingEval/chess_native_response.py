@@ -9,6 +9,7 @@ import unicodedata
 
 _ACTION_NAME = re.compile(r"[a-z][A-Za-z0-9]*\Z")
 _BOARD_SQUARE = re.compile(r"[a-h][1-8]\Z")
+_EXPECTED_RESPONSES = frozenset(("none", "selectPiece", "stageMove"))
 _THINKING_ENVELOPE = re.compile(
     r"\A<think>[\r\n]{0,2}[^<]{0,128}</think>[\r\n]{0,2}(?P<candidate>\{.*)\Z",
     re.DOTALL,
@@ -79,6 +80,7 @@ def _gbnf_json_string(value):
 class ChessNativeResponseContract:
     actions: tuple
     allowable_moves: tuple
+    expected_responses: tuple = ()
 
     @classmethod
     def from_markdown(cls, markdown):
@@ -87,9 +89,24 @@ class ChessNativeResponseContract:
             raise ValueError("Model-facing Markdown must contain one Available UI response")
         section = markdown.split(marker, 1)[1]
         lines = section.rstrip("\n").splitlines()
-        if len(lines) != 3:
-            raise ValueError("Available UI response must contain exactly three fields")
-        actions_line, square_line, moves_line = lines
+        if len(lines) == 3:
+            actions_line, square_line, moves_line = lines
+            expected_responses = ()
+        elif len(lines) == 4:
+            actions_line, expected_line, square_line, moves_line = lines
+            if not expected_line.startswith("Expected response: "):
+                raise ValueError("Available UI response has invalid expected responses")
+            expected_responses = tuple(
+                expected_line.removeprefix("Expected response: ").split(", ")
+            )
+            if (
+                not expected_responses
+                or any(value not in _EXPECTED_RESPONSES for value in expected_responses)
+                or len(expected_responses) != len(set(expected_responses))
+            ):
+                raise ValueError("Available UI response has invalid expected responses")
+        else:
+            raise ValueError("Available UI response must contain three or four fields")
         if not actions_line.startswith("Actions: "):
             raise ValueError("Available UI response has invalid actions")
         if square_line != "Square focus: any board square":
@@ -120,7 +137,11 @@ class ChessNativeResponseContract:
                 or len(allowable_moves) != len(set(allowable_moves))
             ):
                 raise ValueError("Available UI response has invalid move focus")
-        return cls(actions=actions, allowable_moves=allowable_moves)
+        return cls(
+            actions=actions,
+            allowable_moves=allowable_moves,
+            expected_responses=expected_responses,
+        )
 
     def grammar(self, *, enable_thinking):
         if not isinstance(enable_thinking, bool):
@@ -139,14 +160,29 @@ class ChessNativeResponseContract:
             if enable_thinking
             else "root ::= turn\n"
         )
+        turn_grammar = (
+            'turn ::= "{" space message-kv "," space actions-kv "," space focus-kv '
+            '"," space expects-kv space "}"\n'
+            if self.expected_responses
+            else 'turn ::= "{" space message-kv "," space actions-kv "," space focus-kv space "}"\n'
+        )
         grammar = (
             root
-            + _GRAMMAR_PREFIX
+            + turn_grammar
+            + _GRAMMAR_FIELDS
             + f"action ::= ({action_values})\n"
             + f"focus-object ::= {focus_object}\n"
         )
         if move_values:
             grammar += f"move-focus ::= ({move_values})\n"
+        if self.expected_responses:
+            expected_values = " | ".join(
+                _gbnf_json_string(value) for value in self.expected_responses
+            )
+            grammar += (
+                'expects-kv ::= "\\\"expects\\\"" space ":" space expected-response\n'
+                f"expected-response ::= ({expected_values})\n"
+            )
         return grammar + _GRAMMAR_SUFFIX
 
     def json_schema(self):
@@ -173,22 +209,30 @@ class ChessNativeResponseContract:
                     "additionalProperties": False,
                 }
             )
+        properties = {
+            "message": {"type": "string", "minLength": 1, "maxLength": 256},
+            "actions": {
+                "type": "array",
+                "items": {"type": "string", "enum": list(self.actions)},
+                "maxItems": 3,
+            },
+            "focus": {
+                "type": "array",
+                "items": {"anyOf": focus_variants},
+                "maxItems": 4,
+            },
+        }
+        required = ["message", "actions", "focus"]
+        if self.expected_responses:
+            properties["expects"] = {
+                "type": "string",
+                "enum": list(self.expected_responses),
+            }
+            required.append("expects")
         return {
             "type": "object",
-            "properties": {
-                "message": {"type": "string", "minLength": 1, "maxLength": 256},
-                "actions": {
-                    "type": "array",
-                    "items": {"type": "string", "enum": list(self.actions)},
-                    "maxItems": 3,
-                },
-                "focus": {
-                    "type": "array",
-                    "items": {"anyOf": focus_variants},
-                    "maxItems": 4,
-                },
-            },
-            "required": ["message", "actions", "focus"],
+            "properties": properties,
+            "required": required,
             "additionalProperties": False,
         }
 
@@ -229,7 +273,10 @@ class ChessNativeResponseContract:
     def validation_issues(self, turn):
         if not isinstance(turn, dict):
             return ["shape.turn"]
-        if set(turn) != {"message", "actions", "focus"}:
+        expected_fields = {"message", "actions", "focus"}
+        if self.expected_responses:
+            expected_fields.add("expects")
+        if set(turn) != expected_fields:
             return ["shape.turnFields"]
         if not isinstance(turn["message"], str):
             return ["shape.message"]
@@ -239,6 +286,8 @@ class ChessNativeResponseContract:
             return ["shape.actions"]
         if not isinstance(turn["focus"], list):
             return ["shape.focus"]
+        if self.expected_responses and not isinstance(turn["expects"], str):
+            return ["shape.expects"]
 
         for item in turn["focus"]:
             if not isinstance(item, dict):
@@ -315,6 +364,11 @@ class ChessNativeResponseContract:
             seen_focus.add(identity)
         if len(turn["focus"]) > 4:
             issues.append("focus.limitExceeded")
+        if (
+            self.expected_responses
+            and turn["expects"] not in set(self.expected_responses)
+        ):
+            issues.append(f"expects.unavailable:{turn['expects']}")
         return issues
 
     @staticmethod
@@ -328,8 +382,7 @@ class ChessNativeResponseContract:
         )
 
 
-_GRAMMAR_PREFIX = r'''turn ::= "{" space message-kv "," space actions-kv "," space focus-kv space "}"
-message-kv ::= "\"message\"" space ":" space message
+_GRAMMAR_FIELDS = r'''message-kv ::= "\"message\"" space ":" space message
 message ::= "\"" message-space* message-word message-tail{0,17} message-space* "\""
 message-tail ::= message-space+ message-word
 actions-kv ::= "\"actions\"" space ":" space actions

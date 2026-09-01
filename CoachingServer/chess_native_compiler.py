@@ -57,6 +57,7 @@ class ChessNativeCompilation:
     markdown: str
     actions: tuple[str, ...]
     allowable_moves: tuple[tuple[str, str], ...]
+    expected_responses: tuple[str, ...]
 
 
 def compile_context(
@@ -83,7 +84,7 @@ def _compile_context(
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
     pieces_by_id = {piece["id"]: piece for piece in parsed["pieces"]}
     scoped_replies = _replies_for_current_interaction(parsed, pieces_by_id)
-    actions = _available_actions(parsed)
+    actions = _available_actions(parsed, prompt_version=prompt_version)
     allowable_moves = _available_move_focus(parsed, scoped_replies)
 
     shared_sections = (
@@ -94,7 +95,11 @@ def _compile_context(
         ),
         (
             "Available UI response",
-            _available_response_lines(actions, allowable_moves),
+            _available_response_lines(
+                actions,
+                allowable_moves,
+                prompt_version=prompt_version,
+            ),
         ),
     )
     sections = shared_sections if is_follow_up else (
@@ -112,6 +117,11 @@ def _compile_context(
         markdown=markdown,
         actions=actions,
         allowable_moves=allowable_moves,
+        expected_responses=(
+            ("none", "selectPiece", "stageMove")
+            if prompt_version == "tutor-v10"
+            else ()
+        ),
     )
 
 
@@ -421,17 +431,31 @@ def _relevant_legal_fact_lines(request: dict[str, Any], pieces_by_id: dict[str, 
     return tuple(lines)
 
 
-def _available_response_lines(actions: tuple[str, ...], moves: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
-    return (
+def _available_response_lines(
+    actions: tuple[str, ...],
+    moves: tuple[tuple[str, str], ...],
+    *,
+    prompt_version: str,
+) -> tuple[str, ...]:
+    lines = (
         "Actions: " + (", ".join(actions) if actions else "none"),
         "Square focus: any board square",
         "Allowable move focus: " + (", ".join(f"{origin}-{destination}" for origin, destination in moves) if moves else "none"),
     )
+    if prompt_version == "tutor-v10":
+        return (lines[0], "Expected response: none, selectPiece, stageMove") + lines[1:]
+    return lines
 
 
-def _available_actions(request: dict[str, Any]) -> tuple[str, ...]:
+def _available_actions(
+    request: dict[str, Any],
+    *,
+    prompt_version: str,
+) -> tuple[str, ...]:
     actions = ["hint"]
     tentative = request["interaction"]["tentativeMove"]
+    if prompt_version == "tutor-v10":
+        actions.append("looksSafe" if tentative else "noPieceNeedsHelp")
     if tentative and tentative["isLegal"]:
         actions.append("playMove")
     capabilities = request["capabilities"]

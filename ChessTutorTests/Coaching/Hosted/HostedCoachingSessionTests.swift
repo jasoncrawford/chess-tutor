@@ -2,6 +2,28 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedCoachingSessionTests: XCTestCase {
+    func testReadySelectionQuestionRecordsTheTappedPieceAsAnAnswer() {
+        let state = GameState.startingPosition()
+        let pawnSquare = Square(file: .f, rank: 2)
+        var session = HostedCoachingSession(learner: .white)
+        session.openHelp(selectedSquare: nil, tentativeMove: nil)
+        session.receive(
+            ModelCoachingChessNativeTurn(
+                message: "Can you find the pawn in danger?",
+                actions: ["noPieceNeedsHelp"],
+                focus: [],
+                expects: .selectPiece
+            ),
+            continuationID: "resp_danger-123"
+        )
+
+        XCTAssertTrue(session.recordPieceSelectionAnswer(at: pawnSquare, in: state))
+        XCTAssertEqual(.pieceSelected, session.latestEvent.kind)
+        XCTAssertEqual(["piece:white:pawn:f2"], session.latestEvent.referencedIDs)
+        XCTAssertEqual(.thinking, session.phase)
+        XCTAssertFalse(session.recordPieceSelectionAnswer(at: pawnSquare, in: state))
+    }
+
     func testEpisodeDerivesCurrentLearnerEventsAndBuildsEveryRequestFromCurrentState() throws {
         let state = GameState.startingPosition()
         let b1 = Square(file: .b, rank: 1)

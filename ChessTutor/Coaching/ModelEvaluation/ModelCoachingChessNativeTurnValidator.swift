@@ -181,24 +181,28 @@ enum ModelCoachingChessNativeTurnDecoder {
         "message",
         "actions",
         "focus",
+        "expects",
     ]
 
     static func decodeAndValidate(
         _ data: Data,
-        compilation: ModelCoachingChessNativeContextCompilation
+        compilation: ModelCoachingChessNativeContextCompilation,
+        requiresExpectedResponse: Bool = false
     ) throws -> ModelCoachingChessNativeTurn {
         try decodeAndValidate(
             data,
             contract: ModelCoachingChessNativeResponseContract(
                 availableActions: compilation.availableActions,
                 availableMoveFocus: compilation.availableMoveFocus
-            )
+            ),
+            requiresExpectedResponse: requiresExpectedResponse
         )
     }
 
     static func decodeAndValidate(
         _ data: Data,
-        contract: ModelCoachingChessNativeResponseContract
+        contract: ModelCoachingChessNativeResponseContract,
+        requiresExpectedResponse: Bool = false
     ) throws -> ModelCoachingChessNativeTurn {
         do {
             var validator = ModelCoachingRawJSONValidator(data: data)
@@ -225,6 +229,9 @@ enum ModelCoachingChessNativeTurnDecoder {
             .sorted()
         guard unknownProperties.isEmpty else {
             throw ModelCoachingChessNativeTurnDecodingError.additionalProperties(unknownProperties)
+        }
+        if requiresExpectedResponse, dictionary["expects"] == nil {
+            throw ModelCoachingChessNativeTurnDecodingError.invalidTurnJSON
         }
 
         try validateRawFocus(dictionary["focus"])

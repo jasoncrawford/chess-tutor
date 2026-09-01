@@ -3,6 +3,30 @@ import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
+    func testDecoderRequiresAndAcceptsExpectedHostedInteraction() throws {
+        let data = Data(
+            #"{"message":"Can you find the piece in danger?","actions":["noPieceNeedsHelp"],"focus":[],"expects":"selectPiece"}"#.utf8
+        )
+
+        let turn = try ModelCoachingChessNativeTurnDecoder.decodeAndValidate(
+            data,
+            compilation: compilation(
+                availableActions: ["hint", "noPieceNeedsHelp"]
+            ),
+            requiresExpectedResponse: true
+        )
+
+        XCTAssertEqual(.selectPiece, turn.expects)
+        assertRejected(
+            json: #"{"message":"Look for danger.","actions":[],"focus":[]}"#,
+            requiresExpectedResponse: true
+        )
+        assertRejected(
+            json: #"{"message":"Look for danger.","actions":[],"focus":[],"expects":"tapSquare"}"#,
+            requiresExpectedResponse: true
+        )
+    }
+
     func testDecoderAcceptsValidSemanticSquareAndMoveFocus() throws {
         let data = Data(
             #"{"message":"Look at the queen. What could it take?","actions":["playMove"],"focus":[{"type":"square","square":"h4"},{"type":"move","from":"h4","to":"f2"}]}"#.utf8
@@ -239,12 +263,14 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
     private func assertRejected(
         json: String,
         compilation: ModelCoachingChessNativeContextCompilation? = nil,
+        requiresExpectedResponse: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         assertRejected(
             Data(json.utf8),
             compilation: compilation ?? self.compilation(),
+            requiresExpectedResponse: requiresExpectedResponse,
             file: file,
             line: line
         )
@@ -253,13 +279,15 @@ final class ModelCoachingChessNativeTurnValidatorTests: XCTestCase {
     private func assertRejected(
         _ data: Data,
         compilation: ModelCoachingChessNativeContextCompilation? = nil,
+        requiresExpectedResponse: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         XCTAssertThrowsError(
             try ModelCoachingChessNativeTurnDecoder.decodeAndValidate(
                 data,
-                compilation: compilation ?? self.compilation()
+                compilation: compilation ?? self.compilation(),
+                requiresExpectedResponse: requiresExpectedResponse
             ),
             file: file,
             line: line

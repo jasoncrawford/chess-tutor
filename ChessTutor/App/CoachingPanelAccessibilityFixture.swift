@@ -268,22 +268,42 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
         continuationID: String?
     ) async throws -> HostedCoachingResponse {
         try await Task.sleep(for: .milliseconds(850))
-        let isStagedMove = request.interaction.latestEvent.kind == .moveStaged
+        let turn: ModelCoachingChessNativeTurn
+        switch request.interaction.latestEvent.kind {
+        case .moveStaged:
+            turn = ModelCoachingChessNativeTurn(
+                message: "How does your knight help from f3?",
+                actions: ["playMove", "tryAnotherMove"],
+                focus: [.move(from: "g1", to: "f3")],
+                expects: .stageMove
+            )
+        case .pieceSelected:
+            turn = ModelCoachingChessNativeTurn(
+                message: "Yes, that is the pawn to notice.",
+                actions: [],
+                focus: [.square("f2")]
+            )
+        case .actionChosen:
+            turn = ModelCoachingChessNativeTurn(
+                message: "Good check. Nothing needs help right now.",
+                actions: [],
+                focus: []
+            )
+        default:
+            turn = ModelCoachingChessNativeTurn(
+                message: "Can you find the pawn in danger?",
+                actions: ["noPieceNeedsHelp"],
+                focus: [.square("f2")],
+                expects: .selectPiece
+            )
+        }
         return HostedCoachingResponse(
-            schemaVersion: "hosted-coaching-turn.v2",
+            schemaVersion: "hosted-coaching-turn.v3",
             requestID: request.requestID,
             positionRevision: request.positionRevision,
-            promptVersion: "tutor-v9",
+            promptVersion: "tutor-v10",
             continuationID: "resp_ui-fixture",
-            turn: ModelCoachingChessNativeTurn(
-                message: isStagedMove
-                    ? "How does your knight help from f3?"
-                    : "This opening answer is stale.",
-                actions: isStagedMove ? ["playMove", "tryAnotherMove"] : [],
-                focus: isStagedMove
-                    ? [.move(from: "g1", to: "f3")]
-                    : []
-            ),
+            turn: turn,
             metrics: HostedCoachingMetrics(
                 inputTokens: 100,
                 cachedInputTokens: 0,
@@ -343,6 +363,12 @@ struct HostedCoachingContinuityUITestFixture: View {
                     )
                     session.select(move.from)
                     _ = session.moveSelectedPiece(to: move.to)
+                }
+
+                Button("Tap hosted pawn answer") {
+                    _ = session.handleCoachingSquareTap(
+                        Square(file: .f, rank: 2)
+                    )
                 }
             }
             .padding()

@@ -119,8 +119,11 @@ final class GameSession {
     }
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
-        if hostedCoachingSession != nil {
-            return .none
+        if let hostedCoachingSession {
+            return HostedCoachingPresentationProjector().presentation(
+                for: hostedCoachingSession.phase,
+                pulseID: hostedCoachingSession.pulseID
+            ).boardTask
         }
         return coachingSession?.authoritativeBoardTask ?? .none
     }
@@ -748,6 +751,18 @@ final class GameSession {
         _ square: Square,
         intent: CoachingSquareInteractionIntent
     ) -> Bool {
+        if var hostedSession = hostedCoachingSession {
+            guard intent == .tap,
+                  hostedSession.recordPieceSelectionAnswer(
+                      at: square,
+                      in: committedState
+                  ) else { return false }
+            selectWithoutSynchronizing(square)
+            hostedCoachingSession = hostedSession
+            queueHostedCoachingRequest()
+            return true
+        }
+
         guard case let .identify(allowsMoveRevision) = authoritativeCoachingBoardTask else {
             return false
         }
@@ -786,6 +801,18 @@ final class GameSession {
                 hostedCoachingSession = hostedSession
                 queueHostedCoachingRequest()
                 return nil
+            case .noAnswer:
+                guard var hostedSession = hostedCoachingSession,
+                      hostedSession.recordAction("noPieceNeedsHelp") else { return nil }
+                hostedCoachingSession = hostedSession
+                queueHostedCoachingRequest()
+                return nil
+            case .looksSafe:
+                guard var hostedSession = hostedCoachingSession,
+                      hostedSession.recordAction("looksSafe") else { return nil }
+                hostedCoachingSession = hostedSession
+                queueHostedCoachingRequest()
+                return nil
             case .keepLooking:
                 guard tentativeMove != nil else { return nil }
                 restoreCommittedPosition()
@@ -795,8 +822,6 @@ final class GameSession {
                 return finishTurn()
             case .stop:
                 stopCoaching()
-                return nil
-            default:
                 return nil
             }
         }
@@ -827,7 +852,10 @@ final class GameSession {
         pendingHostedCoachingRequest = PendingHostedCoachingRequest(
             id: id,
             request: request,
-            contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
+            contract: ModelCoachingChessNativeContextCompiler.responseContract(
+                for: request,
+                promptVersion: "tutor-v10"
+            ),
             continuationID: hostedSession.continuationID,
             committedState: committedState,
             tentativeMove: tentativeMove
