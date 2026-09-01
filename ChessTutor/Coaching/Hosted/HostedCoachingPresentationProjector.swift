@@ -27,7 +27,9 @@ struct HostedCoachingPresentationProjector: Sendable {
         case .ready(let turn):
             return makePresentation(
                 message: turn.message,
-                actions: turn.actions.compactMap(actionPresentation) + [closeAction],
+                actions: responseActions(for: turn.expects)
+                    + turn.actions.compactMap(actionPresentation)
+                    + [closeAction],
                 focus: focusPresentation(for: turn.focus, pulseID: pulseID),
                 boardTask: boardTask(for: turn.expects)
             )
@@ -57,8 +59,15 @@ struct HostedCoachingPresentationProjector: Sendable {
         case "noPieceNeedsHelp":
             return CoachingActionPresentation(
                 action: .noAnswer,
-                title: "Everything looks safe",
+                title: "No piece needs help",
                 accessibilityLabel: "No piece needs help",
+                prominence: .secondary
+            )
+        case "noSafeCapture":
+            return CoachingActionPresentation(
+                action: .noAnswer,
+                title: "No safe capture",
+                accessibilityLabel: "No safe capture",
                 prominence: .secondary
             )
         case "looksSafe":
@@ -94,13 +103,70 @@ struct HostedCoachingPresentationProjector: Sendable {
         }
     }
 
+    private func responseActions(
+        for expectedResponse: ModelCoachingChessNativeExpectedResponse
+    ) -> [CoachingActionPresentation] {
+        switch expectedResponse {
+        case .findEndangeredPiece:
+            return [
+                CoachingActionPresentation(
+                    action: .noAnswer,
+                    title: "No piece needs help",
+                    accessibilityLabel: "No piece needs help",
+                    prominence: .secondary
+                ),
+            ]
+        case .findSafeCapture:
+            return [
+                CoachingActionPresentation(
+                    action: .noAnswer,
+                    title: "No safe capture",
+                    accessibilityLabel: "No safe capture",
+                    prominence: .secondary
+                ),
+            ]
+        case .judgeMoveSafety:
+            return [
+                CoachingActionPresentation(
+                    action: .looksSafe,
+                    title: "Looks safe",
+                    accessibilityLabel: "The move looks safe",
+                    prominence: .secondary
+                ),
+                CoachingActionPresentation(
+                    action: .keepLooking,
+                    title: "Try another move",
+                    accessibilityLabel: "Try another move",
+                    prominence: .secondary
+                ),
+            ]
+        case .chooseWhetherToPlay:
+            return [
+                CoachingActionPresentation(
+                    action: .done,
+                    title: "Play this move",
+                    accessibilityLabel: "Play this move",
+                    prominence: .primary
+                ),
+                CoachingActionPresentation(
+                    action: .keepLooking,
+                    title: "Try another move",
+                    accessibilityLabel: "Try another move",
+                    prominence: .secondary
+                ),
+            ]
+        case .none, .selectPiece, .stageMove:
+            return []
+        }
+    }
+
     private func boardTask(
         for expectedResponse: ModelCoachingChessNativeExpectedResponse
     ) -> CoachingBoardTask {
         switch expectedResponse {
-        case .none:
+        case .none, .judgeMoveSafety, .chooseWhetherToPlay:
             return .none
-        case .selectPiece:
+        case .selectPiece, .findEndangeredPiece, .findSafeCapture:
             return .identify(allowsMoveRevision: false)
         case .stageMove:
             return .move

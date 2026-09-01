@@ -2,12 +2,12 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedCoachingPresentationProjectorTests: XCTestCase {
-    func testSelectionQuestionAndNegativeAnswerHaveVisibleInteractionAffordances() {
+    func testDangerQuestionDerivesMatchingBoardTaskAndNegativeAnswer() {
         let turn = ModelCoachingChessNativeTurn(
             message: "Can you find the pawn in danger?",
-            actions: ["noPieceNeedsHelp"],
+            actions: ["hint"],
             focus: [.square("f2")],
-            expects: .selectPiece
+            expects: .findEndangeredPiece
         )
 
         let presentation = HostedCoachingPresentationProjector().presentation(
@@ -16,19 +16,19 @@ final class HostedCoachingPresentationProjectorTests: XCTestCase {
         )
 
         XCTAssertEqual(.identify(allowsMoveRevision: false), presentation.boardTask)
-        XCTAssertEqual([.noAnswer, .stop], presentation.actions.map(\.action))
+        XCTAssertEqual([.noAnswer, .hint, .stop], presentation.actions.map(\.action))
         XCTAssertEqual(
-            ["Everything looks safe", "Close help"],
+            ["No piece needs help", "Hint", "Close help"],
             presentation.actions.map(\.title)
         )
     }
 
-    func testStagedMoveQuestionUsesMoveTaskAndLooksSafeAction() {
+    func testCaptureQuestionDerivesDistinctNegativeAnswer() {
         let turn = ModelCoachingChessNativeTurn(
-            message: "What might your opponent do next?",
-            actions: ["looksSafe"],
+            message: "Can you find a safe capture?",
+            actions: [],
             focus: [],
-            expects: .stageMove
+            expects: .findSafeCapture
         )
 
         let presentation = HostedCoachingPresentationProjector().presentation(
@@ -36,9 +36,51 @@ final class HostedCoachingPresentationProjectorTests: XCTestCase {
             pulseID: 4
         )
 
-        XCTAssertEqual(.move, presentation.boardTask)
-        XCTAssertEqual([.looksSafe, .stop], presentation.actions.map(\.action))
-        XCTAssertEqual(["Looks safe", "Close help"], presentation.actions.map(\.title))
+        XCTAssertEqual(.identify(allowsMoveRevision: false), presentation.boardTask)
+        XCTAssertEqual([.noAnswer, .stop], presentation.actions.map(\.action))
+        XCTAssertEqual(["No safe capture", "Close help"], presentation.actions.map(\.title))
+    }
+
+    func testStagedMoveResponseTypesDeriveMutuallyCoherentControls() {
+        let projector = HostedCoachingPresentationProjector()
+        let judgment = projector.presentation(
+            for: .ready(
+                ModelCoachingChessNativeTurn(
+                    message: "What could your opponent do next? Does this look safe?",
+                    actions: ["hint"],
+                    focus: [],
+                    expects: .judgeMoveSafety
+                )
+            ),
+            pulseID: 4
+        )
+        let decision = projector.presentation(
+            for: .ready(
+                ModelCoachingChessNativeTurn(
+                    message: "That move looks safe. Would you like to keep it?",
+                    actions: ["hint"],
+                    focus: [],
+                    expects: .chooseWhetherToPlay
+                )
+            ),
+            pulseID: 5
+        )
+
+        XCTAssertEqual(.none, judgment.boardTask)
+        XCTAssertEqual(
+            [.looksSafe, .keepLooking, .hint, .stop],
+            judgment.actions.map(\.action)
+        )
+        XCTAssertEqual(
+            ["Looks safe", "Try another move", "Hint", "Close help"],
+            judgment.actions.map(\.title)
+        )
+        XCTAssertEqual(.none, decision.boardTask)
+        XCTAssertEqual([.done, .keepLooking, .hint, .stop], decision.actions.map(\.action))
+        XCTAssertEqual(
+            ["Play this move", "Try another move", "Hint", "Close help"],
+            decision.actions.map(\.title)
+        )
     }
 
     func testThinkingAndFailureRemainVisibleWithOnlyUsefulActions() {

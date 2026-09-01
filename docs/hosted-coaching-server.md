@@ -4,13 +4,21 @@ The private prototype accepts mechanically generated chess facts from the iPad,
 renders the coaching prompts on the server, and returns one validated coaching
 turn. The device never receives the OpenAI key.
 
-The server owns the `tutor-v10` system prompt, converts the structured device
+The server owns the `tutor-v11` system prompt, converts the structured device
 request into model-facing Markdown, and validates the model's strict JSON
 before returning it. Opening Help uses GPT-5.6 Sol with high reasoning. A
 meaningful follow-up continues that Responses API chain with a compact update.
 Move evaluation, inspected tactical replies, and Hint use low reasoning; simple
 episode updates use none. Selecting a piece remains local and does not call the
 server. The iPad validates the JSON again before showing it.
+
+The model chooses one authoritative expected response for each turn. The app
+then supplies the matching interaction mechanically: finding an endangered
+piece includes **No piece needs help**; finding a safe capture includes **No
+safe capture**; judging an unplayed move includes **Looks safe** and **Try
+another move**; and deciding whether to keep a confirmed-safe move includes
+**Play this move** and **Try another move**. The model can additionally request
+Hint, but it cannot invent or mix the primary controls.
 
 ## Local development
 
@@ -98,3 +106,9 @@ The server uses the OpenAI [Responses API](https://developers.openai.com/api/doc
 with Structured Outputs and stored response chaining. It exposes only the
 opaque response ID needed to continue the active episode, never raw provider
 output or reasoning.
+
+If a provider turn fails validation, the server still returns the same small
+`invalidProviderResponse` error. Its local log includes only fixed diagnostic
+categories such as `invalidJSON`, `unavailableAction`, or
+`unavailableExpectedResponse`; rejected model text and identifiers are not
+logged.

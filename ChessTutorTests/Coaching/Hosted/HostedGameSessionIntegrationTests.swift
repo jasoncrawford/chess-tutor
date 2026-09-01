@@ -13,9 +13,9 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         await provider.succeed(
             requestID: openingRequest.requestID,
             message: "Can you find the pawn in danger?",
-            actions: ["noPieceNeedsHelp"],
+            actions: ["hint"],
             focus: [.square("f2")],
-            expects: .selectPiece
+            expects: .findEndangeredPiece
         )
         await openingTask.value
 
@@ -23,7 +23,10 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
             .identify(allowsMoveRevision: false),
             session.authoritativeCoachingBoardTask
         )
-        XCTAssertEqual([.noAnswer, .stop], session.coachingPresentation?.actions.map(\.action))
+        XCTAssertEqual(
+            ["No piece needs help", "Hint", "Close help"],
+            session.coachingPresentation?.actions.map(\.title)
+        )
 
         let pawn = Square(file: .f, rank: 2)
         XCTAssertTrue(session.handleCoachingSquareTap(pawn))
@@ -35,17 +38,22 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
 
         await provider.succeed(
             requestID: selectionRequest.requestID,
-            message: "Yes, that pawn needs attention.",
-            actions: ["noPieceNeedsHelp"]
+            message: "Now can you find a safe capture?",
+            expects: .findSafeCapture
         )
         await selectionTask.value
+
+        XCTAssertEqual(
+            ["No safe capture", "Close help"],
+            session.coachingPresentation?.actions.map(\.title)
+        )
 
         XCTAssertNil(session.chooseCoachingAction(.noAnswer))
         let absenceID = try XCTUnwrap(session.pendingCoachingRequestID)
         let absenceTask = Task { await session.resolvePendingCoachingAdvice() }
         let absenceRequest = await provider.waitForRequest(id: "hosted-\(absenceID)")
         XCTAssertEqual(.actionChosen, absenceRequest.interaction.latestEvent.kind)
-        XCTAssertEqual(["action:noPieceNeedsHelp"], absenceRequest.interaction.latestEvent.referencedIDs)
+        XCTAssertEqual(["action:noSafeCapture"], absenceRequest.interaction.latestEvent.referencedIDs)
         await provider.succeed(
             requestID: absenceRequest.requestID,
             message: "Good check. Now look for a useful capture."
@@ -259,7 +267,7 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
                 schemaVersion: "hosted-coaching-turn.v3",
                 requestID: call.request.requestID,
                 positionRevision: call.request.positionRevision,
-                promptVersion: "tutor-v10",
+                promptVersion: "tutor-v11",
                 continuationID: continuationID ?? "resp_\(requestID)",
                 turn: ModelCoachingChessNativeTurn(
                     message: message,

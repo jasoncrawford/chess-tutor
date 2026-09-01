@@ -65,7 +65,27 @@ struct HostedCoachingSession: Equatable, Sendable {
     @discardableResult
     mutating func recordAction(_ action: String) -> Bool {
         guard case .ready(let turn) = phase,
-              turn.actions.contains(action) else { return false }
+              turn.actions.contains(action)
+                || (turn.expects == .judgeMoveSafety && action == "looksSafe") else {
+            return false
+        }
+        append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
+        phase = .thinking
+        return true
+    }
+
+    @discardableResult
+    mutating func recordNegativeAnswer() -> Bool {
+        guard case .ready(let turn) = phase else { return false }
+        let action: String
+        switch turn.expects {
+        case .findEndangeredPiece:
+            action = "noPieceNeedsHelp"
+        case .findSafeCapture:
+            action = "noSafeCapture"
+        default:
+            return false
+        }
         append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
         phase = .thinking
         return true
@@ -77,7 +97,9 @@ struct HostedCoachingSession: Equatable, Sendable {
         in committedState: GameState
     ) -> Bool {
         guard case .ready(let turn) = phase,
-              turn.expects == .selectPiece,
+              turn.expects == .selectPiece
+                || turn.expects == .findEndangeredPiece
+                || turn.expects == .findSafeCapture,
               let piece = committedState.board[square] else { return false }
         append(
             kind: .pieceSelected,

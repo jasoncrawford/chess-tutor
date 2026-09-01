@@ -10,9 +10,9 @@ final class HostedCoachingSessionTests: XCTestCase {
         session.receive(
             ModelCoachingChessNativeTurn(
                 message: "Can you find the pawn in danger?",
-                actions: ["noPieceNeedsHelp"],
+                actions: [],
                 focus: [],
-                expects: .selectPiece
+                expects: .findEndangeredPiece
             ),
             continuationID: "resp_danger-123"
         )
@@ -22,6 +22,32 @@ final class HostedCoachingSessionTests: XCTestCase {
         XCTAssertEqual(["piece:white:pawn:f2"], session.latestEvent.referencedIDs)
         XCTAssertEqual(.thinking, session.phase)
         XCTAssertFalse(session.recordPieceSelectionAnswer(at: pawnSquare, in: state))
+    }
+
+    func testNegativeAnswerUsesTheCurrentQuestionSemantics() {
+        let cases: [(ModelCoachingChessNativeExpectedResponse, String)] = [
+            (.findEndangeredPiece, "action:noPieceNeedsHelp"),
+            (.findSafeCapture, "action:noSafeCapture"),
+        ]
+
+        for (expects, expectedReference) in cases {
+            var session = HostedCoachingSession(learner: .white)
+            session.openHelp(selectedSquare: nil, tentativeMove: nil)
+            session.receive(
+                ModelCoachingChessNativeTurn(
+                    message: "Find it.",
+                    actions: [],
+                    focus: [],
+                    expects: expects
+                ),
+                continuationID: "resp_question-123"
+            )
+
+            XCTAssertTrue(session.recordNegativeAnswer())
+            XCTAssertEqual(.actionChosen, session.latestEvent.kind)
+            XCTAssertEqual([expectedReference], session.latestEvent.referencedIDs)
+            XCTAssertEqual(.thinking, session.phase)
+        }
     }
 
     func testEpisodeDerivesCurrentLearnerEventsAndBuildsEveryRequestFromCurrentState() throws {

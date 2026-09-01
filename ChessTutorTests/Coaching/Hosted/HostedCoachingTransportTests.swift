@@ -7,7 +7,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         let request = try sharedRequest()
         let contract = ModelCoachingChessNativeContextCompiler.responseContract(
             for: request,
-            promptVersion: "tutor-v10"
+            promptVersion: "tutor-v11"
         )
         let responseData = try hostedResponseData(
             request: request,
@@ -15,7 +15,7 @@ final class HostedCoachingTransportTests: XCTestCase {
                 "message": "Where could this knight help in the center?",
                 "actions": ["hint"],
                 "focus": [["type": "square", "square": "b1"]],
-                "expects": "selectPiece",
+                "expects": "findEndangeredPiece",
             ]
         )
         let loader = RecordingHostedLoader(
@@ -80,7 +80,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         let request = try sharedRequest()
         let contract = ModelCoachingChessNativeContextCompiler.responseContract(
             for: request,
-            promptVersion: "tutor-v10"
+            promptVersion: "tutor-v11"
         )
         let validTurn: [String: Any] = [
             "message": "Look at the knight.",
@@ -251,7 +251,7 @@ final class HostedCoachingTransportTests: XCTestCase {
             "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": requestID ?? request.requestID,
             "positionRevision": revision ?? request.positionRevision,
-            "promptVersion": "tutor-v10",
+            "promptVersion": "tutor-v11",
             "continuationID": "resp_next-123",
             "turn": turn,
             "metrics": [

@@ -71,6 +71,81 @@ class ChessNativeResponseContractTests(unittest.TestCase):
                 '{"message":"Look.","actions":[],"focus":[],"expects":"tapSquare"}'
             )
 
+    def test_v11_contract_accepts_only_explicit_learner_responses(self):
+        contract = chess_native_response.ChessNativeResponseContract.from_markdown(
+            "# Chess coaching situation\n\n"
+            "## Available UI response\n\n"
+            "Actions: hint\n"
+            "Expected response: none, findEndangeredPiece, findSafeCapture, "
+            "stageMove, judgeMoveSafety, chooseWhetherToPlay\n"
+            "Square focus: any board square\n"
+            "Allowable move focus: none"
+        )
+
+        self.assertEqual(
+            (
+                "none",
+                "findEndangeredPiece",
+                "findSafeCapture",
+                "stageMove",
+                "judgeMoveSafety",
+                "chooseWhetherToPlay",
+            ),
+            contract.expected_responses,
+        )
+        self.assertEqual(
+            "findSafeCapture",
+            contract.parse_and_validate(
+                '{"message":"Can you find a safe capture?","actions":[],"focus":[],'
+                '"expects":"findSafeCapture"}'
+            )["expects"],
+        )
+
+    def test_validation_errors_expose_only_safe_reason_categories(self):
+        contract = chess_native_response.ChessNativeResponseContract.from_markdown(
+            "# Chess coaching situation\n\n"
+            "## Available UI response\n\n"
+            "Actions: hint\n"
+            "Expected response: none, findEndangeredPiece\n"
+            "Square focus: any board square\n"
+            "Allowable move focus: none"
+        )
+        cases = [
+            ("not json", ("invalidJSON",)),
+            ('{"message":"Look","message":"Again"}', ("duplicateKey",)),
+            (
+                '{"message":"Look \\ud800","actions":[],"focus":[],'
+                '"expects":"none"}',
+                ("invalidUnicode",),
+            ),
+            (
+                '{"message":"Look here","actions":["privateAction"],'
+                '"focus":[],"expects":"findEndangeredPiece"}',
+                ("unavailableAction",),
+            ),
+            (
+                '{"message":"Look here","actions":[],"focus":[],'
+                '"expects":"privateResponse"}',
+                ("unavailableExpectedResponse",),
+            ),
+        ]
+
+        for candidate, expected_categories in cases:
+            with self.subTest(expected_categories=expected_categories):
+                with self.assertRaises(
+                    chess_native_response.ChessNativeResponseValidationError
+                ) as raised:
+                    contract.parse_and_validate(candidate)
+                self.assertEqual(expected_categories, raised.exception.categories)
+                self.assertEqual("Invalid chess-native response", str(raised.exception))
+                self.assertNotIn("private", str(raised.exception))
+
+        unknown = chess_native_response.ChessNativeResponseValidationError(
+            "privateRejectedValue"
+        )
+        self.assertEqual(("validation",), unknown.categories)
+        self.assertNotIn("private", str(unknown))
+
     def test_rejects_malformed_available_ui_response_contracts(self):
         invalid_sections = (
             "Actions: hint, hint\nSquare focus: any board square\nAllowable move focus: none",
@@ -227,10 +302,12 @@ class ChessNativeResponseContractTests(unittest.TestCase):
         )
 
         for candidate in duplicate_candidates:
-            with self.subTest(candidate=candidate), self.assertRaisesRegex(
-                ValueError, "Duplicate JSON key"
-            ):
-                self.contract().parse_and_validate(candidate)
+            with self.subTest(candidate=candidate):
+                with self.assertRaises(
+                    chess_native_response.ChessNativeResponseValidationError
+                ) as raised:
+                    self.contract().parse_and_validate(candidate)
+                self.assertEqual(("duplicateKey",), raised.exception.categories)
 
     def test_rejects_lone_unicode_surrogates_recursively(self):
         invalid_candidates = (
@@ -244,10 +321,12 @@ class ChessNativeResponseContractTests(unittest.TestCase):
         )
 
         for candidate in invalid_candidates:
-            with self.subTest(candidate=candidate), self.assertRaisesRegex(
-                ValueError, "lone Unicode surrogate"
-            ):
-                self.contract().parse_and_validate(candidate)
+            with self.subTest(candidate=candidate):
+                with self.assertRaises(
+                    chess_native_response.ChessNativeResponseValidationError
+                ) as raised:
+                    self.contract().parse_and_validate(candidate)
+                self.assertEqual(("invalidUnicode",), raised.exception.categories)
 
         valid_pair = (
             '{"message":"Look \\ud83d\\ude00","actions":[],"focus":[]}'

@@ -140,7 +140,7 @@ def create_environment_application():
     access_token = _required_environment("CHESS_TUTOR_COACHING_ACCESS_TOKEN")
     root = Path(__file__).resolve().parents[1]
     system_prompt = (
-        root / "Tools/CoachingEval/prompts/tutor-v10.md"
+        root / "Tools/CoachingEval/prompts/tutor-v11.md"
     ).read_text(encoding="utf-8")
     from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 

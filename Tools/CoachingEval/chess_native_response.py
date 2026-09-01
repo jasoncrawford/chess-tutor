@@ -9,13 +9,39 @@ import unicodedata
 
 _ACTION_NAME = re.compile(r"[a-z][A-Za-z0-9]*\Z")
 _BOARD_SQUARE = re.compile(r"[a-h][1-8]\Z")
-_EXPECTED_RESPONSES = frozenset(("none", "selectPiece", "stageMove"))
+_EXPECTED_RESPONSES = frozenset(
+    (
+        "none",
+        "selectPiece",
+        "stageMove",
+        "findEndangeredPiece",
+        "findSafeCapture",
+        "judgeMoveSafety",
+        "chooseWhetherToPlay",
+    )
+)
 _THINKING_ENVELOPE = re.compile(
     r"\A<think>[\r\n]{0,2}[^<]{0,128}</think>[\r\n]{0,2}(?P<candidate>\{.*)\Z",
     re.DOTALL,
 )
 _THINKING_MARKER = re.compile(r"<\s*/?\s*think\b", re.IGNORECASE)
 _FIGURINES = frozenset("♔♕♖♗♘♙♚♛♜♝♞♟")
+_SAFE_VALIDATION_CATEGORIES = frozenset(
+    (
+        "invalidJSON",
+        "duplicateKey",
+        "invalidUnicode",
+        "shape",
+        "message",
+        "unavailableAction",
+        "actions",
+        "offBoardFocus",
+        "unavailableMoveFocus",
+        "focus",
+        "unavailableExpectedResponse",
+        "validation",
+    )
+)
 _NOTATION_PATTERNS = tuple(
     re.compile(pattern)
     for pattern in (
@@ -33,6 +59,18 @@ _NOTATION_PATTERNS = tuple(
 
 class _DuplicateJSONKey(ValueError):
     pass
+
+
+class ChessNativeResponseValidationError(ValueError):
+    """A response failure carrying only bounded, content-free reason categories."""
+
+    def __init__(self, *categories):
+        super().__init__("Invalid chess-native response")
+        safe_categories = tuple(
+            category if category in _SAFE_VALIDATION_CATEGORIES else "validation"
+            for category in categories or ("validation",)
+        )
+        self.categories = tuple(dict.fromkeys(safe_categories))
 
 
 def _strict_json_object(pairs):
@@ -260,14 +298,16 @@ class ChessNativeResponseContract:
                 parse_constant=_reject_json_constant,
             )
         except _DuplicateJSONKey:
-            raise
+            raise ChessNativeResponseValidationError("duplicateKey") from None
         except (TypeError, ValueError) as error:
-            raise ValueError("Response is not valid JSON") from error
+            raise ChessNativeResponseValidationError("invalidJSON") from error
         if _contains_lone_unicode_surrogate(turn):
-            raise ValueError("Response contains a lone Unicode surrogate")
+            raise ChessNativeResponseValidationError("invalidUnicode")
         issues = self.validation_issues(turn)
         if issues:
-            raise ValueError("Invalid chess-native response: " + ", ".join(issues))
+            raise ChessNativeResponseValidationError(
+                *(_safe_validation_category(issue) for issue in issues)
+            )
         return turn
 
     def validation_issues(self, turn):
@@ -380,6 +420,27 @@ class ChessNativeResponseContract:
             '"\\\"to\\\"" space ":" space '
             f'{_gbnf_json_string(destination)} space "}}"'
         )
+
+
+def _safe_validation_category(issue):
+    prefix = issue.split(":", 1)[0]
+    if prefix.startswith("shape."):
+        return "shape"
+    if prefix.startswith("message."):
+        return "message"
+    if prefix == "actions.unavailable":
+        return "unavailableAction"
+    if prefix.startswith("actions."):
+        return "actions"
+    if prefix == "focus.offBoardSquare":
+        return "offBoardFocus"
+    if prefix == "focus.unavailableMove":
+        return "unavailableMoveFocus"
+    if prefix.startswith("focus."):
+        return "focus"
+    if prefix == "expects.unavailable":
+        return "unavailableExpectedResponse"
+    return "validation"
 
 
 _GRAMMAR_FIELDS = r'''message-kv ::= "\"message\"" space ":" space message
