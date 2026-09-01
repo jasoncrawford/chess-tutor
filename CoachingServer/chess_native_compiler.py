@@ -440,7 +440,7 @@ def _available_response_lines(
     )
     if prompt_version == "tutor-v10":
         return (lines[0], "Expected response: none, selectPiece, stageMove") + lines[1:]
-    if prompt_version in {"tutor-v11", "tutor-v12"}:
+    if prompt_version in {"tutor-v11", "tutor-v12", "tutor-v13"}:
         return (
             lines[0],
             "Expected response: " + ", ".join(_expected_responses(prompt_version)),
@@ -454,7 +454,7 @@ def _available_actions(
     prompt_version: str,
 ) -> tuple[str, ...]:
     actions = ["hint"]
-    if prompt_version in {"tutor-v11", "tutor-v12"}:
+    if prompt_version in {"tutor-v11", "tutor-v12", "tutor-v13"}:
         return tuple(actions)
     tentative = request["interaction"]["tentativeMove"]
     if prompt_version == "tutor-v10":
@@ -473,6 +473,14 @@ def _expected_responses(prompt_version: str) -> tuple[str, ...]:
     if prompt_version in {"tutor-v11", "tutor-v12"}:
         return (
             "none",
+            "findEndangeredPiece",
+            "findSafeCapture",
+            "stageMove",
+            "judgeMoveSafety",
+            "chooseWhetherToPlay",
+        )
+    if prompt_version == "tutor-v13":
+        return (
             "findEndangeredPiece",
             "findSafeCapture",
             "stageMove",

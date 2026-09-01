@@ -168,7 +168,7 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
 
             let wire = try JSONDecoder().decode(HostedCoachingWireResponse.self, from: data)
             guard wire.schemaVersion == "hosted-coaching-turn.v3",
-                  wire.promptVersion == "tutor-v12",
+                  wire.promptVersion == "tutor-v13",
                   Self.isValidContinuationID(wire.continuationID) else {
                 throw HostedCoachingTransportError.invalidResponse
             }
@@ -189,6 +189,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
                 contract: contract,
                 requiresExpectedResponse: true
             )
+            guard turn.expects != .none else {
+                throw HostedCoachingTransportError.invalidResponse
+            }
             return HostedCoachingResponse(
                 schemaVersion: wire.schemaVersion,
                 requestID: wire.requestID,

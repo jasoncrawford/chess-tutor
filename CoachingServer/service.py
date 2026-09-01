@@ -81,7 +81,7 @@ class HostedCoachingService:
             neutral_request, previous_response_id = _parse_envelope(request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
-            compilation = compiler(neutral_request, "tutor-v12")
+            compilation = compiler(neutral_request, "tutor-v13")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
