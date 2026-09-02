@@ -55,16 +55,17 @@ run_root="$session_root/candidates"
 grade_root="$session_root/grades"
 report_root="$session_root/report"
 completed=false
+interrupted=false
 
 cleanup() {
-  if [ "$completed" != true ]; then
+  if [ "$interrupted" = true ]; then
     [ ! -e "$corpus_root" ] || rm -rf "$corpus_root"
     [ ! -e "$session_root" ] || rm -rf "$session_root"
   fi
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'interrupted=true; exit 130' INT
+trap 'interrupted=true; exit 143' TERM
 
 mkdir -p "$(dirname "$corpus_root")" "$(dirname "$session_root")"
 
@@ -83,9 +84,11 @@ run_arguments=(
   run --corpus "$corpus_root" --mode "$mode"
   --candidate "$production" --pricing "$prices" --output "$run_root"
 )
-for candidate in "${candidate_paths[@]}"; do
-  run_arguments+=(--candidate "$candidate")
-done
+if [ "${#candidate_paths[@]}" -gt 0 ]; then
+  for candidate in "${candidate_paths[@]}"; do
+    run_arguments+=(--candidate "$candidate")
+  done
+fi
 if [ "$include_holdout" = true ]; then
   run_arguments+=(--include-holdout)
 fi
@@ -103,14 +106,24 @@ echo "Running candidate coaching configurations..."
 OPENAI_API_KEY="$openai_api_key" "${cli[@]}" "${run_arguments[@]}"
 
 echo "Calibrating and running the automatic judge..."
+set +e
 OPENAI_API_KEY="$openai_api_key" "${cli[@]}" grade \
   --run "$run_root" --corpus "$corpus_root" --judge "$judge" \
   --pricing "$prices" --output "$grade_root"
+grade_status=$?
+set -e
 unset openai_api_key
 
 echo "Building the benchmark report..."
 "${cli[@]}" report --run "$run_root" --grades "$grade_root" \
   --pricing "$prices" --output "$report_root"
+
+if [ "$grade_status" -ne 0 ]; then
+  completed=true
+  echo "Judge grading did not pass; a diagnostic report was preserved." >&2
+  echo "Report: $report_root/summary.md" >&2
+  exit "$grade_status"
+fi
 
 completed=true
 echo "Benchmark complete."

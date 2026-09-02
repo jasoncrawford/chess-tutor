@@ -158,6 +158,7 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         "judgeOverhead": judge_overhead,
         "promotionEligible": global_eligible,
         "integrityIssues": _ordered_unique(issues),
+        "mechanicalFailures": _mechanical_failures(records),
         "worstExamples": _worst_examples(run_root, records_by_id, grades_by_id),
     }
 
@@ -561,6 +562,29 @@ def _worst_examples(run_root, records_by_id, grades_by_id):
     return [value[3] for value in ranked[:10]]
 
 
+def _mechanical_failures(records):
+    failures = []
+    for record in records:
+        if _valid_record(record):
+            continue
+        validation = record.get("mechanicalValidation")
+        categories = (
+            validation.get("categories", [])
+            if isinstance(validation, Mapping)
+            else []
+        )
+        failures.append(
+            {
+                "cellID": record.get("cellID"),
+                "generationStatus": record.get("generationStatus"),
+                "categories": [
+                    value for value in categories if isinstance(value, str)
+                ],
+            }
+        )
+    return failures
+
+
 def _experiment_changes(configurations, baseline_id):
     if baseline_id is None or baseline_id not in configurations:
         return {}
@@ -800,6 +824,21 @@ def _markdown(report):
             "## Confidence intervals",
             "",
             f"Paired bootstrap: {report['confidenceIntervals']['draws']} draws, seed {report['confidenceIntervals']['seed']}.",
+            "",
+            "## Mechanical failures",
+            "",
+        ]
+    )
+    if report["mechanicalFailures"]:
+        for failure in report["mechanicalFailures"]:
+            lines.append(
+                f"- **{failure['cellID']}**: {failure['generationStatus']} "
+                f"({', '.join(failure['categories']) or 'unclassified'})"
+            )
+    else:
+        lines.append("None.")
+    lines.extend(
+        [
             "",
             "## Worst-case examples",
             "",

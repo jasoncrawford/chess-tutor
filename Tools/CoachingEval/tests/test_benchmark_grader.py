@@ -149,15 +149,23 @@ class BenchmarkGraderTests(unittest.TestCase):
         for index in (0, 1, 2):
             outputs[index]["flags"]["severeError"] = not self.rows[index]["humanFlags"]["severeError"]
         client = QueueJudge(outputs)
+        destination = self.root / "rejected"
         with self.assertRaisesRegex(ValueError, "calibration"):
             grade_run(
                 run_root=self.make_run(),
                 corpus=self.make_corpus(),
                 judge_configuration=self.configuration,
                 client=client,
-                destination=self.root / "rejected",
+                destination=destination,
             )
         self.assertEqual(20, len(client.calls))
+        calibration = json.loads((destination / "calibration.json").read_text())
+        manifest = json.loads((destination / "grade-manifest.json").read_text())
+        self.assertFalse(calibration["passed"])
+        self.assertEqual(20, len(calibration["rows"]))
+        self.assertEqual("calibrationFailed", manifest["status"])
+        self.assertEqual("", (destination / "absolute-grades.jsonl").read_text())
+        self.assertEqual("", (destination / "pairwise-grades.jsonl").read_text())
 
     def test_candidate_judge_output_is_strict_bounded_and_identity_free(self):
         valid = self.absolute(score=4)

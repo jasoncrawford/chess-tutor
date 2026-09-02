@@ -166,7 +166,7 @@ class BenchmarkLauncherTests(unittest.TestCase):
                 "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
                 "FAKE_COMMAND_LOG": str(self.log),
                 "CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT": str(self.artifacts),
-                "CHESS_TUTOR_BENCHMARK_TIMESTAMP": "20260901T120000Z",
+            "CHESS_TUTOR_BENCHMARK_TIMESTAMP": "20260901T120000Z",
             }
         )
         self.write_fake("security", "printf '%s\\n' 'sk-private-launcher-key'")
@@ -194,6 +194,9 @@ class BenchmarkLauncherTests(unittest.TestCase):
             done
             [ -n "$destination" ] && mkdir -p "$destination"
             printf '%s\n' '{"status":"completed"}'
+            if [ "${FAKE_GRADE_FAIL:-}" = "1" ] && [[ "$*" == *"benchmark.cli grade"* ]]; then
+              exit 7
+            fi
             """,
         )
 
@@ -221,6 +224,23 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.assertNotIn("sk-private-launcher-key", combined)
         self.assertNotIn("sk-private-launcher-key", commands)
         self.assertTrue((self.artifacts / "runs/20260901T120000Z/report").is_dir())
+
+    def test_quick_mode_needs_no_extra_candidate(self):
+        result = subprocess.run(
+            [str(LAUNCHER), "quick", "--smoke"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        combined = result.stdout + result.stderr
+        commands = self.log.read_text()
+        self.assertEqual(0, result.returncode, combined)
+        self.assertEqual(1, commands.count("benchmark.cli run"))
+        self.assertIn("--case q01-starting-position", commands)
+        self.assertIn("--case s01-danger-selection-response-03", commands)
+        self.assertNotIn("candidate.json", commands)
 
     def test_missing_key_is_actionable_and_interrupt_cleans_partial_artifacts(self):
         self.write_fake("security", "exit 44")
@@ -262,6 +282,22 @@ class BenchmarkLauncherTests(unittest.TestCase):
         process.communicate(timeout=5)
         self.assertFalse((self.artifacts / "corpus/source-sha-20260901T120000Z").exists())
         self.assertFalse((self.artifacts / "runs/20260901T120000Z").exists())
+
+    def test_failed_grade_preserves_artifacts_and_still_builds_diagnostic_report(self):
+        self.env["FAKE_GRADE_FAIL"] = "1"
+        result = subprocess.run(
+            [str(LAUNCHER), "quick", "--smoke"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        commands = self.log.read_text()
+        self.assertEqual(7, result.returncode)
+        self.assertEqual(1, commands.count("benchmark.cli report"))
+        self.assertTrue((self.artifacts / "corpus/source-sha-20260901T120000Z").is_dir())
+        self.assertTrue((self.artifacts / "runs/20260901T120000Z/report").is_dir())
 
     def write_fake(self, name, body):
         path = self.bin / name

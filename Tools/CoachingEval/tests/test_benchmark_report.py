@@ -49,6 +49,10 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertTrue(candidate["promotionEligible"])
         self.assertIn("candidate", report["paretoFrontier"])
         self.assertNotIn("baseline", report["paretoFrontier"])
+        self.assertEqual(
+            ["baseline|s1-3|r1"],
+            [value["cellID"] for value in report["mechanicalFailures"]],
+        )
 
     def test_confidence_intervals_are_deterministic_and_manifest_failures_are_diagnostic(self):
         first = build_report(self.run_root, self.grade_root, self.prices)
@@ -91,6 +95,8 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn("Candidate cost", summary)
         self.assertIn("Judge overhead", summary)
         self.assertIn("Pareto frontier", summary)
+        self.assertIn("Mechanical failures", summary)
+        self.assertIn("baseline|s1-3|r1", summary)
         self.assertIn("transcripts/candidate--s1-3--r1.md", summary)
         with self.assertRaisesRegex(ValueError, "overwrite"):
             write_report(self.run_root, self.grade_root, self.prices, destination)

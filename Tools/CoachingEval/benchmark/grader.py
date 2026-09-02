@@ -41,6 +41,7 @@ class CalibrationResult:
     row_count: int
     calibration_sha256: str
     judge_metrics: Mapping[str, Any]
+    rows: tuple
 
 
 def calibrate_judge(configuration, client, price_table=None):
@@ -49,6 +50,7 @@ def calibrate_judge(configuration, client, price_table=None):
     dimension_matches = 0
     dimension_count = len(rows) * len(RUBRIC_DIMENSIONS)
     metrics = _empty_metrics()
+    results = []
     for row in rows:
         payload = {
             "kind": "absolute",
@@ -72,6 +74,25 @@ def calibrate_judge(configuration, client, price_table=None):
                 grade["scores"][dimension] - row["humanScores"][dimension]
             ) <= 1
         _add_metrics(metrics, call_metrics)
+        results.append(
+            {
+                "rowID": row["id"],
+                "severeMatch": (
+                    grade["flags"]["severeError"]
+                    == row["humanFlags"]["severeError"]
+                ),
+                "dimensionsWithinOne": sum(
+                    abs(grade["scores"][dimension] - row["humanScores"][dimension])
+                    <= 1
+                    for dimension in RUBRIC_DIMENSIONS
+                ),
+                "humanScores": dict(row["humanScores"]),
+                "judgeScores": grade["scores"],
+                "humanFlags": dict(row["humanFlags"]),
+                "judgeFlags": grade["flags"],
+                "evidence": grade["evidence"],
+            }
+        )
     severe_agreement = severe_matches / len(rows)
     dimension_within_one = dimension_matches / dimension_count
     return CalibrationResult(
@@ -81,6 +102,7 @@ def calibrate_judge(configuration, client, price_table=None):
         row_count=len(rows),
         calibration_sha256=configuration.calibration_sha256,
         judge_metrics=metrics,
+        rows=tuple(results),
     )
 
 
@@ -99,6 +121,16 @@ def grade_run(
     run_manifest, records = _load_run(run_root, corpus)
     calibration = calibrate_judge(judge_configuration, client, price_table)
     if not calibration.passed:
+        calibration_json = _calibration_json(calibration)
+        manifest = _grade_manifest(
+            run_manifest,
+            judge_configuration,
+            calibration_json,
+            [],
+            [],
+            status="calibrationFailed",
+        )
+        _publish(destination, calibration_json, [], [], manifest)
         raise ValueError("Judge calibration failed; candidate grading was not started")
     turns = corpus.by_id()
     absolute = []
@@ -480,12 +512,22 @@ def _calibration_json(result):
         "rowCount": result.row_count,
         "calibrationSHA256": result.calibration_sha256,
         "judgeMetrics": result.judge_metrics,
+        "rows": list(result.rows),
     }
 
 
-def _grade_manifest(run_manifest, configuration, calibration, absolute, pairwise):
+def _grade_manifest(
+    run_manifest,
+    configuration,
+    calibration,
+    absolute,
+    pairwise,
+    *,
+    status="completed",
+):
     return {
         "schemaVersion": "coaching-quality-grade-run.v1",
+        "status": status,
         "sourceRunRecordsSHA256": run_manifest["recordsSHA256"],
         "corpusSHA256": run_manifest["corpusSHA256"],
         "judgeConfigurationSHA256": configuration.sha256,
