@@ -200,6 +200,9 @@ Every candidate call records:
 Reports show totals, rates, median, p90, and per-fixture outliers. Cost is shown
 per response, per complete game sequence, and per benchmark run. Pricing
 changes never rewrite old reports; a new price table produces a new estimate.
+Candidate inference cost and latency are reported separately from the automatic
+judge's benchmark overhead, so grading expense is never mistaken for a
+production operating cost.
 
 ## Reporting and decisions
 
