@@ -31,6 +31,7 @@ def run_candidates(
     provider_factory,
     include_holdout: bool = False,
     price_table=None,
+    diagnostic_subset: bool = False,
 ):
     """Run one fully preflighted quick or comparison matrix and publish atomically."""
     destination = Path(destination)
@@ -97,7 +98,14 @@ def run_candidates(
         if record["mechanicalValidation"]["valid"]:
             transcripts[_transcript_name(record)] = _transcript(record)
 
-    manifest = _manifest(corpus, configurations, mode, include_holdout, records)
+    manifest = _manifest(
+        corpus,
+        configurations,
+        mode,
+        include_holdout,
+        records,
+        diagnostic_subset,
+    )
     _publish(destination, manifest, records, transcripts)
     return manifest
 
@@ -250,7 +258,14 @@ def _base_record(cell):
     }
 
 
-def _manifest(corpus, configurations, mode, include_holdout, records):
+def _manifest(
+    corpus,
+    configurations,
+    mode,
+    include_holdout,
+    records,
+    diagnostic_subset,
+):
     resolved = []
     for configuration in configurations:
         resolved.append(
@@ -276,6 +291,7 @@ def _manifest(corpus, configurations, mode, include_holdout, records):
     return {
         "schemaVersion": "coaching-quality-candidate-run.v1",
         "mode": mode,
+        "diagnosticSubset": diagnostic_subset,
         "includeHoldout": include_holdout,
         "corpusSHA256": corpus.sha256,
         "sourceGitSHA": corpus.source_git_sha,

@@ -13,6 +13,66 @@ All downloaded models, runtime builds, corpus exports, raw generations, hidden-s
 
 The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 256 output tokens, temperature 0.2, top-p 0.9, and seeds 1103, 2207, and 3301. Do not change that file during a comparison round.
 
+## Hosted coaching quality benchmark
+
+The current hosted coach has a separate production-shaped benchmark for comparing a model, reasoning settings, system prompt, or deterministic user-prompt compiler. The simplest development run is:
+
+```bash
+./scripts/run_coaching_quality_benchmark.sh quick
+```
+
+The script reads `ChessTutor-CoachingEval-OpenAI` from Keychain, exports a fresh 70-turn corpus from Swift, runs the production configuration, calibrates the pinned automatic judge, and writes an ignored report beneath `.coaching-eval/benchmark/runs/<timestamp>/report/summary.md`. It never places the key in a command argument or artifact.
+
+Compare one or more candidate configuration files against production with three repetitions per case:
+
+```bash
+./scripts/run_coaching_quality_benchmark.sh comparison path/to/candidate.json
+```
+
+Holdout cases require an explicit opt-in:
+
+```bash
+./scripts/run_coaching_quality_benchmark.sh comparison --include-holdout path/to/candidate.json
+```
+
+Before a paid matrix, use the five-turn diagnostic smoke. It is always marked ineligible for promotion:
+
+```bash
+./scripts/run_coaching_quality_benchmark.sh comparison --smoke path/to/candidate.json
+```
+
+Each phase can also be run directly:
+
+```bash
+python3 -m Tools.CoachingEval.benchmark.cli run \
+  --corpus .coaching-eval/benchmark/corpus/<export> --mode comparison \
+  --candidate Tools/CoachingEval/benchmark/configs/production-v1.json \
+  --candidate path/to/candidate.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --output .coaching-eval/benchmark/runs/<run>/candidates
+
+python3 -m Tools.CoachingEval.benchmark.cli grade \
+  --run .coaching-eval/benchmark/runs/<run>/candidates \
+  --corpus .coaching-eval/benchmark/corpus/<export> \
+  --judge Tools/CoachingEval/benchmark/configs/judge-v1.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --output .coaching-eval/benchmark/runs/<run>/grades
+
+python3 -m Tools.CoachingEval.benchmark.cli report \
+  --run .coaching-eval/benchmark/runs/<run>/candidates \
+  --grades .coaching-eval/benchmark/runs/<run>/grades \
+  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --output .coaching-eval/benchmark/runs/<run>/report
+```
+
+`report` is entirely offline and can regenerate a report from frozen responses and grades. Reports keep quality separate from operations: they show mechanical validity, severe errors, each of the six rubric dimensions, strong-response rate, pairwise wins/losses/ties, p50/p90 latency, candidate token cost, and separately labeled judge overhead. The Pareto frontier includes configurations not dominated simultaneously on strong-response rate, severe errors, p90 latency, and candidate cost; there is deliberately no opaque combined score.
+
+To test a new prompt or model, copy `configs/production-v1.json`, change only the intended fields, and pin all referenced hashes. To test a new deterministic user-prompt generator, add a named entry to `PROMPT_GENERATORS` in `benchmark/configuration.py` plus compiler and benchmark tests; configuration files cannot load arbitrary code. Pricing is an immutable, dated estimate: add a new `pricing-v<number>.json` from an official source rather than rewriting an old table.
+
+To promote an interesting production trace into the corpus, copy its game ID from the app's About sheet, filter the retained JSONL as described in `docs/hosted-coaching-server.md`, and reproduce the chosen turn mechanically in `CoachingQualityBenchmarkCorpus.swift`. Add the grader brief separately; never copy the model response into the candidate request or derive the oracle from it. A fixture or grader-brief change creates a new corpus version.
+
+Provider and judge calls are intentionally absent from pull-request CI because they require credentials, cost money, and have variable external latency. CI covers the corpus, contracts, fake providers, calibration gates, aggregation, and command workflow.
+
 ## Export the real corpus
 
 From the repository root:

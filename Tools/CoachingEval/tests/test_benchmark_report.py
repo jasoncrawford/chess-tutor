@@ -57,6 +57,16 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(10_000, first["confidenceIntervals"]["draws"])
         self.assertEqual(20260901, first["confidenceIntervals"]["seed"])
 
+        manifest_path = self.run_root / "run-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["diagnosticSubset"] = True
+        manifest_path.write_text(json.dumps(manifest))
+        diagnostic_subset = build_report(self.run_root, self.grade_root, self.prices)
+        self.assertFalse(diagnostic_subset["promotionEligible"])
+        self.assertIn("diagnostic subset is not promotion eligible", diagnostic_subset["integrityIssues"])
+        manifest["diagnosticSubset"] = False
+        manifest_path.write_text(json.dumps(manifest))
+
         records_path = self.run_root / "records.jsonl"
         lines = records_path.read_text().splitlines()
         records_path.write_text("\n".join(lines[:-1]) + "\n")
@@ -173,6 +183,7 @@ class BenchmarkReportTests(unittest.TestCase):
         run_manifest = {
             "schemaVersion": "coaching-quality-candidate-run.v1",
             "mode": "comparison",
+            "diagnosticSubset": False,
             "includeHoldout": False,
             "corpusSHA256": "c" * 64,
             "sourceGitSHA": "source",

@@ -75,6 +75,8 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         issues.append("grade corpus hash mismatch")
     if calibration.get("passed") is not True:
         issues.append("judge calibration did not pass")
+    if run_manifest.get("diagnosticSubset") is True:
+        issues.append("diagnostic subset is not promotion eligible")
 
     configurations = _configurations(run_manifest, issues)
     record_ids = _unique_ids(records, "cellID", "candidate record", issues)
