@@ -323,6 +323,7 @@ def _judge_call(configuration, client, payload, schema, price_table):
         raise ValueError("Judge returned malformed structured output") from error
     usage = _usage(response.get("usage") if isinstance(response, dict) else None)
     metrics = {
+        "callCount": 1,
         "usage": usage,
         "latencyMilliseconds": latency,
         "estimatedCostUSD": (
@@ -543,6 +544,7 @@ def _usage(value):
 
 def _empty_metrics():
     return {
+        "callCount": 0,
         "usage": {"inputTokens": 0, "cachedInputTokens": 0, "outputTokens": 0, "reasoningTokens": 0, "totalTokens": 0},
         "latencyMilliseconds": 0.0,
         "estimatedCostUSD": None,
@@ -550,6 +552,7 @@ def _empty_metrics():
 
 
 def _add_metrics(total, current):
+    total["callCount"] += current["callCount"]
     for key in total["usage"]:
         total["usage"][key] += current["usage"][key]
     total["latencyMilliseconds"] += current["latencyMilliseconds"]
