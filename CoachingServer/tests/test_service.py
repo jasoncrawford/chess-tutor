@@ -4,7 +4,11 @@ import socket
 import unittest
 from pathlib import Path
 
-from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
+from CoachingServer.service import (
+    HostedCoachingCompletion,
+    HostedCoachingService,
+    HostedCoachingServiceError,
+)
 from CoachingServer.chess_native_compiler import compile_context
 
 
@@ -88,86 +92,78 @@ class RecordingProvider:
 
 
 class HostedCoachingServiceTests(unittest.TestCase):
-    def test_opt_in_content_trace_contains_client_request_and_server_response(self):
-        provider = RecordingProvider()
+    def test_returns_compact_safe_diagnostics_with_the_validated_turn(self):
         clock = iter((10.0, 10.123))
-        request = json.loads(json.dumps(FIXTURE["request"]))
-        request["positionRevision"] = 1
-        request["position"] = {
-            "fen": "4k3/8/8/8/4P3/8/8/1N2K3 b - - 0 1",
-            "sideToMove": "black",
-            "status": "ongoing",
-        }
-        request["gameHistory"] = [
-            {"ply": 1, "canonicalMove": "e2e4", "displayNotation": "e4"}
-        ]
         service = HostedCoachingService(
-            provider=provider,
+            provider=RecordingProvider(),
             system_prompt=SYSTEM_PROMPT,
-            log_content=True,
             clock=lambda: next(clock),
         )
 
-        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
-            service.complete(
-                hosted_request(request=request),
-                trace_id="trace-content",
-            )
+        completion = service.complete(hosted_request(), trace_id="trace-summary")
 
-        messages = [record.getMessage() for record in captured.records]
-        content_messages = [
-            message
-            for message in messages
-            if message.startswith("event=coaching_trace ")
-        ]
-        self.assertEqual(1, len(content_messages))
-        content = content_messages[0]
-        expected_trace = {
-            "kind": "initial",
-            "reasoning": "high",
-            "revision": 1,
-            "position": {
-                "fen": "4k3/8/8/8/4P3/8/8/1N2K3 b - - 0 1",
-                "moves": ["e4"],
-                "side": "black",
-                "status": "ongoing",
-            },
-            "interaction": {
-                "selected": "piece:white:knight:b1",
-                "selectedSquare": "b1",
-                "staged": None,
-                "events": [
-                    {
+        self.assertIsInstance(completion, HostedCoachingCompletion)
+        self.assertEqual(
+            {
+                "request": {
+                    "kind": "initial",
+                    "request_id": "shared-selected-knight",
+                    "prompt_version": "tutor-v13",
+                    "position_revision": 0,
+                    "fen": "4k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+                    "moves": [],
+                    "side_to_move": "white",
+                    "status": "ongoing",
+                    "latest_interaction": {
                         "sequence": 1,
                         "kind": "pieceSelected",
                         "references": ["piece:white:knight:b1"],
-                    }
-                ],
+                    },
+                    "selected_piece": "piece:white:knight:b1",
+                    "selected_square": "b1",
+                    "staged_move": None,
+                },
+                "response": {
+                    "message": "Where could this knight help in the center?",
+                    "actions": ["hint"],
+                    "focus": [{"type": "square", "square": "b1"}],
+                    "expects": "stageMove",
+                },
+                "provider": {
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "input_tokens": 500,
+                    "cached_input_tokens": 25,
+                    "output_tokens": 80,
+                    "reasoning_tokens": 50,
+                    "total_tokens": 580,
+                    "latency_ms": 123.0,
+                },
             },
-            "advice": {
-                "message": "Where could this knight help in the center?",
-                "actions": ["hint"],
-                "focus": [{"type": "square", "square": "b1"}],
-                "expects": "stageMove",
-            },
-            "latencyMs": 123.0,
-        }
-        self.assertEqual(
-            "event=coaching_trace trace_id=trace-content data="
-            + json.dumps(expected_trace, ensure_ascii=False, separators=(",", ":")),
-            content,
+            completion.diagnostics,
         )
-        self.assertNotIn("# Chess Tutor v13", content)
-        self.assertNotIn("# Chess coaching context", content)
-        self.assertNotIn('"pieces":', content)
-        self.assertNotIn('"legalMoves":', content)
-        self.assertNotIn('"occupiedSquareRelationships":', content)
-        self.assertNotIn('"tentativeReplies":', content)
-        self.assertNotIn('"capabilities":', content)
-        self.assertNotIn("resp_provider-private-id", content)
-        self.assertNotIn("gpt-5.6-sol-2026", content)
+        serialized = json.dumps(completion.diagnostics)
+        self.assertNotIn(SYSTEM_PROMPT, serialized)
+        self.assertNotIn("resp_provider-private-id", serialized)
+        self.assertNotIn('"pieces"', serialized)
+        self.assertNotIn('"legalMoves"', serialized)
 
-    def test_invalid_provider_output_never_appears_in_content_trace(self):
+    def test_provider_failure_carries_only_compiled_safe_diagnostics(self):
+        service = HostedCoachingService(
+            provider=RecordingProvider(error=RuntimeError("PRIVATE BODY SECRET")),
+            system_prompt=SYSTEM_PROMPT,
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request(), trace_id="trace-failure")
+
+        self.assertEqual("providerUnavailable", raised.exception.code)
+        self.assertIsNotNone(raised.exception.diagnostics["request"])
+        self.assertIsNone(raised.exception.diagnostics["response"])
+        self.assertEqual("gpt-5.6-sol", raised.exception.diagnostics["provider"]["model"])
+        self.assertNotIn("PRIVATE BODY SECRET", json.dumps(raised.exception.diagnostics))
+
+    def test_invalid_provider_output_never_appears_in_logs_or_diagnostics(self):
         provider = RecordingProvider(
             response={
                 "id": "resp_invalid-private-id",
@@ -183,7 +179,6 @@ class HostedCoachingServiceTests(unittest.TestCase):
         service = HostedCoachingService(
             provider=provider,
             system_prompt=SYSTEM_PROMPT,
-            log_content=True,
         )
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
@@ -191,7 +186,6 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 service.complete(hosted_request(), trace_id="trace-invalid")
 
         joined = "\n".join(record.getMessage() for record in captured.records)
-        self.assertNotIn("event=coaching_trace", joined)
         self.assertNotIn("PRIVATE RAW PROVIDER OUTPUT", joined)
         failure = next(
             value
@@ -276,36 +270,6 @@ class HostedCoachingServiceTests(unittest.TestCase):
         )
         self.assertEqual(["messageTooLong"], failure["reasons"])
         self.assertNotIn(private_message, joined)
-
-    def test_follow_up_content_trace_excludes_continuation_identifiers(self):
-        service = HostedCoachingService(
-            provider=RecordingProvider(),
-            system_prompt=SYSTEM_PROMPT,
-            log_content=True,
-        )
-
-        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
-            service.complete(
-                hosted_request(previous_response_id="resp_previous-private-id"),
-                trace_id="trace-follow-up",
-            )
-
-        content = next(
-            record.getMessage()
-            for record in captured.records
-            if record.getMessage().startswith("event=coaching_trace ")
-        )
-        self.assertIn('"kind":"follow_up"', content)
-        self.assertNotIn("resp_previous-private-id", content)
-        self.assertNotIn("resp_provider-private-id", content)
-
-    def test_content_trace_configuration_requires_a_boolean(self):
-        with self.assertRaisesRegex(ValueError, "log_content must be a boolean"):
-            HostedCoachingService(
-                provider=RecordingProvider(),
-                system_prompt=SYSTEM_PROMPT,
-                log_content="1",
-            )
 
     def test_logs_provider_lifecycle_with_trace_and_elapsed_time(self):
         provider = RecordingProvider()
@@ -424,7 +388,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             clock=lambda: next(clock),
         )
 
-        response = service.complete(hosted_request())
+        response = service.complete(hosted_request()).response
 
         self.assertEqual(1, len(provider.calls))
         call = provider.calls[0]
@@ -490,7 +454,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         response = service.complete(
             hosted_request(previous_response_id="resp_previous-123")
-        )
+        ).response
 
         call = provider.calls[0]
         self.assertEqual("none", call["reasoning_effort"])

@@ -11,11 +11,43 @@ from flask import Flask
 from werkzeug.serving import make_server
 
 from CoachingServer.http_app import create_application, create_environment_application
-from CoachingServer.service import HostedCoachingServiceError
+from CoachingServer.service import HostedCoachingCompletion, HostedCoachingServiceError
 
 
 GAME_ID = "a1111111-1111-4111-8111-111111111111"
 EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
+SAFE_DIAGNOSTICS = {
+    "request": {
+        "kind": "initial",
+        "request_id": "request-1",
+        "prompt_version": "tutor-v13",
+        "position_revision": 2,
+        "fen": "4k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+        "moves": ["e4", "e5"],
+        "side_to_move": "white",
+        "status": "ongoing",
+        "latest_interaction": None,
+        "selected_piece": None,
+        "selected_square": None,
+        "staged_move": None,
+    },
+    "response": {
+        "message": "Which piece could help in the center?",
+        "actions": ["hint"],
+        "focus": [],
+        "expects": "stageMove",
+    },
+    "provider": {
+        "model": "gpt-5.6-sol",
+        "reasoning_effort": "high",
+        "input_tokens": 100,
+        "cached_input_tokens": 0,
+        "output_tokens": 25,
+        "reasoning_tokens": 10,
+        "total_tokens": 125,
+        "latency_ms": 200.0,
+    },
+}
 
 
 def correlated_request():
@@ -31,10 +63,14 @@ def correlated_request():
 class FakeService:
     def __init__(self, response=None, error=None):
         self.requests = []
-        self.response = response or {
+        public_response = response or {
             "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": "request-1",
         }
+        self.response = HostedCoachingCompletion(
+            response=public_response,
+            diagnostics=SAFE_DIAGNOSTICS,
+        )
         self.error = error
         self.trace_ids = []
 
@@ -72,6 +108,118 @@ def invoke(app, method, path, *, token=None, body=b"", content_type="application
 
 
 class HostedCoachingHTTPApplicationTests(unittest.TestCase):
+    def test_emits_one_exact_canonical_terminal_record_on_success(self):
+        clock = iter((5.0, 5.25))
+        app = create_application(
+            service=FakeService(),
+            access_token="prototype-token",
+            clock=lambda: next(clock),
+            trace_id_factory=lambda: "trace-canonical",
+        )
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            status, _, body = invoke(
+                app,
+                "POST",
+                "/v1/coaching-turn",
+                token="prototype-token",
+                body=json.dumps(correlated_request()).encode("utf-8"),
+            )
+
+        events = [json.loads(record.getMessage()) for record in captured.records]
+        terminal = [value for value in events if value["event"] == "coaching_turn"]
+        self.assertEqual(1, len(terminal))
+        value = terminal[0]
+        self.assertEqual("coaching-log.v1", value.pop("schema_version"))
+        self.assertTrue(value.pop("timestamp").endswith("Z"))
+        self.assertEqual(
+            {
+                "level": "info",
+                "event": "coaching_turn",
+                "trace_id": "trace-canonical",
+                "game_id": GAME_ID,
+                "episode_id": EPISODE_ID,
+                **SAFE_DIAGNOSTICS,
+                "outcome": "success",
+                "http_status": 200,
+                "elapsed_ms": 250.0,
+            },
+            value,
+        )
+        self.assertEqual("200 OK", status)
+        self.assertEqual(FakeService().response.response, body)
+
+    def test_emits_one_terminal_record_for_each_stable_and_unexpected_failure(self):
+        cases = (
+            (HostedCoachingServiceError("invalidRequest"), 400, "invalidRequest", False),
+            (
+                HostedCoachingServiceError(
+                    "invalidProviderResponse",
+                    diagnostics={**SAFE_DIAGNOSTICS, "response": None},
+                ),
+                502,
+                "invalidProviderResponse",
+                True,
+            ),
+            (
+                HostedCoachingServiceError(
+                    "providerUnavailable",
+                    diagnostics={**SAFE_DIAGNOSTICS, "response": None},
+                ),
+                503,
+                "providerUnavailable",
+                True,
+            ),
+            (
+                HostedCoachingServiceError(
+                    "providerTimeout",
+                    diagnostics={**SAFE_DIAGNOSTICS, "response": None},
+                ),
+                504,
+                "providerTimeout",
+                True,
+            ),
+            (
+                RuntimeError("PRIVATE EXCEPTION BODY"),
+                503,
+                "providerUnavailable",
+                False,
+            ),
+        )
+        for error, expected_status, expected_outcome, retains_request in cases:
+            with self.subTest(outcome=expected_outcome):
+                clock = iter((5.0, 5.1))
+                app = create_application(
+                    service=FakeService(error=error),
+                    access_token="prototype-token",
+                    clock=lambda: next(clock),
+                    trace_id_factory=lambda: "trace-failure",
+                )
+                with self.assertLogs(
+                    "ChessTutor.CoachingServer", level="INFO"
+                ) as captured:
+                    status, _, _ = invoke(
+                        app,
+                        "POST",
+                        "/v1/coaching-turn",
+                        token="prototype-token",
+                        body=json.dumps(correlated_request()).encode("utf-8"),
+                    )
+
+                events = [json.loads(record.getMessage()) for record in captured.records]
+                terminal = [
+                    value for value in events if value["event"] == "coaching_turn"
+                ]
+                self.assertEqual(1, len(terminal))
+                self.assertEqual(expected_outcome, terminal[0]["outcome"])
+                self.assertEqual(expected_status, terminal[0]["http_status"])
+                self.assertIsNone(terminal[0]["response"])
+                if retains_request:
+                    self.assertEqual(SAFE_DIAGNOSTICS["request"], terminal[0]["request"])
+                else:
+                    self.assertIsNone(terminal[0]["request"])
+                self.assertNotIn("PRIVATE", json.dumps(events))
+
     def test_environment_application_owns_v13_prompt_and_simple_follow_up_effort(self):
         fake_service = FakeService()
         with mock.patch.dict(
@@ -80,7 +228,6 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
                 "OPENAI_API_KEY": "private-key",
                 "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
                 "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT": "none",
-                "CHESS_TUTOR_COACHING_LOG_CONTENT": "1",
             },
             clear=True,
         ), mock.patch(
@@ -95,27 +242,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
         client_type.assert_called_once_with(api_key="private-key")
         arguments = service_type.call_args.kwargs
         self.assertEqual("none", arguments["follow_up_reasoning_effort"])
-        self.assertIs(True, arguments["log_content"])
         self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v13\n"))
-
-    def test_environment_application_requires_exact_one_to_log_content(self):
-        for configured_value in (None, "", "true", "yes", "0"):
-            with self.subTest(configured_value=configured_value):
-                environment = {
-                    "OPENAI_API_KEY": "private-key",
-                    "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
-                }
-                if configured_value is not None:
-                    environment["CHESS_TUTOR_COACHING_LOG_CONTENT"] = configured_value
-                with mock.patch.dict(os.environ, environment, clear=True), mock.patch(
-                    "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
-                ), mock.patch(
-                    "CoachingServer.http_app.HostedCoachingService",
-                    return_value=FakeService(),
-                ) as service_type:
-                    create_environment_application()
-
-                self.assertIs(False, service_type.call_args.kwargs["log_content"])
 
     def test_uses_flask_for_the_http_boundary(self):
         app = create_application(
@@ -182,7 +309,11 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
 
         self.assertEqual("200 OK", status)
         self.assertEqual(["trace-http"], service.trace_ids)
-        values = [json.loads(record.getMessage()) for record in captured.records]
+        values = [
+            json.loads(record.getMessage())
+            for record in captured.records
+            if json.loads(record.getMessage())["event"] != "coaching_turn"
+        ]
         for value in values:
             self.assertEqual("coaching-log.v1", value.pop("schema_version"))
             self.assertTrue(value.pop("timestamp").endswith("Z"))
@@ -284,7 +415,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
             body=encoded,
         )
         self.assertEqual("200 OK", status)
-        self.assertEqual(service.response, body)
+        self.assertEqual(service.response.response, body)
         self.assertEqual([request], service.requests)
 
     def test_rejects_bad_routes_content_type_json_shape_and_body_size(self):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -13,7 +14,11 @@ import uuid
 from flask import Flask, Response, request
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
-from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
+from CoachingServer.service import (
+    HostedCoachingCompletion,
+    HostedCoachingService,
+    HostedCoachingServiceError,
+)
 from CoachingServer.structured_logging import emit_event
 
 
@@ -104,36 +109,65 @@ def create_application(
         started = clock()
         emit_event("http_request_started", trace_id=trace_id, **correlation)
         try:
-            response = service.complete(request_object, trace_id=trace_id)
+            completion = service.complete(request_object, trace_id=trace_id)
+            if not isinstance(completion, HostedCoachingCompletion):
+                raise TypeError("Invalid hosted coaching service completion")
         except HostedCoachingServiceError as error:
             status = _ERROR_STATUS[error.code]
+            elapsed_milliseconds = _elapsed_milliseconds(clock(), started)
             _log_http_completed(
                 trace_id=trace_id,
                 correlation=correlation,
-                elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+                elapsed_milliseconds=elapsed_milliseconds,
                 outcome=error.code,
                 status=status,
+            )
+            _log_coaching_turn(
+                trace_id=trace_id,
+                correlation=correlation,
+                diagnostics=error.diagnostics,
+                outcome=error.code,
+                status=status,
+                elapsed_milliseconds=elapsed_milliseconds,
             )
             return _error_response(status, error.code)
         except Exception:
             status = "503 Service Unavailable"
+            elapsed_milliseconds = _elapsed_milliseconds(clock(), started)
             _log_http_completed(
                 trace_id=trace_id,
                 correlation=correlation,
-                elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+                elapsed_milliseconds=elapsed_milliseconds,
                 outcome="providerUnavailable",
                 status=status,
             )
+            _log_coaching_turn(
+                trace_id=trace_id,
+                correlation=correlation,
+                diagnostics=None,
+                outcome="providerUnavailable",
+                status=status,
+                elapsed_milliseconds=elapsed_milliseconds,
+            )
             return _error_response(status, "providerUnavailable")
 
+        elapsed_milliseconds = _elapsed_milliseconds(clock(), started)
         _log_http_completed(
             trace_id=trace_id,
             correlation=correlation,
-            elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+            elapsed_milliseconds=elapsed_milliseconds,
             outcome="success",
             status="200 OK",
         )
-        return _response("200 OK", response)
+        _log_coaching_turn(
+            trace_id=trace_id,
+            correlation=correlation,
+            diagnostics=completion.diagnostics,
+            outcome="success",
+            status="200 OK",
+            elapsed_milliseconds=elapsed_milliseconds,
+        )
+        return _response("200 OK", completion.response)
 
     return application
 
@@ -154,7 +188,6 @@ def create_environment_application():
             "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT",
             "none",
         ),
-        log_content=os.environ.get("CHESS_TUTOR_COACHING_LOG_CONTENT") == "1",
     )
     return create_application(service=service, access_token=access_token)
 
@@ -238,3 +271,27 @@ def _safe_correlation_fields(value: dict[str, object]) -> dict[str, str]:
         if candidate == canonical:
             fields[target] = canonical
     return fields
+
+
+def _log_coaching_turn(
+    *,
+    trace_id: str,
+    correlation: dict[str, str],
+    diagnostics: dict[str, object] | None,
+    outcome: str,
+    status: str,
+    elapsed_milliseconds: float,
+) -> None:
+    safe = diagnostics if isinstance(diagnostics, dict) else {}
+    emit_event(
+        "coaching_turn",
+        level=logging.INFO if outcome == "success" else logging.WARNING,
+        trace_id=trace_id,
+        **correlation,
+        request=safe.get("request"),
+        response=safe.get("response") if outcome == "success" else None,
+        provider=safe.get("provider"),
+        outcome=outcome,
+        http_status=int(status.split(" ", 1)[0]),
+        elapsed_ms=elapsed_milliseconds,
+    )
