@@ -1,0 +1,15 @@
+{
+  "calibrationPath": "Tools/CoachingEval/benchmark/judge-calibration-v1.jsonl",
+  "calibrationSHA256": "a7f573e378b269b697f37dc8a8bf3f2cac1a6e9ceb8dfeae7bba21f32cf5ccbf",
+  "conversationReuse": false,
+  "id": "judge-sol-v1",
+  "maximumOutputTokens": 2048,
+  "model": "gpt-5.6-sol",
+  "provider": "openai-responses-v1",
+  "reasoningEffort": "high",
+  "reviewSeed": 20260901,
+  "schemaVersion": "coaching-quality-judge.v1",
+  "systemPromptPath": "Tools/CoachingEval/benchmark/judge-v1.md",
+  "systemPromptSHA256": "06a1f561970f6e0a74f0b86ac898df05b8df4248cde790bf977345bc8c8f0c38",
+  "timeoutSeconds": 60
+}

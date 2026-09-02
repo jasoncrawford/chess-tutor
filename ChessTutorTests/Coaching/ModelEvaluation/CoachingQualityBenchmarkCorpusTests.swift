@@ -4,6 +4,23 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingQualityBenchmarkCorpusTests: XCTestCase {
+    func testOptInExport() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let outputPath = environment["COACHING_QUALITY_BENCHMARK_OUTPUT_DIR"],
+              !outputPath.isEmpty else {
+            return
+        }
+        let sourceSHA = try XCTUnwrap(
+            environment["COACHING_QUALITY_BENCHMARK_SOURCE_SHA"],
+            "Opt-in benchmark export requires a source SHA"
+        )
+        XCTAssertFalse(sourceSHA.isEmpty)
+        try CoachingQualityBenchmarkExporter.write(
+            to: URL(fileURLWithPath: outputPath, isDirectory: true),
+            sourceGitSHA: sourceSHA
+        )
+    }
+
     func testV1HasExactIndependentSequenceAndSplitCounts() {
         let corpus = CoachingQualityBenchmarkCorpus.v1
 

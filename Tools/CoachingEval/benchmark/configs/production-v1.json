@@ -1,0 +1,18 @@
+{
+  "baseline": true,
+  "conversationReuse": true,
+  "followUpReasoningEffort": "none",
+  "id": "production-sol-v1",
+  "initialReasoningEffort": "high",
+  "maximumAttempts": 1,
+  "maximumOutputTokens": 2048,
+  "model": "gpt-5.6-sol",
+  "pricingVersion": "openai-2026-09-01",
+  "provider": "openai-responses-v1",
+  "responseContract": "chess-native-v13",
+  "schemaVersion": "coaching-quality-candidate.v1",
+  "systemPromptPath": "Tools/CoachingEval/prompts/tutor-v13.md",
+  "systemPromptSHA256": "297a4af6c89d7afc1f3d3c67224c6ec533691f9c93cf2f7bd161bb5088d2a33e",
+  "timeoutSeconds": 30,
+  "userPromptGenerator": "chess-native-v13"
+}
