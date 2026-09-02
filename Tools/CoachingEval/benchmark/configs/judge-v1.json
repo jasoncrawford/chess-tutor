@@ -1,6 +1,6 @@
 {
   "calibrationPath": "Tools/CoachingEval/benchmark/judge-calibration-v1.jsonl",
-  "calibrationSHA256": "a7f573e378b269b697f37dc8a8bf3f2cac1a6e9ceb8dfeae7bba21f32cf5ccbf",
+  "calibrationSHA256": "08688fa3016e24c300d6c39320b056c86d6dc0fc292e7af02ae37e246ea1a522",
   "conversationReuse": false,
   "id": "judge-sol-v1",
   "maximumOutputTokens": 2048,
