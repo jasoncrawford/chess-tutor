@@ -85,7 +85,8 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
     func turn(
         for request: ModelCoachingNeutralRequest,
         contract: ModelCoachingChessNativeResponseContract,
-        continuationID: String?
+        continuationID: String?,
+        correlation: HostedCoachingCorrelation
     ) async throws -> HostedCoachingResponse {
         guard continuationID == nil || Self.isValidContinuationID(continuationID!) else {
             throw HostedCoachingTransportError.invalidRequest
@@ -96,7 +97,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             encoder.outputFormatting = [.sortedKeys]
             body = try encoder.encode(
                 HostedCoachingWireRequest(
-                    schemaVersion: "hosted-coaching-request.v2",
+                    schemaVersion: "hosted-coaching-request.v3",
+                    gameID: correlation.gameID,
+                    episodeID: correlation.episodeID,
                     request: request,
                     previousResponseID: continuationID
                 )
@@ -224,11 +227,15 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
 
 private struct HostedCoachingWireRequest: Encodable {
     let schemaVersion: String
+    let gameID: String
+    let episodeID: String
     let request: ModelCoachingNeutralRequest
     let previousResponseID: String?
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
+        case gameID
+        case episodeID
         case request
         case previousResponseID
     }
@@ -236,6 +243,8 @@ private struct HostedCoachingWireRequest: Encodable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(gameID, forKey: .gameID)
+        try container.encode(episodeID, forKey: .episodeID)
         try container.encode(request, forKey: .request)
         if let previousResponseID {
             try container.encode(previousResponseID, forKey: .previousResponseID)

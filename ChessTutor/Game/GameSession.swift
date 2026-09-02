@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 private enum CoachingSquareInteractionIntent {
@@ -38,6 +39,7 @@ final class GameSession {
         let request: ModelCoachingNeutralRequest
         let contract: ModelCoachingChessNativeResponseContract
         let continuationID: String?
+        let correlation: HostedCoachingCorrelation
         let committedState: GameState
         let tentativeMove: Move?
     }
@@ -49,6 +51,8 @@ final class GameSession {
     private var actionableMovesForSelection: [Move] = []
     private let coachingAdvisor: any CoachingAdvising
     private let hostedCoachingProvider: (any HostedCoachingTurning)?
+    private let coachingIdentifierFactory: () -> String
+    private var hostedCoachingGameID: String
     private var coachingSession: CoachingSession?
     private var pendingCoachingRequest: PendingCoachingRequest?
     private var hostedCoachingSession: HostedCoachingSession?
@@ -130,6 +134,10 @@ final class GameSession {
 
     var pendingCoachingRequestID: Int? {
         pendingHostedCoachingRequest?.id ?? pendingCoachingRequest?.id
+    }
+
+    var currentCoachingGameID: String? {
+        hostedCoachingProvider == nil ? nil : hostedCoachingGameID
     }
 
     private var coachingInteractionSnapshot: CoachingInteractionSnapshot {
@@ -281,12 +289,17 @@ final class GameSession {
     init(
         state: GameState = .startingPosition(),
         coachingAdvisor: any CoachingAdvising = LocalCoachingAdvisor(),
-        hostedCoachingProvider: (any HostedCoachingTurning)? = nil
+        hostedCoachingProvider: (any HostedCoachingTurning)? = nil,
+        coachingIdentifierFactory: @escaping () -> String = {
+            UUID().uuidString.lowercased()
+        }
     ) {
         self.committedState = state
         self.displayedAnalysis = Self.makeAnalysis(for: state)
         self.coachingAdvisor = coachingAdvisor
         self.hostedCoachingProvider = hostedCoachingProvider
+        self.coachingIdentifierFactory = coachingIdentifierFactory
+        self.hostedCoachingGameID = coachingIdentifierFactory()
     }
 
     convenience init(
@@ -527,6 +540,7 @@ final class GameSession {
 
     func newGame() {
         stopCoaching()
+        hostedCoachingGameID = coachingIdentifierFactory()
         committedState = .startingPosition()
         coachingPositionRevision += 1
         tentativeMove = nil
@@ -680,7 +694,10 @@ final class GameSession {
         guard canRequestCoaching else { return }
 
         if hostedCoachingProvider != nil {
-            var hostedSession = HostedCoachingSession(learner: committedState.sideToMove)
+            var hostedSession = HostedCoachingSession(
+                learner: committedState.sideToMove,
+                episodeID: coachingIdentifierFactory()
+            )
             hostedSession.openHelp(
                 selectedSquare: selectedSquare,
                 tentativeMove: tentativeMove
@@ -713,7 +730,8 @@ final class GameSession {
                 let response = try await hostedCoachingProvider.turn(
                     for: pending.request,
                     contract: pending.contract,
-                    continuationID: pending.continuationID
+                    continuationID: pending.continuationID,
+                    correlation: pending.correlation
                 )
                 receiveHostedCoachingResponse(response, for: pending)
             } catch is CancellationError {
@@ -848,6 +866,10 @@ final class GameSession {
             positionRevision: coachingPositionRevision,
             requestID: "hosted-\(id)"
         )
+        let correlation = HostedCoachingCorrelation(
+            gameID: hostedCoachingGameID,
+            episodeID: hostedSession.episodeID
+        )
         hostedCoachingSession = hostedSession
         pendingHostedCoachingRequest = PendingHostedCoachingRequest(
             id: id,
@@ -857,6 +879,7 @@ final class GameSession {
                 promptVersion: "tutor-v13"
             ),
             continuationID: hostedSession.continuationID,
+            correlation: correlation,
             committedState: committedState,
             tentativeMove: tentativeMove
         )

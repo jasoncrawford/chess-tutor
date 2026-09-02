@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-import json
+from dataclasses import dataclass
 import logging
 import re
-import time
 import socket
+import time
+import uuid
 from collections.abc import Mapping
 
-from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
+from CoachingServer.chess_native_compiler import (
+    compile_context,
+    compile_follow_up_context,
+    parse_neutral_request,
+)
+from CoachingServer.structured_logging import emit_event
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -18,9 +24,14 @@ from Tools.CoachingEval.chess_native_response import (
 
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
 _MAXIMUM_LATENCY_MILLISECONDS = 120_000.0
-_LOGGER = logging.getLogger("ChessTutor.CoachingServer")
 _CONTINUATION_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
-_ENVELOPE_FIELDS = {"schemaVersion", "request", "previousResponseID"}
+_ENVELOPE_FIELDS = {
+    "schemaVersion",
+    "gameID",
+    "episodeID",
+    "request",
+    "previousResponseID",
+}
 _TACTICAL_FOLLOW_UP_EVENTS = {"moveStaged", "moveReplaced", "squareInspected"}
 
 
@@ -34,11 +45,18 @@ class HostedCoachingServiceError(RuntimeError):
         "invalidProviderResponse": "The coaching response was invalid.",
     }
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, diagnostics: dict[str, object] | None = None):
         if code not in self._MESSAGES:
             code = "providerUnavailable"
         super().__init__(self._MESSAGES[code])
         self.code = code
+        self.diagnostics = diagnostics
+
+
+@dataclass(frozen=True)
+class HostedCoachingCompletion:
+    response: dict[str, object]
+    diagnostics: dict[str, object]
 
 
 class HostedCoachingService:
@@ -49,7 +67,6 @@ class HostedCoachingService:
         system_prompt: str,
         timeout: float = 30.0,
         follow_up_reasoning_effort: str = "none",
-        log_content: bool = False,
         clock=time.monotonic,
     ):
         if not callable(getattr(provider, "complete", None)):
@@ -62,13 +79,10 @@ class HostedCoachingService:
             raise ValueError("clock must be callable")
         if follow_up_reasoning_effort not in {"low", "none"}:
             raise ValueError("follow-up reasoning effort must be low or none")
-        if not isinstance(log_content, bool):
-            raise ValueError("log_content must be a boolean")
         self._provider = provider
         self._system_prompt = system_prompt
         self._timeout = float(timeout)
         self._follow_up_reasoning_effort = follow_up_reasoning_effort
-        self._log_content = log_content
         self._clock = clock
 
     def complete(
@@ -76,24 +90,40 @@ class HostedCoachingService:
         request: Mapping[str, object],
         *,
         trace_id: str = "direct",
-    ) -> dict[str, object]:
+    ) -> HostedCoachingCompletion:
         try:
-            neutral_request, previous_response_id = _parse_envelope(request)
+            (
+                neutral_request,
+                previous_response_id,
+                game_id,
+                episode_id,
+            ) = _parse_envelope(request)
+            normalized_request = parse_neutral_request(neutral_request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
             compilation = compiler(neutral_request, "tutor-v13")
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
+        correlation = {
+            "trace_id": trace_id,
+            "game_id": game_id,
+            "episode_id": episode_id,
+        }
+        request_summary = _request_summary(
+            normalized_request,
+            compilation=compilation,
+            request_kind=request_kind,
+        )
         reasoning_effort = _reasoning_effort(
-            neutral_request,
+            normalized_request,
             is_follow_up=is_follow_up,
             simple_follow_up_effort=self._follow_up_reasoning_effort,
         )
-        _LOGGER.info(
-            "event=request_compiled trace_id=%s request_kind=%s",
-            trace_id,
-            request_kind,
+        emit_event(
+            "request_compiled",
+            **correlation,
+            request_kind=request_kind,
         )
 
         contract = ChessNativeResponseContract(
@@ -102,16 +132,13 @@ class HostedCoachingService:
             expected_responses=compilation.expected_responses,
         )
         started = self._clock()
-        _LOGGER.info(
-            (
-                "event=provider_request_started trace_id=%s "
-                "request_kind=%s model=gpt-5.6-sol "
-                "reasoning_effort=%s timeout_seconds=%s"
-            ),
-            trace_id,
-            request_kind,
-            reasoning_effort,
-            f"{self._timeout:g}",
+        emit_event(
+            "provider_request_started",
+            **correlation,
+            request_kind=request_kind,
+            model="gpt-5.6-sol",
+            reasoning_effort=reasoning_effort,
+            timeout_seconds=self._timeout,
         )
         try:
             provider_response = self._provider.complete(
@@ -132,18 +159,34 @@ class HostedCoachingService:
                 or getattr(error, "category", None) == "timeout"
                 or getattr(error, "http_status", None) == 504
             )
-            _LOGGER.info(
-                (
-                    "event=provider_request_failed trace_id=%s "
-                    "elapsed_ms=%s outcome=%s"
-                ),
-                trace_id,
-                elapsed_milliseconds,
-                "timeout" if is_timeout else "unavailable",
+            emit_event(
+                "provider_request_failed",
+                level=logging.WARNING,
+                **correlation,
+                elapsed_ms=elapsed_milliseconds,
+                outcome="timeout" if is_timeout else "unavailable",
             )
             if is_timeout:
-                raise HostedCoachingServiceError("providerTimeout") from None
-            raise HostedCoachingServiceError("providerUnavailable") from None
+                raise HostedCoachingServiceError(
+                    "providerTimeout",
+                    _diagnostics(
+                        request=request_summary,
+                        provider=_provider_summary(
+                            reasoning_effort=reasoning_effort,
+                            metrics=_metrics(None, elapsed_milliseconds),
+                        ),
+                    ),
+                ) from None
+            raise HostedCoachingServiceError(
+                "providerUnavailable",
+                _diagnostics(
+                    request=request_summary,
+                    provider=_provider_summary(
+                        reasoning_effort=reasoning_effort,
+                        metrics=_metrics(None, elapsed_milliseconds),
+                    ),
+                ),
+            ) from None
         elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
         provider_outcome = (
             "completed"
@@ -155,19 +198,19 @@ class HostedCoachingService:
             provider_response.get("usage") if isinstance(provider_response, dict) else None,
             elapsed_milliseconds,
         )
-        _LOGGER.info(
-            (
-                "event=provider_request_completed trace_id=%s "
-                "elapsed_ms=%s outcome=%s input_tokens=%s "
-                "cached_input_tokens=%s output_tokens=%s reasoning_tokens=%s"
-            ),
-            trace_id,
-            elapsed_milliseconds,
-            provider_outcome,
-            metrics["inputTokens"],
-            metrics["cachedInputTokens"],
-            metrics["outputTokens"],
-            metrics["reasoningTokens"],
+        provider_summary = _provider_summary(
+            reasoning_effort=reasoning_effort,
+            metrics=metrics,
+        )
+        emit_event(
+            "provider_request_completed",
+            **correlation,
+            elapsed_ms=elapsed_milliseconds,
+            outcome=provider_outcome,
+            input_tokens=metrics["inputTokens"],
+            cached_input_tokens=metrics["cachedInputTokens"],
+            output_tokens=metrics["outputTokens"],
+            reasoning_tokens=metrics["reasoningTokens"],
         )
 
         try:
@@ -181,25 +224,38 @@ class HostedCoachingService:
             continuation_id = _continuation_id(provider_response.get("id"))
             turn = contract.parse_and_validate(output_text)
         except ChessNativeResponseValidationError as error:
-            _LOGGER.info(
-                (
-                    "event=provider_response_failed trace_id=%s "
-                    "outcome=invalid_response reasons=%s"
-                ),
-                trace_id,
-                ",".join(error.categories),
+            emit_event(
+                "provider_response_failed",
+                level=logging.WARNING,
+                **correlation,
+                outcome="invalid_response",
+                reasons=list(error.categories),
             )
-            raise HostedCoachingServiceError("invalidProviderResponse") from None
+            invalid_provider = {
+                **provider_summary,
+                "validation_reasons": list(error.categories),
+            }
+            raise HostedCoachingServiceError(
+                "invalidProviderResponse",
+                _diagnostics(request=request_summary, provider=invalid_provider),
+            ) from None
         except (KeyError, TypeError, ValueError):
-            _LOGGER.info(
-                (
-                    "event=provider_response_failed trace_id=%s "
-                    "outcome=invalid_response reasons=providerEnvelope"
-                ),
-                trace_id,
+            emit_event(
+                "provider_response_failed",
+                level=logging.WARNING,
+                **correlation,
+                outcome="invalid_response",
+                reasons=["providerEnvelope"],
             )
-            raise HostedCoachingServiceError("invalidProviderResponse") from None
-        _LOGGER.info("event=provider_response_validated trace_id=%s", trace_id)
+            invalid_provider = {
+                **provider_summary,
+                "validation_reasons": ["providerEnvelope"],
+            }
+            raise HostedCoachingServiceError(
+                "invalidProviderResponse",
+                _diagnostics(request=request_summary, provider=invalid_provider),
+            ) from None
+        emit_event("provider_response_validated", **correlation)
         response = {
             "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": compilation.request_id,
@@ -209,70 +265,84 @@ class HostedCoachingService:
             "turn": turn,
             "metrics": metrics,
         }
-        if self._log_content:
-            _LOGGER.info(
-                "%s",
-                _content_trace(
-                    trace_id=trace_id,
-                    request_kind=request_kind,
-                    reasoning_effort=reasoning_effort,
-                    client_request=neutral_request,
-                    server_response=response,
-                ),
-            )
-
-        return response
+        return HostedCoachingCompletion(
+            response=response,
+            diagnostics=_diagnostics(
+                request=request_summary,
+                response=turn,
+                provider=provider_summary,
+            ),
+        )
 
 
-def _content_trace(
+def _request_summary(
+    request: Mapping[str, object],
     *,
-    trace_id: str,
+    compilation,
     request_kind: str,
-    reasoning_effort: str,
-    client_request: Mapping[str, object],
-    server_response: Mapping[str, object],
-) -> str:
-    position = client_request["position"]
-    history = client_request["gameHistory"]
-    interaction = client_request["interaction"]
-    tentative = interaction.get("tentativeMove")
-    staged = None
+) -> dict[str, object]:
+    position = request["position"]
+    interaction = request["interaction"]
+    latest = interaction["latestEvent"]
+    tentative = interaction["tentativeMove"]
+    staged_move = None
     if tentative is not None:
-        staged = {
+        staged_move = {
             "move": tentative["canonicalMove"],
             "notation": tentative["san"],
             "legal": tentative["isLegal"],
         }
-    trace = {
+    latest_interaction = None
+    if latest is not None:
+        latest_interaction = {
+            "sequence": latest["sequence"],
+            "kind": latest["kind"],
+            "references": list(latest["referencedIDs"]),
+        }
+    return {
         "kind": request_kind,
-        "reasoning": reasoning_effort,
-        "revision": client_request["positionRevision"],
-        "position": {
-            "fen": position["fen"],
-            "moves": [move["displayNotation"] for move in history],
-            "side": position["sideToMove"],
-            "status": position["status"],
-        },
-        "interaction": {
-            "selected": interaction.get("selectedPieceReference"),
-            "selectedSquare": interaction.get("selectedSquare"),
-            "staged": staged,
-            "events": [
-                {
-                    "sequence": event["sequence"],
-                    "kind": event["kind"],
-                    "references": event["referencedIDs"],
-                }
-                for event in interaction["episodeEvents"]
-            ],
-        },
-        "advice": server_response["turn"],
-        "latencyMs": server_response["metrics"]["latencyMilliseconds"],
+        "request_id": compilation.request_id,
+        "prompt_version": compilation.prompt_version,
+        "position_revision": compilation.position_revision,
+        "fen": position["fen"],
+        "moves": [move["displayNotation"] for move in request["gameHistory"]],
+        "side_to_move": position["sideToMove"],
+        "status": position["status"],
+        "latest_interaction": latest_interaction,
+        "selected_piece": interaction["selectedPieceReference"],
+        "selected_square": interaction["selectedSquare"],
+        "staged_move": staged_move,
     }
-    return "event=coaching_trace trace_id={} data={}".format(
-        trace_id,
-        json.dumps(trace, ensure_ascii=False, separators=(",", ":")),
-    )
+
+
+def _provider_summary(
+    *,
+    reasoning_effort: str,
+    metrics: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        "model": "gpt-5.6-sol",
+        "reasoning_effort": reasoning_effort,
+        "input_tokens": metrics["inputTokens"],
+        "cached_input_tokens": metrics["cachedInputTokens"],
+        "output_tokens": metrics["outputTokens"],
+        "reasoning_tokens": metrics["reasoningTokens"],
+        "total_tokens": metrics["totalTokens"],
+        "latency_ms": metrics["latencyMilliseconds"],
+    }
+
+
+def _diagnostics(
+    *,
+    request: dict[str, object] | None,
+    response: dict[str, object] | None = None,
+    provider: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "request": request,
+        "response": response,
+        "provider": provider,
+    }
 
 
 def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
@@ -319,18 +389,34 @@ def _bounded_int(value: object) -> int:
     return min(value, _MAXIMUM_TOKEN_COUNT)
 
 
-def _parse_envelope(value: Mapping[str, object]) -> tuple[Mapping[str, object], str | None]:
+def _parse_envelope(
+    value: Mapping[str, object],
+) -> tuple[Mapping[str, object], str | None, str, str]:
     if not isinstance(value, Mapping) or set(value.keys()) != _ENVELOPE_FIELDS:
         raise ValueError("Invalid hosted coaching request envelope")
-    if value["schemaVersion"] != "hosted-coaching-request.v2":
+    if value["schemaVersion"] != "hosted-coaching-request.v3":
         raise ValueError("Unsupported hosted coaching request schema")
+    game_id = _canonical_uuid(value["gameID"])
+    episode_id = _canonical_uuid(value["episodeID"])
     neutral_request = value["request"]
     if not isinstance(neutral_request, Mapping):
         raise ValueError("Hosted coaching request must be an object")
     previous_response_id = value["previousResponseID"]
     if previous_response_id is not None:
         previous_response_id = _continuation_id(previous_response_id)
-    return neutral_request, previous_response_id
+    return neutral_request, previous_response_id, game_id, episode_id
+
+
+def _canonical_uuid(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("Invalid correlation ID")
+    try:
+        canonical = str(uuid.UUID(value))
+    except (AttributeError, ValueError):
+        raise ValueError("Invalid correlation ID") from None
+    if value != canonical:
+        raise ValueError("Correlation ID must use canonical lowercase UUID form")
+    return canonical
 
 
 def _continuation_id(value: object) -> str:

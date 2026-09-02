@@ -265,8 +265,10 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
     func turn(
         for request: ModelCoachingNeutralRequest,
         contract: ModelCoachingChessNativeResponseContract,
-        continuationID: String?
+        continuationID: String?,
+        correlation: HostedCoachingCorrelation
     ) async throws -> HostedCoachingResponse {
+        _ = correlation
         try await Task.sleep(for: .milliseconds(850))
         let turn: ModelCoachingChessNativeTurn
         switch request.interaction.latestEvent.kind {

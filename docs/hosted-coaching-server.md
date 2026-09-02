@@ -4,7 +4,7 @@ The private prototype accepts mechanically generated chess facts from the iPad,
 renders the coaching prompts on the server, and returns one validated coaching
 turn. The device never receives the OpenAI key.
 
-The server owns the `tutor-v11` system prompt, converts the structured device
+The server owns the `tutor-v13` system prompt, converts the structured device
 request into model-facing Markdown, and validates the model's strict JSON
 before returning it. Opening Help uses GPT-5.6 Sol with high reasoning. A
 meaningful follow-up continues that Responses API chain with a compact update.
@@ -67,6 +67,27 @@ The base URL may be plain HTTP only in Debug builds and only for loopback or a
 private LAN address. Production configuration requires HTTPS. Device requests
 time out after 35 seconds.
 
+## Reviewing one game
+
+Application logs are one-line `coaching-log.v1` JSON objects. Each completed
+request has exactly one `coaching_turn` record containing a compact board and
+move summary, the validated advice shown by the app, provider metrics, outcome,
+HTTP status, and elapsed time. It deliberately excludes credentials, prompts,
+full rule arrays, provider/continuation IDs, reasoning, raw provider bodies, and
+exception text.
+
+In a hosted build, open About and choose **Copy Coaching Game ID**. Use that
+value to filter retained server logs by `game_id`; within the result,
+`episode_id` groups one opening of Help and `trace_id` identifies one HTTP
+request. To extract completed turns from a local JSONL capture:
+
+```bash
+jq 'select(.event == "coaching_turn" and .game_id == "<copied-game-id>")' server.jsonl
+```
+
+New Game creates a new game ID. Closing and reopening Help keeps the game ID
+but creates a new episode ID.
+
 ## Vercel
 
 The committed `api/index.py` exposes the same WSGI app and `vercel.json` routes
@@ -92,9 +113,10 @@ turn discards the ID. No reasoning trace is returned or logged.
 
 ## API boundary
 
-`POST /v1/coaching-turn` accepts one strict `hosted-coaching-request.v2`
-envelope containing a `model-coaching-neutral-request.v1` object and an
-optional previous response ID. The successful response contains only:
+`POST /v1/coaching-turn` accepts one strict `hosted-coaching-request.v3`
+envelope containing game and Help-episode UUIDs, a
+`model-coaching-neutral-request.v1` object, and an optional previous response
+ID. The successful response contains only:
 
 - request identity and position revision;
 - the opaque continuation ID for this Help episode;

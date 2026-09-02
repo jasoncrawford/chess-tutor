@@ -4,7 +4,11 @@ import socket
 import unittest
 from pathlib import Path
 
-from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
+from CoachingServer.service import (
+    HostedCoachingCompletion,
+    HostedCoachingService,
+    HostedCoachingServiceError,
+)
 from CoachingServer.chess_native_compiler import compile_context
 
 
@@ -17,14 +21,32 @@ FIXTURE = json.loads(
 SYSTEM_PROMPT = (
     ROOT / "Tools/CoachingEval/prompts/tutor-v13.md"
 ).read_text(encoding="utf-8")
+GAME_ID = "a1111111-1111-4111-8111-111111111111"
+EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
 
 
-def hosted_request(*, previous_response_id=None, request=None):
+def hosted_request(
+    *,
+    previous_response_id=None,
+    request=None,
+    game_id=GAME_ID,
+    episode_id=EPISODE_ID,
+):
     return {
-        "schemaVersion": "hosted-coaching-request.v2",
+        "schemaVersion": "hosted-coaching-request.v3",
+        "gameID": game_id,
+        "episodeID": episode_id,
         "request": FIXTURE["request"] if request is None else request,
         "previousResponseID": previous_response_id,
     }
+
+
+def decoded_events(captured):
+    values = [json.loads(record.getMessage()) for record in captured.records]
+    for value in values:
+        assert value.pop("schema_version") == "coaching-log.v1"
+        assert value.pop("timestamp").endswith("Z")
+    return values
 
 
 def request_with_latest_event(kind, references=()):
@@ -70,86 +92,78 @@ class RecordingProvider:
 
 
 class HostedCoachingServiceTests(unittest.TestCase):
-    def test_opt_in_content_trace_contains_client_request_and_server_response(self):
-        provider = RecordingProvider()
+    def test_returns_compact_safe_diagnostics_with_the_validated_turn(self):
         clock = iter((10.0, 10.123))
-        request = json.loads(json.dumps(FIXTURE["request"]))
-        request["positionRevision"] = 1
-        request["position"] = {
-            "fen": "4k3/8/8/8/4P3/8/8/1N2K3 b - - 0 1",
-            "sideToMove": "black",
-            "status": "ongoing",
-        }
-        request["gameHistory"] = [
-            {"ply": 1, "canonicalMove": "e2e4", "displayNotation": "e4"}
-        ]
         service = HostedCoachingService(
-            provider=provider,
+            provider=RecordingProvider(),
             system_prompt=SYSTEM_PROMPT,
-            log_content=True,
             clock=lambda: next(clock),
         )
 
-        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
-            service.complete(
-                hosted_request(request=request),
-                trace_id="trace-content",
-            )
+        completion = service.complete(hosted_request(), trace_id="trace-summary")
 
-        messages = [record.getMessage() for record in captured.records]
-        content_messages = [
-            message
-            for message in messages
-            if message.startswith("event=coaching_trace ")
-        ]
-        self.assertEqual(1, len(content_messages))
-        content = content_messages[0]
-        expected_trace = {
-            "kind": "initial",
-            "reasoning": "high",
-            "revision": 1,
-            "position": {
-                "fen": "4k3/8/8/8/4P3/8/8/1N2K3 b - - 0 1",
-                "moves": ["e4"],
-                "side": "black",
-                "status": "ongoing",
-            },
-            "interaction": {
-                "selected": "piece:white:knight:b1",
-                "selectedSquare": "b1",
-                "staged": None,
-                "events": [
-                    {
+        self.assertIsInstance(completion, HostedCoachingCompletion)
+        self.assertEqual(
+            {
+                "request": {
+                    "kind": "initial",
+                    "request_id": "shared-selected-knight",
+                    "prompt_version": "tutor-v13",
+                    "position_revision": 0,
+                    "fen": "4k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+                    "moves": [],
+                    "side_to_move": "white",
+                    "status": "ongoing",
+                    "latest_interaction": {
                         "sequence": 1,
                         "kind": "pieceSelected",
                         "references": ["piece:white:knight:b1"],
-                    }
-                ],
+                    },
+                    "selected_piece": "piece:white:knight:b1",
+                    "selected_square": "b1",
+                    "staged_move": None,
+                },
+                "response": {
+                    "message": "Where could this knight help in the center?",
+                    "actions": ["hint"],
+                    "focus": [{"type": "square", "square": "b1"}],
+                    "expects": "stageMove",
+                },
+                "provider": {
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "input_tokens": 500,
+                    "cached_input_tokens": 25,
+                    "output_tokens": 80,
+                    "reasoning_tokens": 50,
+                    "total_tokens": 580,
+                    "latency_ms": 123.0,
+                },
             },
-            "advice": {
-                "message": "Where could this knight help in the center?",
-                "actions": ["hint"],
-                "focus": [{"type": "square", "square": "b1"}],
-                "expects": "stageMove",
-            },
-            "latencyMs": 123.0,
-        }
-        self.assertEqual(
-            "event=coaching_trace trace_id=trace-content data="
-            + json.dumps(expected_trace, ensure_ascii=False, separators=(",", ":")),
-            content,
+            completion.diagnostics,
         )
-        self.assertNotIn("# Chess Tutor v13", content)
-        self.assertNotIn("# Chess coaching context", content)
-        self.assertNotIn('"pieces":', content)
-        self.assertNotIn('"legalMoves":', content)
-        self.assertNotIn('"occupiedSquareRelationships":', content)
-        self.assertNotIn('"tentativeReplies":', content)
-        self.assertNotIn('"capabilities":', content)
-        self.assertNotIn("resp_provider-private-id", content)
-        self.assertNotIn("gpt-5.6-sol-2026", content)
+        serialized = json.dumps(completion.diagnostics)
+        self.assertNotIn(SYSTEM_PROMPT, serialized)
+        self.assertNotIn("resp_provider-private-id", serialized)
+        self.assertNotIn('"pieces"', serialized)
+        self.assertNotIn('"legalMoves"', serialized)
 
-    def test_invalid_provider_output_never_appears_in_content_trace(self):
+    def test_provider_failure_carries_only_compiled_safe_diagnostics(self):
+        service = HostedCoachingService(
+            provider=RecordingProvider(error=RuntimeError("PRIVATE BODY SECRET")),
+            system_prompt=SYSTEM_PROMPT,
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request(), trace_id="trace-failure")
+
+        self.assertEqual("providerUnavailable", raised.exception.code)
+        self.assertIsNotNone(raised.exception.diagnostics["request"])
+        self.assertIsNone(raised.exception.diagnostics["response"])
+        self.assertEqual("gpt-5.6-sol", raised.exception.diagnostics["provider"]["model"])
+        self.assertNotIn("PRIVATE BODY SECRET", json.dumps(raised.exception.diagnostics))
+
+    def test_invalid_provider_output_never_appears_in_logs_or_diagnostics(self):
         provider = RecordingProvider(
             response={
                 "id": "resp_invalid-private-id",
@@ -165,7 +179,6 @@ class HostedCoachingServiceTests(unittest.TestCase):
         service = HostedCoachingService(
             provider=provider,
             system_prompt=SYSTEM_PROMPT,
-            log_content=True,
         )
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
@@ -173,13 +186,13 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 service.complete(hosted_request(), trace_id="trace-invalid")
 
         joined = "\n".join(record.getMessage() for record in captured.records)
-        self.assertNotIn("event=coaching_trace", joined)
         self.assertNotIn("PRIVATE RAW PROVIDER OUTPUT", joined)
-        self.assertIn(
-            "event=provider_response_failed trace_id=trace-invalid "
-            "outcome=invalid_response reasons=unavailableAction",
-            joined,
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
         )
+        self.assertEqual(["unavailableAction"], failure["reasons"])
         self.assertNotIn("resp_invalid-private-id", joined)
 
     def test_rejects_provider_turn_without_a_meaningful_next_interaction(self):
@@ -217,7 +230,12 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 service.complete(hosted_request(), trace_id="trace-invalid-json")
 
         joined = "\n".join(record.getMessage() for record in captured.records)
-        self.assertIn("reasons=invalidJSON", joined)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["invalidJSON"], failure["reasons"])
         self.assertNotIn("PRIVATE not-json body", joined)
 
     def test_overlong_provider_message_logs_specific_safe_reason(self):
@@ -245,38 +263,13 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 service.complete(hosted_request(), trace_id="trace-overlong")
 
         joined = "\n".join(record.getMessage() for record in captured.records)
-        self.assertIn("reasons=messageTooLong", joined)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["messageTooLong"], failure["reasons"])
         self.assertNotIn(private_message, joined)
-
-    def test_follow_up_content_trace_excludes_continuation_identifiers(self):
-        service = HostedCoachingService(
-            provider=RecordingProvider(),
-            system_prompt=SYSTEM_PROMPT,
-            log_content=True,
-        )
-
-        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
-            service.complete(
-                hosted_request(previous_response_id="resp_previous-private-id"),
-                trace_id="trace-follow-up",
-            )
-
-        content = next(
-            record.getMessage()
-            for record in captured.records
-            if record.getMessage().startswith("event=coaching_trace ")
-        )
-        self.assertIn('"kind":"follow_up"', content)
-        self.assertNotIn("resp_previous-private-id", content)
-        self.assertNotIn("resp_provider-private-id", content)
-
-    def test_content_trace_configuration_requires_a_boolean(self):
-        with self.assertRaisesRegex(ValueError, "log_content must be a boolean"):
-            HostedCoachingService(
-                provider=RecordingProvider(),
-                system_prompt=SYSTEM_PROMPT,
-                log_content="1",
-            )
 
     def test_logs_provider_lifecycle_with_trace_and_elapsed_time(self):
         provider = RecordingProvider()
@@ -292,20 +285,47 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                "event=request_compiled trace_id=trace-1 request_kind=initial",
-                (
-                    "event=provider_request_started trace_id=trace-1 "
-                    "request_kind=initial model=gpt-5.6-sol "
-                    "reasoning_effort=high timeout_seconds=30"
-                ),
-                (
-                    "event=provider_request_completed trace_id=trace-1 "
-                    "elapsed_ms=123.0 outcome=completed input_tokens=500 "
-                    "cached_input_tokens=25 output_tokens=80 reasoning_tokens=50"
-                ),
-                "event=provider_response_validated trace_id=trace-1",
+                {
+                    "level": "info",
+                    "event": "request_compiled",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_started",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "timeout_seconds": 30.0,
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_completed",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 123.0,
+                    "outcome": "completed",
+                    "input_tokens": 500,
+                    "cached_input_tokens": 25,
+                    "output_tokens": 80,
+                    "reasoning_tokens": 50,
+                },
+                {
+                    "level": "info",
+                    "event": "provider_response_validated",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                },
             ],
-            [record.getMessage() for record in captured.records],
+            decoded_events(captured),
         )
 
     def test_logs_timeout_category_without_private_exception_text(self):
@@ -321,23 +341,43 @@ class HostedCoachingServiceTests(unittest.TestCase):
             with self.assertRaises(HostedCoachingServiceError):
                 service.complete(hosted_request(), trace_id="trace-2")
 
-        messages = [record.getMessage() for record in captured.records]
         self.assertEqual(
             [
-                "event=request_compiled trace_id=trace-2 request_kind=initial",
-                (
-                    "event=provider_request_started trace_id=trace-2 "
-                    "request_kind=initial model=gpt-5.6-sol "
-                    "reasoning_effort=high timeout_seconds=30"
-                ),
-                (
-                    "event=provider_request_failed trace_id=trace-2 "
-                    "elapsed_ms=30500.0 outcome=timeout"
-                ),
+                {
+                    "level": "info",
+                    "event": "request_compiled",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_started",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "timeout_seconds": 30.0,
+                },
+                {
+                    "level": "warning",
+                    "event": "provider_request_failed",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 30500.0,
+                    "outcome": "timeout",
+                },
             ],
-            messages,
+            decoded_events(captured),
         )
-        self.assertNotIn("private timeout detail", "\n".join(messages))
+        self.assertNotIn(
+            "private timeout detail",
+            "\n".join(record.getMessage() for record in captured.records),
+        )
 
     def test_calls_provider_once_with_server_owned_prompt_settings_and_schema(self):
         provider = RecordingProvider()
@@ -348,7 +388,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             clock=lambda: next(clock),
         )
 
-        response = service.complete(hosted_request())
+        response = service.complete(hosted_request()).response
 
         self.assertEqual(1, len(provider.calls))
         call = provider.calls[0]
@@ -359,10 +399,14 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertIsNone(call["previous_response_id"])
         self.assertTrue(call["store"])
         self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
+        self.assertNotIn(GAME_ID, call["system_prompt"])
+        self.assertNotIn(EPISODE_ID, call["system_prompt"])
         self.assertEqual(
             compile_context(FIXTURE["request"], "tutor-v13").markdown,
             call["user_prompt"],
         )
+        self.assertNotIn(GAME_ID, call["user_prompt"])
+        self.assertNotIn(EPISODE_ID, call["user_prompt"])
         self.assertFalse(call["schema"]["additionalProperties"])
         self.assertEqual(
             [
@@ -410,7 +454,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         response = service.complete(
             hosted_request(previous_response_id="resp_previous-123")
-        )
+        ).response
 
         call = provider.calls[0]
         self.assertEqual("none", call["reasoning_effort"])
@@ -534,6 +578,27 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         self.assertEqual("invalidRequest", raised.exception.code)
         self.assertEqual([], provider.calls)
+
+    def test_rejects_missing_malformed_or_noncanonical_correlation_ids(self):
+        invalid_requests = (
+            {key: value for key, value in hosted_request().items() if key != "gameID"},
+            hosted_request(game_id="not-a-uuid"),
+            hosted_request(game_id=GAME_ID.upper()),
+            hosted_request(episode_id="not-a-uuid"),
+            hosted_request(episode_id=EPISODE_ID.upper()),
+        )
+
+        for invalid in invalid_requests:
+            with self.subTest(invalid=invalid):
+                provider = RecordingProvider()
+                service = HostedCoachingService(
+                    provider=provider,
+                    system_prompt=SYSTEM_PROMPT,
+                )
+                with self.assertRaises(HostedCoachingServiceError) as raised:
+                    service.complete(invalid)
+                self.assertEqual("invalidRequest", raised.exception.code)
+                self.assertEqual([], provider.calls)
 
 
 if __name__ == "__main__":

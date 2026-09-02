@@ -81,7 +81,6 @@ open -a Simulator
 echo "Starting the coaching server..."
 OPENAI_API_KEY="$openai_api_key" \
 CHESS_TUTOR_COACHING_ACCESS_TOKEN="$access_token" \
-CHESS_TUTOR_COACHING_LOG_CONTENT=1 \
   "$venv_directory/bin/python" -m CoachingServer.local --host 127.0.0.1 --port "$port" &
 server_pid=$!
 unset openai_api_key

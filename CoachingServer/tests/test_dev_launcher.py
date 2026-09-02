@@ -25,7 +25,6 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 "FAKE_COMMAND_LOG": str(self.command_log),
                 "CHESS_TUTOR_COACHING_DEV_PORT": "18787",
                 "CHESS_TUTOR_COACHING_VENV_DIR": str(self.temp_path / "venv"),
-                "CHESS_TUTOR_COACHING_LOG_CONTENT": "0",
                 "SIMCTL_CHILD_UNRELATED_SECRET": "do-not-forward",
             }
         )
@@ -75,7 +74,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             "org.jasoncrawford.chesstutor base-url=set token=set extra-child=missing",
             command_log,
         )
-        self.assertIn("server-start key=set token=set content-log=1", command_log)
+        self.assertIn("server-start key=set token=set", command_log)
         self.assertIn("server-stopped", command_log)
         self.assertIn("venv-create", command_log)
         self.assertIn("dependency-install requirements.txt", command_log)
@@ -198,10 +197,9 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             fi
             key_state=missing
             token_state=missing
-            content_log_state="${CHESS_TUTOR_COACHING_LOG_CONTENT:-missing}"
             [ -n "${OPENAI_API_KEY:-}" ] && key_state=set
             [ -n "${CHESS_TUTOR_COACHING_ACCESS_TOKEN:-}" ] && token_state=set
-            printf 'server-start key=%s token=%s content-log=%s\n' "$key_state" "$token_state" "$content_log_state" >> "$FAKE_COMMAND_LOG"
+            printf 'server-start key=%s token=%s\n' "$key_state" "$token_state" >> "$FAKE_COMMAND_LOG"
             [ "${FAKE_SERVER_EXITS_IMMEDIATELY:-}" = "1" ] && exit 0
             [ "${FAKE_SERVER_FAILS_AFTER_DELAY:-}" = "1" ] && sleep 2 && exit 0
             trap 'printf "%s\n" server-stopped >> "$FAKE_COMMAND_LOG"; exit 0' TERM INT

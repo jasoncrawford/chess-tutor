@@ -14,7 +14,12 @@ import uuid
 from flask import Flask, Response, request
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
-from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
+from CoachingServer.service import (
+    HostedCoachingCompletion,
+    HostedCoachingService,
+    HostedCoachingServiceError,
+)
+from CoachingServer.structured_logging import emit_event
 
 
 _MAXIMUM_BODY_BYTES = 128 * 1024
@@ -24,7 +29,6 @@ _ERROR_STATUS = {
     "providerTimeout": "504 Gateway Timeout",
     "providerUnavailable": "503 Service Unavailable",
 }
-_LOGGER = logging.getLogger("ChessTutor.CoachingServer")
 _TRACE_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
 
@@ -101,36 +105,69 @@ def create_application(
             return _error_response("400 Bad Request", "invalidJSON")
 
         trace_id = _safe_trace_id(trace_id_factory())
+        correlation = _safe_correlation_fields(request_object)
         started = clock()
-        _LOGGER.info("event=http_request_started trace_id=%s", trace_id)
+        emit_event("http_request_started", trace_id=trace_id, **correlation)
         try:
-            response = service.complete(request_object, trace_id=trace_id)
+            completion = service.complete(request_object, trace_id=trace_id)
+            if not isinstance(completion, HostedCoachingCompletion):
+                raise TypeError("Invalid hosted coaching service completion")
         except HostedCoachingServiceError as error:
             status = _ERROR_STATUS[error.code]
+            elapsed_milliseconds = _elapsed_milliseconds(clock(), started)
             _log_http_completed(
                 trace_id=trace_id,
-                elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+                correlation=correlation,
+                elapsed_milliseconds=elapsed_milliseconds,
                 outcome=error.code,
                 status=status,
+            )
+            _log_coaching_turn(
+                trace_id=trace_id,
+                correlation=correlation,
+                diagnostics=error.diagnostics,
+                outcome=error.code,
+                status=status,
+                elapsed_milliseconds=elapsed_milliseconds,
             )
             return _error_response(status, error.code)
         except Exception:
             status = "503 Service Unavailable"
+            elapsed_milliseconds = _elapsed_milliseconds(clock(), started)
             _log_http_completed(
                 trace_id=trace_id,
-                elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+                correlation=correlation,
+                elapsed_milliseconds=elapsed_milliseconds,
                 outcome="providerUnavailable",
                 status=status,
             )
+            _log_coaching_turn(
+                trace_id=trace_id,
+                correlation=correlation,
+                diagnostics=None,
+                outcome="providerUnavailable",
+                status=status,
+                elapsed_milliseconds=elapsed_milliseconds,
+            )
             return _error_response(status, "providerUnavailable")
 
+        elapsed_milliseconds = _elapsed_milliseconds(clock(), started)
         _log_http_completed(
             trace_id=trace_id,
-            elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
+            correlation=correlation,
+            elapsed_milliseconds=elapsed_milliseconds,
             outcome="success",
             status="200 OK",
         )
-        return _response("200 OK", response)
+        _log_coaching_turn(
+            trace_id=trace_id,
+            correlation=correlation,
+            diagnostics=completion.diagnostics,
+            outcome="success",
+            status="200 OK",
+            elapsed_milliseconds=elapsed_milliseconds,
+        )
+        return _response("200 OK", completion.response)
 
     return application
 
@@ -151,7 +188,6 @@ def create_environment_application():
             "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT",
             "none",
         ),
-        log_content=os.environ.get("CHESS_TUTOR_COACHING_LOG_CONTENT") == "1",
     )
     return create_application(service=service, access_token=access_token)
 
@@ -207,17 +243,55 @@ def _elapsed_milliseconds(finished: float, started: float) -> float:
 def _log_http_completed(
     *,
     trace_id: str,
+    correlation: dict[str, str],
     elapsed_milliseconds: float,
     outcome: str,
     status: str,
 ) -> None:
-    _LOGGER.info(
-        (
-            "event=http_request_completed trace_id=%s "
-            "elapsed_ms=%s outcome=%s status=%s"
-        ),
-        trace_id,
-        elapsed_milliseconds,
-        outcome,
-        status.split(" ", 1)[0],
+    emit_event(
+        "http_request_completed",
+        trace_id=trace_id,
+        **correlation,
+        elapsed_ms=elapsed_milliseconds,
+        outcome=outcome,
+        status=int(status.split(" ", 1)[0]),
+    )
+
+
+def _safe_correlation_fields(value: dict[str, object]) -> dict[str, str]:
+    fields = {}
+    for source, target in (("gameID", "game_id"), ("episodeID", "episode_id")):
+        candidate = value.get(source)
+        if not isinstance(candidate, str):
+            continue
+        try:
+            canonical = str(uuid.UUID(candidate))
+        except (AttributeError, ValueError):
+            continue
+        if candidate == canonical:
+            fields[target] = canonical
+    return fields
+
+
+def _log_coaching_turn(
+    *,
+    trace_id: str,
+    correlation: dict[str, str],
+    diagnostics: dict[str, object] | None,
+    outcome: str,
+    status: str,
+    elapsed_milliseconds: float,
+) -> None:
+    safe = diagnostics if isinstance(diagnostics, dict) else {}
+    emit_event(
+        "coaching_turn",
+        level=logging.INFO if outcome == "success" else logging.WARNING,
+        trace_id=trace_id,
+        **correlation,
+        request=safe.get("request"),
+        response=safe.get("response") if outcome == "success" else None,
+        provider=safe.get("provider"),
+        outcome=outcome,
+        http_status=int(status.split(" ", 1)[0]),
+        elapsed_ms=elapsed_milliseconds,
     )

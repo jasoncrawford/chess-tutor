@@ -1,8 +1,106 @@
+import Foundation
 import XCTest
 @testable import ChessTutor
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testCurrentCoachingGameIDIsHostedOnlyAndChangesForNewGame() {
+        var identifiers = [
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+        ]
+        let hosted = GameSession(
+            hostedCoachingProvider: ControlledHostedCoachingProvider(),
+            coachingIdentifierFactory: { identifiers.removeFirst() }
+        )
+        let local = GameSession(
+            coachingIdentifierFactory: {
+                "33333333-3333-4333-8333-333333333333"
+            }
+        )
+
+        XCTAssertEqual(
+            "11111111-1111-4111-8111-111111111111",
+            hosted.currentCoachingGameID
+        )
+        XCTAssertNil(local.currentCoachingGameID)
+
+        hosted.newGame()
+
+        XCTAssertEqual(
+            "22222222-2222-4222-8222-222222222222",
+            hosted.currentCoachingGameID
+        )
+        XCTAssertTrue(identifiers.isEmpty)
+    }
+
+    func testHostedCorrelationKeepsGameAndEpisodeLifetimesSeparate() async throws {
+        let provider = ControlledHostedCoachingProvider()
+        var identifiers = [
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+            "33333333-3333-4333-8333-333333333333",
+            "44444444-4444-4444-8444-444444444444",
+            "55555555-5555-4555-8555-555555555555",
+        ]
+        let session = GameSession(
+            hostedCoachingProvider: provider,
+            coachingIdentifierFactory: { identifiers.removeFirst() }
+        )
+
+        session.startCoaching()
+        let firstTask = Task { await session.resolvePendingCoachingAdvice() }
+        let first = await provider.waitForOnlyCorrelation()
+        await provider.succeed(
+            requestID: "hosted-1",
+            message: "What do you notice?",
+            actions: ["hint"]
+        )
+        await firstTask.value
+
+        XCTAssertNil(session.chooseCoachingAction(.hint))
+        let followUpTask = Task { await session.resolvePendingCoachingAdvice() }
+        let followUp = await provider.waitForCorrelation(id: "hosted-2")
+        await provider.succeed(requestID: "hosted-2", message: "Look near the center.")
+        await followUpTask.value
+        XCTAssertEqual(first, followUp)
+
+        session.stopCoaching()
+        session.startCoaching()
+        let reopenedTask = Task { await session.resolvePendingCoachingAdvice() }
+        let reopened = await provider.waitForCorrelation(id: "hosted-3")
+        await provider.succeed(requestID: "hosted-3", message: "What changed?")
+        await reopenedTask.value
+        XCTAssertEqual(first.gameID, reopened.gameID)
+        XCTAssertNotEqual(first.episodeID, reopened.episodeID)
+
+        session.newGame()
+        session.startCoaching()
+        let newGameTask = Task { await session.resolvePendingCoachingAdvice() }
+        let newGame = await provider.waitForCorrelation(id: "hosted-4")
+        await provider.succeed(requestID: "hosted-4", message: "New game.")
+        await newGameTask.value
+        XCTAssertNotEqual(first.gameID, newGame.gameID)
+        XCTAssertNotEqual(reopened.episodeID, newGame.episodeID)
+        XCTAssertTrue(identifiers.isEmpty)
+    }
+
+    func testHostedCorrelationUsesLowercaseCanonicalUUIDsByDefault() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+
+        session.startCoaching()
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let correlation = await provider.waitForOnlyCorrelation()
+        await provider.fail(requestID: "hosted-1")
+        await task.value
+
+        for value in [correlation.gameID, correlation.episodeID] {
+            XCTAssertEqual(value, value.lowercased())
+            XCTAssertEqual(value, UUID(uuidString: value)?.uuidString.lowercased())
+        }
+    }
+
     func testHostedSelectionQuestionAcceptsPieceTapAndNegativeAnswerAsFastFollowUps() async throws {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)
@@ -202,6 +300,7 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
     private struct PendingCall {
         let request: ModelCoachingNeutralRequest
         let continuationID: String?
+        let correlation: HostedCoachingCorrelation
         let continuation: CheckedContinuation<HostedCoachingResponse, Error>
     }
 
@@ -210,12 +309,14 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
     func turn(
         for request: ModelCoachingNeutralRequest,
         contract: ModelCoachingChessNativeResponseContract,
-        continuationID: String?
+        continuationID: String?,
+        correlation: HostedCoachingCorrelation
     ) async throws -> HostedCoachingResponse {
         try await withCheckedThrowingContinuation { continuation in
             pending[request.requestID] = PendingCall(
                 request: request,
                 continuationID: continuationID,
+                correlation: correlation,
                 continuation: continuation
             )
         }
@@ -249,6 +350,26 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
             await Task.yield()
         }
         fatalError("Hosted provider did not receive request \(id)")
+    }
+
+    func waitForOnlyCorrelation() async -> HostedCoachingCorrelation {
+        for _ in 0..<1_000 {
+            if let correlation = pending.values.first?.correlation {
+                return correlation
+            }
+            await Task.yield()
+        }
+        fatalError("Hosted provider did not receive a correlation")
+    }
+
+    func waitForCorrelation(id: String) async -> HostedCoachingCorrelation {
+        for _ in 0..<1_000 {
+            if let correlation = pending[id]?.correlation {
+                return correlation
+            }
+            await Task.yield()
+        }
+        fatalError("Hosted provider did not receive correlation for \(id)")
     }
 
     func succeed(
