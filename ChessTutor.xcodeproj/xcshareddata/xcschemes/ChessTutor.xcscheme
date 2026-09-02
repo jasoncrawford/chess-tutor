@@ -118,6 +118,16 @@
             value = "$(COACHING_NEUTRAL_PREVIEW_DIR)"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_QUALITY_BENCHMARK_OUTPUT_DIR"
+            value = "$(COACHING_QUALITY_BENCHMARK_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_QUALITY_BENCHMARK_SOURCE_SHA"
+            value = "$(COACHING_QUALITY_BENCHMARK_SOURCE_SHA)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
