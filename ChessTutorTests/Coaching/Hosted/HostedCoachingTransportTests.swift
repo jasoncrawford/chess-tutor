@@ -3,6 +3,11 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedCoachingTransportTests: XCTestCase {
+    private let correlation = HostedCoachingCorrelation(
+        gameID: "11111111-1111-4111-8111-111111111111",
+        episodeID: "22222222-2222-4222-8222-222222222222"
+    )
+
     func testSendsCanonicalAuthenticatedRequestAndValidatesResponseAgainOnDevice() async throws {
         let request = try sharedRequest()
         let contract = ModelCoachingChessNativeContextCompiler.responseContract(
@@ -36,7 +41,8 @@ final class HostedCoachingTransportTests: XCTestCase {
         let response = try await transport.turn(
             for: request,
             contract: contract,
-            continuationID: nil
+            continuationID: nil,
+            correlation: correlation
         )
 
         XCTAssertEqual(request.requestID, response.requestID)
@@ -56,10 +62,12 @@ final class HostedCoachingTransportTests: XCTestCase {
             JSONSerialization.jsonObject(with: sentBody) as? [String: Any]
         )
         XCTAssertEqual(
-            ["previousResponseID", "request", "schemaVersion"],
+            ["episodeID", "gameID", "previousResponseID", "request", "schemaVersion"],
             sentObject.keys.sorted()
         )
-        XCTAssertEqual("hosted-coaching-request.v2", sentObject["schemaVersion"] as? String)
+        XCTAssertEqual("hosted-coaching-request.v3", sentObject["schemaVersion"] as? String)
+        XCTAssertEqual(correlation.gameID, sentObject["gameID"] as? String)
+        XCTAssertEqual(correlation.episodeID, sentObject["episodeID"] as? String)
         XCTAssertTrue(sentObject["previousResponseID"] is NSNull)
         let sentRequest = try XCTUnwrap(sentObject["request"] as? [String: Any])
         XCTAssertEqual(request.requestID, sentRequest["requestID"] as? String)
@@ -67,7 +75,8 @@ final class HostedCoachingTransportTests: XCTestCase {
         _ = try await transport.turn(
             for: request,
             contract: contract,
-            continuationID: "resp_previous-456"
+            continuationID: "resp_previous-456",
+            correlation: correlation
         )
         let followUpBody = try XCTUnwrap(loader.requests.last?.httpBody)
         let followUpObject = try XCTUnwrap(
@@ -115,7 +124,8 @@ final class HostedCoachingTransportTests: XCTestCase {
                 _ = try await transport.turn(
                     for: request,
                     contract: contract,
-                    continuationID: nil
+                    continuationID: nil,
+                    correlation: correlation
                 )
                 XCTFail("Expected \(item.expected)")
             } catch let error as HostedCoachingTransportError {
@@ -135,7 +145,8 @@ final class HostedCoachingTransportTests: XCTestCase {
                 _ = try await transport.turn(
                     for: request,
                     contract: contract,
-                    continuationID: nil
+                    continuationID: nil,
+                    correlation: correlation
                 )
                 XCTFail("Expected invalid response")
             } catch let error as HostedCoachingTransportError {
@@ -165,7 +176,8 @@ final class HostedCoachingTransportTests: XCTestCase {
             _ = try await transport.turn(
                 for: request,
                 contract: contract,
-                continuationID: nil
+                continuationID: nil,
+                correlation: correlation
             )
             XCTFail("Expected an invalid response")
         } catch let error as HostedCoachingTransportError {
@@ -186,7 +198,8 @@ final class HostedCoachingTransportTests: XCTestCase {
             _ = try await transport.turn(
                 for: request,
                 contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
-                continuationID: nil
+                continuationID: nil,
+                correlation: correlation
             )
             XCTFail("Expected cancellation")
         } catch is CancellationError {
@@ -206,7 +219,8 @@ final class HostedCoachingTransportTests: XCTestCase {
             _ = try await transport.turn(
                 for: request,
                 contract: ModelCoachingChessNativeContextCompiler.responseContract(for: request),
-                continuationID: nil
+                continuationID: nil,
+                correlation: correlation
             )
             XCTFail("Expected an invalid response")
         } catch let error as HostedCoachingTransportError {

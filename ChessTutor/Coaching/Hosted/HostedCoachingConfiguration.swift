@@ -177,8 +177,10 @@ private struct UnavailableHostedCoachingProvider: HostedCoachingTurning {
     func turn(
         for request: ModelCoachingNeutralRequest,
         contract: ModelCoachingChessNativeResponseContract,
-        continuationID: String?
+        continuationID: String?,
+        correlation: HostedCoachingCorrelation
     ) async throws -> HostedCoachingResponse {
+        _ = correlation
         throw HostedCoachingTransportError.serverUnavailable
     }
 }

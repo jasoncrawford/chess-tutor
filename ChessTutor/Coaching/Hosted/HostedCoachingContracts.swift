@@ -19,11 +19,17 @@ struct HostedCoachingResponse: Equatable, Sendable {
     let metrics: HostedCoachingMetrics
 }
 
+struct HostedCoachingCorrelation: Codable, Equatable, Sendable {
+    let gameID: String
+    let episodeID: String
+}
+
 protocol HostedCoachingTurning: Sendable {
     func turn(
         for request: ModelCoachingNeutralRequest,
         contract: ModelCoachingChessNativeResponseContract,
-        continuationID: String?
+        continuationID: String?,
+        correlation: HostedCoachingCorrelation
     ) async throws -> HostedCoachingResponse
 }
 

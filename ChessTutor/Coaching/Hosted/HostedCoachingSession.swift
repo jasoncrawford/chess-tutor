@@ -1,5 +1,8 @@
+import Foundation
+
 struct HostedCoachingSession: Equatable, Sendable {
     let learner: PieceColor
+    let episodeID: String
     private(set) var phase: HostedCoachingPhase = .thinking
     private(set) var events: [ModelCoachingNeutralEpisodeEvent] = []
     private(set) var pulseID = 0
@@ -13,8 +16,12 @@ struct HostedCoachingSession: Equatable, Sendable {
         return events[events.count - 1]
     }
 
-    init(learner: PieceColor) {
+    init(
+        learner: PieceColor,
+        episodeID: String = UUID().uuidString.lowercased()
+    ) {
         self.learner = learner
+        self.episodeID = episodeID
     }
 
     mutating func openHelp(selectedSquare: Square?, tentativeMove: Move?) {
