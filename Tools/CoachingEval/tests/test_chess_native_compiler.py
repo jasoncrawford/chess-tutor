@@ -102,6 +102,24 @@ class ChessNativeCompilerTests(unittest.TestCase):
             compilation.expected_responses,
         )
 
+    def test_v13_requires_a_meaningful_next_interaction(self):
+        compilation = compile_context(self.fixture["request"], "tutor-v13")
+
+        expected_responses = (
+            "findEndangeredPiece",
+            "findSafeCapture",
+            "stageMove",
+            "judgeMoveSafety",
+            "chooseWhetherToPlay",
+        )
+        self.assertEqual(("hint",), compilation.actions)
+        self.assertEqual(expected_responses, compilation.expected_responses)
+        self.assertIn(
+            "Expected response: " + ", ".join(expected_responses),
+            compilation.markdown,
+        )
+        self.assertNotIn("Expected response: none", compilation.markdown)
+
     def test_rejects_unknown_request_fields_and_schema_versions(self):
         request = dict(self.fixture["request"])
         request["authoredAdvice"] = "Tell the child what to do."

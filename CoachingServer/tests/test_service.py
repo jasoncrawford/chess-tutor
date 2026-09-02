@@ -15,7 +15,7 @@ FIXTURE = json.loads(
     )
 )
 SYSTEM_PROMPT = (
-    ROOT / "Tools/CoachingEval/prompts/tutor-v12.md"
+    ROOT / "Tools/CoachingEval/prompts/tutor-v13.md"
 ).read_text(encoding="utf-8")
 
 
@@ -139,7 +139,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
             + json.dumps(expected_trace, ensure_ascii=False, separators=(",", ":")),
             content,
         )
-        self.assertNotIn("# Chess Tutor v12", content)
+        self.assertNotIn("# Chess Tutor v13", content)
         self.assertNotIn("# Chess coaching context", content)
         self.assertNotIn('"pieces":', content)
         self.assertNotIn('"legalMoves":', content)
@@ -181,6 +181,25 @@ class HostedCoachingServiceTests(unittest.TestCase):
             joined,
         )
         self.assertNotIn("resp_invalid-private-id", joined)
+
+    def test_rejects_provider_turn_without_a_meaningful_next_interaction(self):
+        provider = RecordingProvider(
+            response={
+                "id": "resp_inert-turn",
+                "status": "completed",
+                "output_text": (
+                    '{"message":"That pawn is safe.",'
+                    '"actions":[],"focus":[],"expects":"none"}'
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+
+        with self.assertRaises(HostedCoachingServiceError) as captured:
+            service.complete(hosted_request())
+
+        self.assertEqual("invalidProviderResponse", captured.exception.code)
 
     def test_invalid_json_logs_a_safe_reason_without_provider_content(self):
         provider = RecordingProvider(
@@ -341,16 +360,26 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertTrue(call["store"])
         self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
         self.assertEqual(
-            compile_context(FIXTURE["request"], "tutor-v12").markdown,
+            compile_context(FIXTURE["request"], "tutor-v13").markdown,
             call["user_prompt"],
         )
         self.assertFalse(call["schema"]["additionalProperties"])
+        self.assertEqual(
+            [
+                "findEndangeredPiece",
+                "findSafeCapture",
+                "stageMove",
+                "judgeMoveSafety",
+                "chooseWhetherToPlay",
+            ],
+            call["schema"]["properties"]["expects"]["enum"],
+        )
         self.assertEqual(
             {
                 "schemaVersion": "hosted-coaching-turn.v3",
                 "requestID": "shared-selected-knight",
                 "positionRevision": 0,
-                "promptVersion": "tutor-v12",
+                "promptVersion": "tutor-v13",
                 "continuationID": "resp_provider-private-id",
                 "turn": {
                     "message": "Where could this knight help in the center?",

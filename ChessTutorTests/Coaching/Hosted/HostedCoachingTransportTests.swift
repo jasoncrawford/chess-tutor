@@ -7,7 +7,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         let request = try sharedRequest()
         let contract = ModelCoachingChessNativeContextCompiler.responseContract(
             for: request,
-            promptVersion: "tutor-v12"
+            promptVersion: "tutor-v13"
         )
         let responseData = try hostedResponseData(
             request: request,
@@ -80,7 +80,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         let request = try sharedRequest()
         let contract = ModelCoachingChessNativeContextCompiler.responseContract(
             for: request,
-            promptVersion: "tutor-v12"
+            promptVersion: "tutor-v13"
         )
         let validTurn: [String: Any] = [
             "message": "Look at the knight.",
@@ -141,6 +141,35 @@ final class HostedCoachingTransportTests: XCTestCase {
             } catch let error as HostedCoachingTransportError {
                 XCTAssertEqual(.invalidResponse, error)
             }
+        }
+    }
+
+    func testRejectsHostedTurnWithoutAMeaningfulNextInteraction() async throws {
+        let request = try sharedRequest()
+        let contract = ModelCoachingChessNativeContextCompiler.responseContract(
+            for: request,
+            promptVersion: "tutor-v13"
+        )
+        let responseData = try hostedResponseData(
+            request: request,
+            turn: [
+                "message": "That pawn is safe.",
+                "actions": [],
+                "focus": [],
+                "expects": "none",
+            ]
+        )
+        let transport = makeTransport(data: responseData, status: 200)
+
+        do {
+            _ = try await transport.turn(
+                for: request,
+                contract: contract,
+                continuationID: nil
+            )
+            XCTFail("Expected an invalid response")
+        } catch let error as HostedCoachingTransportError {
+            XCTAssertEqual(.invalidResponse, error)
         }
     }
 
@@ -251,7 +280,7 @@ final class HostedCoachingTransportTests: XCTestCase {
             "schemaVersion": "hosted-coaching-turn.v3",
             "requestID": requestID ?? request.requestID,
             "positionRevision": revision ?? request.positionRevision,
-            "promptVersion": "tutor-v12",
+            "promptVersion": "tutor-v13",
             "continuationID": "resp_next-123",
             "turn": turn,
             "metrics": [

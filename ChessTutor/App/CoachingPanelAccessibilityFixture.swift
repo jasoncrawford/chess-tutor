@@ -301,7 +301,7 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
             schemaVersion: "hosted-coaching-turn.v3",
             requestID: request.requestID,
             positionRevision: request.positionRevision,
-            promptVersion: "tutor-v12",
+            promptVersion: "tutor-v13",
             continuationID: "resp_ui-fixture",
             turn: turn,
             metrics: HostedCoachingMetrics(
