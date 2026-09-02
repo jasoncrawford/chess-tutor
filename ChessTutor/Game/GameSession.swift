@@ -136,6 +136,10 @@ final class GameSession {
         pendingHostedCoachingRequest?.id ?? pendingCoachingRequest?.id
     }
 
+    var currentCoachingGameID: String? {
+        hostedCoachingProvider == nil ? nil : hostedCoachingGameID
+    }
+
     private var coachingInteractionSnapshot: CoachingInteractionSnapshot {
         CoachingInteractionSnapshot(
             selectedSquare: selectedSquare,

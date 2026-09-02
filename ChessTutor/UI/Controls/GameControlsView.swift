@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct GameControlsPresentation: Equatable {
     enum PrimaryAction: Equatable {
@@ -214,10 +215,16 @@ struct AboutSheetView: View {
     @State private var isPreparingDiagnostics = false
     let diagnosticsLog: DiagnosticsLog
     let buildInfo: AppBuildInfo
+    let coachingGameID: String?
 
-    init(diagnosticsLog: DiagnosticsLog = .shared, buildInfo: AppBuildInfo = .current()) {
+    init(
+        diagnosticsLog: DiagnosticsLog = .shared,
+        buildInfo: AppBuildInfo = .current(),
+        coachingGameID: String? = nil
+    ) {
         self.diagnosticsLog = diagnosticsLog
         self.buildInfo = buildInfo
+        self.coachingGameID = coachingGameID
     }
 
     var body: some View {
@@ -258,6 +265,18 @@ struct AboutSheetView: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .leading, spacing: 8) {
+                if let coachingGameID {
+                    Button {
+                        UIPasteboard.general.string = coachingGameID
+                    } label: {
+                        Label("Copy Coaching Game ID", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundStyle(AppTheme.boardFrame)
+                    .accessibilityIdentifier("copy-coaching-game-id")
+                }
+
                 Button {
                     shareDiagnostics()
                 } label: {

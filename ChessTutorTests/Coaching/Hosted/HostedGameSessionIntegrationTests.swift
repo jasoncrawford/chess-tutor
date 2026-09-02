@@ -4,6 +4,36 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testCurrentCoachingGameIDIsHostedOnlyAndChangesForNewGame() {
+        var identifiers = [
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+        ]
+        let hosted = GameSession(
+            hostedCoachingProvider: ControlledHostedCoachingProvider(),
+            coachingIdentifierFactory: { identifiers.removeFirst() }
+        )
+        let local = GameSession(
+            coachingIdentifierFactory: {
+                "33333333-3333-4333-8333-333333333333"
+            }
+        )
+
+        XCTAssertEqual(
+            "11111111-1111-4111-8111-111111111111",
+            hosted.currentCoachingGameID
+        )
+        XCTAssertNil(local.currentCoachingGameID)
+
+        hosted.newGame()
+
+        XCTAssertEqual(
+            "22222222-2222-4222-8222-222222222222",
+            hosted.currentCoachingGameID
+        )
+        XCTAssertTrue(identifiers.isEmpty)
+    }
+
     func testHostedCorrelationKeepsGameAndEpisodeLifetimesSeparate() async throws {
         let provider = ControlledHostedCoachingProvider()
         var identifiers = [

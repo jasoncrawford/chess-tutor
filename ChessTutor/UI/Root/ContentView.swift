@@ -207,8 +207,13 @@ struct ContentView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingAbout) {
-            AboutSheetView(diagnosticsLog: diagnosticsLog)
-                .presentationDetents([.height(380)])
+            AboutSheetView(
+                diagnosticsLog: diagnosticsLog,
+                coachingGameID: session.currentCoachingGameID
+            )
+                .presentationDetents([
+                    .height(session.currentCoachingGameID == nil ? 380 : 430)
+                ])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: remotePlaySheetBinding) {
