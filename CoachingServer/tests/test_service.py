@@ -17,14 +17,32 @@ FIXTURE = json.loads(
 SYSTEM_PROMPT = (
     ROOT / "Tools/CoachingEval/prompts/tutor-v13.md"
 ).read_text(encoding="utf-8")
+GAME_ID = "a1111111-1111-4111-8111-111111111111"
+EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
 
 
-def hosted_request(*, previous_response_id=None, request=None):
+def hosted_request(
+    *,
+    previous_response_id=None,
+    request=None,
+    game_id=GAME_ID,
+    episode_id=EPISODE_ID,
+):
     return {
-        "schemaVersion": "hosted-coaching-request.v2",
+        "schemaVersion": "hosted-coaching-request.v3",
+        "gameID": game_id,
+        "episodeID": episode_id,
         "request": FIXTURE["request"] if request is None else request,
         "previousResponseID": previous_response_id,
     }
+
+
+def decoded_events(captured):
+    values = [json.loads(record.getMessage()) for record in captured.records]
+    for value in values:
+        assert value.pop("schema_version") == "coaching-log.v1"
+        assert value.pop("timestamp").endswith("Z")
+    return values
 
 
 def request_with_latest_event(kind, references=()):
@@ -175,11 +193,12 @@ class HostedCoachingServiceTests(unittest.TestCase):
         joined = "\n".join(record.getMessage() for record in captured.records)
         self.assertNotIn("event=coaching_trace", joined)
         self.assertNotIn("PRIVATE RAW PROVIDER OUTPUT", joined)
-        self.assertIn(
-            "event=provider_response_failed trace_id=trace-invalid "
-            "outcome=invalid_response reasons=unavailableAction",
-            joined,
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
         )
+        self.assertEqual(["unavailableAction"], failure["reasons"])
         self.assertNotIn("resp_invalid-private-id", joined)
 
     def test_rejects_provider_turn_without_a_meaningful_next_interaction(self):
@@ -217,7 +236,12 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 service.complete(hosted_request(), trace_id="trace-invalid-json")
 
         joined = "\n".join(record.getMessage() for record in captured.records)
-        self.assertIn("reasons=invalidJSON", joined)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["invalidJSON"], failure["reasons"])
         self.assertNotIn("PRIVATE not-json body", joined)
 
     def test_overlong_provider_message_logs_specific_safe_reason(self):
@@ -245,7 +269,12 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 service.complete(hosted_request(), trace_id="trace-overlong")
 
         joined = "\n".join(record.getMessage() for record in captured.records)
-        self.assertIn("reasons=messageTooLong", joined)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["messageTooLong"], failure["reasons"])
         self.assertNotIn(private_message, joined)
 
     def test_follow_up_content_trace_excludes_continuation_identifiers(self):
@@ -292,20 +321,47 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                "event=request_compiled trace_id=trace-1 request_kind=initial",
-                (
-                    "event=provider_request_started trace_id=trace-1 "
-                    "request_kind=initial model=gpt-5.6-sol "
-                    "reasoning_effort=high timeout_seconds=30"
-                ),
-                (
-                    "event=provider_request_completed trace_id=trace-1 "
-                    "elapsed_ms=123.0 outcome=completed input_tokens=500 "
-                    "cached_input_tokens=25 output_tokens=80 reasoning_tokens=50"
-                ),
-                "event=provider_response_validated trace_id=trace-1",
+                {
+                    "level": "info",
+                    "event": "request_compiled",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_started",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "timeout_seconds": 30.0,
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_completed",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 123.0,
+                    "outcome": "completed",
+                    "input_tokens": 500,
+                    "cached_input_tokens": 25,
+                    "output_tokens": 80,
+                    "reasoning_tokens": 50,
+                },
+                {
+                    "level": "info",
+                    "event": "provider_response_validated",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                },
             ],
-            [record.getMessage() for record in captured.records],
+            decoded_events(captured),
         )
 
     def test_logs_timeout_category_without_private_exception_text(self):
@@ -321,23 +377,43 @@ class HostedCoachingServiceTests(unittest.TestCase):
             with self.assertRaises(HostedCoachingServiceError):
                 service.complete(hosted_request(), trace_id="trace-2")
 
-        messages = [record.getMessage() for record in captured.records]
         self.assertEqual(
             [
-                "event=request_compiled trace_id=trace-2 request_kind=initial",
-                (
-                    "event=provider_request_started trace_id=trace-2 "
-                    "request_kind=initial model=gpt-5.6-sol "
-                    "reasoning_effort=high timeout_seconds=30"
-                ),
-                (
-                    "event=provider_request_failed trace_id=trace-2 "
-                    "elapsed_ms=30500.0 outcome=timeout"
-                ),
+                {
+                    "level": "info",
+                    "event": "request_compiled",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_started",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "timeout_seconds": 30.0,
+                },
+                {
+                    "level": "warning",
+                    "event": "provider_request_failed",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 30500.0,
+                    "outcome": "timeout",
+                },
             ],
-            messages,
+            decoded_events(captured),
         )
-        self.assertNotIn("private timeout detail", "\n".join(messages))
+        self.assertNotIn(
+            "private timeout detail",
+            "\n".join(record.getMessage() for record in captured.records),
+        )
 
     def test_calls_provider_once_with_server_owned_prompt_settings_and_schema(self):
         provider = RecordingProvider()
@@ -359,10 +435,14 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertIsNone(call["previous_response_id"])
         self.assertTrue(call["store"])
         self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
+        self.assertNotIn(GAME_ID, call["system_prompt"])
+        self.assertNotIn(EPISODE_ID, call["system_prompt"])
         self.assertEqual(
             compile_context(FIXTURE["request"], "tutor-v13").markdown,
             call["user_prompt"],
         )
+        self.assertNotIn(GAME_ID, call["user_prompt"])
+        self.assertNotIn(EPISODE_ID, call["user_prompt"])
         self.assertFalse(call["schema"]["additionalProperties"])
         self.assertEqual(
             [
@@ -534,6 +614,27 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         self.assertEqual("invalidRequest", raised.exception.code)
         self.assertEqual([], provider.calls)
+
+    def test_rejects_missing_malformed_or_noncanonical_correlation_ids(self):
+        invalid_requests = (
+            {key: value for key, value in hosted_request().items() if key != "gameID"},
+            hosted_request(game_id="not-a-uuid"),
+            hosted_request(game_id=GAME_ID.upper()),
+            hosted_request(episode_id="not-a-uuid"),
+            hosted_request(episode_id=EPISODE_ID.upper()),
+        )
+
+        for invalid in invalid_requests:
+            with self.subTest(invalid=invalid):
+                provider = RecordingProvider()
+                service = HostedCoachingService(
+                    provider=provider,
+                    system_prompt=SYSTEM_PROMPT,
+                )
+                with self.assertRaises(HostedCoachingServiceError) as raised:
+                    service.complete(invalid)
+                self.assertEqual("invalidRequest", raised.exception.code)
+                self.assertEqual([], provider.calls)
 
 
 if __name__ == "__main__":

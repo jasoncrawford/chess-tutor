@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hmac
 import json
-import logging
 import os
 from pathlib import Path
 import re
@@ -15,6 +14,7 @@ from flask import Flask, Response, request
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
 from CoachingServer.service import HostedCoachingService, HostedCoachingServiceError
+from CoachingServer.structured_logging import emit_event
 
 
 _MAXIMUM_BODY_BYTES = 128 * 1024
@@ -24,7 +24,6 @@ _ERROR_STATUS = {
     "providerTimeout": "504 Gateway Timeout",
     "providerUnavailable": "503 Service Unavailable",
 }
-_LOGGER = logging.getLogger("ChessTutor.CoachingServer")
 _TRACE_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
 
@@ -101,14 +100,16 @@ def create_application(
             return _error_response("400 Bad Request", "invalidJSON")
 
         trace_id = _safe_trace_id(trace_id_factory())
+        correlation = _safe_correlation_fields(request_object)
         started = clock()
-        _LOGGER.info("event=http_request_started trace_id=%s", trace_id)
+        emit_event("http_request_started", trace_id=trace_id, **correlation)
         try:
             response = service.complete(request_object, trace_id=trace_id)
         except HostedCoachingServiceError as error:
             status = _ERROR_STATUS[error.code]
             _log_http_completed(
                 trace_id=trace_id,
+                correlation=correlation,
                 elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
                 outcome=error.code,
                 status=status,
@@ -118,6 +119,7 @@ def create_application(
             status = "503 Service Unavailable"
             _log_http_completed(
                 trace_id=trace_id,
+                correlation=correlation,
                 elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
                 outcome="providerUnavailable",
                 status=status,
@@ -126,6 +128,7 @@ def create_application(
 
         _log_http_completed(
             trace_id=trace_id,
+            correlation=correlation,
             elapsed_milliseconds=_elapsed_milliseconds(clock(), started),
             outcome="success",
             status="200 OK",
@@ -207,17 +210,31 @@ def _elapsed_milliseconds(finished: float, started: float) -> float:
 def _log_http_completed(
     *,
     trace_id: str,
+    correlation: dict[str, str],
     elapsed_milliseconds: float,
     outcome: str,
     status: str,
 ) -> None:
-    _LOGGER.info(
-        (
-            "event=http_request_completed trace_id=%s "
-            "elapsed_ms=%s outcome=%s status=%s"
-        ),
-        trace_id,
-        elapsed_milliseconds,
-        outcome,
-        status.split(" ", 1)[0],
+    emit_event(
+        "http_request_completed",
+        trace_id=trace_id,
+        **correlation,
+        elapsed_ms=elapsed_milliseconds,
+        outcome=outcome,
+        status=int(status.split(" ", 1)[0]),
     )
+
+
+def _safe_correlation_fields(value: dict[str, object]) -> dict[str, str]:
+    fields = {}
+    for source, target in (("gameID", "game_id"), ("episodeID", "episode_id")):
+        candidate = value.get(source)
+        if not isinstance(candidate, str):
+            continue
+        try:
+            canonical = str(uuid.UUID(candidate))
+        except (AttributeError, ValueError):
+            continue
+        if candidate == canonical:
+            fields[target] = canonical
+    return fields

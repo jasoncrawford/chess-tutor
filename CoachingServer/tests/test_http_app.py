@@ -14,6 +14,20 @@ from CoachingServer.http_app import create_application, create_environment_appli
 from CoachingServer.service import HostedCoachingServiceError
 
 
+GAME_ID = "a1111111-1111-4111-8111-111111111111"
+EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
+
+
+def correlated_request():
+    return {
+        "schemaVersion": "hosted-coaching-request.v3",
+        "gameID": GAME_ID,
+        "episodeID": EPISODE_ID,
+        "request": {},
+        "previousResponseID": None,
+    }
+
+
 class FakeService:
     def __init__(self, response=None, error=None):
         self.requests = []
@@ -155,7 +169,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
             clock=lambda: next(clock),
             trace_id_factory=lambda: "trace-http",
         )
-        encoded = json.dumps({"schemaVersion": "request.v1"}).encode("utf-8")
+        encoded = json.dumps(correlated_request()).encode("utf-8")
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
             status, _, _ = invoke(
@@ -168,15 +182,31 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
 
         self.assertEqual("200 OK", status)
         self.assertEqual(["trace-http"], service.trace_ids)
+        values = [json.loads(record.getMessage()) for record in captured.records]
+        for value in values:
+            self.assertEqual("coaching-log.v1", value.pop("schema_version"))
+            self.assertTrue(value.pop("timestamp").endswith("Z"))
         self.assertEqual(
             [
-                "event=http_request_started trace_id=trace-http",
-                (
-                    "event=http_request_completed trace_id=trace-http "
-                    "elapsed_ms=250.0 outcome=success status=200"
-                ),
+                {
+                    "level": "info",
+                    "event": "http_request_started",
+                    "trace_id": "trace-http",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                },
+                {
+                    "level": "info",
+                    "event": "http_request_completed",
+                    "trace_id": "trace-http",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 250.0,
+                    "outcome": "success",
+                    "status": 200,
+                },
             ],
-            [record.getMessage() for record in captured.records],
+            values,
         )
 
     def test_rejected_input_does_not_log_payload_content(self):
