@@ -151,6 +151,7 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
     record["previousResponseIDUsed"] = previous_response_id
     response = None
     final_category = "providerError"
+    final_http_status = None
     started = time.monotonic()
     for attempt in range(1, configuration.maximum_attempts + 1):
         record["attemptCount"] = attempt
@@ -169,11 +170,14 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
             break
         except OpenAIResponsesError as error:
             final_category = error.category
+            final_http_status = _bounded_http_status(error.http_status)
         except Exception:
             final_category = "providerError"
+            final_http_status = None
     record["latencyMilliseconds"] = _bounded_float((time.monotonic() - started) * 1000)
     if response is None:
         record["generationStatus"] = final_category
+        record["providerHTTPStatus"] = final_http_status
         record["mechanicalValidation"] = {
             "valid": False,
             "categories": [final_category],
@@ -239,6 +243,7 @@ def _base_record(cell):
         "userPromptSHA256": _sha256(user_prompt.encode("utf-8")),
         "providerResponseID": "",
         "providerModel": "",
+        "providerHTTPStatus": None,
         "sanitizedOutput": "",
         "parsedTurn": None,
         "mechanicalValidation": {"valid": False, "categories": ["notRun"]},
@@ -256,6 +261,12 @@ def _base_record(cell):
         "previousResponseIDUsed": None,
         "candidateCostUSD": None,
     }
+
+
+def _bounded_http_status(value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 100 <= value <= 599 else None
 
 
 def _manifest(

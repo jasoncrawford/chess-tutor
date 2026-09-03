@@ -65,7 +65,7 @@ python3 -m Tools.CoachingEval.benchmark.cli report \
   --output .coaching-eval/benchmark/runs/<run>/report
 ```
 
-`report` is entirely offline and can regenerate a report from frozen responses and grades. Reports keep quality separate from operations: they show mechanical validity, severe errors, each of the six rubric dimensions, strong-response rate, pairwise wins/losses/ties, p50/p90 latency, candidate token cost, and separately labeled judge overhead. The Pareto frontier includes configurations not dominated simultaneously on strong-response rate, severe errors, p90 latency, and candidate cost; there is deliberately no opaque combined score.
+`report` is entirely offline and can regenerate a report from frozen responses and grades. Reports keep quality separate from operations: they show mechanical validity, provider failures grouped by category and bounded HTTP status, severe errors, each of the six rubric dimensions, strong-response rate, pairwise wins/losses/ties, p50/p90 latency, candidate token cost, and separately labeled judge overhead. The Pareto frontier includes configurations not dominated simultaneously on strong-response rate, severe errors, p90 latency, and candidate cost; there is deliberately no opaque combined score.
 
 To test a new prompt or model, copy `configs/production-v1.json`, change only the intended fields, and pin all referenced hashes. To test a new deterministic user-prompt generator, add a named entry to `PROMPT_GENERATORS` in `benchmark/configuration.py` plus compiler and benchmark tests; configuration files cannot load arbitrary code. Pricing is an immutable, dated estimate: add a new `pricing-v<number>.json` from an official source rather than rewriting an old table.
 

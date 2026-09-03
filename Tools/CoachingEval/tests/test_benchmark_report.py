@@ -30,6 +30,11 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(4, baseline["responseCount"])
         self.assertEqual(0.75, baseline["reliability"]["providerSuccessRate"])
         self.assertEqual(0.75, baseline["reliability"]["mechanicalValidityRate"])
+        self.assertEqual(
+            [{"category": "httpError", "httpStatus": 502, "count": 1}],
+            baseline["reliability"]["providerFailureBreakdown"],
+        )
+        self.assertEqual([], candidate["reliability"]["providerFailureBreakdown"])
         self.assertEqual(0.25, baseline["quality"]["severeErrorRate"])
         self.assertEqual(0.5, baseline["quality"]["allDimensionsAtLeast4Rate"])
         self.assertEqual({"1": 1, "3": 1, "4": 1, "5": 1}, baseline["quality"]["dimensions"]["chessCorrectness"]["distribution"])
@@ -53,6 +58,7 @@ class BenchmarkReportTests(unittest.TestCase):
             ["baseline|s1-3|r1"],
             [value["cellID"] for value in report["mechanicalFailures"]],
         )
+        self.assertEqual(502, report["mechanicalFailures"][0]["providerHTTPStatus"])
 
     def test_confidence_intervals_are_deterministic_and_manifest_failures_are_diagnostic(self):
         first = build_report(self.run_root, self.grade_root, self.prices)
@@ -97,6 +103,8 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn("Pareto frontier", summary)
         self.assertIn("Mechanical failures", summary)
         self.assertIn("baseline|s1-3|r1", summary)
+        self.assertIn("httpError (HTTP 502): 1", summary)
+        self.assertIn("HTTP 502", summary)
         self.assertIn("transcripts/candidate--s1-3--r1.md", summary)
         with self.assertRaisesRegex(ValueError, "overwrite"):
             write_report(self.run_root, self.grade_root, self.prices, destination)
@@ -145,7 +153,7 @@ class BenchmarkReportTests(unittest.TestCase):
         ):
             for (case_id, group_id, step_index, category), score, valid, latency in zip(cases, score_values, valid_values, latencies):
                 cell_id = f"{configuration_id}|{case_id}|r1"
-                status = "completed" if valid else "timeout"
+                status = "completed" if valid else "httpError"
                 usage = {
                     "inputTokens": input_tokens if valid else 0,
                     "cachedInputTokens": 10 if valid else 0,
@@ -164,7 +172,8 @@ class BenchmarkReportTests(unittest.TestCase):
                         "category": category,
                         "repetition": 1,
                         "generationStatus": status,
-                        "mechanicalValidation": {"valid": valid, "categories": [] if valid else ["timeout"]},
+                        "providerHTTPStatus": None if valid else 502,
+                        "mechanicalValidation": {"valid": valid, "categories": [] if valid else ["httpError"]},
                         "usage": usage,
                         "latencyMilliseconds": latency,
                         "attemptCount": 3 if configuration_id == "baseline" and case_id == "q1" else 1,

@@ -317,6 +317,32 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertEqual("timeout", first["generationStatus"])
         self.assertNotIn("another-secret", (self.root / "one-attempt/records.jsonl").read_text())
 
+    def test_preserves_bounded_http_status_without_provider_error_content(self):
+        client = FakeClient(
+            failures=[
+                OpenAIResponsesError(
+                    "secret-provider-body",
+                    category="httpError",
+                    http_status=502,
+                )
+            ]
+        )
+        run_candidates(
+            corpus=self.corpus,
+            configurations=(self.configuration,),
+            mode="quick",
+            destination=self.root / "http-failure",
+            provider_factory=lambda _configuration: client,
+        )
+
+        records_text = (self.root / "http-failure/records.jsonl").read_text()
+        first = json.loads(records_text.splitlines()[0])
+        second = json.loads(records_text.splitlines()[1])
+        self.assertEqual("httpError", first["generationStatus"])
+        self.assertEqual(502, first["providerHTTPStatus"])
+        self.assertIsNone(second["providerHTTPStatus"])
+        self.assertNotIn("secret-provider-body", records_text)
+
 
 if __name__ == "__main__":
     unittest.main()
