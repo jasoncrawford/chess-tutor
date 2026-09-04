@@ -11,7 +11,6 @@ from Tools.CoachingEval.benchmark.configuration import (
     load_prices,
 )
 from Tools.CoachingEval.benchmark.corpus import (
-    BenchmarkCorpus,
     BenchmarkGraderBrief,
     BenchmarkTurn,
     load_corpus,
@@ -59,6 +58,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.configuration_counter = 0
+        self.corpus_counter = 0
         self.corpus = self.make_corpus()
         self.configuration = self.make_configuration()
         self.prices = replace(
@@ -113,7 +113,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
         candidate_path.write_bytes(self.pretty(raw))
         return load_candidate(candidate_path, repository_root)
 
-    def make_corpus(self):
+    def make_corpus(self, *, invalid_request_index=None):
         request = json.loads(
             (ROOT / "Tools/CoachingEval/fixtures/chess-native-context-v1.json").read_text()
         )["request"]
@@ -156,33 +156,31 @@ class BenchmarkRunnerTests(unittest.TestCase):
                     detached["interaction"]["episodeEvents"] = [event]
                 turns.append(BenchmarkTurn(identifier, group, step, split, "interaction", detached, brief, None))
         raw_cases = tuple(self.raw_turn(turn) for turn in turns)
-        return BenchmarkCorpus(
-            self.root,
-            "source",
-            "c" * 64,
-            tuple(turns),
-            raw_cases,
-        )
-
-    def make_pinned_corpus(self):
-        corpus = self.make_corpus()
-        root = self.root / "pinned-corpus"
+        if invalid_request_index is not None:
+            raw_cases = list(raw_cases)
+            raw_cases[invalid_request_index] = {
+                **raw_cases[invalid_request_index],
+                "request": {"bad": True},
+            }
+            raw_cases = tuple(raw_cases)
+        self.corpus_counter += 1
+        root = self.root / f"pinned-corpus-{self.corpus_counter}"
         root.mkdir()
         cases_bytes = b"".join(
             json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
             + b"\n"
-            for value in corpus.raw_cases
+            for value in raw_cases
         )
         (root / "cases.jsonl").write_bytes(cases_bytes)
         manifest = {
             "schemaVersion": "coaching-quality-benchmark-manifest.v1",
-            "sourceGitSHA": corpus.source_git_sha,
+            "sourceGitSHA": "source",
             "independentGroupCount": 40,
             "sequenceGroupCount": 10,
             "turnCount": 70,
             "developmentTurnCount": 56,
             "holdoutTurnCount": 14,
-            "turnIDs": [turn.identifier for turn in corpus.turns],
+            "turnIDs": [value["id"] for value in raw_cases],
             "casesSHA256": hashlib.sha256(cases_bytes).hexdigest(),
         }
         (root / "benchmark-manifest.json").write_bytes(self.pretty(manifest))
@@ -365,6 +363,16 @@ class BenchmarkRunnerTests(unittest.TestCase):
                     },
                 },
             ),
+            (
+                "inconsistent-total",
+                lambda response: {
+                    **response,
+                    "usage": {
+                        **response["usage"],
+                        "total_tokens": 999,
+                    },
+                },
+            ),
         )
         for name, mutate in cases:
             with self.subTest(name=name):
@@ -423,18 +431,23 @@ class BenchmarkRunnerTests(unittest.TestCase):
         records = [json.loads(line) for line in (self.root / "blocked/records.jsonl").read_text().splitlines()]
         sequence = [record for record in records if record["groupID"] == "s-01"]
         self.assertEqual(["invalid", "blockedByPriorTurn", "blockedByPriorTurn"], [record["generationStatus"] for record in sequence])
+        for blocked in sequence[1:]:
+            self.assertTrue(blocked["candidateAccountingComplete"])
+            self.assertEqual("0", blocked["candidateCostUSD"])
+            self.assertEqual(
+                {
+                    "inputTokens": 0,
+                    "cachedInputTokens": 0,
+                    "outputTokens": 0,
+                    "reasoningTokens": 0,
+                    "totalTokens": 0,
+                },
+                blocked["usage"],
+            )
         self.assertEqual(54, len(client.calls))
 
     def test_preflights_every_cell_before_provider_and_refuses_unsafe_runs(self):
-        broken = list(self.corpus.turns)
-        broken[55] = replace(broken[55], request={"bad": True})
-        broken_raw = list(self.corpus.raw_cases)
-        broken_raw[55] = {**broken_raw[55], "request": {"bad": True}}
-        broken_corpus = replace(
-            self.corpus,
-            turns=tuple(broken),
-            raw_cases=tuple(broken_raw),
-        )
+        broken_corpus = self.make_corpus(invalid_request_index=55)
         factory_calls = []
         with self.assertRaises(ValueError):
             run_candidates(
@@ -520,10 +533,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             alternative,
             identifier="mutated-alternative",
         )
-        broken_turns = list(self.corpus.turns)
-        broken_turns[55] = replace(broken_turns[55], request={"bad": True})
-        broken_raw = list(self.corpus.raw_cases)
-        broken_raw[55] = {**broken_raw[55], "request": {"bad": True}}
+        broken_corpus = self.make_corpus(invalid_request_index=55)
         cases = (
             (
                 "zero-baselines",
@@ -630,11 +640,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 "compilation-failure",
                 (self.configuration, alternative),
                 self.prices,
-                replace(
-                    self.corpus,
-                    turns=tuple(broken_turns),
-                    raw_cases=tuple(broken_raw),
-                ),
+                broken_corpus,
             ),
         )
         for name, configurations, prices, corpus in cases:
@@ -728,7 +734,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertEqual([], factory_calls)
 
     def test_in_memory_corpus_mutation_stops_before_provider_construction(self):
-        mutated = self.make_pinned_corpus()
+        mutated = self.make_corpus()
         mutated.turns[0].request["requestID"] = "benchmark:valid-but-mutated"
         factory_calls = []
 
@@ -759,19 +765,12 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 price_table=self.prices,
             )
 
-        artifact_root = self.root / "bound-corpus"
-        artifact_root.mkdir()
-        cases_path = artifact_root / "cases.jsonl"
-        cases_path.write_bytes(b"original\n")
-        bound = replace(
-            self.corpus,
-            root=artifact_root,
-            sha256=hashlib.sha256(cases_path.read_bytes()).hexdigest(),
-        )
-        cases_path.write_bytes(b"changed\n")
-        with self.assertRaisesRegex(ValueError, "changed"):
+        changed = self.make_corpus()
+        changed_cases_path = Path(changed.root) / "cases.jsonl"
+        changed_cases_path.write_bytes(changed_cases_path.read_bytes() + b" ")
+        with self.assertRaises(ValueError):
             run_candidates(
-                corpus=bound,
+                corpus=changed,
                 configurations=(self.configuration,),
                 mode="quick",
                 destination=self.root / "hash-drift",
@@ -788,6 +787,38 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 provider_factory=lambda _configuration: FakeClient(),
                 price_table=self.prices,
             )
+
+    def test_missing_or_repointed_corpus_artifacts_stop_before_provider_construction(self):
+        missing_manifest = self.make_corpus()
+        (Path(missing_manifest.root) / "benchmark-manifest.json").unlink()
+        missing_cases = self.make_corpus()
+        (Path(missing_cases.root) / "cases.jsonl").unlink()
+        source = self.make_corpus()
+        repointed_root = self.root / "repointed-corpus"
+        repointed_root.mkdir()
+        for name in ("cases.jsonl", "benchmark-manifest.json"):
+            (repointed_root / name).write_bytes((Path(source.root) / name).read_bytes())
+        repointed = replace(source, root=repointed_root)
+
+        for name, corpus in (
+            ("missing-manifest", missing_manifest),
+            ("missing-cases", missing_cases),
+            ("repointed-root", repointed),
+        ):
+            with self.subTest(name=name):
+                factory_calls = []
+                with self.assertRaisesRegex(ValueError, "missing or repointed"):
+                    run_candidates(
+                        corpus=corpus,
+                        configurations=(self.configuration,),
+                        mode="quick",
+                        destination=self.root / name,
+                        provider_factory=lambda configuration: factory_calls.append(
+                            configuration
+                        ),
+                        price_table=self.prices,
+                    )
+                self.assertEqual([], factory_calls)
 
     def test_retries_only_when_configured_and_redacts_exception_text(self):
         client = FakeClient(

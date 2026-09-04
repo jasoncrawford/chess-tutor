@@ -5,6 +5,7 @@ import json
 import math
 import os
 import random
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -12,12 +13,26 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from Tools.CoachingEval.benchmark.configuration import validate_candidate_usage
 from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS
 
 
 _BOOTSTRAP_DRAWS = 10_000
 _BOOTSTRAP_SEED = 20260901
 _PROVIDER_SUCCESS = frozenset(("completed", "invalid"))
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_QUALIFICATION_BINDING_KEYS = frozenset(
+    (
+        "judgeConfigurationSHA256",
+        "judgePromptSHA256",
+        "referenceSetSHA256",
+        "absoluteSchemaSHA256",
+        "pairwiseSchemaSHA256",
+    )
+)
+_MANIFEST_QUALIFICATION_BINDING_KEYS = _QUALIFICATION_BINDING_KEYS - {
+    "referenceSetSHA256"
+}
 _USAGE_KEYS = (
     "inputTokens",
     "cachedInputTokens",
@@ -267,6 +282,12 @@ def _aggregate_configuration(
             issues.append(f"candidate accounting is incomplete for {identifier}")
             candidate_accounting_complete = False
         try:
+            validate_candidate_usage(record.get("usage"))
+        except ValueError:
+            issues.append(f"candidate usage accounting is invalid for {identifier}")
+            candidate_accounting_complete = False
+            continue
+        try:
             expected_cost = price_table.estimate(
                 configuration.get("model"), record.get("usage", {})
             )
@@ -485,6 +506,13 @@ def _sequence_costs(records, configuration, price_table, issues):
         total = Decimal(0)
         try:
             for record in group:
+                if record.get("candidateAccountingComplete") is not True:
+                    raise ValueError("Candidate accounting is incomplete")
+                validate_candidate_usage(record.get("usage"))
+        except ValueError:
+            continue
+        try:
+            for record in group:
                 total += price_table.estimate(
                     configuration.get("model"), record.get("usage", {})
                 )
@@ -688,16 +716,20 @@ def _validate_qualification_binding(qualification, manifest, issues):
     if qualification.get("status") != "accepted":
         issues.append("judge qualification was not accepted")
     bindings = qualification.get("bindings")
-    if not isinstance(bindings, Mapping):
+    if (
+        not isinstance(bindings, Mapping)
+        or set(bindings) != _QUALIFICATION_BINDING_KEYS
+        or any(not _valid_sha256(bindings.get(key)) for key in _QUALIFICATION_BINDING_KEYS)
+        or any(
+            not _valid_sha256(manifest.get(key))
+            for key in _MANIFEST_QUALIFICATION_BINDING_KEYS
+        )
+    ):
         issues.append("judge qualification bindings are invalid")
-        return
-    expected = {
-        "judgeConfigurationSHA256": manifest.get("judgeConfigurationSHA256"),
-        "judgePromptSHA256": manifest.get("judgePromptSHA256"),
-        "absoluteSchemaSHA256": manifest.get("absoluteSchemaSHA256"),
-        "pairwiseSchemaSHA256": manifest.get("pairwiseSchemaSHA256"),
-    }
-    if any(bindings.get(key) != value for key, value in expected.items()):
+    elif any(
+        bindings[key] != manifest[key]
+        for key in _MANIFEST_QUALIFICATION_BINDING_KEYS
+    ):
         issues.append("judge qualification bindings do not match grade manifest")
     criteria = qualification.get("criteria")
     passes = qualification.get("passes")
@@ -1219,6 +1251,10 @@ def _nonnegative_decimal(value):
     except Exception:
         return None
     return result if result is not None and result.is_finite() and result >= 0 else None
+
+
+def _valid_sha256(value):
+    return isinstance(value, str) and _SHA256.fullmatch(value) is not None
 
 
 def _decimal_string(value):

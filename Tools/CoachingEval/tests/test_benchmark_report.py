@@ -236,6 +236,58 @@ class BenchmarkReportTests(unittest.TestCase):
             report["integrityIssues"],
         )
 
+    def test_empty_usage_cannot_claim_complete_candidate_accounting(self):
+        run_root, grade_root = self.make_complete_comparison(
+            self.root / "empty-candidate-usage",
+            include_holdout=True,
+        )
+        records_path = run_root / "records.jsonl"
+        records = [json.loads(line) for line in records_path.read_text().splitlines()]
+        candidate_records = [
+            record
+            for record in records
+            if record["configurationID"] == "candidate"
+            and record["repetition"] == 1
+        ][:3]
+        for step_index, record in enumerate(candidate_records, start=1):
+            record["groupID"] = "candidate-sequence"
+            record["stepIndex"] = step_index
+        candidate_record = candidate_records[0]
+        candidate_record["usage"] = {}
+        candidate_record["candidateAccountingComplete"] = True
+        candidate_record["candidateCostUSD"] = "0"
+        records_bytes = self.jsonl(records)
+        records_path.write_bytes(records_bytes)
+        run_manifest_path = run_root / "run-manifest.json"
+        run_manifest = json.loads(run_manifest_path.read_text())
+        run_manifest["recordsSHA256"] = self.sha(records_bytes)
+        run_manifest_path.write_text(json.dumps(run_manifest))
+        grade_manifest_path = grade_root / "grade-manifest.json"
+        grade_manifest = json.loads(grade_manifest_path.read_text())
+        grade_manifest["sourceRunRecordsSHA256"] = self.sha(records_bytes)
+        grade_manifest_path.write_text(json.dumps(grade_manifest))
+
+        report = build_report(run_root, grade_root, self.prices)
+
+        candidate = report["configurations"]["candidate"]
+        self.assertFalse(candidate["candidateCostUSD"]["accountingComplete"])
+        self.assertIsNone(candidate["candidateCostUSD"]["total"])
+        self.assertIn(
+            "candidate usage accounting is invalid for candidate",
+            report["integrityIssues"],
+        )
+        self.assertFalse(
+            any(
+                value["groupID"] == "candidate-sequence"
+                for value in candidate["completeSequenceCostsUSD"]
+            )
+        )
+        self.assertFalse(report["promotionEligible"])
+        self.assertEqual(
+            {"decision": "keepBaseline", "configurationID": "baseline"},
+            report["recommendation"],
+        )
+
     def test_development_comparison_can_qualify_a_trial_but_not_promotion(self):
         run_root, grade_root = self.make_complete_comparison(
             self.root / "development-comparison",
@@ -327,6 +379,57 @@ class BenchmarkReportTests(unittest.TestCase):
 
                 self.assertFalse(report["promotionEligible"])
                 self.assertIn(issue, report["integrityIssues"])
+                self.assertEqual(
+                    {"decision": "keepBaseline", "configurationID": "baseline"},
+                    report["recommendation"],
+                )
+
+    def test_qualification_and_manifest_require_complete_valid_sha_bindings(self):
+        mutations = (
+            (
+                "same-missing-binding",
+                lambda qualification, manifest: (
+                    qualification["bindings"].pop("judgePromptSHA256"),
+                    manifest.pop("judgePromptSHA256"),
+                ),
+            ),
+            (
+                "same-malformed-binding",
+                lambda qualification, manifest: (
+                    qualification["bindings"].update(judgePromptSHA256="bad"),
+                    manifest.update(judgePromptSHA256="bad"),
+                ),
+            ),
+            (
+                "malformed-reference-binding",
+                lambda qualification, _manifest: qualification["bindings"].update(
+                    referenceSetSHA256="bad"
+                ),
+            ),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name):
+                run_root, grade_root = self.make_complete_comparison(
+                    self.root / name,
+                    include_holdout=True,
+                )
+                qualification_path = grade_root / "qualification.json"
+                qualification = json.loads(qualification_path.read_text())
+                manifest_path = grade_root / "grade-manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                mutate(qualification, manifest)
+                qualification_bytes = self.pretty(qualification)
+                qualification_path.write_bytes(qualification_bytes)
+                manifest["qualificationSHA256"] = self.sha(qualification_bytes)
+                manifest_path.write_text(json.dumps(manifest))
+
+                report = build_report(run_root, grade_root, self.prices)
+
+                self.assertFalse(report["promotionEligible"])
+                self.assertIn(
+                    "judge qualification bindings are invalid",
+                    report["integrityIssues"],
+                )
                 self.assertEqual(
                     {"decision": "keepBaseline", "configurationID": "baseline"},
                     report["recommendation"],
@@ -666,12 +769,13 @@ class BenchmarkReportTests(unittest.TestCase):
             for (case_id, group_id, step_index, category), score, valid, latency in zip(cases, score_values, valid_values, latencies):
                 cell_id = f"{configuration_id}|{case_id}|r1"
                 status = "completed" if valid else "httpError"
+                output_tokens = 10 if case_id == "q1" and valid else 0
                 usage = {
                     "inputTokens": input_tokens if valid else 0,
                     "cachedInputTokens": 10 if valid else 0,
-                    "outputTokens": 10 if case_id == "q1" and valid else 0,
-                    "reasoningTokens": 2 if valid else 0,
-                    "totalTokens": input_tokens + 10 if valid else 0,
+                    "outputTokens": output_tokens,
+                    "reasoningTokens": 2 if output_tokens else 0,
+                    "totalTokens": input_tokens + output_tokens if valid else 0,
                 }
                 records.append(
                     {

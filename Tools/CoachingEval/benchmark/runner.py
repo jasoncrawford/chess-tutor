@@ -17,6 +17,7 @@ from Tools.CoachingEval.benchmark.configuration import (
     PROVIDERS,
     RESPONSE_CONTRACTS,
     load_candidate,
+    validate_candidate_usage,
 )
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.chess_native_response import (
@@ -487,16 +488,22 @@ def _validate_selected_groups(turns):
 
 
 def _verify_corpus_binding(corpus):
-    root = Path(corpus.root)
-    cases_path = root / "cases.jsonl"
-    manifest_path = root / "benchmark-manifest.json"
-    if cases_path.exists() and manifest_path.exists():
-        try:
-            canonical = load_corpus(root)
-        except (OSError, ValueError) as error:
-            raise ValueError("Cannot reload pinned benchmark corpus") from error
-        if canonical != corpus:
-            raise ValueError("Loaded benchmark corpus changed after loading")
+    root = Path(corpus.root).resolve()
+    cases_path = (root / "cases.jsonl").resolve()
+    manifest_path = (root / "benchmark-manifest.json").resolve()
+    if (
+        getattr(corpus, "cases_path", None) != cases_path
+        or getattr(corpus, "manifest_path", None) != manifest_path
+        or not cases_path.is_file()
+        or not manifest_path.is_file()
+    ):
+        raise ValueError("Pinned benchmark corpus artifacts are missing or repointed")
+    try:
+        canonical = load_corpus(root)
+    except (OSError, ValueError) as error:
+        raise ValueError("Cannot reload pinned benchmark corpus") from error
+    if canonical != corpus:
+        raise ValueError("Loaded benchmark corpus changed after loading")
     if corpus.raw_cases:
         raw_ids = [value.get("id") if isinstance(value, Mapping) else None for value in corpus.raw_cases]
         turn_ids = [turn.identifier for turn in corpus.turns]
@@ -565,6 +572,10 @@ def _usage(value):
         "totalTokens": _bounded_int(value.get("total_tokens")),
     }
     if usage["cachedInputTokens"] > usage["inputTokens"]:
+        complete = False
+    try:
+        validate_candidate_usage(usage)
+    except ValueError:
         complete = False
     return usage, complete
 

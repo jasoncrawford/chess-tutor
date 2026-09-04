@@ -19,6 +19,15 @@ PROMPT_GENERATORS = {
 PROVIDERS = frozenset(("openai-responses-v1",))
 RESPONSE_CONTRACTS = frozenset(("chess-native-v13",))
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_CANDIDATE_USAGE_KEYS = frozenset(
+    (
+        "inputTokens",
+        "cachedInputTokens",
+        "outputTokens",
+        "reasoningTokens",
+        "totalTokens",
+    )
+)
 _CANDIDATE_KEYS = frozenset(
     (
         "schemaVersion",
@@ -146,6 +155,19 @@ class PriceTable:
             + Decimal(cached_tokens) * price.cached_input_per_million
             + Decimal(output_tokens) * price.output_per_million
         ) / million
+
+
+def validate_candidate_usage(value: Any) -> None:
+    if not isinstance(value, Mapping) or set(value) != _CANDIDATE_USAGE_KEYS:
+        raise ValueError("Candidate usage fields do not match the contract")
+    for key in _CANDIDATE_USAGE_KEYS:
+        _bounded_nonnegative_usage(value[key], key)
+    if value["cachedInputTokens"] > value["inputTokens"]:
+        raise ValueError("Cached input tokens cannot exceed input tokens")
+    if value["reasoningTokens"] > value["outputTokens"]:
+        raise ValueError("Reasoning tokens cannot exceed output tokens")
+    if value["totalTokens"] != value["inputTokens"] + value["outputTokens"]:
+        raise ValueError("Total tokens must equal input plus output tokens")
 
 
 def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
@@ -424,6 +446,13 @@ def _nonnegative_decimal(value, label):
 def _nonnegative_usage(value, label):
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{label} must be a nonnegative integer")
+    return value
+
+
+def _bounded_nonnegative_usage(value, label):
+    value = _nonnegative_usage(value, label)
+    if value > 1_000_000_000:
+        raise ValueError(f"{label} exceeds the accounting bound")
     return value
 
 
