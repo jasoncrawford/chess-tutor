@@ -71,6 +71,11 @@ def judge_call(configuration, client, payload, schema, price_table):
     return output, metrics
 
 
+def preflight_price(configuration, price_table):
+    if price_table is not None:
+        price_table.estimate(configuration.model, empty_metrics()["usage"])
+
+
 def validate_absolute(value):
     if not isinstance(value, dict) or set(value) != {"scores", "flags", "evidence"}:
         raise ValueError("Absolute judge fields do not match")

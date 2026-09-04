@@ -266,6 +266,25 @@ class BenchmarkGraderTests(unittest.TestCase):
                 )
             self.assertEqual([], client.calls)
 
+    def test_grade_preflights_judge_price_before_provider_call(self):
+        class MissingPrice:
+            def estimate(self, _model, _usage):
+                raise ValueError("No price is pinned for judge")
+
+        client = QueueJudge([])
+        with self.assertRaisesRegex(ValueError, "price"):
+            grade_run(
+                run_root=self.make_run(),
+                corpus=self.make_corpus(),
+                judge_configuration=self.configuration,
+                client=client,
+                destination=self.root / "unpriced",
+                qualification_path=self.qualification_path,
+                price_table=MissingPrice(),
+                now=self.now,
+            )
+        self.assertEqual([], client.calls)
+
     def test_candidate_judge_output_is_strict_bounded_and_identity_free(self):
         valid = self.absolute(score=4)
         cases = {

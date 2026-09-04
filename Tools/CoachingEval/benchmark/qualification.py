@@ -21,6 +21,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     empty_metrics as _empty_metrics,
     judge_call as _judge_call,
     pairwise_schema as _pairwise_schema,
+    preflight_price as _preflight_price,
     pretty_json_bytes as _pretty_json_bytes,
     validate_absolute as _validate_absolute,
     validate_evidence as _validate_evidence,
@@ -111,11 +112,10 @@ class JudgeQualification:
     ) -> Path:
         now = _utc_datetime(now)
         reference = cls._load_reference(configuration)
+        _preflight_price(configuration, price_table)
         reusable = cls._newest_compatible(artifact_root, configuration, now)
         if reusable is not None:
             return reusable.path
-        if price_table is not None:
-            price_table.estimate(configuration.model, _empty_metrics()["usage"])
 
         passes = []
         qualification_metrics = _empty_metrics()

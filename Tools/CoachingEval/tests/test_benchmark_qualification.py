@@ -333,13 +333,21 @@ class JudgeQualificationTests(unittest.TestCase):
             def estimate(self, _model, _usage):
                 raise ValueError("No price is pinned for judge")
 
+        artifact_root = self.root / "missing-price"
+        JudgeQualification.ensure(
+            self.configuration,
+            QueueJudge(self.passing_outputs()),
+            None,
+            artifact_root,
+            self.now,
+        )
         client = QueueJudge([])
         with self.assertRaisesRegex(ValueError, "price"):
             JudgeQualification.ensure(
                 self.configuration,
                 client,
                 MissingPrice(),
-                self.root / "missing-price",
+                artifact_root,
                 self.now,
             )
         self.assertEqual([], client.calls)

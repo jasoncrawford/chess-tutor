@@ -19,6 +19,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     empty_metrics as _empty_metrics,
     judge_call as _judge_call,
     pairwise_schema as _pairwise_schema,
+    preflight_price as _preflight_price,
     pretty_json_bytes as _pretty_json_bytes,
     validate_absolute as _validate_absolute,
     validate_flags as _validate_flags,
@@ -121,6 +122,7 @@ def grade_run(
         judge_configuration,
         now,
     )
+    _preflight_price(judge_configuration, price_table)
     qualification_bytes = qualification.artifact_bytes
     run_manifest, records = _load_run(run_root, corpus)
     turns = corpus.by_id()
