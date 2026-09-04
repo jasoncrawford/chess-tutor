@@ -218,6 +218,57 @@ class BenchmarkRunnerTests(unittest.TestCase):
             self.assertEqual("high", call["reasoning_effort"])
             self.assertIsNone(call["previous_response_id"])
 
+    def test_invalid_provider_envelopes_become_invalid_records_without_crashing(self):
+        def without_id(response):
+            return {key: value for key, value in response.items() if key != "id"}
+
+        cases = (
+            ("non-mapping", lambda _response: ["not", "a", "mapping"]),
+            (
+                "non-completed",
+                lambda response: {**response, "status": "in_progress"},
+            ),
+            ("missing-id", without_id),
+            (
+                "malformed-id",
+                lambda response: {**response, "id": "request_not-a-continuation"},
+            ),
+        )
+        for name, mutate in cases:
+            with self.subTest(name=name):
+                client = FakeClient()
+                valid_complete = client.complete
+
+                def complete(**arguments):
+                    return mutate(valid_complete(**arguments))
+
+                client.complete = complete
+                try:
+                    run_candidates(
+                        corpus=self.corpus,
+                        configurations=(self.configuration,),
+                        mode="quick",
+                        destination=self.root / f"invalid-envelope-{name}",
+                        provider_factory=lambda _configuration: client,
+                    )
+                except Exception as error:
+                    self.fail(f"invalid provider envelope crashed the runner: {error!r}")
+
+                first = json.loads(
+                    (
+                        self.root
+                        / f"invalid-envelope-{name}/records.jsonl"
+                    ).read_text().splitlines()[0]
+                )
+                self.assertEqual("invalid", first["generationStatus"])
+                self.assertEqual(
+                    {"valid": False, "categories": ["invalidResponse"]},
+                    first["mechanicalValidation"],
+                )
+                if name != "non-mapping":
+                    self.assertEqual(100, first["usage"]["inputTokens"])
+                    self.assertEqual("gpt-5.6-sol", first["providerModel"])
+
     def test_invalid_sequence_step_blocks_later_steps(self):
         client = FakeClient()
         original_complete = client.complete

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from CoachingServer.chess_native_compiler import parse_neutral_request
+from CoachingServer.provider_envelope import validate_provider_envelope
 from Tools.CoachingEval.benchmark.configuration import PROMPT_GENERATORS
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
@@ -160,6 +161,7 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
     model_configuration = configuration.model_configuration
     record = _base_record(cell)
     response = None
+    provider_returned = False
     final_category = "providerError"
     final_http_status = None
     started = time.monotonic()
@@ -177,6 +179,7 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
                 previous_response_id=previous_response_id,
                 store=model_configuration.store,
             )
+            provider_returned = True
             break
         except OpenAIResponsesError as error:
             final_category = error.category
@@ -185,7 +188,7 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
             final_category = "providerError"
             final_http_status = None
     record["latencyMilliseconds"] = _bounded_float((time.monotonic() - started) * 1000)
-    if response is None:
+    if not provider_returned:
         record["generationStatus"] = final_category
         record["providerHTTPStatus"] = final_http_status
         record["mechanicalValidation"] = {
@@ -194,16 +197,24 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
         }
         return record, None
 
-    response_id = _bounded_identifier(response.get("id"))
-    provider_model = _bounded_identifier(response.get("model"))
-    output = response.get("output_text")
-    usage = _usage(response.get("usage"))
-    record["providerModel"] = provider_model
-    record["usage"] = usage
-    if price_table is not None:
-        record["candidateCostUSD"] = str(
-            price_table.estimate(model_configuration.model, usage)
-        )
+    if isinstance(response, Mapping):
+        provider_model = _bounded_identifier(response.get("model"))
+        usage = _usage(response.get("usage"))
+        record["providerModel"] = provider_model
+        record["usage"] = usage
+        if price_table is not None:
+            record["candidateCostUSD"] = str(
+                price_table.estimate(model_configuration.model, usage)
+            )
+    try:
+        response_id, output = validate_provider_envelope(response)
+    except ValueError:
+        record["generationStatus"] = "invalid"
+        record["mechanicalValidation"] = {
+            "valid": False,
+            "categories": ["invalidResponse"],
+        }
+        return record, None
     if not isinstance(output, str) or not output or _TRACE_MARKER.search(output):
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {

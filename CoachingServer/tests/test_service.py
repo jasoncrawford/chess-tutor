@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from CoachingServer.model_configuration import HostedModelConfiguration
+from CoachingServer.provider_envelope import validate_provider_envelope
 from CoachingServer.service import (
     HostedCoachingCompletion,
     HostedCoachingService,
@@ -107,6 +108,30 @@ class EmptyProvider:
 
 
 class HostedCoachingServiceTests(unittest.TestCase):
+    def test_shared_provider_envelope_requires_completed_output_and_continuation(self):
+        response = {
+            "id": "resp_valid-123",
+            "status": "completed",
+            "output_text": '{"message":"Valid body"}',
+        }
+
+        self.assertEqual(
+            ("resp_valid-123", '{"message":"Valid body"}'),
+            validate_provider_envelope(response),
+        )
+        invalid = (
+            None,
+            [],
+            {**response, "status": "in_progress"},
+            {key: value for key, value in response.items() if key != "output_text"},
+            {**response, "output_text": None},
+            {key: value for key, value in response.items() if key != "id"},
+            {**response, "id": "request_not-a-continuation"},
+        )
+        for candidate in invalid:
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                validate_provider_envelope(candidate)
+
     def test_returns_compact_safe_diagnostics_with_the_validated_turn(self):
         clock = iter((10.0, 10.123))
         service = HostedCoachingService(
