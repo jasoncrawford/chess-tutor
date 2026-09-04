@@ -21,6 +21,14 @@ The current hosted coach has a separate production-shaped benchmark for comparin
 ./scripts/run_coaching_quality_benchmark.sh quick
 ```
 
+Before the v2 judge reference becomes qualification ground truth, review its proposed 20 absolute judgments and 10 pairwise preferences in the local study desk:
+
+```bash
+./scripts/review_judge_references.sh
+```
+
+The launcher uses the repository `.venv` when present and otherwise uses `python3`; Flask is pinned in the root `requirements.txt`. It binds only to `127.0.0.1` and makes no provider or model calls. The app reads the exact reference set pinned by `benchmark/configs/judge-v2.json`, while edits, decisions, and notes remain only in browser local storage under that reference file's SHA-256. Use **Copy review summary** after reviewing all 30 cases and paste the result into Codex. This does not modify `judge-reference-v2.json` or record human provenance: those remain separate, explicit follow-up steps. For a validation-only launch with no browser or listening server, run `./scripts/review_judge_references.sh --no-open --check`.
+
 The script reads `ChessTutor-CoachingEval-OpenAI` from Keychain, ensures the pinned automatic judge has a compatible qualification from the last 30 days, exports a fresh 70-turn corpus from Swift, runs the production configuration, and writes an ignored report beneath `.coaching-eval/benchmark/runs/<timestamp>/report/summary.md`. It never places the key in a command argument or artifact. Qualification happens before corpus export or candidate inference, so an unqualified judge cannot waste a candidate run.
 
 Compare one or more candidate configuration files against production with three repetitions per case:
