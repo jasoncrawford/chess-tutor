@@ -245,6 +245,7 @@ def _aggregate_configuration(
             "providerSuccessRate": _rate(provider_success, response_count),
             "mechanicalValidityRate": _rate(mechanical_valid, response_count),
             "mechanicalFailureCategories": _failure_categories(records),
+            "providerFailureBreakdown": _provider_failure_breakdown(records),
         },
         "pairwise": pair_counts,
         "breakdowns": {
@@ -577,6 +578,7 @@ def _mechanical_failures(records):
             {
                 "cellID": record.get("cellID"),
                 "generationStatus": record.get("generationStatus"),
+                "providerHTTPStatus": _http_status(record.get("providerHTTPStatus")),
                 "categories": [
                     value for value in categories if isinstance(value, str)
                 ],
@@ -675,6 +677,31 @@ def _failure_categories(records):
         if isinstance(raw, list):
             categories.update(value for value in raw if isinstance(value, str))
     return sorted(categories)
+
+
+def _provider_failure_breakdown(records):
+    counts = defaultdict(int)
+    for record in records:
+        category = record.get("generationStatus")
+        if (
+            category in _PROVIDER_SUCCESS
+            or not isinstance(category, str)
+            or _bounded_int(record.get("attemptCount")) == 0
+        ):
+            continue
+        counts[(category, _http_status(record.get("providerHTTPStatus")))] += 1
+    return [
+        {"category": category, "httpStatus": http_status, "count": count}
+        for (category, http_status), count in sorted(
+            counts.items(), key=lambda value: (value[0][0], value[0][1] or 0)
+        )
+    ]
+
+
+def _http_status(value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 100 <= value <= 599 else None
 
 
 def _usage_total(usages):
@@ -801,12 +828,26 @@ def _markdown(report):
         lines.append("- No candidate changes were available.")
     lines.extend(["", "## Quality and reliability", ""])
     for identifier, value in report["configurations"].items():
-        lines.append(
+        line = (
             f"- **{identifier}**: strong {value['quality']['allDimensionsAtLeast4Rate']:.1%}; "
             f"severe {value['quality']['severeErrorRate']:.1%}; "
             f"mechanically valid {value['reliability']['mechanicalValidityRate']:.1%}; "
             f"p90 {value['latencyMilliseconds']['p90']:.0f} ms."
         )
+        failures = value["reliability"]["providerFailureBreakdown"]
+        if failures:
+            details = ", ".join(
+                f"{failure['category']}"
+                + (
+                    f" (HTTP {failure['httpStatus']})"
+                    if failure["httpStatus"] is not None
+                    else ""
+                )
+                + f": {failure['count']}"
+                for failure in failures
+            )
+            line += f" Provider failures: {details}."
+        lines.append(line)
     lines.extend(["", "## Candidate cost", ""])
     for identifier, value in report["configurations"].items():
         lines.append(f"- **{identifier}**: ${value['candidateCostUSD']['total']}")
@@ -831,9 +872,11 @@ def _markdown(report):
     )
     if report["mechanicalFailures"]:
         for failure in report["mechanicalFailures"]:
+            http_status = failure["providerHTTPStatus"]
+            http_detail = f"; HTTP {http_status}" if http_status is not None else ""
             lines.append(
                 f"- **{failure['cellID']}**: {failure['generationStatus']} "
-                f"({', '.join(failure['categories']) or 'unclassified'})"
+                f"({', '.join(failure['categories']) or 'unclassified'}{http_detail})"
             )
     else:
         lines.append("None.")
