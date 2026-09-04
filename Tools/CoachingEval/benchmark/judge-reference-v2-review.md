@@ -4,484 +4,1114 @@ Status: **pending human review**
 
 Proposed by: Codex implementation agent on 2026-09-03
 
-Review each context, candidate response, score, flag, and rationale. Approval of this sheet is required before these judgments become qualification ground truth.
+Response contract: `chess-native-v13`
 
-## ref-01
+Source Git SHA: `29d24c8bc081fe17431d0e88ab5a0e085c3f1b20`
 
-**Facts:** White is to move in a quiet opening. White is not in check. No white piece is in immediate danger and no safe capture is available.
+Source corpus cases SHA-256: `d882d31605462b856266e6578ddfd2eec37dfbbd6d329150ae4b997398465afb`
 
-**Purpose:** Invite a useful opening idea without prescribing a move or inventing danger.
+Source corpus manifest SHA-256: `17b55d3222dadc818b738a0994b523b791b839015cdedbd184582b7bfccb9213`
 
-**Acceptable alternatives:** Ask about bringing a piece toward the center. | Ask what piece could join the game.
+Review every replayed context, candidate response, score, flag, preference, and rationale. Approval of this sheet is required before these judgments become qualification ground truth.
 
-**Success criteria:** Leaves the move choice to the learner. | Uses language a young beginner can understand.
+The raw source requests remain in the JSON reference set. This sheet renders the bounded facts needed for review.
 
-**Severe-failure criteria:** Invents an urgent threat. | Prevents the learner from making a move.
+## Absolute ref-01
 
-**Candidate:** “What could you develop toward the center?”
+**Source:** `q01-starting-position`; group=`q01-starting-position`; step=1; split=development; category=quiet; requestKind=initial.
 
-**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+**Request SHA-256:** `77808753061c1d93c3f32778deef8f888886339db8ef35688988f269fb41d727`
+
+**FEN:** `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`
+
+**Move history:** none
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 0 plies. Latest learner event: helpOpened. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
+
+**Purpose:** Offer one useful beginner thought without inventing urgency or prescribing an exact move.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response encourages discovery and fits a position with no immediate emergency.
+
+**Severe-failure criteria:** The response invents a hanging piece, forced tactic, check, or mandatory move.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate:** “Which knight could you bring toward the middle, where it may have more choices?”
 
 **Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 4; Child clarity: 3.
-
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
-
-**Rationale:** The question preserves agency and fits the quiet position. Develop is useful chess language but may need simpler wording for a five-year-old.
-
-## ref-02
-
-**Facts:** A pawn attacks the learner's knight. Several safe knight moves exist. The current interaction asks the learner to identify the endangered piece before solving the danger.
-
-**Purpose:** Help the learner notice which piece needs help before choosing a response.
-
-**Acceptable alternatives:** Ask the learner to tap the endangered piece without naming it.
-
-**Success criteria:** Does not reveal the endangered piece. | Stays on the identification step.
-
-**Severe-failure criteria:** Claims the knight is safe. | Creates a dead end that prevents progress.
-
-**Candidate:** “Your knight is attacked. Can you find a square where it will be safer?”
-
-**Available UI:** actions=["noPieceNeedsHelp"]; expectedResponses=["findEndangeredPiece"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=[]; focus=[]; expects="findEndangeredPiece".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 2; Discovery and independence: 2; Coherence and answerability: 2; Child clarity: 5.
-
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: true; answerRevealingGuidance: true; unavailableUIOrDeadEnd: false; severeError: false.
-
-**Rationale:** It states the endangered piece instead of letting the learner find it. It also jumps from identifying the piece to choosing its destination while declaring a different expected response.
-
-## ref-03
-
-**Facts:** The learner staged a move that leaves the queen capturable by Black. It is still the learner's tentative move and has not been committed.
-
-**Purpose:** Help the learner discover the opponent's immediate reply before deciding whether to keep the move.
-
-**Acceptable alternatives:** Ask what Black could capture next. | Ask whether the queen will be safe after the move.
-
-**Success criteria:** Focuses on the staged move's immediate safety. | Does not reveal the answer unnecessarily.
-
-**Severe-failure criteria:** Approves the losing move. | Discusses an unrelated earlier stage.
-
-**Candidate:** “Before keeping that move, what could Black capture next?”
-
-**Available UI:** actions=["tryAnotherMove"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=["tryAnotherMove"]; focus=[]; expects="judgeMoveSafety".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** It asks one answerable question about the staged move's decisive flaw and preserves discovery.
+**Rationale:** The position is quiet, and the question offers one useful idea without prescribing a move. It leaves the learner free to choose and stage a knight move.
 
-## ref-04
+## Absolute ref-02
 
-**Facts:** The learner's pawn is attacked. If the attacking piece captures it, the learner's king can recapture safely. The pawn is therefore not simply lost.
+**Source:** `d01-loose-bishop`; group=`d01-loose-bishop`; step=1; split=development; category=danger; requestKind=initial.
 
-**Purpose:** Distinguish being attacked from being lost and let the learner decide whether to continue.
+**Request SHA-256:** `63b0dc41eacd8dc78632654c24a270576458d7fbaf501daeb13a972c81546005`
 
-**Acceptable alternatives:** Explain that the king protects the pawn. | Ask what can recapture the attacker.
+**FEN:** `rnbqkbnr/ppp2ppp/8/3pp3/3P1B2/8/PPP1PPPP/RN1QKBNR w KQkq e6 0 3`
 
-**Success criteria:** Accurately explains the recapture. | Leaves a usable next choice.
+**Move history:** d4 d5 Bf4 e5
 
-**Severe-failure criteria:** Claims the pawn is undefended or inevitably lost.
+**Latest interaction:** helpOpened; references=[].
 
-**Candidate:** “That pawn is attacked, but your king protects it. Nothing is lost yet.”
+**Staged move:** none
 
-**Available UI:** actions=["looksSafe"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: helpOpened. Legal learner moves: 30. Legal learner captures: 2. Attacked learner pieces: bishop on f4, pawn on d4. Selected piece: none. Tentative move: none.
 
-**Candidate controls:** actions=["looksSafe"]; focus=[]; expects="chooseWhetherToPlay".
+**Purpose:** Help the learner notice and reason about the most relevant immediate danger.
 
-**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 4; Child clarity: 5.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+**Success criteria:** The response accurately distinguishes a real threat from a defended or harmless attack.
 
-**Rationale:** The explanation is accurate and concise, although it tells rather than helps the learner discover the recapture.
+**Severe-failure criteria:** The response misses check, claims a safe piece is lost, or identifies the wrong color or piece.
 
-## ref-05
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
 
-**Facts:** The learner replaced a previously staged pawn move with a legal knight move. The knight move is not immediately losing and helps control central squares.
+**Candidate:** “Black's pawn is attacking two of your pieces. Can you find the more valuable one?”
 
-**Purpose:** Follow the replacement and help the learner evaluate the new move.
-
-**Acceptable alternatives:** Ask what the knight now attacks or protects. | Ask whether the knight is safe on its new square.
-
-**Success criteria:** Responds to the replacement rather than the old pawn move. | Prompts useful evaluation of the knight move.
-
-**Severe-failure criteria:** Continues discussing the replaced pawn move.
-
-**Candidate:** “You changed to the knight move. What does that knight now help control?”
-
-**Available UI:** actions=["hint"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=["hint"]; focus=[]; expects="judgeMoveSafety".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 4; Child clarity: 4.
-
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
-
-**Rationale:** It explicitly follows the replacement and prompts thought about the new move. Control is somewhat abstract and does not directly ask for the requested safety judgment.
-
-## ref-06
-
-**Facts:** The learner reported that no safe capture is available. The position is quiet and the learner can stage a developing move.
-
-**Purpose:** Accept the learner's answer and move on to choosing a useful move.
-
-**Acceptable alternatives:** Ask what piece could join the game. | Ask how the learner could help control the center.
-
-**Success criteria:** Does not repeat the capture search. | Leaves the move choice open.
-
-**Severe-failure criteria:** Insists that a nonexistent capture exists. | Blocks progress after the answer.
-
-**Candidate:** “You found there is no safe capture. What kind of piece could you bring into the game?”
-
-**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 4.
-
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
-
-**Rationale:** It accepts the latest answer, advances naturally, and asks a non-prescriptive question.
-
-## ref-07
-
-**Facts:** The learner staged legal kingside castling. Castling moves the king and rook in one move and generally improves king shelter.
-
-**Purpose:** Explain the unfamiliar special move simply before the learner chooses whether to play it.
-
-**Acceptable alternatives:** Briefly explain that both the king and rook move.
-
-**Success criteria:** Explains castling accurately. | Supports the play-or-retry choice.
-
-**Severe-failure criteria:** Calls the move illegal. | Describes the king or rook moving incorrectly.
-
-**Candidate:** “Castling moves your king and rook together and helps shelter your king.”
-
-**Available UI:** actions=["playMove"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=["playMove"]; focus=[]; expects="chooseWhetherToPlay".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 4; Child clarity: 5.
-
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
-
-**Rationale:** A direct explanation is appropriate for a special rule, and the available action supports the next choice.
-
-## ref-08
-
-**Facts:** The learner staged a legal en-passant capture. The pawn moves diagonally to an empty square while capturing the opposing pawn that just advanced two squares.
-
-**Purpose:** Explain the unusual capture accurately before the learner chooses whether to play it.
-
-**Acceptable alternatives:** Explain that the pawn captures the pawn that just passed beside it.
-
-**Success criteria:** Accurately describes which pawn is captured. | Uses simple language.
-
-**Severe-failure criteria:** Claims the move is illegal. | Identifies the wrong captured pawn.
-
-**Candidate:** “The pawn moved diagonally to take the pawn that just passed it.”
-
-**Available UI:** actions=["playMove"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=["playMove"]; focus=[]; expects="chooseWhetherToPlay".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 4; Child clarity: 4.
-
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
-
-**Rationale:** The explanation is accurate and suitably direct for an unusual rule, though just passed it could be slightly clearer.
-
-## ref-09
-
-**Facts:** The learner's bishop is under a real one-move threat. The learner staged an unrelated pawn move that leaves the bishop endangered.
-
-**Purpose:** Respond to the staged move by returning attention to the unresolved urgent danger.
-
-**Acceptable alternatives:** Ask whether the bishop is still safe after the pawn move. | Ask how the learner could help the attacked bishop.
-
-**Success criteria:** Prioritizes the bishop over unrelated opportunities. | Connects the question to the staged move.
-
-**Severe-failure criteria:** Approves the pawn move while ignoring the loose bishop.
-
-**Candidate:** “Your bishop is still attacked after that pawn move. How could you help it?”
-
-**Available UI:** actions=["tryAnotherMove"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=["tryAnotherMove"]; focus=[]; expects="stageMove".
+**Candidate controls:** actions=[]; focus=[]; expects="findEndangeredPiece".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** It responds to the learner's latest move, keeps the urgent threat central, and asks the learner to solve it.
+**Rationale:** The pawn attacks both the bishop and the pawn, and the bishop is the more valuable urgent target. The prompt preserves discovery and matches the declared identification response.
 
-## ref-10
+## Absolute ref-03
 
-**Facts:** The learner just closed coaching help. No coaching response buttons remain visible. The app's global Help control remains available if the learner later wants help again.
+**Source:** `s01-danger-selection-response-02`; group=`s01-danger-selection-response`; step=2; split=development; category=danger; requestKind=followUp.
 
-**Purpose:** Respect the close action without continuing the lesson.
+**Request SHA-256:** `508734253e6b68367c9a7d0842687b766c9dc7e9832032564fb8240d3c0e1efe`
 
-**Acceptable alternatives:** Acknowledge that help is closed. | Say nothing further.
+**FEN:** `rnbqkbnr/pppp1ppp/8/8/4p3/5NP1/PPPPPP1P/RNBQKB1R w KQkq - 0 3`
 
-**Success criteria:** Does not ask another coaching question. | Does not imply that play is blocked.
+**Move history:** Nf3 e5 g3 e4
 
-**Severe-failure criteria:** Continues forcing the learner through coaching steps.
+**Latest interaction:** pieceSelected; references=["piece:white:knight:f3"].
 
-**Candidate:** “You closed help. Tap Help whenever you want another thought.”
+**Staged move:** none
 
-**Available UI:** actions=[]; expectedResponses=[]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: pieceSelected. Legal learner moves: 22. Legal learner captures: 0. Attacked learner pieces: knight on f3. Selected piece: piece:white:knight:f3. Tentative move: none.
 
-**Candidate controls:** actions=[]; focus=[]; expects=null.
+**Purpose:** Help the learner notice and reason about the most relevant immediate danger.
 
-**Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+**Success criteria:** The response accurately distinguishes a real threat from a defended or harmless attack.
 
-**Rationale:** It directly respects the close action and accurately refers to the separate global Help control.
+**Severe-failure criteria:** The response misses check, claims a safe piece is lost, or identifies the wrong color or piece.
 
-## ref-11
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["f3", "d4"], ["f3", "e5"], ["f3", "g1"], ["f3", "g5"], ["f3", "h4"]].
 
-**Facts:** White is to move in a quiet opening with several useful legal moves. Moving the central pawn to d4 is legal and reasonable. The board accepts staged moves directly.
-
-**Purpose:** Encourage independent opening thought rather than prescribe one move.
-
-**Acceptable alternatives:** Ask what piece or pawn could help the center. | Ask what the learner wants to develop.
-
-**Success criteria:** Leaves the choice among several good moves to the learner.
-
-**Severe-failure criteria:** Invents danger or gives an illegal move.
-
-**Candidate:** “Move your pawn to d4 now.”
-
-**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+**Candidate:** “Yes, that knight needs help. Where could you move it so the pawn cannot take it?”
 
 **Candidate controls:** actions=[]; focus=[]; expects="stageMove".
 
-**Scores:** Chess correctness: 4; Coaching judgment: 2; Latest-action responsiveness: 4; Discovery and independence: 1; Coherence and answerability: 4; Child clarity: 4.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The move is legal and understandable, but the command is unnecessarily prescriptive and teaches no decision-making process.
+**Rationale:** The response confirms the learner's correct selection and advances to an answerable move choice. Naming the already-selected knight does not remove the learner's remaining decision.
 
-## ref-12
+## Absolute ref-04
 
-**Facts:** An opposing pawn attacks the learner's knight. The knight is loose and can be won if the learner ignores the threat.
+**Source:** `c01-safe-queen-capture`; group=`c01-safe-queen-capture`; step=1; split=development; category=capture; requestKind=initial.
 
-**Purpose:** Help the learner recognize and solve the urgent danger.
+**Request SHA-256:** `db51b3d7caafbf6d2db8cbfb1204af3afa703514229919c00f7cf1f389f5406b`
 
-**Acceptable alternatives:** Ask which piece is attacked. | Ask how the knight could become safe.
+**FEN:** `rnb1kbnr/pppp1ppp/8/4p3/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3`
 
-**Success criteria:** Treats the knight as genuinely endangered.
+**Move history:** e4 e5 Nf3 Qh4
 
-**Severe-failure criteria:** Claims the knight is safe. | Tells the learner to ignore the attack.
+**Latest interaction:** helpOpened; references=[].
 
-**Candidate:** “Your knight is safe, so ignore the pawn attacking it.”
+**Staged move:** none
 
-**Available UI:** actions=["noPieceNeedsHelp"]; expectedResponses=["findEndangeredPiece"]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: helpOpened. Legal learner moves: 26. Legal learner captures: 2. Attacked learner pieces: pawn on e4, pawn on f2, pawn on h2. Selected piece: none. Tentative move: none.
 
-**Candidate controls:** actions=["noPieceNeedsHelp"]; focus=[]; expects="findEndangeredPiece".
+**Purpose:** Help the learner assess whether a capture is available and what the opponent can do next.
 
-**Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 2; Discovery and independence: 2; Coherence and answerability: 1; Child clarity: 4.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
+**Success criteria:** The response treats recaptures and exchanges accurately without revealing more than needed.
 
-**Rationale:** It reverses the decisive chess fact and directs the learner to ignore a piece-losing threat.
+**Severe-failure criteria:** The response invents a capture, overlooks an encoded recapture, or calls a losing capture safe.
 
-## ref-13
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
 
-**Facts:** The learner staged a bishop capture. An opposing pawn can immediately recapture the bishop. The exchange loses material for the learner.
+**Candidate:** “Can you find the valuable black piece your knight can capture safely?”
 
-**Purpose:** Help the learner evaluate the staged capture before committing it.
+**Candidate controls:** actions=[]; focus=[]; expects="findSafeCapture".
 
-**Acceptable alternatives:** Ask what can recapture the bishop. | Suggest trying another move after the learner sees the recapture.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
-**Success criteria:** Does not approve the losing capture.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Severe-failure criteria:** Calls the capture good and recommends keeping it.
+**Rationale:** The knight has a safe capture of Black's queen, but the response does not reveal its square. The question directly matches the declared safe-capture discovery response.
 
-**Candidate:** “Great capture! Keep it.”
+## Absolute ref-05
 
-**Available UI:** actions=["tryAnotherMove"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+**Source:** `s03-capture-none-02`; group=`s03-capture-none`; step=2; split=development; category=capture; requestKind=followUp.
 
-**Candidate controls:** actions=[]; focus=[]; expects="judgeMoveSafety".
+**Request SHA-256:** `edb7e604268c72b53967f361bedbbbfcbe5be5fe9e32209def7ad2eb674b74d7`
 
-**Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 4; Discovery and independence: 1; Coherence and answerability: 2; Child clarity: 4.
+**FEN:** `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`
 
-**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
+**Move history:** none
 
-**Rationale:** It directly approves a move that the verified facts say loses material.
+**Latest interaction:** actionChosen; references=["action:noSafeCapture"].
 
-## ref-14
+**Staged move:** none
 
-**Facts:** The learner needs an answerable next step. The rook on a8 is not a learner piece and is not an available answer or move focus.
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 0 plies. Latest learner event: actionChosen. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
 
-**Purpose:** Give an instruction the learner can complete through the current board or controls.
+**Purpose:** Help the learner assess whether a capture is available and what the opponent can do next.
 
-**Acceptable alternatives:** Ask the learner to stage a legal move. | Offer the available hint action.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Success criteria:** References only available interactions.
+**Success criteria:** The response treats recaptures and exchanges accurately without revealing more than needed.
 
-**Severe-failure criteria:** Directs the learner to an unavailable target and leaves no workable continuation.
+**Severe-failure criteria:** The response invents a capture, overlooks an encoded recapture, or calls a losing capture safe.
 
-**Candidate:** “Tap the rook on a8.”
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
 
-**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+**Candidate:** “Right, there is no capture yet. Which piece could you move toward the middle?”
 
-**Candidate controls:** actions=[]; focus=[{"type": "square", "square": "a8"}]; expects="stageMove".
+**Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
 
-**Scores:** Chess correctness: 2; Coaching judgment: 1; Latest-action responsiveness: 2; Discovery and independence: 1; Coherence and answerability: 1; Child clarity: 4.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: true; severeError: true.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The instruction is clear but cannot be completed through the available interaction and prevents progress.
+**Rationale:** The response accepts the learner's correct no-capture answer and advances to a useful move. It does not repeat the resolved capture search.
 
-## ref-15
+## Absolute ref-06
 
-**Facts:** There is no queen on f6. The learner's queen is not exposed to capture on the next move.
+**Source:** `s04-safe-move-confirm-02`; group=`s04-safe-move-confirm`; step=2; split=development; category=tentativeMove; requestKind=followUp.
 
-**Purpose:** Keep the advice grounded in the supplied position.
+**Request SHA-256:** `4c7c1862726cd1415669306a59a98ee9579db905e9f86d3da8686d893a987ce9`
 
-**Acceptable alternatives:** Discuss only verified threats. | Ask a restrained question if no urgent fact is available.
+**FEN:** `rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3`
 
-**Success criteria:** Does not invent a piece or threat.
+**Move history:** d4 d5 Nf3 Nf6
 
-**Severe-failure criteria:** Invents an opponent queen and a false immediate threat.
+**Latest interaction:** moveStaged; references=["move:b1-c3"].
 
-**Candidate:** “The queen on f6 can take your queen next.”
+**Staged move:** b1c3 (Nc3; special=none; legal=true)
 
-**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveStaged. Legal learner moves: 29. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: piece:white:knight:b1. Tentative move: b1c3; legal: true. Forcing immediate replies: 0.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["b1", "c3"]].
+
+**Candidate:** “Your knight move has no immediate forcing reply. Does it look safe?”
+
+**Candidate controls:** actions=[]; focus=[{"from": "b1", "to": "c3", "type": "move"}]; expects="judgeMoveSafety".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The response evaluates the actual staged knight move and uses its allowable move focus. It gives a grounded clue while leaving the learner to judge safety.
+
+## Absolute ref-07
+
+**Source:** `s04-safe-move-confirm-03`; group=`s04-safe-move-confirm`; step=3; split=development; category=tentativeMove; requestKind=followUp.
+
+**Request SHA-256:** `a8c26069b7594f309206c95e54dd2210e7f6f2eae093779872f38deebebc942a`
+
+**FEN:** `rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3`
+
+**Move history:** d4 d5 Nf3 Nf6
+
+**Latest interaction:** actionChosen; references=["action:looksSafe"].
+
+**Staged move:** b1c3 (Nc3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: actionChosen. Legal learner moves: 29. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: piece:white:knight:b1. Tentative move: b1c3; legal: true. Forcing immediate replies: 0.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["b1", "c3"]].
+
+**Candidate:** “Yes, it looks safe. Would you like to play this move or try another one?”
+
+**Candidate controls:** actions=[]; focus=[{"from": "b1", "to": "c3", "type": "move"}]; expects="chooseWhetherToPlay".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The response acknowledges the learner's positive safety judgment and asks for the next available decision. Its move focus points to the current staged move rather than an earlier stage.
+
+## Absolute ref-08
+
+**Source:** `c02-poisoned-bishop-capture`; group=`c02-poisoned-bishop-capture`; step=1; split=development; category=capture; requestKind=initial.
+
+**Request SHA-256:** `b9626025d4450585fb33b9c4ef362b9654b0eaaad162fa39d1ebb6164744c70f`
+
+**FEN:** `rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3`
+
+**Move history:** e4 e5 Bc4 Nf6
+
+**Latest interaction:** moveStaged; references=["move:c4-f7"].
+
+**Staged move:** c4f7 (Bxf7+; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveStaged. Legal learner moves: 33. Legal learner captures: 1. Attacked learner pieces: pawn on e4. Selected piece: piece:white:bishop:c4. Tentative move: c4f7; legal: true. Forcing immediate replies: 1.
+
+**Purpose:** Help the learner assess whether a capture is available and what the opponent can do next.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response treats recaptures and exchanges accurately without revealing more than needed.
+
+**Severe-failure criteria:** The response invents a capture, overlooks an encoded recapture, or calls a losing capture safe.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["c4", "f7"], ["e8", "f7"]].
+
+**Candidate:** “After this bishop capture, Black's king can take your bishop. Does the capture still look safe?”
+
+**Candidate controls:** actions=[]; focus=[{"from": "c4", "to": "f7", "type": "move"}]; expects="judgeMoveSafety".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 2; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: true; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The stated recapture is factually correct and the question remains answerable in the declared stage. It reveals the decisive reply, so pedagogy and discovery score lower without reducing chess correctness.
+
+## Absolute ref-09
+
+**Source:** `s05-unsafe-move-retry-03`; group=`s05-unsafe-move-retry`; step=3; split=development; category=tentativeMove; requestKind=followUp.
+
+**Request SHA-256:** `711a3a1b742388f74e413abb55233b8ab47398130de3beb38523322c3807f8a6`
+
+**FEN:** `rnbqkbnr/ppp1ppp1/7p/3p2B1/3P4/8/PPP1PPPP/RN1QKBNR w KQkq - 0 3`
+
+**Move history:** d4 d5 Bg5 h6
+
+**Latest interaction:** actionChosen; references=["action:tryAnotherMove"].
+
+**Staged move:** a2a3 (a3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: actionChosen. Legal learner moves: 31. Legal learner captures: 2. Attacked learner pieces: bishop on g5. Selected piece: piece:white:pawn:a2. Tentative move: a2a3; legal: true. Forcing immediate replies: 1.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["a2", "a3"], ["h6", "g5"]].
+
+**Candidate:** “Good choice to try again. Move your bishop somewhere the pawn cannot take it.”
 
 **Candidate controls:** actions=[]; focus=[]; expects="stageMove".
 
-**Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 2; Discovery and independence: 2; Coherence and answerability: 1; Child clarity: 4.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
 
-**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** It invents both a piece and an urgent threat, making the chess advice unusable.
+**Rationale:** The learner chose to retry, and the response returns to resolving the still-urgent bishop danger. It constrains the goal without prescribing an exact move.
 
-## ref-16
+## Absolute ref-10
 
-**Facts:** The knight on f3 is endangered. The current step asks the learner to identify the endangered piece by tapping it.
+**Source:** `s06-replace-move-03`; group=`s06-replace-move`; step=3; split=development; category=tentativeMove; requestKind=followUp.
 
-**Purpose:** Let the learner find the endangered piece rather than revealing it.
+**Request SHA-256:** `748c45853832ffbe91eb082b8e647ce981118662bacc88fbc887ababf4f1ca57`
 
-**Acceptable alternatives:** Ask which piece the opponent can win next without naming or circling it.
+**FEN:** `rnbqkbnr/ppp1p1pp/5p2/3pN3/8/8/PPPPPPPP/RNBQKB1R w KQkq - 0 3`
 
-**Success criteria:** Does not name, locate, or focus the answer.
+**Move history:** Nf3 d5 Ne5 f6
 
-**Severe-failure criteria:** Reveals the answer while simultaneously asking the learner to find it.
+**Latest interaction:** moveReplaced; references=["move:e5-f3"].
 
-**Candidate:** “Look for the endangered knight. It is the knight on f3.”
+**Staged move:** e5f3 (Nf3; special=none; legal=true)
 
-**Available UI:** actions=["noPieceNeedsHelp"]; expectedResponses=["findEndangeredPiece"]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveReplaced. Legal learner moves: 27. Legal learner captures: 0. Attacked learner pieces: knight on e5. Selected piece: piece:white:knight:e5. Tentative move: e5f3; legal: true. Forcing immediate replies: 0.
 
-**Candidate controls:** actions=[]; focus=[]; expects="findEndangeredPiece".
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
 
-**Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 3; Discovery and independence: 1; Coherence and answerability: 2; Child clarity: 5.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: true; unavailableUIOrDeadEnd: false; severeError: true.
+**Success criteria:** The response follows the latest move and gives one answerable next step.
 
-**Rationale:** It explicitly names the answer while telling the learner to look for it, defeating the teaching interaction.
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
 
-## ref-17
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["e5", "f3"]].
 
-**Facts:** The learner first staged a pawn move, then replaced it with a knight move. Only the knight move is currently staged.
+**Candidate:** “You changed to the knight move. Does this new move look safe?”
 
-**Purpose:** Respond to and evaluate the learner's current knight move.
+**Candidate controls:** actions=[]; focus=[{"from": "e5", "to": "f3", "type": "move"}]; expects="judgeMoveSafety".
 
-**Acceptable alternatives:** Acknowledge the knight move and ask whether it is safe. | Ask what the knight now attacks or protects.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
-**Success criteria:** Does not discuss the replaced pawn move as current.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Severe-failure criteria:** Gives stale advice about the removed move and blocks the current interaction.
+**Rationale:** The response follows the replacement event and evaluates the current staged move. The move focus is the allowable focus for the new move, not the superseded move.
 
-**Candidate:** “That first pawn move looks safe.”
+## Absolute ref-11
 
-**Available UI:** actions=["looksSafe"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+**Source:** `h05-stale-selection-replaced`; group=`h05-stale-selection-replaced`; step=1; split=holdout; category=interaction; requestKind=initial.
 
-**Candidate controls:** actions=["looksSafe"]; focus=[]; expects="judgeMoveSafety".
+**Request SHA-256:** `0815d0e931f691c746abc67c65a1ab48b586cdb5b30d3be2e29692ff23e7f2e0`
 
-**Scores:** Chess correctness: 3; Coaching judgment: 1; Latest-action responsiveness: 1; Discovery and independence: 2; Coherence and answerability: 2; Child clarity: 5.
+**FEN:** `rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2`
+
+**Move history:** e4 e5
+
+**Latest interaction:** moveReplaced; references=["move:g1-f3"].
+
+**Staged move:** g1f3 (Nf3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 2 plies. Latest learner event: moveReplaced. Legal learner moves: 29. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: piece:white:knight:g1. Tentative move: g1f3; legal: true. Forcing immediate replies: 0.
+
+**Purpose:** Follow the learner's latest tap, answer, revision, or help action without repeating a resolved step.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response acknowledges the latest interaction and advances one coherent step.
+
+**Severe-failure criteria:** The response ignores the latest event, repeats a resolved question, or offers no possible next action.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["g1", "f3"]].
+
+**Candidate:** “Your earlier pawn move looks safe. Would you like to play it?”
+
+**Candidate controls:** actions=[]; focus=[]; expects="chooseWhetherToPlay".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 1; Latest-action responsiveness: 1; Discovery and independence: 2; Coherence and answerability: 1; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: true; mixedStages: true; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
 
-**Rationale:** It ignores the learner's replacement and evaluates a move that is no longer staged.
+**Rationale:** The sentence can be factually true about the earlier move, so chess correctness remains separate from pedagogy. It ignores the latest knight replacement and asks the learner to act on an obsolete stage, which is a severe coherence failure.
 
-## ref-18
+## Absolute ref-12
 
-**Facts:** The learner's king is in check but is not checkmated. The staged bishop move is legal and resolves the check.
+**Source:** `s07-inspect-reply-03`; group=`s07-inspect-reply`; step=3; split=development; category=tentativeMove; requestKind=followUp.
 
-**Purpose:** Evaluate the legal response to check accurately.
+**Request SHA-256:** `d03c87f1e8ed7d31fa49b036402dd2f7562c419845893e6ff65d4be11658cedc`
 
-**Acceptable alternatives:** Explain that the bishop move gets the king out of check. | Invite the learner to keep the legal response.
+**FEN:** `rnb1kbnr/pppp1ppp/5q2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3`
 
-**Success criteria:** Distinguishes check from checkmate.
+**Move history:** e4 e5 Nf3 Qf6
 
-**Severe-failure criteria:** Calls the position checkmate while also claiming a legal move exists.
+**Latest interaction:** squareInspected; references=["piece:black:queen:f6"].
 
-**Candidate:** “Your king is checkmated, but you can move your bishop.”
+**Staged move:** d2d3 (d3; special=none; legal=true)
 
-**Available UI:** actions=["playMove"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: squareInspected. Legal learner moves: 27. Legal learner captures: 1. Attacked learner pieces: knight on f3. Selected piece: piece:white:pawn:d2. Tentative move: d2d3; legal: true. Forcing immediate replies: 2.
 
-**Candidate controls:** actions=["playMove"]; focus=[]; expects="chooseWhetherToPlay".
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
 
-**Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 3; Discovery and independence: 1; Coherence and answerability: 1; Child clarity: 3.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: true; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
+**Success criteria:** The response follows the latest move and gives one answerable next step.
 
-**Rationale:** The statement contradicts both the verified position and itself: a checkmated player has no legal move.
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
 
-## ref-19
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["d2", "d3"], ["f6", "f3"]].
 
-**Facts:** Moving the learner's knight to c3 is legal and safe. The move develops the knight with tempo in this position. The learner is an early beginner who is not expected to know algebraic notation or advanced terminology.
+**Candidate:** “Look again at the queen you tapped. Does your pawn move still look safe?”
 
-**Purpose:** Use clear beginner language and preserve agency while discussing a reasonable move.
+**Candidate controls:** actions=[]; focus=[{"square": "f6", "type": "square"}]; expects="judgeMoveSafety".
 
-**Acceptable alternatives:** Refer to the knight and square c3 in plain language. | Ask what the knight could do from its new square.
-
-**Success criteria:** Avoids unexplained notation and jargon. | Does not simply prescribe the move.
-
-**Severe-failure criteria:** Gives an illegal move or makes progress impossible.
-
-**Candidate:** “The knight's move to c3 is legal and safe, and develops with tempo.”
-
-**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
-
-**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
-
-**Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 3; Discovery and independence: 2; Coherence and answerability: 3; Child clarity: 1.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The chess content is accurate, but the redundant legal and safe wording and tempo jargon are poorly suited to the learner.
+**Rationale:** The response acknowledges the inspected black queen and reconnects it to the staged pawn move's safety. Its square focus identifies the square the learner just inspected without revealing the reply.
 
-## ref-20
+## Absolute ref-13
 
-**Facts:** The learner has already staged a specific move. The current coaching step is to judge that move's safety. The available controls let the learner mark it safe or try another move.
+**Source:** `s08-hint-then-act-02`; group=`s08-hint-then-act`; step=2; split=development; category=interaction; requestKind=followUp.
 
-**Purpose:** Help evaluate the current staged move rather than restart broad move selection.
+**Request SHA-256:** `dbca335d20d7fb9a00e2021409f98e77cae03eb4d3253a3af143d07834865c46`
 
-**Acceptable alternatives:** Ask what the opponent could do after the staged move. | Ask whether the moved piece remains safe.
+**FEN:** `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`
 
-**Success criteria:** Directly addresses the staged move and the available judgment controls.
+**Move history:** none
 
-**Severe-failure criteria:** Ignores the staged move and leaves the learner unable to answer through the current interaction.
+**Latest interaction:** actionChosen; references=["action:hint"].
 
-**Candidate:** “Think about everything on the board and choose the best move.”
+**Staged move:** none
 
-**Available UI:** actions=["looksSafe", "tryAnotherMove"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 0 plies. Latest learner event: actionChosen. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
 
-**Candidate controls:** actions=[]; focus=[]; expects="judgeMoveSafety".
+**Purpose:** Follow the learner's latest tap, answer, revision, or help action without repeating a resolved step.
 
-**Scores:** Chess correctness: 3; Coaching judgment: 1; Latest-action responsiveness: 1; Discovery and independence: 3; Coherence and answerability: 1; Child clarity: 3.
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
 
-**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: true; mixedStages: true; answerRevealingGuidance: false; unavailableUIOrDeadEnd: true; severeError: true.
+**Success criteria:** The response acknowledges the latest interaction and advances one coherent step.
 
-**Rationale:** The generic instruction discards the current staged move and does not connect to the available safety judgment.
+**Severe-failure criteria:** The response ignores the latest event, repeats a resolved question, or offers no possible next action.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate:** “Here is a hint: a knight near the middle often has more choices. Which knight could you move there?”
+
+**Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The response follows the learner's Hint action and provides a useful quiet-position idea. It narrows the idea to knights but preserves the exact move choice.
+
+## Absolute ref-14
+
+**Source:** `m07-castling`; group=`m07-castling`; step=1; split=development; category=specialRule; requestKind=initial.
+
+**Request SHA-256:** `81d16055d66103c0a1417f83e392b9b00c9559b3a8fba5f98a00a55a3baf20f6`
+
+**FEN:** `r1bqkb1r/1ppp1ppp/p1n2n2/4p3/B3P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 5`
+
+**Move history:** e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6
+
+**Latest interaction:** moveStaged; references=["move:e1-g1:castle-kingside"].
+
+**Staged move:** e1g1 (O-O; special=castle-kingside; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 8 plies. Latest learner event: moveStaged. Legal learner moves: 27. Legal learner captures: 2. Attacked learner pieces: pawn on e4. Selected piece: piece:white:king:e1. Tentative move: e1g1; legal: true. Forcing immediate replies: 1.
+
+**Purpose:** Explain the relevant check, mate, castling, en-passant, or promotion consequence simply and accurately.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response handles the special rule correctly in beginner-friendly language.
+
+**Severe-failure criteria:** The response misstates legality, check, checkmate, castling, en-passant, or promotion.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["e1", "g1"], ["f6", "e4"]].
+
+**Candidate:** “This castle would move your king toward shelter and bring your rook out. Does the move look safe?”
+
+**Candidate controls:** actions=[]; focus=[{"from": "e1", "to": "g1", "type": "move"}]; expects="judgeMoveSafety".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The response explains both piece movements and the usual purpose of the legal staged castle. It uses the current move focus and asks for the learner's safety judgment.
+
+## Absolute ref-15
+
+**Source:** `c06-en-passant`; group=`c06-en-passant`; step=1; split=development; category=specialRule; requestKind=initial.
+
+**Request SHA-256:** `2a91b99f33a8b8ed6bb1259f2cfa477462e3f0ebf01a95a913b7d78cfe498153`
+
+**FEN:** `rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3`
+
+**Move history:** e4 a6 e5 d5
+
+**Latest interaction:** moveStaged; references=["move:e5-d6:en-passant"].
+
+**Staged move:** e5d6 (exd6; special=en-passant; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveStaged. Legal learner moves: 31. Legal learner captures: 2. Attacked learner pieces: none. Selected piece: piece:white:pawn:e5. Tentative move: e5d6; legal: true. Forcing immediate replies: 3.
+
+**Purpose:** Explain the relevant check, mate, castling, en-passant, or promotion consequence simply and accurately.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response handles the special rule correctly in beginner-friendly language.
+
+**Severe-failure criteria:** The response misstates legality, check, checkmate, castling, en-passant, or promotion.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["e5", "d6"], ["c7", "d6"], ["d8", "d6"], ["e7", "d6"]].
+
+**Candidate:** “This special capture takes the pawn that just moved two squares, even though it stands beside your pawn. Does the capture look safe?”
+
+**Candidate controls:** actions=[]; focus=[{"from": "e5", "to": "d6", "type": "move"}]; expects="judgeMoveSafety".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 5; Child clarity: 4.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The explanation accurately describes the legal staged en-passant capture in plain terms. The rule explanation is somewhat long but leaves the safety judgment to the learner.
+
+## Absolute ref-16
+
+**Source:** `m06-promotion`; group=`m06-promotion`; step=1; split=development; category=specialRule; requestKind=initial.
+
+**Request SHA-256:** `42168807db82be1ebcb7ee8090b14517781e749489a9dc1b2cf1a11b076609d7`
+
+**FEN:** `rnbqkbnr/pPppppp1/8/8/8/8/1PPPPPpP/RNBQKBNR w KQkq - 0 5`
+
+**Move history:** a4 h5 a5 h4 a6 h3 axb7 hxg2
+
+**Latest interaction:** moveStaged; references=["move:b7-a8:promote-queen"].
+
+**Staged move:** b7a8q (bxa8=Q; special=promote-queen; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 8 plies. Latest learner event: moveStaged. Legal learner moves: 31. Legal learner captures: 10. Attacked learner pieces: bishop on f1, pawn on b7, pawn on h2, rook on h1. Selected piece: piece:white:pawn:b7. Tentative move: b7a8q; legal: true. Forcing immediate replies: 9.
+
+**Purpose:** Explain the relevant check, mate, castling, en-passant, or promotion consequence simply and accurately.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response handles the special rule correctly in beginner-friendly language.
+
+**Severe-failure criteria:** The response misstates legality, check, checkmate, castling, en-passant, or promotion.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["b7", "a8"], ["g2", "f1"], ["g2", "h1"], ["h8", "h2"]].
+
+**Candidate:** “This pawn would reach the back rank and become a queen. Does the move look safe?”
+
+**Candidate controls:** actions=[]; focus=[{"from": "b7", "to": "a8", "type": "move"}]; expects="judgeMoveSafety".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The response accurately describes the selected queen promotion and points to the staged move. It explains the consequence before asking the learner to judge the move's safety.
+
+## Absolute ref-17
+
+**Source:** `c05-mating-capture`; group=`c05-mating-capture`; step=1; split=development; category=specialRule; requestKind=initial.
+
+**Request SHA-256:** `24b90eccd8619f23494646500a953f55ff26833cfd8a4f792f3509e3bd73aeb1`
+
+**FEN:** `r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4`
+
+**Move history:** e4 e5 Bc4 Nc6 Qh5 Nf6
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 6 plies. Latest learner event: helpOpened. Legal learner moves: 43. Legal learner captures: 4. Attacked learner pieces: pawn on e4, queen on h5. Selected piece: none. Tentative move: none.
+
+**Purpose:** Explain the relevant check, mate, castling, en-passant, or promotion consequence simply and accurately.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response handles the special rule correctly in beginner-friendly language.
+
+**Severe-failure criteria:** The response misstates legality, check, checkmate, castling, en-passant, or promotion.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate:** “Black has already checkmated your king, so you cannot move.”
+
+**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
+
+**Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 3; Discovery and independence: 1; Coherence and answerability: 1; Child clarity: 4.
+
+**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: true; severeError: true.
+
+**Rationale:** The position is ongoing and White has legal moves, so the checkmate claim is factually false. It says no move is possible while declaring a move-staging response, creating a severe dead end.
+
+## Absolute ref-18
+
+**Source:** `h01-quiet-black-opening`; group=`h01-quiet-black-opening`; step=1; split=holdout; category=quiet; requestKind=initial.
+
+**Request SHA-256:** `b28f405c82c2eb7bc02fd2e43c4d553b3b07a92f4daeea18726d243a81fee8f6`
+
+**FEN:** `rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1`
+
+**Move history:** e4
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: black. Position status: ongoing. Committed history length: 1 plies. Latest learner event: helpOpened. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
+
+**Purpose:** Offer one useful beginner thought without inventing urgency or prescribing an exact move.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response encourages discovery and fits a position with no immediate emergency.
+
+**Severe-failure criteria:** The response invents a hanging piece, forced tactic, check, or mandatory move.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate:** “Move the pawn in front of your king two squares, then type done in the answer box.”
+
+**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 1; Latest-action responsiveness: 4; Discovery and independence: 1; Coherence and answerability: 1; Child clarity: 4.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: true; unavailableUIOrDeadEnd: true; severeError: true.
+
+**Rationale:** The prescribed pawn move is legal, so answer revealing is scored separately from chess correctness. The response also requires a nonexistent answer box that the declared stageMove interaction cannot accept, making it a severe dead end.
+
+## Absolute ref-19
+
+**Source:** `q02-quiet-midgame`; group=`q02-quiet-midgame`; step=1; split=development; category=quiet; requestKind=initial.
+
+**Request SHA-256:** `bc5b9c2668a702b2b928f60a95d612269630ae6ca31aa13779210553fe07bc3d`
+
+**FEN:** `r1bq1rk1/ppppbppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 3 6`
+
+**Move history:** e4 e5 Nf3 Nc6 Bc4 Nf6 d3 Be7 O-O O-O
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 10 plies. Latest learner event: helpOpened. Legal learner moves: 35. Legal learner captures: 2. Attacked learner pieces: pawn on e4. Selected piece: none. Tentative move: none.
+
+**Purpose:** Offer one useful beginner thought without inventing urgency or prescribing an exact move.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response encourages discovery and fits a position with no immediate emergency.
+
+**Severe-failure criteria:** The response invents a hanging piece, forced tactic, check, or mandatory move.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate:** “You have legal choices here. Pick one that seems useful.”
+
+**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 3; Child clarity: 2.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The message is factually true and mechanically answerable, so it keeps full chess correctness and no error flags. It is too vague to provide much coaching value or child-friendly direction, so clarity and judgment score poorly.
+
+## Absolute ref-20
+
+**Source:** `s10-close-and-reopen-03`; group=`s10-close-and-reopen`; step=3; split=holdout; category=interaction; requestKind=followUp.
+
+**Request SHA-256:** `537daecfde1e905302449f97d513a8ee788326e0f50a0776d952933051cb38a9`
+
+**FEN:** `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`
+
+**Move history:** none
+
+**Latest interaction:** helpReopened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 0 plies. Latest learner event: helpReopened. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
+
+**Purpose:** Follow the learner's latest tap, answer, revision, or help action without repeating a resolved step.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response acknowledges the latest interaction and advances one coherent step.
+
+**Severe-failure criteria:** The response ignores the latest event, repeats a resolved question, or offers no possible next action.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate:** “Welcome back. Which knight could you bring toward the middle?”
+
+**Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
+
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
+
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
+
+**Rationale:** The response follows the hosted helpReopened turn and restarts with one useful quiet-position question. It is a real response-bearing turn rather than an acknowledgment after Help has closed.
+
+## Pairwise pair-01
+
+**Source:** `q01-starting-position`; group=`q01-starting-position`; step=1; split=development; category=quiet; requestKind=initial.
+
+**Request SHA-256:** `77808753061c1d93c3f32778deef8f888886339db8ef35688988f269fb41d727`
+
+**FEN:** `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`
+
+**Move history:** none
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 0 plies. Latest learner event: helpOpened. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
+
+**Purpose:** Offer one useful beginner thought without inventing urgency or prescribing an exact move.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response encourages discovery and fits a position with no immediate emergency.
+
+**Severe-failure criteria:** The response invents a hanging piece, forced tactic, check, or mandatory move.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Response one:** “Which knight could you bring toward the middle, where it may have more choices?”
+
+**Response one controls:** actions=["hint"]; focus=[]; expects="stageMove".
+
+**Response two:** “Move a knight.”
+
+**Response two controls:** actions=[]; focus=[]; expects="stageMove".
+
+**Reference preference:** responseOne
+
+**Rationale:** Response one supplies a useful beginner reason while preserving the same move choice.
+
+## Pairwise pair-02
+
+**Source:** `d01-loose-bishop`; group=`d01-loose-bishop`; step=1; split=development; category=danger; requestKind=initial.
+
+**Request SHA-256:** `63b0dc41eacd8dc78632654c24a270576458d7fbaf501daeb13a972c81546005`
+
+**FEN:** `rnbqkbnr/ppp2ppp/8/3pp3/3P1B2/8/PPP1PPPP/RN1QKBNR w KQkq e6 0 3`
+
+**Move history:** d4 d5 Bf4 e5
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: helpOpened. Legal learner moves: 30. Legal learner captures: 2. Attacked learner pieces: bishop on f4, pawn on d4. Selected piece: none. Tentative move: none.
+
+**Purpose:** Help the learner notice and reason about the most relevant immediate danger.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response accurately distinguishes a real threat from a defended or harmless attack.
+
+**Severe-failure criteria:** The response misses check, claims a safe piece is lost, or identifies the wrong color or piece.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Response one:** “Black's pawn is attacking two of your pieces. Can you find the more valuable one?”
+
+**Response one controls:** actions=[]; focus=[]; expects="findEndangeredPiece".
+
+**Response two:** “Your bishop is endangered. Tap it.”
+
+**Response two controls:** actions=[]; focus=[]; expects="stageMove".
+
+**Reference preference:** responseOne
+
+**Rationale:** Response one preserves discovery and aligns its question with its expected response; response two reveals the answer and declares the wrong next interaction.
+
+## Pairwise pair-03
+
+**Source:** `c01-safe-queen-capture`; group=`c01-safe-queen-capture`; step=1; split=development; category=capture; requestKind=initial.
+
+**Request SHA-256:** `db51b3d7caafbf6d2db8cbfb1204af3afa703514229919c00f7cf1f389f5406b`
+
+**FEN:** `rnb1kbnr/pppp1ppp/8/4p3/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3`
+
+**Move history:** e4 e5 Nf3 Qh4
+
+**Latest interaction:** helpOpened; references=[].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: helpOpened. Legal learner moves: 26. Legal learner captures: 2. Attacked learner pieces: pawn on e4, pawn on f2, pawn on h2. Selected piece: none. Tentative move: none.
+
+**Purpose:** Help the learner assess whether a capture is available and what the opponent can do next.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response treats recaptures and exchanges accurately without revealing more than needed.
+
+**Severe-failure criteria:** The response invents a capture, overlooks an encoded recapture, or calls a losing capture safe.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Response one:** “Can you find the valuable black piece your knight can capture safely?”
+
+**Response one controls:** actions=[]; focus=[]; expects="findSafeCapture".
+
+**Response two:** “Capture the black queen with your knight.”
+
+**Response two controls:** actions=[]; focus=[]; expects="findSafeCapture".
+
+**Reference preference:** responseOne
+
+**Rationale:** Both are mechanically valid and factually grounded, but response one lets the learner discover the safe capture.
+
+## Pairwise pair-04
+
+**Source:** `s04-safe-move-confirm-02`; group=`s04-safe-move-confirm`; step=2; split=development; category=tentativeMove; requestKind=followUp.
+
+**Request SHA-256:** `4c7c1862726cd1415669306a59a98ee9579db905e9f86d3da8686d893a987ce9`
+
+**FEN:** `rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3`
+
+**Move history:** d4 d5 Nf3 Nf6
+
+**Latest interaction:** moveStaged; references=["move:b1-c3"].
+
+**Staged move:** b1c3 (Nc3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveStaged. Legal learner moves: 29. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: piece:white:knight:b1. Tentative move: b1c3; legal: true. Forcing immediate replies: 0.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["b1", "c3"]].
+
+**Response one:** “Your knight move has no immediate forcing reply. Does it look safe?”
+
+**Response one controls:** actions=[]; focus=[{"from": "b1", "to": "c3", "type": "move"}]; expects="judgeMoveSafety".
+
+**Response two:** “Your knight is in the middle now. What do you notice?”
+
+**Response two controls:** actions=[]; focus=[]; expects="judgeMoveSafety".
+
+**Reference preference:** responseOne
+
+**Rationale:** Response one asks the declared safety question and grounds it in the actual staged move; response two is less answerable.
+
+## Pairwise pair-05
+
+**Source:** `s04-safe-move-confirm-03`; group=`s04-safe-move-confirm`; step=3; split=development; category=tentativeMove; requestKind=followUp.
+
+**Request SHA-256:** `a8c26069b7594f309206c95e54dd2210e7f6f2eae093779872f38deebebc942a`
+
+**FEN:** `rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3`
+
+**Move history:** d4 d5 Nf3 Nf6
+
+**Latest interaction:** actionChosen; references=["action:looksSafe"].
+
+**Staged move:** b1c3 (Nc3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: actionChosen. Legal learner moves: 29. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: piece:white:knight:b1. Tentative move: b1c3; legal: true. Forcing immediate replies: 0.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["b1", "c3"]].
+
+**Response one:** “Yes, it looks safe. Would you like to play this move or try another one?”
+
+**Response one controls:** actions=[]; focus=[{"from": "b1", "to": "c3", "type": "move"}]; expects="chooseWhetherToPlay".
+
+**Response two:** “That was a good move.”
+
+**Response two controls:** actions=[]; focus=[]; expects="chooseWhetherToPlay".
+
+**Reference preference:** responseOne
+
+**Rationale:** Response one acknowledges the answer and gives the learner the declared choice; response two does not ask for a choice.
+
+## Pairwise pair-06
+
+**Source:** `c02-poisoned-bishop-capture`; group=`c02-poisoned-bishop-capture`; step=1; split=development; category=capture; requestKind=initial.
+
+**Request SHA-256:** `b9626025d4450585fb33b9c4ef362b9654b0eaaad162fa39d1ebb6164744c70f`
+
+**FEN:** `rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3`
+
+**Move history:** e4 e5 Bc4 Nf6
+
+**Latest interaction:** moveStaged; references=["move:c4-f7"].
+
+**Staged move:** c4f7 (Bxf7+; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveStaged. Legal learner moves: 33. Legal learner captures: 1. Attacked learner pieces: pawn on e4. Selected piece: piece:white:bishop:c4. Tentative move: c4f7; legal: true. Forcing immediate replies: 1.
+
+**Purpose:** Help the learner assess whether a capture is available and what the opponent can do next.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response treats recaptures and exchanges accurately without revealing more than needed.
+
+**Severe-failure criteria:** The response invents a capture, overlooks an encoded recapture, or calls a losing capture safe.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["c4", "f7"], ["e8", "f7"]].
+
+**Response one:** “Does this bishop capture leave the bishop safe from Black's king?”
+
+**Response one controls:** actions=[]; focus=[{"from": "c4", "to": "f7", "type": "move"}]; expects="judgeMoveSafety".
+
+**Response two:** “After this bishop capture, Black's king can take your bishop. Does the capture still look safe?”
+
+**Response two controls:** actions=[]; focus=[{"from": "c4", "to": "f7", "type": "move"}]; expects="judgeMoveSafety".
+
+**Reference preference:** responseOne
+
+**Rationale:** Both address the unsafe capture accurately, but response one prompts discovery while response two reveals the recapture.
+
+## Pairwise pair-07
+
+**Source:** `s06-replace-move-03`; group=`s06-replace-move`; step=3; split=development; category=tentativeMove; requestKind=followUp.
+
+**Request SHA-256:** `748c45853832ffbe91eb082b8e647ce981118662bacc88fbc887ababf4f1ca57`
+
+**FEN:** `rnbqkbnr/ppp1p1pp/5p2/3pN3/8/8/PPPPPPPP/RNBQKB1R w KQkq - 0 3`
+
+**Move history:** Nf3 d5 Ne5 f6
+
+**Latest interaction:** moveReplaced; references=["move:e5-f3"].
+
+**Staged move:** e5f3 (Nf3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveReplaced. Legal learner moves: 27. Legal learner captures: 0. Attacked learner pieces: knight on e5. Selected piece: piece:white:knight:e5. Tentative move: e5f3; legal: true. Forcing immediate replies: 0.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["e5", "f3"]].
+
+**Response one:** “You changed to the knight move. Does this new move look safe?”
+
+**Response one controls:** actions=[]; focus=[{"from": "e5", "to": "f3", "type": "move"}]; expects="judgeMoveSafety".
+
+**Response two:** “Your earlier pawn move looks safe. Would you like to play it?”
+
+**Response two controls:** actions=[]; focus=[]; expects="chooseWhetherToPlay".
+
+**Reference preference:** responseOne
+
+**Rationale:** Response one follows the latest replacement; response two mixes in the obsolete pawn stage.
+
+## Pairwise pair-08
+
+**Source:** `s07-inspect-reply-03`; group=`s07-inspect-reply`; step=3; split=development; category=tentativeMove; requestKind=followUp.
+
+**Request SHA-256:** `d03c87f1e8ed7d31fa49b036402dd2f7562c419845893e6ff65d4be11658cedc`
+
+**FEN:** `rnb1kbnr/pppp1ppp/5q2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3`
+
+**Move history:** e4 e5 Nf3 Qf6
+
+**Latest interaction:** squareInspected; references=["piece:black:queen:f6"].
+
+**Staged move:** d2d3 (d3; special=none; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: squareInspected. Legal learner moves: 27. Legal learner captures: 1. Attacked learner pieces: knight on f3. Selected piece: piece:white:pawn:d2. Tentative move: d2d3; legal: true. Forcing immediate replies: 2.
+
+**Purpose:** Respond to the currently staged move and help the learner evaluate it before committing.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response follows the latest move and gives one answerable next step.
+
+**Severe-failure criteria:** The response discusses a superseded move or approves a move contradicted by an immediate reply.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["d2", "d3"], ["f6", "f3"]].
+
+**Response one:** “Look again at the queen you tapped. Does your pawn move still look safe?”
+
+**Response one controls:** actions=[]; focus=[{"square": "f6", "type": "square"}]; expects="judgeMoveSafety".
+
+**Response two:** “The queen can take your knight. Does your pawn move still look safe?”
+
+**Response two controls:** actions=[]; focus=[{"square": "f6", "type": "square"}]; expects="judgeMoveSafety".
+
+**Reference preference:** responseOne
+
+**Rationale:** Both are accurate and responsive, but response one is preferred because it uses the learner's inspection without revealing the reply.
+
+## Pairwise pair-09
+
+**Source:** `c06-en-passant`; group=`c06-en-passant`; step=1; split=development; category=specialRule; requestKind=initial.
+
+**Request SHA-256:** `2a91b99f33a8b8ed6bb1259f2cfa477462e3f0ebf01a95a913b7d78cfe498153`
+
+**FEN:** `rnbqkbnr/1pp1pppp/p7/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3`
+
+**Move history:** e4 a6 e5 d5
+
+**Latest interaction:** moveStaged; references=["move:e5-d6:en-passant"].
+
+**Staged move:** e5d6 (exd6; special=en-passant; legal=true)
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 4 plies. Latest learner event: moveStaged. Legal learner moves: 31. Legal learner captures: 2. Attacked learner pieces: none. Selected piece: piece:white:pawn:e5. Tentative move: e5d6; legal: true. Forcing immediate replies: 3.
+
+**Purpose:** Explain the relevant check, mate, castling, en-passant, or promotion consequence simply and accurately.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response handles the special rule correctly in beginner-friendly language.
+
+**Severe-failure criteria:** The response misstates legality, check, checkmate, castling, en-passant, or promotion.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[["e5", "d6"], ["c7", "d6"], ["d8", "d6"], ["e7", "d6"]].
+
+**Response one:** “This special capture takes the pawn beside yours. Does the capture look safe?”
+
+**Response one controls:** actions=[]; focus=[{"from": "e5", "to": "d6", "type": "move"}]; expects="judgeMoveSafety".
+
+**Response two:** “Here your pawn captures the pawn that just passed it. Does the move look safe?”
+
+**Response two controls:** actions=[]; focus=[{"from": "e5", "to": "d6", "type": "move"}]; expects="judgeMoveSafety".
+
+**Reference preference:** tie
+
+**Rationale:** Both responses correctly and simply describe the special capture, use the current move focus, and ask the same answerable safety question.
+
+## Pairwise pair-10
+
+**Source:** `s08-hint-then-act-02`; group=`s08-hint-then-act`; step=2; split=development; category=interaction; requestKind=followUp.
+
+**Request SHA-256:** `dbca335d20d7fb9a00e2021409f98e77cae03eb4d3253a3af143d07834865c46`
+
+**FEN:** `rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`
+
+**Move history:** none
+
+**Latest interaction:** actionChosen; references=["action:hint"].
+
+**Staged move:** none
+
+**Facts:** Side to move: white. Position status: ongoing. Committed history length: 0 plies. Latest learner event: actionChosen. Legal learner moves: 20. Legal learner captures: 0. Attacked learner pieces: none. Selected piece: none. Tentative move: none.
+
+**Purpose:** Follow the learner's latest tap, answer, revision, or help action without repeating a resolved step.
+
+**Acceptable alternatives:** Any concise, accurate coaching turn that preserves learner agency.
+
+**Success criteria:** The response acknowledges the latest interaction and advances one coherent step.
+
+**Severe-failure criteria:** The response ignores the latest event, repeats a resolved question, or offers no possible next action.
+
+**Available UI:** actions=["hint"]; expectedResponses=["findEndangeredPiece", "findSafeCapture", "stageMove", "judgeMoveSafety", "chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Response one:** “Try moving something.”
+
+**Response one controls:** actions=[]; focus=[]; expects="stageMove".
+
+**Response two:** “Here is a hint: a knight near the middle often has more choices. Which knight could you move there?”
+
+**Response two controls:** actions=["hint"]; focus=[]; expects="stageMove".
+
+**Reference preference:** responseTwo
+
+**Rationale:** Response two actually follows the Hint action with a useful idea, while response one is too vague to coach the learner.

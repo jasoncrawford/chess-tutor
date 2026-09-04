@@ -238,8 +238,21 @@ class BenchmarkConfigurationTests(unittest.TestCase):
 
         self.assertEqual("production-sol-v1", candidate.identifier)
         self.assertEqual("gpt-5.6-sol", candidate.model_configuration.model)
+        self.assertEqual(
+            "35a881fa378cb52dfe1f070742ea2908626d280c9f77f0562b5d68a39ca79106",
+            candidate.model_configuration_sha256,
+        )
         self.assertEqual("judge-sol-v1", judge.identifier)
         self.assertEqual("judge-sol-v2", judge_v2.identifier)
+        reference_path = benchmark / "judge-reference-v2.json"
+        self.assertEqual(
+            hashlib.sha256(reference_path.read_bytes()).hexdigest(),
+            judge_v2.reference_set_sha256,
+        )
+        self.assertEqual(
+            "chess-native-v13",
+            json.loads(reference_path.read_text())["responseContract"],
+        )
         self.assertEqual("openai-2026-09-01", prices.version)
 
 

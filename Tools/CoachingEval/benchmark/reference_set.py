@@ -1,29 +1,77 @@
-"""Immutable, reviewable reference cases for qualifying the benchmark judge."""
+"""Immutable, replayable reference cases for qualifying the benchmark judge."""
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
-from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
-from Tools.CoachingEval.benchmark.judge_contract import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
-
-
-_TOP_LEVEL_KEYS = frozenset(("schemaVersion", "id", "provenance", "cases"))
-_PROVENANCE_KEYS = frozenset(
-    ("authoredBy", "authoredAt", "reviewStatus", "reviewedBy", "reviewedAt")
+from CoachingServer.chess_native_compiler import (
+    compile_context,
+    compile_follow_up_context,
 )
-_CASE_KEYS = frozenset(
+from Tools.CoachingEval.benchmark.judge_contract import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
+from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
+
+
+_TOP_LEVEL_KEYS = frozenset(
+    (
+        "schemaVersion",
+        "id",
+        "responseContract",
+        "provenance",
+        "sources",
+        "absoluteCases",
+        "pairwiseCases",
+    )
+)
+_PROVENANCE_KEYS = frozenset(
+    (
+        "authoredBy",
+        "authoredAt",
+        "reviewStatus",
+        "reviewedBy",
+        "reviewedAt",
+        "sourceGitSHA",
+        "sourceCasesSHA256",
+        "sourceManifestSHA256",
+    )
+)
+_SOURCE_REQUIRED_KEYS = frozenset(
+    (
+        "schemaVersion",
+        "id",
+        "groupID",
+        "stepIndex",
+        "split",
+        "category",
+        "requestKind",
+        "requestSHA256",
+        "request",
+        "graderBrief",
+    )
+)
+_SOURCE_OPTIONAL_KEYS = frozenset(("sourceTraceID",))
+_ABSOLUTE_CASE_KEYS = frozenset(
     (
         "id",
-        "graderBrief",
-        "availableUI",
+        "sourceID",
         "candidateTurn",
         "referenceScores",
         "referenceFlags",
+        "rationale",
+    )
+)
+_PAIRWISE_CASE_KEYS = frozenset(
+    (
+        "id",
+        "sourceID",
+        "responseOne",
+        "responseTwo",
+        "referencePreference",
         "rationale",
     )
 )
@@ -36,9 +84,15 @@ _BRIEF_KEYS = frozenset(
         "severeFailureCriteria",
     )
 )
-_UI_KEYS = frozenset(("actions", "expectedResponses", "allowableMoveFocus"))
-_TURN_REQUIRED_KEYS = frozenset(("message", "actions", "focus"))
-_TURN_OPTIONAL_KEYS = frozenset(("expects",))
+_TURN_KEYS = frozenset(("message", "actions", "focus", "expects"))
+_SPLITS = frozenset(("development", "holdout"))
+_CATEGORIES = frozenset(
+    ("quiet", "danger", "capture", "tentativeMove", "interaction", "specialRule")
+)
+_REQUEST_KINDS = frozenset(("initial", "followUp"))
+_REFERENCE_PREFERENCES = frozenset(("responseOne", "responseTwo", "tie"))
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_GIT_SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _DIMENSION_LABELS = {
     "chessCorrectness": "Chess correctness",
     "coachingJudgment": "Coaching judgment",
@@ -52,13 +106,24 @@ _DIMENSION_LABELS = {
 @dataclass(frozen=True)
 class JudgeReferenceSet:
     identifier: str
+    response_contract: str
     authored_by: str
     authored_at: str
     review_status: str
     reviewed_by: Optional[str]
     reviewed_at: Optional[str]
-    cases: tuple[Mapping[str, Any], ...]
+    source_git_sha: str
+    source_cases_sha256: str
+    source_manifest_sha256: str
+    sources: tuple[Mapping[str, Any], ...]
+    absolute_cases: tuple[Mapping[str, Any], ...]
+    pairwise_cases: tuple[Mapping[str, Any], ...]
     sha256: str
+
+    @property
+    def cases(self) -> tuple[Mapping[str, Any], ...]:
+        """Compatibility name for the absolute qualification inventory."""
+        return self.absolute_cases
 
     @classmethod
     def load(
@@ -81,41 +146,32 @@ class JudgeReferenceSet:
             raise ValueError("Judge reference-set fields do not match")
         if value["schemaVersion"] != "coaching-quality-judge-reference-set.v2":
             raise ValueError("Unsupported judge reference-set schema")
-        identifier = cls._text(value["id"], "reference-set id")
-        provenance = value["provenance"]
-        if not isinstance(provenance, dict) or set(provenance) != _PROVENANCE_KEYS:
-            raise ValueError("Judge reference-set provenance is invalid")
-        authored_by = cls._text(provenance["authoredBy"], "reference-set author")
-        authored_at = cls._date(provenance["authoredAt"], "reference-set authored date")
-        review_status = provenance["reviewStatus"]
-        reviewed_by = provenance["reviewedBy"]
-        reviewed_at = provenance["reviewedAt"]
-        if review_status == "pending":
-            if reviewed_by is not None or reviewed_at is not None:
-                raise ValueError("Pending reference-set review cannot name a reviewer")
-        elif review_status == "humanReviewed":
-            reviewed_by = cls._text(reviewed_by, "reference-set reviewer")
-            reviewed_at = cls._date(reviewed_at, "reference-set review date")
-        else:
-            raise ValueError("Judge reference-set review status is invalid")
-        if require_reviewed and review_status != "humanReviewed":
-            raise ValueError("Judge reference set has not been human-reviewed")
+        if value["responseContract"] != "chess-native-v13":
+            raise ValueError("Unsupported judge reference-set response contract")
 
-        raw_cases = value["cases"]
-        if not isinstance(raw_cases, list) or len(raw_cases) != 20:
-            raise ValueError("Judge reference set must contain exactly 20 cases")
-        cases = []
-        for index, case in enumerate(raw_cases, start=1):
-            cls._validate_case(case, index)
-            cases.append(cls._freeze(case))
+        provenance = cls._validate_provenance(value["provenance"], require_reviewed)
+        sources, compiled = cls._load_sources(value["sources"])
+        absolute_cases = cls._load_absolute_cases(value["absoluteCases"], compiled)
+        if tuple(case["sourceID"] for case in absolute_cases) != tuple(
+            source["id"] for source in sources
+        ):
+            raise ValueError("Judge reference-set absolute source inventory does not match")
+        pairwise_cases = cls._load_pairwise_cases(value["pairwiseCases"], compiled)
+
         return cls(
-            identifier=identifier,
-            authored_by=authored_by,
-            authored_at=authored_at,
-            review_status=review_status,
-            reviewed_by=reviewed_by,
-            reviewed_at=reviewed_at,
-            cases=tuple(cases),
+            identifier=cls._text(value["id"], "reference-set id"),
+            response_contract=value["responseContract"],
+            authored_by=provenance["authoredBy"],
+            authored_at=provenance["authoredAt"],
+            review_status=provenance["reviewStatus"],
+            reviewed_by=provenance["reviewedBy"],
+            reviewed_at=provenance["reviewedAt"],
+            source_git_sha=provenance["sourceGitSHA"],
+            source_cases_sha256=provenance["sourceCasesSHA256"],
+            source_manifest_sha256=provenance["sourceManifestSHA256"],
+            sources=tuple(cls._freeze(source) for source in sources),
+            absolute_cases=tuple(cls._freeze(case) for case in absolute_cases),
+            pairwise_cases=tuple(cls._freeze(case) for case in pairwise_cases),
             sha256=actual_sha256,
         )
 
@@ -124,6 +180,7 @@ class JudgeReferenceSet:
             status = f"human-reviewed by {self.reviewed_by} on {self.reviewed_at}"
         else:
             status = "pending human review"
+        sources = {source["id"]: source for source in self.sources}
         lines = [
             "# Judge reference set v2",
             "",
@@ -131,37 +188,28 @@ class JudgeReferenceSet:
             "",
             f"Proposed by: {self.authored_by} on {self.authored_at}",
             "",
-            "Review each context, candidate response, score, flag, and rationale. Approval of this sheet is required before these judgments become qualification ground truth.",
+            f"Response contract: `{self.response_contract}`",
+            "",
+            f"Source Git SHA: `{self.source_git_sha}`",
+            "",
+            f"Source corpus cases SHA-256: `{self.source_cases_sha256}`",
+            "",
+            f"Source corpus manifest SHA-256: `{self.source_manifest_sha256}`",
+            "",
+            "Review every replayed context, candidate response, score, flag, preference, and rationale. Approval of this sheet is required before these judgments become qualification ground truth.",
+            "",
+            "The raw source requests remain in the JSON reference set. This sheet renders the bounded facts needed for review.",
         ]
-        for case in self.cases:
-            brief = case["graderBrief"]
+        for case in self.absolute_cases:
+            source = sources[case["sourceID"]]
+            lines.extend(self._review_context("Absolute", case["id"], source, case))
             turn = case["candidateTurn"]
             lines.extend(
                 [
                     "",
-                    f"## {case['id']}",
-                    "",
-                    f"**Facts:** {' '.join(brief['verifiedFacts'])}",
-                    "",
-                    f"**Purpose:** {brief['coachingPurpose']}",
-                    "",
-                    f"**Acceptable alternatives:** {' | '.join(brief['acceptableAlternatives']) or 'none'}",
-                    "",
-                    f"**Success criteria:** {' | '.join(brief['successCriteria'])}",
-                    "",
-                    f"**Severe-failure criteria:** {' | '.join(brief['severeFailureCriteria']) or 'none'}",
-                    "",
                     f"**Candidate:** “{turn['message']}”",
                     "",
-                    "**Available UI:** "
-                    f"actions={json.dumps(list(case['availableUI']['actions']))}; "
-                    f"expectedResponses={json.dumps(list(case['availableUI']['expectedResponses']))}; "
-                    f"allowableMoveFocus={json.dumps([list(move) for move in case['availableUI']['allowableMoveFocus']])}.",
-                    "",
-                    "**Candidate controls:** "
-                    f"actions={json.dumps(list(turn['actions']))}; "
-                    f"focus={json.dumps(self._thaw(turn['focus']))}; "
-                    f"expects={json.dumps(turn.get('expects'))}.",
+                    f"**Candidate controls:** {self._controls(turn)}",
                     "",
                     "**Scores:** "
                     + "; ".join(
@@ -180,63 +228,278 @@ class JudgeReferenceSet:
                     f"**Rationale:** {' '.join(case['rationale'])}",
                 ]
             )
+        for case in self.pairwise_cases:
+            source = sources[case["sourceID"]]
+            lines.extend(self._review_context("Pairwise", case["id"], source, case))
+            for label, key in (("Response one", "responseOne"), ("Response two", "responseTwo")):
+                turn = case[key]
+                lines.extend(
+                    [
+                        "",
+                        f"**{label}:** “{turn['message']}”",
+                        "",
+                        f"**{label} controls:** {self._controls(turn)}",
+                    ]
+                )
+            lines.extend(
+                [
+                    "",
+                    f"**Reference preference:** {case['referencePreference']}",
+                    "",
+                    f"**Rationale:** {' '.join(case['rationale'])}",
+                ]
+            )
         return "\n".join(lines) + "\n"
 
+    def _review_context(self, kind, identifier, source, case):
+        request = source["request"]
+        interaction = request["interaction"]
+        latest = interaction["latestEvent"]
+        history = " ".join(move["displayNotation"] for move in request["gameHistory"])
+        staged = interaction.get("tentativeMove")
+        brief = case["graderBrief"]
+        return [
+            "",
+            f"## {kind} {identifier}",
+            "",
+            "**Source:** "
+            f"`{source['id']}`; group=`{source['groupID']}`; step={source['stepIndex']}; "
+            f"split={source['split']}; category={source['category']}; requestKind={source['requestKind']}.",
+            "",
+            f"**Request SHA-256:** `{source['requestSHA256']}`",
+            "",
+            f"**FEN:** `{request['position']['fen']}`",
+            "",
+            f"**Move history:** {history or 'none'}",
+            "",
+            "**Latest interaction:** "
+            f"{latest['kind']}; references={json.dumps(list(latest['referencedIDs']))}.",
+            "",
+            "**Staged move:** "
+            + (
+                f"{staged['canonicalMove']} ({staged['san']}; special={staged['special']}; legal={str(staged['isLegal']).lower()})"
+                if staged
+                else "none"
+            ),
+            "",
+            f"**Facts:** {' '.join(brief['verifiedFacts'])}",
+            "",
+            f"**Purpose:** {brief['coachingPurpose']}",
+            "",
+            f"**Acceptable alternatives:** {' | '.join(brief['acceptableAlternatives']) or 'none'}",
+            "",
+            f"**Success criteria:** {' | '.join(brief['successCriteria'])}",
+            "",
+            f"**Severe-failure criteria:** {' | '.join(brief['severeFailureCriteria']) or 'none'}",
+            "",
+            "**Available UI:** "
+            f"actions={json.dumps(list(case['availableUI']['actions']))}; "
+            f"expectedResponses={json.dumps(list(case['availableUI']['expectedResponses']))}; "
+            f"allowableMoveFocus={json.dumps([list(move) for move in case['availableUI']['allowableMoveFocus']])}.",
+        ]
+
     @classmethod
-    def _validate_case(cls, value, index):
-        if not isinstance(value, dict) or set(value) != _CASE_KEYS:
-            raise ValueError("Judge reference-set case fields do not match")
-        if value["id"] != f"ref-{index:02}":
-            raise ValueError("Judge reference-set case IDs or order do not match")
-        brief = value["graderBrief"]
-        if not isinstance(brief, dict) or set(brief) != _BRIEF_KEYS:
-            raise ValueError("Judge reference-set grader brief is invalid")
-        cls._text_list(brief["verifiedFacts"], "verified facts", minimum=1)
-        cls._text(brief["coachingPurpose"], "coaching purpose")
-        cls._text_list(brief["acceptableAlternatives"], "acceptable alternatives")
-        cls._text_list(brief["successCriteria"], "success criteria", minimum=1)
-        cls._text_list(brief["severeFailureCriteria"], "severe failure criteria")
-
-        available_ui = value["availableUI"]
-        if not isinstance(available_ui, dict) or set(available_ui) != _UI_KEYS:
-            raise ValueError("Judge reference-set available UI is invalid")
-        cls._text_list(available_ui["actions"], "available actions")
-        cls._text_list(available_ui["expectedResponses"], "expected responses")
-        moves = available_ui["allowableMoveFocus"]
-        if not isinstance(moves, list) or any(
-            not isinstance(move, list)
-            or len(move) != 2
-            or any(not isinstance(square, str) or not square for square in move)
-            for move in moves
-        ):
-            raise ValueError("Judge reference-set allowable move focus is invalid")
-
-        turn = value["candidateTurn"]
-        if (
-            not isinstance(turn, dict)
-            or not _TURN_REQUIRED_KEYS.issubset(turn)
-            or not set(turn).issubset(_TURN_REQUIRED_KEYS | _TURN_OPTIONAL_KEYS)
-        ):
-            raise ValueError("Judge reference-set candidate turn is invalid")
-        cls._text(turn["message"], "candidate message")
-        cls._text_list(turn["actions"], "candidate actions")
-        if any(action not in available_ui["actions"] for action in turn["actions"]):
-            raise ValueError("Judge reference-set candidate action is unavailable")
-        if not isinstance(turn["focus"], list):
-            raise ValueError("Judge reference-set candidate focus is invalid")
-        if "expects" in turn:
-            expects = cls._text(turn["expects"], "candidate expected response")
-            if expects not in available_ui["expectedResponses"]:
-                raise ValueError("Judge reference-set expected response is unavailable")
-        contract = ChessNativeResponseContract(
-            actions=tuple(available_ui["actions"]),
-            allowable_moves=tuple(tuple(move) for move in moves),
-            expected_responses=tuple(available_ui["expectedResponses"]),
+    def _validate_provenance(cls, value, require_reviewed):
+        if not isinstance(value, dict) or set(value) != _PROVENANCE_KEYS:
+            raise ValueError("Judge reference-set provenance is invalid")
+        provenance = dict(value)
+        provenance["authoredBy"] = cls._text(value["authoredBy"], "reference-set author")
+        provenance["authoredAt"] = cls._date(
+            value["authoredAt"], "reference-set authored date"
         )
-        if contract.validation_issues(cls._thaw(turn)):
+        source_git_sha = cls._text(value["sourceGitSHA"], "source Git SHA")
+        if _GIT_SHA.fullmatch(source_git_sha) is None:
+            raise ValueError("Judge source Git SHA is invalid")
+        provenance["sourceGitSHA"] = source_git_sha
+        provenance["sourceCasesSHA256"] = cls._hash(
+            value["sourceCasesSHA256"], "source cases hash"
+        )
+        provenance["sourceManifestSHA256"] = cls._hash(
+            value["sourceManifestSHA256"], "source manifest hash"
+        )
+        status = value["reviewStatus"]
+        if status == "pending":
+            if value["reviewedBy"] is not None or value["reviewedAt"] is not None:
+                raise ValueError("Pending reference-set review cannot name a reviewer")
+        elif status == "humanReviewed":
+            provenance["reviewedBy"] = cls._text(
+                value["reviewedBy"], "reference-set reviewer"
+            )
+            provenance["reviewedAt"] = cls._date(
+                value["reviewedAt"], "reference-set review date"
+            )
+        else:
+            raise ValueError("Judge reference-set review status is invalid")
+        if require_reviewed and status != "humanReviewed":
+            raise ValueError("Judge reference set has not been human-reviewed")
+        return provenance
+
+    @classmethod
+    def _load_sources(cls, raw_sources):
+        if not isinstance(raw_sources, list) or len(raw_sources) != 20:
+            raise ValueError("Judge reference set must contain exactly 20 sources")
+        sources = []
+        compiled = {}
+        for raw in raw_sources:
+            source, compilation = cls._validate_source(raw)
+            if source["id"] in compiled:
+                raise ValueError("Judge reference-set source IDs must be unique")
+            sources.append(source)
+            compiled[source["id"]] = (source, compilation)
+        return sources, compiled
+
+    @classmethod
+    def _validate_source(cls, value):
+        if not isinstance(value, dict):
+            raise ValueError("Judge reference-set source is invalid")
+        keys = set(value)
+        if not _SOURCE_REQUIRED_KEYS.issubset(keys) or not keys.issubset(
+            _SOURCE_REQUIRED_KEYS | _SOURCE_OPTIONAL_KEYS
+        ):
+            raise ValueError("Judge reference-set source fields do not match")
+        if value["schemaVersion"] != "coaching-quality-benchmark-case.v1":
+            raise ValueError("Unsupported judge reference source schema")
+        source = dict(value)
+        identifier = cls._text(value["id"], "source id")
+        cls._text(value["groupID"], "source group id")
+        step_index = value["stepIndex"]
+        if isinstance(step_index, bool) or not isinstance(step_index, int) or step_index <= 0:
+            raise ValueError("Judge source step index is invalid")
+        if value["split"] not in _SPLITS or value["category"] not in _CATEGORIES:
+            raise ValueError("Judge reference source corpus fields are invalid")
+        request_kind = value["requestKind"]
+        if request_kind not in _REQUEST_KINDS:
+            raise ValueError("Judge reference source request kind is invalid")
+        expected_kind = "initial" if step_index == 1 else "followUp"
+        if request_kind != expected_kind:
+            raise ValueError("Judge reference source request kind does not match its step")
+        request = value["request"]
+        if not isinstance(request, dict):
+            raise ValueError("Judge reference source request is invalid")
+        expected_hash = cls._hash(value["requestSHA256"], "source request hash")
+        if cls._canonical_sha256(request) != expected_hash:
+            raise ValueError("Judge reference source request hash does not match")
+        if request.get("requestID") != f"benchmark:{identifier}":
+            raise ValueError("Judge reference source request ID does not match")
+        cls._validate_brief(value["graderBrief"])
+        if "sourceTraceID" in value:
+            cls._text(value["sourceTraceID"], "source trace id")
+
+        compiler = compile_context if request_kind == "initial" else compile_follow_up_context
+        try:
+            compilation = compiler(request, "tutor-v13")
+        except (TypeError, ValueError) as error:
+            raise ValueError("Judge reference source does not compile with production v13") from error
+        if request["interaction"]["latestEvent"]["kind"] == "helpClosed":
+            raise ValueError("Judge reference source cannot be a help-closed turn")
+        cls._validate_event_references(request)
+        return source, compilation
+
+    @classmethod
+    def _load_absolute_cases(cls, raw_cases, compiled):
+        if not isinstance(raw_cases, list) or len(raw_cases) != 20:
+            raise ValueError("Judge reference set must contain exactly 20 absolute cases")
+        cases = []
+        for index, raw in enumerate(raw_cases, start=1):
+            if not isinstance(raw, dict) or set(raw) != _ABSOLUTE_CASE_KEYS:
+                raise ValueError("Judge reference-set absolute case fields do not match")
+            if raw["id"] != f"ref-{index:02}":
+                raise ValueError("Judge reference-set absolute case IDs or order do not match")
+            source, compilation = cls._resolve_source(raw["sourceID"], compiled)
+            contract, available_ui = cls._contract_and_ui(compilation)
+            cls._validate_turn(raw["candidateTurn"], contract)
+            cls._validate_scores(raw["referenceScores"])
+            cls._validate_flags(raw["referenceFlags"])
+            cls._text_list(raw["rationale"], "reference rationale", minimum=1, maximum=3)
+            cases.append(
+                dict(
+                    raw,
+                    graderBrief=source["graderBrief"],
+                    availableUI=available_ui,
+                )
+            )
+        return cases
+
+    @classmethod
+    def _load_pairwise_cases(cls, raw_cases, compiled):
+        if not isinstance(raw_cases, list) or len(raw_cases) != 10:
+            raise ValueError("Judge reference set must contain exactly 10 pairwise cases")
+        cases = []
+        for index, raw in enumerate(raw_cases, start=1):
+            if not isinstance(raw, dict) or set(raw) != _PAIRWISE_CASE_KEYS:
+                raise ValueError("Judge reference-set pairwise case fields do not match")
+            if raw["id"] != f"pair-{index:02}":
+                raise ValueError("Judge reference-set pairwise case IDs or order do not match")
+            source, compilation = cls._resolve_source(raw["sourceID"], compiled)
+            contract, available_ui = cls._contract_and_ui(compilation)
+            cls._validate_turn(raw["responseOne"], contract)
+            cls._validate_turn(raw["responseTwo"], contract)
+            if raw["referencePreference"] not in _REFERENCE_PREFERENCES:
+                raise ValueError("Judge reference-set pairwise preference is invalid")
+            cls._text_list(raw["rationale"], "pairwise rationale", minimum=1, maximum=3)
+            cases.append(
+                dict(
+                    raw,
+                    graderBrief=source["graderBrief"],
+                    availableUI=available_ui,
+                )
+            )
+        return cases
+
+    @staticmethod
+    def _resolve_source(source_id, compiled):
+        if not isinstance(source_id, str) or source_id not in compiled:
+            raise ValueError("Judge reference-set case source does not resolve")
+        return compiled[source_id]
+
+    @classmethod
+    def _validate_brief(cls, value):
+        if not isinstance(value, dict) or set(value) != _BRIEF_KEYS:
+            raise ValueError("Judge reference-set grader brief is invalid")
+        cls._text_list(value["verifiedFacts"], "verified facts", minimum=1)
+        cls._text(value["coachingPurpose"], "coaching purpose")
+        cls._text_list(value["acceptableAlternatives"], "acceptable alternatives")
+        cls._text_list(value["successCriteria"], "success criteria", minimum=1)
+        cls._text_list(value["severeFailureCriteria"], "severe failure criteria")
+
+    @classmethod
+    def _validate_turn(cls, value, contract):
+        if not isinstance(value, dict) or set(value) != _TURN_KEYS:
+            raise ValueError("Judge reference-set candidate turn is invalid")
+        issues = contract.validation_issues(cls._thaw(value))
+        if issues:
             raise ValueError("Judge reference-set candidate turn fails the app contract")
 
-        scores = value["referenceScores"]
+    @staticmethod
+    def _contract_and_ui(compilation):
+        contract = ChessNativeResponseContract(
+            actions=compilation.actions,
+            allowable_moves=compilation.allowable_moves,
+            expected_responses=compilation.expected_responses,
+        )
+        return contract, {
+            "actions": list(compilation.actions),
+            "expectedResponses": list(compilation.expected_responses),
+            "allowableMoveFocus": [list(move) for move in compilation.allowable_moves],
+        }
+
+    @classmethod
+    def _validate_event_references(cls, request):
+        known = {piece["id"] for piece in request["pieces"]}
+        known.update(move["id"] for move in request["legalMoves"])
+        known.update(reply["move"]["id"] for reply in request["tentativeReplies"])
+        tentative = request["interaction"].get("tentativeMove")
+        if tentative is not None:
+            known.add(tentative["id"])
+        for event in request["interaction"]["episodeEvents"]:
+            for reference in event["referencedIDs"]:
+                if reference.startswith("action:") and len(reference) > len("action:"):
+                    continue
+                if reference not in known:
+                    raise ValueError("Judge reference source event reference does not resolve")
+
+    @staticmethod
+    def _validate_scores(scores):
         if not isinstance(scores, dict) or set(scores) != set(RUBRIC_DIMENSIONS):
             raise ValueError("Judge reference-set score fields do not match")
         if any(
@@ -244,12 +507,21 @@ class JudgeReferenceSet:
             for score in scores.values()
         ):
             raise ValueError("Judge reference-set scores must be integers from 1 to 5")
-        flags = value["referenceFlags"]
+
+    @staticmethod
+    def _validate_flags(flags):
         if not isinstance(flags, dict) or set(flags) != set(RUBRIC_FLAGS):
             raise ValueError("Judge reference-set flag fields do not match")
         if any(not isinstance(flag, bool) for flag in flags.values()):
             raise ValueError("Judge reference-set flags must be booleans")
-        cls._text_list(value["rationale"], "reference rationale", minimum=1, maximum=3)
+
+    @staticmethod
+    def _controls(turn):
+        return (
+            f"actions={json.dumps(list(turn['actions']))}; "
+            f"focus={json.dumps(JudgeReferenceSet._thaw(turn['focus']))}; "
+            f"expects={json.dumps(turn['expects'])}."
+        )
 
     @staticmethod
     def _text(value, label):
@@ -274,11 +546,26 @@ class JudgeReferenceSet:
         return value
 
     @classmethod
+    def _hash(cls, value, label):
+        value = cls._text(value, label)
+        if _SHA256.fullmatch(value) is None:
+            raise ValueError(f"Judge {label} is invalid")
+        return value
+
+    @staticmethod
+    def _canonical_sha256(value):
+        data = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(data).hexdigest()
+
+    @classmethod
     def _freeze(cls, value):
         if isinstance(value, dict):
-            return MappingProxyType(
-                {key: cls._freeze(child) for key, child in value.items()}
-            )
+            return MappingProxyType({key: cls._freeze(child) for key, child in value.items()})
         if isinstance(value, list):
             return tuple(cls._freeze(child) for child in value)
         return value
