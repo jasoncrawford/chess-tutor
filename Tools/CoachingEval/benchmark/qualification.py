@@ -9,16 +9,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from Tools.CoachingEval.benchmark.grader import (
+from Tools.CoachingEval.benchmark.judge_contract import (
     RUBRIC_DIMENSIONS,
-    _absolute_schema,
-    _add_metrics,
-    _canonical_json_bytes,
-    _empty_metrics,
-    _judge_call,
-    _pairwise_schema,
-    _pretty_json_bytes,
-    _validate_absolute,
+    absolute_schema as _absolute_schema,
+    add_metrics as _add_metrics,
+    canonical_json_bytes as _canonical_json_bytes,
+    empty_metrics as _empty_metrics,
+    judge_call as _judge_call,
+    pairwise_schema as _pairwise_schema,
+    pretty_json_bytes as _pretty_json_bytes,
+    validate_absolute as _validate_absolute,
 )
 from Tools.CoachingEval.benchmark.reference_set import JudgeReferenceSet
 
@@ -127,8 +127,10 @@ class JudgeQualification:
             raise ValueError("Judge qualification fields do not match")
         if artifact["schemaVersion"] != "coaching-quality-judge-qualification.v2":
             raise ValueError("Unsupported judge qualification schema")
+        if artifact["status"] == "rejected":
+            raise ValueError("Judge qualification was rejected")
         if artifact["status"] != "accepted":
-            raise ValueError("Judge qualification was not accepted")
+            raise ValueError("Judge qualification status is invalid")
         if artifact["judgeConfigurationID"] != configuration.identifier:
             raise ValueError("Judge qualification is not compatible")
         if artifact["bindings"] != _bindings(configuration):

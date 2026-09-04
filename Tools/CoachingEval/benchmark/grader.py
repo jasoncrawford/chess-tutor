@@ -2,35 +2,30 @@
 
 import hashlib
 import json
-import math
 import os
-import time
 import uuid
 from dataclasses import dataclass
-from decimal import Decimal
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
-
-
-RUBRIC_DIMENSIONS = (
-    "chessCorrectness",
-    "coachingJudgment",
-    "latestActionResponsiveness",
-    "discoveryAndIndependence",
-    "coherenceAndAnswerability",
-    "childClarity",
+from Tools.CoachingEval.benchmark.judge_contract import (
+    RUBRIC_DIMENSIONS,
+    RUBRIC_FLAGS,
+    absolute_schema as _absolute_schema,
+    add_metrics as _add_metrics,
+    canonical_json_bytes as _canonical_json_bytes,
+    empty_metrics as _empty_metrics,
+    judge_call as _judge_call,
+    pairwise_schema as _pairwise_schema,
+    pretty_json_bytes as _pretty_json_bytes,
+    validate_absolute as _validate_absolute,
+    validate_flags as _validate_flags,
+    validate_pairwise as _validate_pairwise,
+    validate_scores as _validate_scores,
 )
-RUBRIC_FLAGS = (
-    "factualOrIllegalAdvice",
-    "wrongUrgentPriority",
-    "obsoleteStage",
-    "mixedStages",
-    "answerRevealingGuidance",
-    "unavailableUIOrDeadEnd",
-    "severeError",
-)
+from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 
 
 @dataclass(frozen=True)
@@ -113,25 +108,21 @@ def grade_run(
     judge_configuration,
     client,
     destination: Path,
+    qualification_path: Path,
     price_table=None,
+    now=None,
 ):
     destination = Path(destination)
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite benchmark grades: {destination}")
+    now = now or datetime.now(timezone.utc)
+    qualification = JudgeQualification.load_compatible(
+        qualification_path,
+        judge_configuration,
+        now,
+    )
+    qualification_bytes = qualification.path.read_bytes()
     run_manifest, records = _load_run(run_root, corpus)
-    calibration = calibrate_judge(judge_configuration, client, price_table)
-    if not calibration.passed:
-        calibration_json = _calibration_json(calibration)
-        manifest = _grade_manifest(
-            run_manifest,
-            judge_configuration,
-            calibration_json,
-            [],
-            [],
-            status="calibrationFailed",
-        )
-        _publish(destination, calibration_json, [], [], manifest)
-        raise ValueError("Judge calibration failed; candidate grading was not started")
     turns = corpus.by_id()
     absolute = []
     for record in records:
@@ -173,15 +164,14 @@ def grade_run(
         client,
         price_table,
     )
-    calibration_json = _calibration_json(calibration)
     manifest = _grade_manifest(
         run_manifest,
         judge_configuration,
-        calibration_json,
+        qualification_bytes,
         absolute,
         pairwise,
     )
-    _publish(destination, calibration_json, absolute, pairwise, manifest)
+    _publish(destination, qualification_bytes, absolute, pairwise, manifest)
     return destination
 
 
@@ -332,115 +322,6 @@ def _available_ui(record):
     }
 
 
-def _judge_call(configuration, client, payload, schema, price_table):
-    started = time.monotonic()
-    response = client.complete(
-        system_prompt=configuration.system_prompt,
-        user_prompt=json.dumps(payload, sort_keys=True, separators=(",", ":")),
-        schema=schema,
-        model=configuration.model,
-        reasoning_effort=configuration.reasoning_effort,
-        maximum_output_tokens=configuration.maximum_output_tokens,
-        timeout=configuration.timeout_seconds,
-        previous_response_id=None,
-        store=False,
-    )
-    latency = _bounded_float((time.monotonic() - started) * 1000)
-    output_text = response.get("output_text") if isinstance(response, dict) else None
-    if not isinstance(output_text, str) or not output_text:
-        raise ValueError("Judge returned no structured output")
-    try:
-        output = json.loads(output_text, object_pairs_hook=_strict_object)
-    except (TypeError, ValueError, _DuplicateKey) as error:
-        raise ValueError("Judge returned malformed structured output") from error
-    usage = _usage(response.get("usage") if isinstance(response, dict) else None)
-    metrics = {
-        "callCount": 1,
-        "usage": usage,
-        "latencyMilliseconds": latency,
-        "estimatedCostUSD": (
-            str(price_table.estimate(configuration.model, usage))
-            if price_table is not None
-            else None
-        ),
-    }
-    return output, metrics
-
-
-def _validate_absolute(value):
-    if not isinstance(value, dict) or set(value) != {"scores", "flags", "evidence"}:
-        raise ValueError("Absolute judge fields do not match")
-    _validate_scores(value["scores"])
-    _validate_flags(value["flags"])
-    evidence = _validate_evidence(value["evidence"])
-    return {"scores": dict(value["scores"]), "flags": dict(value["flags"]), "evidence": evidence}
-
-
-def _validate_pairwise(value):
-    if not isinstance(value, dict) or set(value) != {"winner", "evidence"}:
-        raise ValueError("Pairwise judge fields do not match")
-    if value["winner"] not in ("A", "B", "tie"):
-        raise ValueError("Pairwise winner is invalid")
-    return {"winner": value["winner"], "evidence": _validate_evidence(value["evidence"])}
-
-
-def _validate_scores(value):
-    if not isinstance(value, dict) or tuple(sorted(value)) != tuple(sorted(RUBRIC_DIMENSIONS)):
-        raise ValueError("Judge score fields do not match")
-    if any(isinstance(score, bool) or not isinstance(score, int) or not 1 <= score <= 5 for score in value.values()):
-        raise ValueError("Judge scores must be integers from 1 to 5")
-
-
-def _validate_flags(value):
-    if not isinstance(value, dict) or tuple(sorted(value)) != tuple(sorted(RUBRIC_FLAGS)):
-        raise ValueError("Judge flag fields do not match")
-    if any(not isinstance(flag, bool) for flag in value.values()):
-        raise ValueError("Judge flags must be booleans")
-
-
-def _validate_evidence(value):
-    if not isinstance(value, list) or not 1 <= len(value) <= 3:
-        raise ValueError("Judge evidence must contain one to three items")
-    if any(not isinstance(item, str) or not item or len(item) > 500 for item in value):
-        raise ValueError("Judge evidence is invalid")
-    return list(value)
-
-
-def _absolute_schema():
-    return {
-        "type": "object",
-        "properties": {
-            "scores": {
-                "type": "object",
-                "properties": {dimension: {"type": "integer", "minimum": 1, "maximum": 5} for dimension in RUBRIC_DIMENSIONS},
-                "required": list(RUBRIC_DIMENSIONS),
-                "additionalProperties": False,
-            },
-            "flags": {
-                "type": "object",
-                "properties": {flag: {"type": "boolean"} for flag in RUBRIC_FLAGS},
-                "required": list(RUBRIC_FLAGS),
-                "additionalProperties": False,
-            },
-            "evidence": {"type": "array", "items": {"type": "string", "maxLength": 500}, "minItems": 1, "maxItems": 3},
-        },
-        "required": ["scores", "flags", "evidence"],
-        "additionalProperties": False,
-    }
-
-
-def _pairwise_schema():
-    return {
-        "type": "object",
-        "properties": {
-            "winner": {"type": "string", "enum": ["A", "B", "tie"]},
-            "evidence": {"type": "array", "items": {"type": "string", "maxLength": 500}, "minItems": 1, "maxItems": 3},
-        },
-        "required": ["winner", "evidence"],
-        "additionalProperties": False,
-    }
-
-
 def _mechanically_valid(record):
     validation = record.get("mechanicalValidation")
     return isinstance(validation, dict) and validation.get("valid") is True
@@ -519,22 +400,20 @@ def _calibration_json(result):
 def _grade_manifest(
     run_manifest,
     configuration,
-    calibration,
+    qualification_bytes,
     absolute,
     pairwise,
-    *,
-    status="completed",
 ):
     return {
-        "schemaVersion": "coaching-quality-grade-run.v1",
-        "status": status,
+        "schemaVersion": "coaching-quality-grade-run.v2",
+        "status": "completed",
         "sourceRunRecordsSHA256": run_manifest["recordsSHA256"],
         "corpusSHA256": run_manifest["corpusSHA256"],
         "judgeConfigurationSHA256": configuration.sha256,
         "judgePromptSHA256": configuration.system_prompt_sha256,
         "absoluteSchemaSHA256": _sha256(_canonical_json_bytes(_absolute_schema())),
         "pairwiseSchemaSHA256": _sha256(_canonical_json_bytes(_pairwise_schema())),
-        "calibrationSHA256": _sha256(_pretty_json_bytes(calibration)),
+        "qualificationSHA256": _sha256(qualification_bytes),
         "absoluteGradesSHA256": _sha256(_jsonl_bytes(absolute)),
         "pairwiseGradesSHA256": _sha256(_jsonl_bytes(pairwise)),
         "absoluteGradeCount": len(absolute),
@@ -542,12 +421,12 @@ def _grade_manifest(
     }
 
 
-def _publish(destination, calibration, absolute, pairwise, manifest):
+def _publish(destination, qualification_bytes, absolute, pairwise, manifest):
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.parent / f".{destination.name}.tmp-{uuid.uuid4()}"
     temporary.mkdir()
     try:
-        (temporary / "calibration.json").write_bytes(_pretty_json_bytes(calibration))
+        (temporary / "qualification.json").write_bytes(qualification_bytes)
         (temporary / "absolute-grades.jsonl").write_bytes(_jsonl_bytes(absolute))
         (temporary / "pairwise-grades.jsonl").write_bytes(_jsonl_bytes(pairwise))
         (temporary / "grade-manifest.json").write_bytes(_pretty_json_bytes(manifest))
@@ -560,82 +439,11 @@ def _publish(destination, calibration, absolute, pairwise, manifest):
         raise
 
 
-class _DuplicateKey(ValueError):
-    pass
-
-
-def _strict_object(pairs):
-    value = {}
-    for key, child in pairs:
-        if key in value:
-            raise _DuplicateKey()
-        value[key] = child
-    return value
-
-
-def _usage(value):
-    value = value if isinstance(value, Mapping) else {}
-    return {
-        "inputTokens": _bounded_int(value.get("input_tokens")),
-        "cachedInputTokens": _bounded_int(value.get("cached_input_tokens")),
-        "outputTokens": _bounded_int(value.get("output_tokens")),
-        "reasoningTokens": _bounded_int(value.get("reasoning_tokens")),
-        "totalTokens": _bounded_int(value.get("total_tokens")),
-    }
-
-
-def _empty_metrics():
-    return {
-        "callCount": 0,
-        "usage": {"inputTokens": 0, "cachedInputTokens": 0, "outputTokens": 0, "reasoningTokens": 0, "totalTokens": 0},
-        "latencyMilliseconds": 0.0,
-        "estimatedCostUSD": None,
-    }
-
-
-def _add_metrics(total, current):
-    total["callCount"] += current["callCount"]
-    for key in total["usage"]:
-        total["usage"][key] += current["usage"][key]
-    total["latencyMilliseconds"] += current["latencyMilliseconds"]
-    if current["estimatedCostUSD"] is not None:
-        prior = total["estimatedCostUSD"] or "0"
-        total["estimatedCostUSD"] = str(
-            Decimal(prior) + Decimal(current["estimatedCostUSD"])
-        )
-
-
-def _bounded_int(value):
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        return 0
-    return min(value, 1_000_000_000)
-
-
-def _bounded_float(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return 0.0
-    value = float(value)
-    return value if math.isfinite(value) and 0 <= value <= 86_400_000 else 0.0
-
-
 def _jsonl_bytes(values):
     return b"".join(
         json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
         for value in values
     )
-
-
-def _pretty_json_bytes(value):
-    return (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
-
-
-def _canonical_json_bytes(value):
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
 
 
 def _sha256(data):

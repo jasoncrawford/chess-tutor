@@ -49,8 +49,11 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(1.0, candidate["breakdowns"]["category"]["quiet"]["strongResponseRate"])
         self.assertEqual(1.0, candidate["breakdowns"]["turnKind"]["initial"]["strongResponseRate"])
         self.assertGreater(float(candidate["candidateCostUSD"]["total"]), 0)
-        self.assertEqual(30, report["judgeOverhead"]["callCount"])
-        self.assertEqual(3000, report["judgeOverhead"]["usage"]["inputTokens"])
+        self.assertEqual(10, report["judgeOverhead"]["callCount"])
+        self.assertEqual(1000, report["judgeOverhead"]["usage"]["inputTokens"])
+        self.assertEqual(60, report["judgeQualification"]["metrics"]["callCount"])
+        self.assertEqual(3, report["judgeQualification"]["repetitions"])
+        self.assertEqual(0.95, report["judgeQualification"]["minimumSevereAgreement"])
         self.assertTrue(candidate["promotionEligible"])
         self.assertIn("candidate", report["paretoFrontier"])
         self.assertNotIn("baseline", report["paretoFrontier"])
@@ -94,12 +97,13 @@ class BenchmarkReportTests(unittest.TestCase):
         )
         aggregate = json.loads(aggregate_path.read_text())
         summary = summary_path.read_text()
-        self.assertEqual("coaching-quality-report.v1", aggregate["schemaVersion"])
+        self.assertEqual("coaching-quality-report.v2", aggregate["schemaVersion"])
         self.assertIn("# Coaching quality benchmark", summary)
         self.assertIn("Experiment changes", summary)
         self.assertIn("Quality and reliability", summary)
         self.assertIn("Candidate cost", summary)
         self.assertIn("Judge overhead", summary)
+        self.assertIn("Judge qualification", summary)
         self.assertIn("Pareto frontier", summary)
         self.assertIn("Mechanical failures", summary)
         self.assertIn("baseline|s1-3|r1", summary)
@@ -109,9 +113,22 @@ class BenchmarkReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "overwrite"):
             write_report(self.run_root, self.grade_root, self.prices, destination)
 
-    def make_artifacts(self):
-        run_root = self.root / "run"
-        grade_root = self.root / "grades"
+    def test_reads_legacy_calibration_artifacts(self):
+        legacy_root = self.root / "legacy"
+        legacy_root.mkdir()
+        run_root, grade_root = self.make_artifacts(legacy_root, legacy=True)
+
+        report = build_report(run_root, grade_root, self.prices)
+
+        self.assertEqual("coaching-quality-report.v2", report["schemaVersion"])
+        self.assertIsNone(report["judgeQualification"])
+        self.assertEqual(30, report["judgeOverhead"]["callCount"])
+        self.assertEqual([], report["integrityIssues"])
+
+    def make_artifacts(self, parent=None, *, legacy=False):
+        parent = parent or self.root
+        run_root = parent / "run"
+        grade_root = parent / "grades"
         run_root.mkdir()
         grade_root.mkdir()
         configurations = [
@@ -236,21 +253,69 @@ class BenchmarkReportTests(unittest.TestCase):
         calibration_bytes = self.pretty(calibration)
         (grade_root / "absolute-grades.jsonl").write_bytes(absolute_bytes)
         (grade_root / "pairwise-grades.jsonl").write_bytes(pairwise_bytes)
-        (grade_root / "calibration.json").write_bytes(calibration_bytes)
-        grade_manifest = {
-            "schemaVersion": "coaching-quality-grade-run.v1",
+        shared_manifest = {
             "sourceRunRecordsSHA256": self.sha(records_bytes),
             "corpusSHA256": "c" * 64,
             "judgeConfigurationSHA256": "e" * 64,
             "judgePromptSHA256": "f" * 64,
             "absoluteSchemaSHA256": "1" * 64,
             "pairwiseSchemaSHA256": "2" * 64,
-            "calibrationSHA256": self.sha(calibration_bytes),
             "absoluteGradesSHA256": self.sha(absolute_bytes),
             "pairwiseGradesSHA256": self.sha(pairwise_bytes),
             "absoluteGradeCount": len(grades),
             "pairwiseGradeCount": len(pairs),
         }
+        if legacy:
+            (grade_root / "calibration.json").write_bytes(calibration_bytes)
+            grade_manifest = {
+                "schemaVersion": "coaching-quality-grade-run.v1",
+                **shared_manifest,
+                "calibrationSHA256": self.sha(calibration_bytes),
+            }
+        else:
+            qualification = {
+                "schemaVersion": "coaching-quality-judge-qualification.v2",
+                "status": "accepted",
+                "judgeConfigurationID": "judge-sol-v2",
+                "referenceSetID": "judge-reference-v2",
+                "createdAt": "2026-09-03T12:00:00Z",
+                "expiresAt": "2026-10-03T12:00:00Z",
+                "criteria": {
+                    "repetitions": 3,
+                    "minimumSevereAgreement": 0.95,
+                    "minimumDimensionAgreement": 0.9,
+                    "validDays": 30,
+                },
+                "bindings": {
+                    "judgeConfigurationSHA256": "e" * 64,
+                    "judgePromptSHA256": "f" * 64,
+                    "referenceSetSHA256": "d" * 64,
+                    "absoluteSchemaSHA256": "1" * 64,
+                    "pairwiseSchemaSHA256": "2" * 64,
+                },
+                "minimumSevereAgreement": 0.95,
+                "minimumDimensionAgreement": 0.925,
+                "qualificationMetrics": self.metrics(60),
+                "passes": [
+                    {
+                        "repetition": repetition,
+                        "passed": True,
+                        "severeAgreement": 1.0 if repetition < 3 else 0.95,
+                        "dimensionWithinOne": 0.95 if repetition < 3 else 0.925,
+                        "judgeMetrics": self.metrics(20),
+                        "rows": [{} for _ in range(20)],
+                    }
+                    for repetition in range(1, 4)
+                ],
+            }
+            qualification_bytes = self.pretty(qualification)
+            (grade_root / "qualification.json").write_bytes(qualification_bytes)
+            grade_manifest = {
+                "schemaVersion": "coaching-quality-grade-run.v2",
+                "status": "completed",
+                **shared_manifest,
+                "qualificationSHA256": self.sha(qualification_bytes),
+            }
         (grade_root / "grade-manifest.json").write_text(json.dumps(grade_manifest))
         return run_root, grade_root
 

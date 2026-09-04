@@ -33,7 +33,18 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
     issues = []
     run_manifest = _read_object(run_root / "run-manifest.json", "candidate run manifest")
     grade_manifest = _read_object(grade_root / "grade-manifest.json", "grade manifest")
-    calibration = _read_object(grade_root / "calibration.json", "judge calibration")
+    grade_version = grade_manifest.get("schemaVersion")
+    calibration = None
+    qualification = None
+    qualification_bytes = None
+    if grade_version == "coaching-quality-grade-run.v1":
+        calibration = _read_object(grade_root / "calibration.json", "judge calibration")
+    elif grade_version == "coaching-quality-grade-run.v2":
+        qualification_bytes, qualification = _read_object_bytes(
+            grade_root / "qualification.json", "judge qualification"
+        )
+    else:
+        issues.append("grade manifest schema is unsupported")
     records_bytes, records = _read_jsonl(run_root / "records.jsonl", "candidate records")
     absolute_bytes, absolute = _read_jsonl(
         grade_root / "absolute-grades.jsonl", "absolute grades"
@@ -60,21 +71,30 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         grade_manifest.get("pairwiseGradesSHA256"),
         pairwise_bytes,
     )
-    calibration_bytes = _pretty_json_bytes(calibration)
-    _check_hash(
-        issues,
-        "calibration hash mismatch",
-        grade_manifest.get("calibrationSHA256"),
-        calibration_bytes,
-    )
+    if calibration is not None:
+        calibration_bytes = _pretty_json_bytes(calibration)
+        _check_hash(
+            issues,
+            "calibration hash mismatch",
+            grade_manifest.get("calibrationSHA256"),
+            calibration_bytes,
+        )
+        if calibration.get("passed") is not True:
+            issues.append("judge calibration did not pass")
+    if qualification is not None:
+        _check_hash(
+            issues,
+            "qualification hash mismatch",
+            grade_manifest.get("qualificationSHA256"),
+            qualification_bytes,
+        )
+        _validate_qualification_binding(qualification, grade_manifest, issues)
     if grade_manifest.get("sourceRunRecordsSHA256") != run_manifest.get(
         "recordsSHA256"
     ):
         issues.append("grade source run hash mismatch")
     if grade_manifest.get("corpusSHA256") != run_manifest.get("corpusSHA256"):
         issues.append("grade corpus hash mismatch")
-    if calibration.get("passed") is not True:
-        issues.append("judge calibration did not pass")
     if run_manifest.get("diagnosticSubset") is True:
         issues.append("diagnostic subset is not promotion eligible")
 
@@ -140,15 +160,21 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         value.get("promotionEligible") is True for value in aggregates.values()
     )
     judge_overhead = _judge_overhead(calibration, absolute, pairwise)
+    qualification_summary = _qualification_summary(qualification)
 
     return {
-        "schemaVersion": "coaching-quality-report.v1",
+        "schemaVersion": "coaching-quality-report.v2",
         "source": {
             "candidateRecordsSHA256": _sha256(records_bytes),
             "absoluteGradesSHA256": _sha256(absolute_bytes),
             "pairwiseGradesSHA256": _sha256(pairwise_bytes),
             "corpusSHA256": run_manifest.get("corpusSHA256"),
             "priceTableSHA256": price_table.sha256,
+            "qualificationSHA256": (
+                _sha256(qualification_bytes)
+                if qualification_bytes is not None
+                else None
+            ),
         },
         "mode": run_manifest.get("mode"),
         "experimentChanges": _experiment_changes(configurations, baseline_id),
@@ -156,6 +182,7 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         "confidenceIntervals": confidence,
         "paretoFrontier": frontier,
         "judgeOverhead": judge_overhead,
+        "judgeQualification": qualification_summary,
         "promotionEligible": global_eligible,
         "integrityIssues": _ordered_unique(issues),
         "mechanicalFailures": _mechanical_failures(records),
@@ -496,12 +523,57 @@ def _apply_promotion_eligibility(aggregates, baseline_id, issues):
 
 def _judge_overhead(calibration, absolute, pairwise):
     metrics = _empty_metrics()
-    _add_metrics(metrics, calibration.get("judgeMetrics"))
+    if calibration is not None:
+        _add_metrics(metrics, calibration.get("judgeMetrics"))
     for grade in absolute:
         _add_metrics(metrics, grade.get("judgeMetrics"))
     for grade in pairwise:
         _add_metrics(metrics, grade.get("judgeMetrics"))
     return metrics
+
+
+def _validate_qualification_binding(qualification, manifest, issues):
+    if qualification.get("status") != "accepted":
+        issues.append("judge qualification was not accepted")
+    bindings = qualification.get("bindings")
+    if not isinstance(bindings, Mapping):
+        issues.append("judge qualification bindings are invalid")
+        return
+    expected = {
+        "judgeConfigurationSHA256": manifest.get("judgeConfigurationSHA256"),
+        "judgePromptSHA256": manifest.get("judgePromptSHA256"),
+        "absoluteSchemaSHA256": manifest.get("absoluteSchemaSHA256"),
+        "pairwiseSchemaSHA256": manifest.get("pairwiseSchemaSHA256"),
+    }
+    if any(bindings.get(key) != value for key, value in expected.items()):
+        issues.append("judge qualification bindings do not match grade manifest")
+    criteria = qualification.get("criteria")
+    passes = qualification.get("passes")
+    if (
+        not isinstance(criteria, Mapping)
+        or not isinstance(criteria.get("repetitions"), int)
+        or not isinstance(passes, list)
+        or len(passes) != criteria.get("repetitions")
+    ):
+        issues.append("judge qualification pass inventory is invalid")
+
+
+def _qualification_summary(qualification):
+    if qualification is None:
+        return None
+    criteria = qualification.get("criteria")
+    criteria = criteria if isinstance(criteria, Mapping) else {}
+    return {
+        "id": qualification.get("referenceSetID"),
+        "createdAt": qualification.get("createdAt"),
+        "expiresAt": qualification.get("expiresAt"),
+        "repetitions": criteria.get("repetitions"),
+        "minimumSevereAgreement": qualification.get("minimumSevereAgreement"),
+        "minimumDimensionAgreement": qualification.get(
+            "minimumDimensionAgreement"
+        ),
+        "metrics": qualification.get("qualificationMetrics"),
+    }
 
 
 def _empty_metrics():
@@ -781,13 +853,19 @@ def _decimal_string(value):
 
 
 def _read_object(path, label):
+    _data, value = _read_object_bytes(path, label)
+    return value
+
+
+def _read_object_bytes(path, label):
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        data = path.read_bytes()
+        value = json.loads(data.decode("utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(f"Cannot read {label}") from error
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be an object")
-    return value
+    return data, value
 
 
 def _read_jsonl(path, label):
@@ -851,6 +929,25 @@ def _markdown(report):
     lines.extend(["", "## Candidate cost", ""])
     for identifier, value in report["configurations"].items():
         lines.append(f"- **{identifier}**: ${value['candidateCostUSD']['total']}")
+    qualification = report["judgeQualification"]
+    if qualification is not None:
+        lines.extend(
+            [
+                "",
+                "## Judge qualification",
+                "",
+                (
+                    f"{qualification['repetitions']} passes; minimum severe agreement "
+                    f"{qualification['minimumSevereAgreement']:.1%}; minimum dimension agreement "
+                    f"{qualification['minimumDimensionAgreement']:.1%}."
+                ),
+                (
+                    f"Created {qualification['createdAt']}; expires "
+                    f"{qualification['expiresAt']}. Qualification cost: "
+                    f"${qualification['metrics']['estimatedCostUSD']}."
+                ),
+            ]
+        )
     lines.extend(
         [
             "",
