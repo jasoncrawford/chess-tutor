@@ -219,7 +219,13 @@ class BenchmarkGraderTests(unittest.TestCase):
         bad_paths = []
         for name, update in (
             ("rejected", {"status": "rejected"}),
-            ("expired", {"expiresAt": "2026-09-03T12:00:00Z"}),
+            (
+                "expired",
+                {
+                    "createdAt": "2026-08-01T12:00:00Z",
+                    "expiresAt": "2026-08-31T12:00:00Z",
+                },
+            ),
         ):
             value = json.loads(json.dumps(original))
             value.update(update)

@@ -121,7 +121,7 @@ def grade_run(
         judge_configuration,
         now,
     )
-    qualification_bytes = qualification.path.read_bytes()
+    qualification_bytes = qualification.artifact_bytes
     run_manifest, records = _load_run(run_root, corpus)
     turns = corpus.by_id()
     absolute = []
@@ -170,6 +170,7 @@ def grade_run(
         qualification_bytes,
         absolute,
         pairwise,
+        now,
     )
     _publish(destination, qualification_bytes, absolute, pairwise, manifest)
     return destination
@@ -403,10 +404,14 @@ def _grade_manifest(
     qualification_bytes,
     absolute,
     pairwise,
+    graded_at,
 ):
     return {
         "schemaVersion": "coaching-quality-grade-run.v2",
         "status": "completed",
+        "gradedAt": graded_at.astimezone(timezone.utc).isoformat().replace(
+            "+00:00", "Z"
+        ),
         "sourceRunRecordsSHA256": run_manifest["recordsSHA256"],
         "corpusSHA256": run_manifest["corpusSHA256"],
         "judgeConfigurationSHA256": configuration.sha256,

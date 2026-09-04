@@ -12,13 +12,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Invite a useful opening idea without prescribing a move or inventing danger.
 
+**Acceptable alternatives:** Ask about bringing a piece toward the center. | Ask what piece could join the game.
+
+**Success criteria:** Leaves the move choice to the learner. | Uses language a young beginner can understand.
+
+**Severe-failure criteria:** Invents an urgent threat. | Prevents the learner from making a move.
+
 **Candidate:** “What could you develop toward the center?”
 
-**Available actions:** hint; expected response: stageMove.
+**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 4; Child clarity: 3.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** The question preserves agency and fits the quiet position. Develop is useful chess language but may need simpler wording for a five-year-old.
 
@@ -28,13 +36,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Help the learner notice which piece needs help before choosing a response.
 
+**Acceptable alternatives:** Ask the learner to tap the endangered piece without naming it.
+
+**Success criteria:** Does not reveal the endangered piece. | Stays on the identification step.
+
+**Severe-failure criteria:** Claims the knight is safe. | Creates a dead end that prevents progress.
+
 **Candidate:** “Your knight is attacked. Can you find a square where it will be safer?”
 
-**Available actions:** noPieceNeedsHelp; expected response: findEndangeredPiece.
+**Available UI:** actions=["noPieceNeedsHelp"]; expectedResponses=["findEndangeredPiece"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="findEndangeredPiece".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 2; Discovery and independence: 2; Coherence and answerability: 2; Child clarity: 5.
 
-**True flags:** mixedStages, answerRevealingGuidance.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: true; answerRevealingGuidance: true; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** It states the endangered piece instead of letting the learner find it. It also jumps from identifying the piece to choosing its destination while declaring a different expected response.
 
@@ -44,13 +60,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Help the learner discover the opponent's immediate reply before deciding whether to keep the move.
 
+**Acceptable alternatives:** Ask what Black could capture next. | Ask whether the queen will be safe after the move.
+
+**Success criteria:** Focuses on the staged move's immediate safety. | Does not reveal the answer unnecessarily.
+
+**Severe-failure criteria:** Approves the losing move. | Discusses an unrelated earlier stage.
+
 **Candidate:** “Before keeping that move, what could Black capture next?”
 
-**Available actions:** tryAnotherMove; expected response: judgeMoveSafety.
+**Available UI:** actions=["tryAnotherMove"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["tryAnotherMove"]; focus=[]; expects="judgeMoveSafety".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** It asks one answerable question about the staged move's decisive flaw and preserves discovery.
 
@@ -60,13 +84,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Distinguish being attacked from being lost and let the learner decide whether to continue.
 
+**Acceptable alternatives:** Explain that the king protects the pawn. | Ask what can recapture the attacker.
+
+**Success criteria:** Accurately explains the recapture. | Leaves a usable next choice.
+
+**Severe-failure criteria:** Claims the pawn is undefended or inevitably lost.
+
 **Candidate:** “That pawn is attacked, but your king protects it. Nothing is lost yet.”
 
-**Available actions:** looksSafe; expected response: chooseWhetherToPlay.
+**Available UI:** actions=["looksSafe"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["looksSafe"]; focus=[]; expects="chooseWhetherToPlay".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 4; Child clarity: 5.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** The explanation is accurate and concise, although it tells rather than helps the learner discover the recapture.
 
@@ -76,13 +108,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Follow the replacement and help the learner evaluate the new move.
 
+**Acceptable alternatives:** Ask what the knight now attacks or protects. | Ask whether the knight is safe on its new square.
+
+**Success criteria:** Responds to the replacement rather than the old pawn move. | Prompts useful evaluation of the knight move.
+
+**Severe-failure criteria:** Continues discussing the replaced pawn move.
+
 **Candidate:** “You changed to the knight move. What does that knight now help control?”
 
-**Available actions:** hint; expected response: judgeMoveSafety.
+**Available UI:** actions=["hint"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["hint"]; focus=[]; expects="judgeMoveSafety".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 4; Child clarity: 4.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** It explicitly follows the replacement and prompts thought about the new move. Control is somewhat abstract and does not directly ask for the requested safety judgment.
 
@@ -92,13 +132,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Accept the learner's answer and move on to choosing a useful move.
 
+**Acceptable alternatives:** Ask what piece could join the game. | Ask how the learner could help control the center.
+
+**Success criteria:** Does not repeat the capture search. | Leaves the move choice open.
+
+**Severe-failure criteria:** Insists that a nonexistent capture exists. | Blocks progress after the answer.
+
 **Candidate:** “You found there is no safe capture. What kind of piece could you bring into the game?”
 
-**Available actions:** hint; expected response: stageMove.
+**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["hint"]; focus=[]; expects="stageMove".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 4.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** It accepts the latest answer, advances naturally, and asks a non-prescriptive question.
 
@@ -108,13 +156,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Explain the unfamiliar special move simply before the learner chooses whether to play it.
 
+**Acceptable alternatives:** Briefly explain that both the king and rook move.
+
+**Success criteria:** Explains castling accurately. | Supports the play-or-retry choice.
+
+**Severe-failure criteria:** Calls the move illegal. | Describes the king or rook moving incorrectly.
+
 **Candidate:** “Castling moves your king and rook together and helps shelter your king.”
 
-**Available actions:** playMove; expected response: chooseWhetherToPlay.
+**Available UI:** actions=["playMove"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["playMove"]; focus=[]; expects="chooseWhetherToPlay".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 4; Child clarity: 5.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** A direct explanation is appropriate for a special rule, and the available action supports the next choice.
 
@@ -124,13 +180,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Explain the unusual capture accurately before the learner chooses whether to play it.
 
+**Acceptable alternatives:** Explain that the pawn captures the pawn that just passed beside it.
+
+**Success criteria:** Accurately describes which pawn is captured. | Uses simple language.
+
+**Severe-failure criteria:** Claims the move is illegal. | Identifies the wrong captured pawn.
+
 **Candidate:** “The pawn moved diagonally to take the pawn that just passed it.”
 
-**Available actions:** playMove; expected response: chooseWhetherToPlay.
+**Available UI:** actions=["playMove"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["playMove"]; focus=[]; expects="chooseWhetherToPlay".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 4; Child clarity: 4.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** The explanation is accurate and suitably direct for an unusual rule, though just passed it could be slightly clearer.
 
@@ -140,13 +204,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Respond to the staged move by returning attention to the unresolved urgent danger.
 
+**Acceptable alternatives:** Ask whether the bishop is still safe after the pawn move. | Ask how the learner could help the attacked bishop.
+
+**Success criteria:** Prioritizes the bishop over unrelated opportunities. | Connects the question to the staged move.
+
+**Severe-failure criteria:** Approves the pawn move while ignoring the loose bishop.
+
 **Candidate:** “Your bishop is still attacked after that pawn move. How could you help it?”
 
-**Available actions:** tryAnotherMove; expected response: stageMove.
+**Available UI:** actions=["tryAnotherMove"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["tryAnotherMove"]; focus=[]; expects="stageMove".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** It responds to the learner's latest move, keeps the urgent threat central, and asks the learner to solve it.
 
@@ -156,13 +228,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Respect the close action without continuing the lesson.
 
+**Acceptable alternatives:** Acknowledge that help is closed. | Say nothing further.
+
+**Success criteria:** Does not ask another coaching question. | Does not imply that play is blocked.
+
+**Severe-failure criteria:** Continues forcing the learner through coaching steps.
+
 **Candidate:** “You closed help. Tap Help whenever you want another thought.”
 
-**Available actions:** none; expected response: none.
+**Available UI:** actions=[]; expectedResponses=[]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects=null.
 
 **Scores:** Chess correctness: 5; Coaching judgment: 4; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** It directly respects the close action and accurately refers to the separate global Help control.
 
@@ -172,13 +252,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Encourage independent opening thought rather than prescribe one move.
 
+**Acceptable alternatives:** Ask what piece or pawn could help the center. | Ask what the learner wants to develop.
+
+**Success criteria:** Leaves the choice among several good moves to the learner.
+
+**Severe-failure criteria:** Invents danger or gives an illegal move.
+
 **Candidate:** “Move your pawn to d4 now.”
 
-**Available actions:** hint; expected response: stageMove.
+**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
 
 **Scores:** Chess correctness: 4; Coaching judgment: 2; Latest-action responsiveness: 4; Discovery and independence: 1; Coherence and answerability: 4; Child clarity: 4.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
 **Rationale:** The move is legal and understandable, but the command is unnecessarily prescriptive and teaches no decision-making process.
 
@@ -188,13 +276,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Help the learner recognize and solve the urgent danger.
 
+**Acceptable alternatives:** Ask which piece is attacked. | Ask how the knight could become safe.
+
+**Success criteria:** Treats the knight as genuinely endangered.
+
+**Severe-failure criteria:** Claims the knight is safe. | Tells the learner to ignore the attack.
+
 **Candidate:** “Your knight is safe, so ignore the pawn attacking it.”
 
-**Available actions:** noPieceNeedsHelp; expected response: findEndangeredPiece.
+**Available UI:** actions=["noPieceNeedsHelp"]; expectedResponses=["findEndangeredPiece"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["noPieceNeedsHelp"]; focus=[]; expects="findEndangeredPiece".
 
 **Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 2; Discovery and independence: 2; Coherence and answerability: 1; Child clarity: 4.
 
-**True flags:** factualOrIllegalAdvice, wrongUrgentPriority, severeError.
+**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
 
 **Rationale:** It reverses the decisive chess fact and directs the learner to ignore a piece-losing threat.
 
@@ -204,13 +300,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Help the learner evaluate the staged capture before committing it.
 
+**Acceptable alternatives:** Ask what can recapture the bishop. | Suggest trying another move after the learner sees the recapture.
+
+**Success criteria:** Does not approve the losing capture.
+
+**Severe-failure criteria:** Calls the capture good and recommends keeping it.
+
 **Candidate:** “Great capture! Keep it.”
 
-**Available actions:** tryAnotherMove; expected response: judgeMoveSafety.
+**Available UI:** actions=["tryAnotherMove"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="judgeMoveSafety".
 
 **Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 4; Discovery and independence: 1; Coherence and answerability: 2; Child clarity: 4.
 
-**True flags:** factualOrIllegalAdvice, wrongUrgentPriority, severeError.
+**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
 
 **Rationale:** It directly approves a move that the verified facts say loses material.
 
@@ -220,13 +324,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Give an instruction the learner can complete through the current board or controls.
 
+**Acceptable alternatives:** Ask the learner to stage a legal move. | Offer the available hint action.
+
+**Success criteria:** References only available interactions.
+
+**Severe-failure criteria:** Directs the learner to an unavailable target and leaves no workable continuation.
+
 **Candidate:** “Tap the rook on a8.”
 
-**Available actions:** hint; expected response: stageMove.
+**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[{"type": "square", "square": "a8"}]; expects="stageMove".
 
 **Scores:** Chess correctness: 2; Coaching judgment: 1; Latest-action responsiveness: 2; Discovery and independence: 1; Coherence and answerability: 1; Child clarity: 4.
 
-**True flags:** unavailableUIOrDeadEnd, severeError.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: true; severeError: true.
 
 **Rationale:** The instruction is clear but cannot be completed through the available interaction and prevents progress.
 
@@ -236,13 +348,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Keep the advice grounded in the supplied position.
 
+**Acceptable alternatives:** Discuss only verified threats. | Ask a restrained question if no urgent fact is available.
+
+**Success criteria:** Does not invent a piece or threat.
+
+**Severe-failure criteria:** Invents an opponent queen and a false immediate threat.
+
 **Candidate:** “The queen on f6 can take your queen next.”
 
-**Available actions:** hint; expected response: stageMove.
+**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
 
 **Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 2; Discovery and independence: 2; Coherence and answerability: 1; Child clarity: 4.
 
-**True flags:** factualOrIllegalAdvice, wrongUrgentPriority, severeError.
+**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
 
 **Rationale:** It invents both a piece and an urgent threat, making the chess advice unusable.
 
@@ -252,15 +372,23 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Let the learner find the endangered piece rather than revealing it.
 
+**Acceptable alternatives:** Ask which piece the opponent can win next without naming or circling it.
+
+**Success criteria:** Does not name, locate, or focus the answer.
+
+**Severe-failure criteria:** Reveals the answer while simultaneously asking the learner to find it.
+
 **Candidate:** “Look for the endangered knight. It is the knight on f3.”
 
-**Available actions:** noPieceNeedsHelp; expected response: findEndangeredPiece.
+**Available UI:** actions=["noPieceNeedsHelp"]; expectedResponses=["findEndangeredPiece"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="findEndangeredPiece".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 3; Discovery and independence: 1; Coherence and answerability: 2; Child clarity: 5.
 
-**True flags:** answerRevealingGuidance, severeError.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: true; unavailableUIOrDeadEnd: false; severeError: true.
 
-**Rationale:** It explicitly names and highlights the answer while telling the learner to look for it, defeating the teaching interaction.
+**Rationale:** It explicitly names the answer while telling the learner to look for it, defeating the teaching interaction.
 
 ## ref-17
 
@@ -268,13 +396,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Respond to and evaluate the learner's current knight move.
 
+**Acceptable alternatives:** Acknowledge the knight move and ask whether it is safe. | Ask what the knight now attacks or protects.
+
+**Success criteria:** Does not discuss the replaced pawn move as current.
+
+**Severe-failure criteria:** Gives stale advice about the removed move and blocks the current interaction.
+
 **Candidate:** “That first pawn move looks safe.”
 
-**Available actions:** looksSafe; expected response: judgeMoveSafety.
+**Available UI:** actions=["looksSafe"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["looksSafe"]; focus=[]; expects="judgeMoveSafety".
 
 **Scores:** Chess correctness: 3; Coaching judgment: 1; Latest-action responsiveness: 1; Discovery and independence: 2; Coherence and answerability: 2; Child clarity: 5.
 
-**True flags:** obsoleteStage, mixedStages, severeError.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: true; mixedStages: true; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
 
 **Rationale:** It ignores the learner's replacement and evaluates a move that is no longer staged.
 
@@ -284,13 +420,21 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Evaluate the legal response to check accurately.
 
+**Acceptable alternatives:** Explain that the bishop move gets the king out of check. | Invite the learner to keep the legal response.
+
+**Success criteria:** Distinguishes check from checkmate.
+
+**Severe-failure criteria:** Calls the position checkmate while also claiming a legal move exists.
+
 **Candidate:** “Your king is checkmated, but you can move your bishop.”
 
-**Available actions:** playMove; expected response: chooseWhetherToPlay.
+**Available UI:** actions=["playMove"]; expectedResponses=["chooseWhetherToPlay"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=["playMove"]; focus=[]; expects="chooseWhetherToPlay".
 
 **Scores:** Chess correctness: 1; Coaching judgment: 1; Latest-action responsiveness: 3; Discovery and independence: 1; Coherence and answerability: 1; Child clarity: 3.
 
-**True flags:** factualOrIllegalAdvice, wrongUrgentPriority, mixedStages, severeError.
+**Flags:** factualOrIllegalAdvice: true; wrongUrgentPriority: true; obsoleteStage: false; mixedStages: true; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: true.
 
 **Rationale:** The statement contradicts both the verified position and itself: a checkmated player has no legal move.
 
@@ -300,15 +444,23 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Use clear beginner language and preserve agency while discussing a reasonable move.
 
-**Candidate:** “Nc3 is a legal safe square and develops with tempo.”
+**Acceptable alternatives:** Refer to the knight and square c3 in plain language. | Ask what the knight could do from its new square.
 
-**Available actions:** hint; expected response: stageMove.
+**Success criteria:** Avoids unexplained notation and jargon. | Does not simply prescribe the move.
+
+**Severe-failure criteria:** Gives an illegal move or makes progress impossible.
+
+**Candidate:** “The knight's move to c3 is legal and safe, and develops with tempo.”
+
+**Available UI:** actions=["hint"]; expectedResponses=["stageMove"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="stageMove".
 
 **Scores:** Chess correctness: 5; Coaching judgment: 2; Latest-action responsiveness: 3; Discovery and independence: 2; Coherence and answerability: 3; Child clarity: 1.
 
-**True flags:** none.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The chess content is accurate, but the notation, redundant legal safe wording, and tempo jargon are poorly suited to the learner.
+**Rationale:** The chess content is accurate, but the redundant legal and safe wording and tempo jargon are poorly suited to the learner.
 
 ## ref-20
 
@@ -316,12 +468,20 @@ Review each context, candidate response, score, flag, and rationale. Approval of
 
 **Purpose:** Help evaluate the current staged move rather than restart broad move selection.
 
+**Acceptable alternatives:** Ask what the opponent could do after the staged move. | Ask whether the moved piece remains safe.
+
+**Success criteria:** Directly addresses the staged move and the available judgment controls.
+
+**Severe-failure criteria:** Ignores the staged move and leaves the learner unable to answer through the current interaction.
+
 **Candidate:** “Think about everything on the board and choose the best move.”
 
-**Available actions:** looksSafe, tryAnotherMove; expected response: judgeMoveSafety.
+**Available UI:** actions=["looksSafe", "tryAnotherMove"]; expectedResponses=["judgeMoveSafety"]; allowableMoveFocus=[].
+
+**Candidate controls:** actions=[]; focus=[]; expects="judgeMoveSafety".
 
 **Scores:** Chess correctness: 3; Coaching judgment: 1; Latest-action responsiveness: 1; Discovery and independence: 3; Coherence and answerability: 1; Child clarity: 3.
 
-**True flags:** obsoleteStage, mixedStages, unavailableUIOrDeadEnd, severeError.
+**Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: true; mixedStages: true; answerRevealingGuidance: false; unavailableUIOrDeadEnd: true; severeError: true.
 
 **Rationale:** The generic instruction discards the current staged move and does not connect to the available safety judgment.

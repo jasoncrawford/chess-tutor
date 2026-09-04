@@ -54,6 +54,7 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(60, report["judgeQualification"]["metrics"]["callCount"])
         self.assertEqual(3, report["judgeQualification"]["repetitions"])
         self.assertEqual(0.95, report["judgeQualification"]["minimumSevereAgreement"])
+        self.assertEqual(7.0, report["judgeQualification"]["ageDaysAtGrading"])
         self.assertTrue(candidate["promotionEligible"])
         self.assertIn("candidate", report["paretoFrontier"])
         self.assertNotIn("baseline", report["paretoFrontier"])
@@ -313,6 +314,7 @@ class BenchmarkReportTests(unittest.TestCase):
             grade_manifest = {
                 "schemaVersion": "coaching-quality-grade-run.v2",
                 "status": "completed",
+                "gradedAt": "2026-09-10T12:00:00Z",
                 **shared_manifest,
                 "qualificationSHA256": self.sha(qualification_bytes),
             }

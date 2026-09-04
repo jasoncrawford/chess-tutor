@@ -55,6 +55,12 @@ class JudgeReferenceSetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "grader brief"):
             JudgeReferenceSet.load(path, sha, require_reviewed=False)
 
+        value = self.reference_value(review_status="pending")
+        value["cases"][0]["candidateTurn"]["message"] = "Try Nc3."
+        path, sha = self.write_value("invalid-candidate.json", value)
+        with self.assertRaisesRegex(ValueError, "app contract"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
     def test_committed_review_sheet_is_deterministically_rendered(self):
         benchmark = ROOT / "Tools/CoachingEval/benchmark"
         path = benchmark / "judge-reference-v2.json"
@@ -68,6 +74,9 @@ class JudgeReferenceSetTests(unittest.TestCase):
         self.assertIn("Status: **pending human review**", rendered)
         self.assertIn("## ref-02", rendered)
         self.assertIn("Discovery and independence: 2", rendered)
+        self.assertIn("**Acceptable alternatives:**", rendered)
+        self.assertIn("allowableMoveFocus=", rendered)
+        self.assertIn("answerRevealingGuidance: true", rendered)
 
     def write_reference(self, **provenance):
         return self.write_value("reference.json", self.reference_value(**provenance))

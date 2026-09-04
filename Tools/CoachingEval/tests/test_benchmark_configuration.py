@@ -152,9 +152,13 @@ class BenchmarkConfigurationTests(unittest.TestCase):
     def test_v2_judge_rejects_bad_qualification_settings_and_reference_drift(self):
         for field, value in (
             ("qualificationRepetitions", 0),
+            ("qualificationRepetitions", 2),
             ("minimumSevereAgreement", 1.01),
+            ("minimumSevereAgreement", 0.94),
             ("minimumDimensionAgreement", 0),
+            ("minimumDimensionAgreement", 0.89),
             ("qualificationValidDays", -1),
+            ("qualificationValidDays", 31),
         ):
             judge = dict(self.judge_v2, **{field: value})
             with self.subTest(field=field), self.assertRaises(ValueError):

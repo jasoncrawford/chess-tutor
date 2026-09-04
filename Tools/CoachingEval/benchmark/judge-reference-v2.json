@@ -244,10 +244,10 @@
         "severeFailureCriteria": ["Reveals the answer while simultaneously asking the learner to find it."]
       },
       "availableUI": {"actions": ["noPieceNeedsHelp"], "expectedResponses": ["findEndangeredPiece"], "allowableMoveFocus": []},
-      "candidateTurn": {"message": "Look for the endangered knight. It is the knight on f3.", "actions": [], "focus": [{"type": "square", "square": "f3"}], "expects": "findEndangeredPiece"},
+      "candidateTurn": {"message": "Look for the endangered knight. It is the knight on f3.", "actions": [], "focus": [], "expects": "findEndangeredPiece"},
       "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 2, "latestActionResponsiveness": 3, "discoveryAndIndependence": 1, "coherenceAndAnswerability": 2, "childClarity": 5},
       "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": true, "unavailableUIOrDeadEnd": false, "severeError": true},
-      "rationale": ["It explicitly names and highlights the answer while telling the learner to look for it, defeating the teaching interaction."]
+      "rationale": ["It explicitly names the answer while telling the learner to look for it, defeating the teaching interaction."]
     },
     {
       "id": "ref-17",
@@ -289,10 +289,10 @@
         "severeFailureCriteria": ["Gives an illegal move or makes progress impossible."]
       },
       "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
-      "candidateTurn": {"message": "Nc3 is a legal safe square and develops with tempo.", "actions": [], "focus": [], "expects": "stageMove"},
+      "candidateTurn": {"message": "The knight's move to c3 is legal and safe, and develops with tempo.", "actions": [], "focus": [], "expects": "stageMove"},
       "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 2, "latestActionResponsiveness": 3, "discoveryAndIndependence": 2, "coherenceAndAnswerability": 3, "childClarity": 1},
       "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
-      "rationale": ["The chess content is accurate, but the notation, redundant legal safe wording, and tempo jargon are poorly suited to the learner."]
+      "rationale": ["The chess content is accurate, but the redundant legal and safe wording and tempo jargon are poorly suited to the learner."]
     },
     {
       "id": "ref-20",

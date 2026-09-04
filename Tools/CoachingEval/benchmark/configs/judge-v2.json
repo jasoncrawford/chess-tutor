@@ -10,7 +10,7 @@
   "qualificationValidDays": 30,
   "reasoningEffort": "high",
   "referenceSetPath": "Tools/CoachingEval/benchmark/judge-reference-v2.json",
-  "referenceSetSHA256": "36372ee8815103972a8393dc4befa4266af2ad5c0405de58b7c729f98c1efc5d",
+  "referenceSetSHA256": "6fdc0fee8414fcbba0af5065d1456c36c738736402c3d4a3c675d6b157f8549d",
   "reviewSeed": 20260901,
   "schemaVersion": "coaching-quality-judge.v2",
   "systemPromptPath": "Tools/CoachingEval/benchmark/judge-v1.md",

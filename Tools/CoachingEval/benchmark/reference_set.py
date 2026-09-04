@@ -8,6 +8,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
+from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
 from Tools.CoachingEval.benchmark.judge_contract import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
 
 
@@ -144,10 +145,23 @@ class JudgeReferenceSet:
                     "",
                     f"**Purpose:** {brief['coachingPurpose']}",
                     "",
+                    f"**Acceptable alternatives:** {' | '.join(brief['acceptableAlternatives']) or 'none'}",
+                    "",
+                    f"**Success criteria:** {' | '.join(brief['successCriteria'])}",
+                    "",
+                    f"**Severe-failure criteria:** {' | '.join(brief['severeFailureCriteria']) or 'none'}",
+                    "",
                     f"**Candidate:** “{turn['message']}”",
                     "",
-                    f"**Available actions:** {', '.join(case['availableUI']['actions']) or 'none'}; "
-                    f"expected response: {', '.join(case['availableUI']['expectedResponses']) or 'none'}.",
+                    "**Available UI:** "
+                    f"actions={json.dumps(list(case['availableUI']['actions']))}; "
+                    f"expectedResponses={json.dumps(list(case['availableUI']['expectedResponses']))}; "
+                    f"allowableMoveFocus={json.dumps([list(move) for move in case['availableUI']['allowableMoveFocus']])}.",
+                    "",
+                    "**Candidate controls:** "
+                    f"actions={json.dumps(list(turn['actions']))}; "
+                    f"focus={json.dumps(self._thaw(turn['focus']))}; "
+                    f"expects={json.dumps(turn.get('expects'))}.",
                     "",
                     "**Scores:** "
                     + "; ".join(
@@ -156,12 +170,10 @@ class JudgeReferenceSet:
                     )
                     + ".",
                     "",
-                    "**True flags:** "
-                    + (
-                        ", ".join(
-                            flag for flag in RUBRIC_FLAGS if case["referenceFlags"][flag]
-                        )
-                        or "none"
+                    "**Flags:** "
+                    + "; ".join(
+                        f"{flag}: {str(case['referenceFlags'][flag]).lower()}"
+                        for flag in RUBRIC_FLAGS
                     )
                     + ".",
                     "",
@@ -216,6 +228,13 @@ class JudgeReferenceSet:
             expects = cls._text(turn["expects"], "candidate expected response")
             if expects not in available_ui["expectedResponses"]:
                 raise ValueError("Judge reference-set expected response is unavailable")
+        contract = ChessNativeResponseContract(
+            actions=tuple(available_ui["actions"]),
+            allowable_moves=tuple(tuple(move) for move in moves),
+            expected_responses=tuple(available_ui["expectedResponses"]),
+        )
+        if contract.validation_issues(cls._thaw(turn)):
+            raise ValueError("Judge reference-set candidate turn fails the app contract")
 
         scores = value["referenceScores"]
         if not isinstance(scores, dict) or set(scores) != set(RUBRIC_DIMENSIONS):
@@ -262,4 +281,12 @@ class JudgeReferenceSet:
             )
         if isinstance(value, list):
             return tuple(cls._freeze(child) for child in value)
+        return value
+
+    @classmethod
+    def _thaw(cls, value):
+        if isinstance(value, Mapping):
+            return {key: cls._thaw(child) for key, child in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [cls._thaw(child) for child in value]
         return value

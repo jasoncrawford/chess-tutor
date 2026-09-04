@@ -7,6 +7,7 @@ import os
 import random
 import uuid
 from collections import defaultdict
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -160,7 +161,7 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         value.get("promotionEligible") is True for value in aggregates.values()
     )
     judge_overhead = _judge_overhead(calibration, absolute, pairwise)
-    qualification_summary = _qualification_summary(qualification)
+    qualification_summary = _qualification_summary(qualification, grade_manifest)
 
     return {
         "schemaVersion": "coaching-quality-report.v2",
@@ -556,17 +557,41 @@ def _validate_qualification_binding(qualification, manifest, issues):
         or len(passes) != criteria.get("repetitions")
     ):
         issues.append("judge qualification pass inventory is invalid")
+    try:
+        created = datetime.fromisoformat(
+            qualification["createdAt"].replace("Z", "+00:00")
+        )
+        expires = datetime.fromisoformat(
+            qualification["expiresAt"].replace("Z", "+00:00")
+        )
+        graded = datetime.fromisoformat(manifest["gradedAt"].replace("Z", "+00:00"))
+        if not created <= graded < expires:
+            raise ValueError
+    except (AttributeError, KeyError, TypeError, ValueError):
+        issues.append("judge qualification grading time is invalid")
 
 
-def _qualification_summary(qualification):
+def _qualification_summary(qualification, grade_manifest):
     if qualification is None:
         return None
     criteria = qualification.get("criteria")
     criteria = criteria if isinstance(criteria, Mapping) else {}
+    age_days = None
+    try:
+        created = datetime.fromisoformat(
+            qualification["createdAt"].replace("Z", "+00:00")
+        )
+        graded = datetime.fromisoformat(
+            grade_manifest["gradedAt"].replace("Z", "+00:00")
+        )
+        age_days = round((graded - created).total_seconds() / 86_400, 6)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        pass
     return {
         "id": qualification.get("referenceSetID"),
         "createdAt": qualification.get("createdAt"),
         "expiresAt": qualification.get("expiresAt"),
+        "ageDaysAtGrading": age_days,
         "repetitions": criteria.get("repetitions"),
         "minimumSevereAgreement": qualification.get("minimumSevereAgreement"),
         "minimumDimensionAgreement": qualification.get(
@@ -931,6 +956,8 @@ def _markdown(report):
         lines.append(f"- **{identifier}**: ${value['candidateCostUSD']['total']}")
     qualification = report["judgeQualification"]
     if qualification is not None:
+        age = qualification["ageDaysAtGrading"]
+        age_text = f"{age:.1f} days" if age is not None else "unknown"
         lines.extend(
             [
                 "",
@@ -943,7 +970,8 @@ def _markdown(report):
                 ),
                 (
                     f"Created {qualification['createdAt']}; expires "
-                    f"{qualification['expiresAt']}. Qualification cost: "
+                    f"{qualification['expiresAt']}; age at grading "
+                    f"{age_text}. Qualification cost: "
                     f"${qualification['metrics']['estimatedCostUSD']}."
                 ),
             ]

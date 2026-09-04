@@ -38,6 +38,18 @@ class QueueJudge:
         }
 
 
+class FailingJudge(QueueJudge):
+    def complete(self, **arguments):
+        self.calls.append(arguments)
+        if len(self.calls) == 2:
+            raise RuntimeError("private provider failure body")
+        output = self.outputs.pop(0)
+        return {
+            "output_text": json.dumps(output, separators=(",", ":")),
+            "usage": {},
+        }
+
+
 class JudgeQualificationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -195,13 +207,12 @@ class JudgeQualificationTests(unittest.TestCase):
                 drifted, self.configuration, self.now + timedelta(days=1)
             )
 
-        newer_directory = artifact_root / "newer"
-        newer_directory.mkdir()
         newer_artifact = json.loads(first.read_text())
         newer_artifact["createdAt"] = "2026-09-04T12:00:00Z"
         newer_artifact["expiresAt"] = "2026-10-04T12:00:00Z"
-        newer = newer_directory / "qualification.json"
-        newer.write_text(json.dumps(newer_artifact), encoding="utf-8")
+        newer = self.write_artifact(
+            artifact_root, "20260904T120000Z", newer_artifact
+        )
         selected = JudgeQualification.ensure(
             self.configuration,
             QueueJudge([]),
@@ -210,6 +221,74 @@ class JudgeQualificationTests(unittest.TestCase):
             self.now + timedelta(days=2),
         )
         self.assertEqual(newer, selected)
+
+    def test_reuse_strictly_validates_evidence_timestamps_metrics_and_snapshot(self):
+        artifact_root = self.root / "strict"
+        path = JudgeQualification.ensure(
+            self.configuration,
+            QueueJudge(self.passing_outputs()),
+            None,
+            artifact_root,
+            self.now,
+        )
+        original_bytes = path.read_bytes()
+        original = json.loads(original_bytes)
+        mutations = []
+
+        future = json.loads(json.dumps(original))
+        future["createdAt"] = "2026-09-04T12:00:00Z"
+        future["expiresAt"] = "2026-10-04T12:00:00Z"
+        mutations.append(("future", future, "future"))
+
+        long_lived = json.loads(json.dumps(original))
+        long_lived["expiresAt"] = "2099-01-01T00:00:00Z"
+        mutations.append(("long-lived", long_lived, "validity interval"))
+
+        extra = json.loads(json.dumps(original))
+        extra["passes"][0]["rows"][0]["providerErrorBody"] = "private"
+        mutations.append(("extra-row", extra, "row"))
+
+        wrong_row = json.loads(json.dumps(original))
+        wrong_row["passes"][0]["rows"][0]["rowID"] = "ref-99"
+        mutations.append(("wrong-row", wrong_row, "row"))
+
+        wrong_metrics = json.loads(json.dumps(original))
+        wrong_metrics["qualificationMetrics"]["callCount"] = 59
+        mutations.append(("wrong-metrics", wrong_metrics, "metrics"))
+
+        for name, value, message in mutations:
+            candidate = self.write_artifact(
+                self.root / f"strict-{name}", "20260903T120000Z", value
+            )
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, message):
+                JudgeQualification.load_compatible(
+                    candidate, self.configuration, self.now
+                )
+
+        loaded = JudgeQualification.load_compatible(
+            path, self.configuration, self.now
+        )
+        path.write_text("{}", encoding="utf-8")
+        self.assertEqual(original_bytes, loaded.artifact_bytes)
+
+    def test_call_failure_publishes_bounded_rejected_diagnostics(self):
+        client = FailingJudge([self.output(self.reference.cases[0])])
+        with self.assertRaises(QualificationFailed) as failure:
+            JudgeQualification.ensure(
+                self.configuration,
+                client,
+                None,
+                self.root / "call-failure",
+                self.now,
+            )
+
+        artifact_text = failure.exception.artifact_path.read_text()
+        artifact = json.loads(artifact_text)
+        self.assertEqual("rejected", artifact["status"])
+        self.assertEqual("judgeCallFailed", artifact["passes"][0]["failureCategory"])
+        self.assertEqual(1, len(artifact["passes"][0]["rows"]))
+        self.assertEqual(2, artifact["qualificationMetrics"]["callCount"])
+        self.assertNotIn("private provider failure body", artifact_text)
 
     def test_pending_reference_is_rejected_before_provider_calls(self):
         reference = json.loads(self.configuration.reference_set_path.read_text())
@@ -233,6 +312,15 @@ class JudgeQualificationTests(unittest.TestCase):
                 self.now,
             )
         self.assertEqual([], client.calls)
+
+    @staticmethod
+    def write_artifact(root, timestamp, value):
+        data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+        directory = Path(root) / f"{timestamp}-{hashlib.sha256(data).hexdigest()}"
+        directory.mkdir(parents=True)
+        path = directory / "qualification.json"
+        path.write_bytes(data)
+        return path
 
 
 if __name__ == "__main__":

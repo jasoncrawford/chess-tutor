@@ -234,15 +234,23 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         qualification_repetitions = _positive_int(
             raw["qualificationRepetitions"], "qualificationRepetitions"
         )
+        if qualification_repetitions < 3:
+            raise ValueError("qualificationRepetitions must be at least 3")
         minimum_severe_agreement = _unit_interval(
             raw["minimumSevereAgreement"], "minimumSevereAgreement"
         )
+        if minimum_severe_agreement < 0.95:
+            raise ValueError("minimumSevereAgreement must be at least 0.95")
         minimum_dimension_agreement = _unit_interval(
             raw["minimumDimensionAgreement"], "minimumDimensionAgreement"
         )
+        if minimum_dimension_agreement < 0.90:
+            raise ValueError("minimumDimensionAgreement must be at least 0.90")
         qualification_valid_days = _positive_int(
             raw["qualificationValidDays"], "qualificationValidDays"
         )
+        if qualification_valid_days > 30:
+            raise ValueError("qualificationValidDays cannot exceed 30")
     review_seed = _positive_int(raw["reviewSeed"], "reviewSeed")
     return JudgeConfiguration(
         schema_version=schema_version,
