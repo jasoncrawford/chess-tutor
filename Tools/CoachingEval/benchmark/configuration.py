@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
 
@@ -38,7 +38,7 @@ _CANDIDATE_KEYS = frozenset(
         "pricingVersion",
     )
 )
-_JUDGE_KEYS = frozenset(
+_JUDGE_V1_KEYS = frozenset(
     (
         "schemaVersion",
         "id",
@@ -53,6 +53,27 @@ _JUDGE_KEYS = frozenset(
         "calibrationPath",
         "calibrationSHA256",
         "reviewSeed",
+    )
+)
+_JUDGE_V2_KEYS = frozenset(
+    (
+        "schemaVersion",
+        "id",
+        "provider",
+        "model",
+        "reasoningEffort",
+        "conversationReuse",
+        "maximumOutputTokens",
+        "timeoutSeconds",
+        "systemPromptPath",
+        "systemPromptSHA256",
+        "referenceSetPath",
+        "referenceSetSHA256",
+        "reviewSeed",
+        "qualificationRepetitions",
+        "minimumSevereAgreement",
+        "minimumDimensionAgreement",
+        "qualificationValidDays",
     )
 )
 
@@ -81,6 +102,7 @@ class CandidateConfiguration:
 
 @dataclass(frozen=True)
 class JudgeConfiguration:
+    schema_version: str
     identifier: str
     provider: str
     model: str
@@ -91,8 +113,14 @@ class JudgeConfiguration:
     system_prompt_path: Path
     system_prompt_sha256: str
     system_prompt: str
-    calibration_path: Path
-    calibration_sha256: str
+    calibration_path: Optional[Path]
+    calibration_sha256: Optional[str]
+    reference_set_path: Optional[Path]
+    reference_set_sha256: Optional[str]
+    qualification_repetitions: int
+    minimum_severe_agreement: float
+    minimum_dimension_agreement: float
+    qualification_valid_days: int
     review_seed: int
     sha256: str
     raw: Mapping[str, Any]
@@ -170,21 +198,54 @@ def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
 
 def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
     raw, _raw_bytes = _load_json(path)
-    _exact_keys(raw, _JUDGE_KEYS, "Judge")
-    if raw["schemaVersion"] != "coaching-quality-judge.v1":
+    schema_version = raw.get("schemaVersion")
+    if schema_version == "coaching-quality-judge.v1":
+        _exact_keys(raw, _JUDGE_V1_KEYS, "Judge")
+    elif schema_version == "coaching-quality-judge.v2":
+        _exact_keys(raw, _JUDGE_V2_KEYS, "Judge")
+    else:
         raise ValueError("Unsupported judge schema")
     provider = _choice(raw["provider"], PROVIDERS, "provider")
     prompt_path, prompt_sha, prompt_text = _load_pinned_text(
         repository_root, raw["systemPromptPath"], raw["systemPromptSHA256"], "Judge prompt"
     )
-    calibration_path, calibration_sha, _calibration_text = _load_pinned_text(
-        repository_root,
-        raw["calibrationPath"],
-        raw["calibrationSHA256"],
-        "Judge calibration",
-    )
+    if schema_version == "coaching-quality-judge.v1":
+        calibration_path, calibration_sha, _calibration_text = _load_pinned_text(
+            repository_root,
+            raw["calibrationPath"],
+            raw["calibrationSHA256"],
+            "Judge calibration",
+        )
+        reference_set_path = None
+        reference_set_sha = None
+        qualification_repetitions = 1
+        minimum_severe_agreement = 0.90
+        minimum_dimension_agreement = 0.80
+        qualification_valid_days = 0
+    else:
+        reference_set_path, reference_set_sha, _reference_text = _load_pinned_text(
+            repository_root,
+            raw["referenceSetPath"],
+            raw["referenceSetSHA256"],
+            "Judge reference set",
+        )
+        calibration_path = None
+        calibration_sha = None
+        qualification_repetitions = _positive_int(
+            raw["qualificationRepetitions"], "qualificationRepetitions"
+        )
+        minimum_severe_agreement = _unit_interval(
+            raw["minimumSevereAgreement"], "minimumSevereAgreement"
+        )
+        minimum_dimension_agreement = _unit_interval(
+            raw["minimumDimensionAgreement"], "minimumDimensionAgreement"
+        )
+        qualification_valid_days = _positive_int(
+            raw["qualificationValidDays"], "qualificationValidDays"
+        )
     review_seed = _positive_int(raw["reviewSeed"], "reviewSeed")
     return JudgeConfiguration(
+        schema_version=schema_version,
         identifier=_string(raw["id"], "id"),
         provider=provider,
         model=_string(raw["model"], "model"),
@@ -197,6 +258,12 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         system_prompt=prompt_text,
         calibration_path=calibration_path,
         calibration_sha256=calibration_sha,
+        reference_set_path=reference_set_path,
+        reference_set_sha256=reference_set_sha,
+        qualification_repetitions=qualification_repetitions,
+        minimum_severe_agreement=minimum_severe_agreement,
+        minimum_dimension_agreement=minimum_dimension_agreement,
+        qualification_valid_days=qualification_valid_days,
         review_seed=review_seed,
         sha256=hashlib.sha256(_canonical_bytes(raw)).hexdigest(),
         raw=_frozen_copy(raw),
@@ -319,6 +386,13 @@ def _positive_number(value, label):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise ValueError(f"{label} must be positive")
     return value
+
+
+def _unit_interval(value, label):
+    value = _positive_number(value, label)
+    if value > 1:
+        raise ValueError(f"{label} cannot exceed 1")
+    return float(value)
 
 
 def _reasoning(value):

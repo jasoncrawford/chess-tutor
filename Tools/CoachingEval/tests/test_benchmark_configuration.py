@@ -12,6 +12,9 @@ from Tools.CoachingEval.benchmark.configuration import (
 )
 
 
+ROOT = Path(__file__).resolve().parents[3]
+
+
 class BenchmarkConfigurationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -53,6 +56,39 @@ class BenchmarkConfigurationTests(unittest.TestCase):
             "calibrationPath": "Tools/CoachingEval/prompts/tutor-v13.md",
             "calibrationSHA256": self.prompt_sha,
             "reviewSeed": 20260901,
+        }
+        reference = json.loads(
+            (ROOT / "Tools/CoachingEval/benchmark/judge-reference-v2.json").read_text()
+        )
+        reference["provenance"].update(
+            {
+                "reviewStatus": "humanReviewed",
+                "reviewedBy": "Test Reviewer",
+                "reviewedAt": "2026-09-03",
+            }
+        )
+        reference_path = self.root / "Tools/CoachingEval/benchmark/reference.json"
+        reference_path.parent.mkdir(parents=True)
+        reference_path.write_text(json.dumps(reference), encoding="utf-8")
+        reference_sha = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+        self.judge_v2 = {
+            "schemaVersion": "coaching-quality-judge.v2",
+            "id": "judge-sol-v2",
+            "provider": "openai-responses-v1",
+            "model": "gpt-5.6-sol",
+            "reasoningEffort": "high",
+            "conversationReuse": False,
+            "maximumOutputTokens": 2048,
+            "timeoutSeconds": 60,
+            "systemPromptPath": "Tools/CoachingEval/prompts/tutor-v13.md",
+            "systemPromptSHA256": self.prompt_sha,
+            "referenceSetPath": "Tools/CoachingEval/benchmark/reference.json",
+            "referenceSetSHA256": reference_sha,
+            "reviewSeed": 20260901,
+            "qualificationRepetitions": 3,
+            "minimumSevereAgreement": 0.95,
+            "minimumDimensionAgreement": 0.90,
+            "qualificationValidDays": 30,
         }
         self.prices = {
             "schemaVersion": "coaching-quality-pricing.v1",
@@ -100,6 +136,34 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             prices.models["other"] = prices.models["gpt-5.6-sol"]
 
+    def test_loads_v2_judge_qualification_contract(self):
+        judge = load_judge(self.dump("judge-v2.json", self.judge_v2), self.root)
+
+        self.assertEqual("judge-sol-v2", judge.identifier)
+        self.assertEqual(3, judge.qualification_repetitions)
+        self.assertEqual(0.95, judge.minimum_severe_agreement)
+        self.assertEqual(0.90, judge.minimum_dimension_agreement)
+        self.assertEqual(30, judge.qualification_valid_days)
+        self.assertEqual(
+            self.judge_v2["referenceSetSHA256"], judge.reference_set_sha256
+        )
+        self.assertIsNone(judge.calibration_path)
+
+    def test_v2_judge_rejects_bad_qualification_settings_and_reference_drift(self):
+        for field, value in (
+            ("qualificationRepetitions", 0),
+            ("minimumSevereAgreement", 1.01),
+            ("minimumDimensionAgreement", 0),
+            ("qualificationValidDays", -1),
+        ):
+            judge = dict(self.judge_v2, **{field: value})
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                load_judge(self.dump(f"bad-{field}.json", judge), self.root)
+
+        judge = dict(self.judge_v2, referenceSetSHA256="0" * 64)
+        with self.assertRaisesRegex(ValueError, "hash"):
+            load_judge(self.dump("reference-drift.json", judge), self.root)
+
     def test_candidate_rejects_unknown_fields_hash_drift_unsupported_ids_and_escape(self):
         for field, value in (
             ("provider", "shell-command"),
@@ -145,17 +209,19 @@ class BenchmarkConfigurationTests(unittest.TestCase):
             load_prices(self.dump("extra.json", prices))
 
     def test_repository_production_judge_and_pricing_pins_load(self):
-        repository_root = Path(__file__).resolve().parents[3]
+        repository_root = ROOT
         benchmark = repository_root / "Tools/CoachingEval/benchmark"
 
         candidate = load_candidate(
             benchmark / "configs/production-v1.json", repository_root
         )
         judge = load_judge(benchmark / "configs/judge-v1.json", repository_root)
+        judge_v2 = load_judge(benchmark / "configs/judge-v2.json", repository_root)
         prices = load_prices(benchmark / "pricing-v1.json")
 
         self.assertEqual("production-sol-v1", candidate.identifier)
         self.assertEqual("judge-sol-v1", judge.identifier)
+        self.assertEqual("judge-sol-v2", judge_v2.identifier)
         self.assertEqual("openai-2026-09-01", prices.version)
 
 

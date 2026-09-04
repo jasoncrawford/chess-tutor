@@ -1,0 +1,313 @@
+{
+  "schemaVersion": "coaching-quality-judge-reference-set.v2",
+  "id": "judge-reference-v2",
+  "provenance": {
+    "authoredBy": "Codex implementation agent",
+    "authoredAt": "2026-09-03",
+    "reviewStatus": "pending",
+    "reviewedBy": null,
+    "reviewedAt": null
+  },
+  "cases": [
+    {
+      "id": "ref-01",
+      "graderBrief": {
+        "verifiedFacts": ["White is to move in a quiet opening.", "White is not in check.", "No white piece is in immediate danger and no safe capture is available."],
+        "coachingPurpose": "Invite a useful opening idea without prescribing a move or inventing danger.",
+        "acceptableAlternatives": ["Ask about bringing a piece toward the center.", "Ask what piece could join the game."],
+        "successCriteria": ["Leaves the move choice to the learner.", "Uses language a young beginner can understand."],
+        "severeFailureCriteria": ["Invents an urgent threat.", "Prevents the learner from making a move."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "What could you develop toward the center?", "actions": ["hint"], "focus": [], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 4, "latestActionResponsiveness": 5, "discoveryAndIndependence": 5, "coherenceAndAnswerability": 4, "childClarity": 3},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["The question preserves agency and fits the quiet position.", "Develop is useful chess language but may need simpler wording for a five-year-old."]
+    },
+    {
+      "id": "ref-02",
+      "graderBrief": {
+        "verifiedFacts": ["A pawn attacks the learner's knight.", "Several safe knight moves exist.", "The current interaction asks the learner to identify the endangered piece before solving the danger."],
+        "coachingPurpose": "Help the learner notice which piece needs help before choosing a response.",
+        "acceptableAlternatives": ["Ask the learner to tap the endangered piece without naming it."],
+        "successCriteria": ["Does not reveal the endangered piece.", "Stays on the identification step."],
+        "severeFailureCriteria": ["Claims the knight is safe.", "Creates a dead end that prevents progress."]
+      },
+      "availableUI": {"actions": ["noPieceNeedsHelp"], "expectedResponses": ["findEndangeredPiece"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Your knight is attacked. Can you find a square where it will be safer?", "actions": [], "focus": [], "expects": "findEndangeredPiece"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 2, "latestActionResponsiveness": 2, "discoveryAndIndependence": 2, "coherenceAndAnswerability": 2, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": true, "answerRevealingGuidance": true, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["It states the endangered piece instead of letting the learner find it.", "It also jumps from identifying the piece to choosing its destination while declaring a different expected response."]
+    },
+    {
+      "id": "ref-03",
+      "graderBrief": {
+        "verifiedFacts": ["The learner staged a move that leaves the queen capturable by Black.", "It is still the learner's tentative move and has not been committed."],
+        "coachingPurpose": "Help the learner discover the opponent's immediate reply before deciding whether to keep the move.",
+        "acceptableAlternatives": ["Ask what Black could capture next.", "Ask whether the queen will be safe after the move."],
+        "successCriteria": ["Focuses on the staged move's immediate safety.", "Does not reveal the answer unnecessarily."],
+        "severeFailureCriteria": ["Approves the losing move.", "Discusses an unrelated earlier stage."]
+      },
+      "availableUI": {"actions": ["tryAnotherMove"], "expectedResponses": ["judgeMoveSafety"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Before keeping that move, what could Black capture next?", "actions": ["tryAnotherMove"], "focus": [], "expects": "judgeMoveSafety"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 5, "latestActionResponsiveness": 5, "discoveryAndIndependence": 5, "coherenceAndAnswerability": 5, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["It asks one answerable question about the staged move's decisive flaw and preserves discovery."]
+    },
+    {
+      "id": "ref-04",
+      "graderBrief": {
+        "verifiedFacts": ["The learner's pawn is attacked.", "If the attacking piece captures it, the learner's king can recapture safely.", "The pawn is therefore not simply lost."],
+        "coachingPurpose": "Distinguish being attacked from being lost and let the learner decide whether to continue.",
+        "acceptableAlternatives": ["Explain that the king protects the pawn.", "Ask what can recapture the attacker."],
+        "successCriteria": ["Accurately explains the recapture.", "Leaves a usable next choice."],
+        "severeFailureCriteria": ["Claims the pawn is undefended or inevitably lost."]
+      },
+      "availableUI": {"actions": ["looksSafe"], "expectedResponses": ["chooseWhetherToPlay"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "That pawn is attacked, but your king protects it. Nothing is lost yet.", "actions": ["looksSafe"], "focus": [], "expects": "chooseWhetherToPlay"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 5, "latestActionResponsiveness": 5, "discoveryAndIndependence": 3, "coherenceAndAnswerability": 4, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["The explanation is accurate and concise, although it tells rather than helps the learner discover the recapture."]
+    },
+    {
+      "id": "ref-05",
+      "graderBrief": {
+        "verifiedFacts": ["The learner replaced a previously staged pawn move with a legal knight move.", "The knight move is not immediately losing and helps control central squares."],
+        "coachingPurpose": "Follow the replacement and help the learner evaluate the new move.",
+        "acceptableAlternatives": ["Ask what the knight now attacks or protects.", "Ask whether the knight is safe on its new square."],
+        "successCriteria": ["Responds to the replacement rather than the old pawn move.", "Prompts useful evaluation of the knight move."],
+        "severeFailureCriteria": ["Continues discussing the replaced pawn move."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["judgeMoveSafety"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "You changed to the knight move. What does that knight now help control?", "actions": ["hint"], "focus": [], "expects": "judgeMoveSafety"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 4, "latestActionResponsiveness": 5, "discoveryAndIndependence": 5, "coherenceAndAnswerability": 4, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["It explicitly follows the replacement and prompts thought about the new move.", "Control is somewhat abstract and does not directly ask for the requested safety judgment."]
+    },
+    {
+      "id": "ref-06",
+      "graderBrief": {
+        "verifiedFacts": ["The learner reported that no safe capture is available.", "The position is quiet and the learner can stage a developing move."],
+        "coachingPurpose": "Accept the learner's answer and move on to choosing a useful move.",
+        "acceptableAlternatives": ["Ask what piece could join the game.", "Ask how the learner could help control the center."],
+        "successCriteria": ["Does not repeat the capture search.", "Leaves the move choice open."],
+        "severeFailureCriteria": ["Insists that a nonexistent capture exists.", "Blocks progress after the answer."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "You found there is no safe capture. What kind of piece could you bring into the game?", "actions": ["hint"], "focus": [], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 5, "latestActionResponsiveness": 5, "discoveryAndIndependence": 5, "coherenceAndAnswerability": 5, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["It accepts the latest answer, advances naturally, and asks a non-prescriptive question."]
+    },
+    {
+      "id": "ref-07",
+      "graderBrief": {
+        "verifiedFacts": ["The learner staged legal kingside castling.", "Castling moves the king and rook in one move and generally improves king shelter."],
+        "coachingPurpose": "Explain the unfamiliar special move simply before the learner chooses whether to play it.",
+        "acceptableAlternatives": ["Briefly explain that both the king and rook move."],
+        "successCriteria": ["Explains castling accurately.", "Supports the play-or-retry choice."],
+        "severeFailureCriteria": ["Calls the move illegal.", "Describes the king or rook moving incorrectly."]
+      },
+      "availableUI": {"actions": ["playMove"], "expectedResponses": ["chooseWhetherToPlay"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Castling moves your king and rook together and helps shelter your king.", "actions": ["playMove"], "focus": [], "expects": "chooseWhetherToPlay"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 4, "latestActionResponsiveness": 5, "discoveryAndIndependence": 3, "coherenceAndAnswerability": 4, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["A direct explanation is appropriate for a special rule, and the available action supports the next choice."]
+    },
+    {
+      "id": "ref-08",
+      "graderBrief": {
+        "verifiedFacts": ["The learner staged a legal en-passant capture.", "The pawn moves diagonally to an empty square while capturing the opposing pawn that just advanced two squares."],
+        "coachingPurpose": "Explain the unusual capture accurately before the learner chooses whether to play it.",
+        "acceptableAlternatives": ["Explain that the pawn captures the pawn that just passed beside it."],
+        "successCriteria": ["Accurately describes which pawn is captured.", "Uses simple language."],
+        "severeFailureCriteria": ["Claims the move is illegal.", "Identifies the wrong captured pawn."]
+      },
+      "availableUI": {"actions": ["playMove"], "expectedResponses": ["chooseWhetherToPlay"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "The pawn moved diagonally to take the pawn that just passed it.", "actions": ["playMove"], "focus": [], "expects": "chooseWhetherToPlay"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 4, "latestActionResponsiveness": 5, "discoveryAndIndependence": 3, "coherenceAndAnswerability": 4, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["The explanation is accurate and suitably direct for an unusual rule, though just passed it could be slightly clearer."]
+    },
+    {
+      "id": "ref-09",
+      "graderBrief": {
+        "verifiedFacts": ["The learner's bishop is under a real one-move threat.", "The learner staged an unrelated pawn move that leaves the bishop endangered."],
+        "coachingPurpose": "Respond to the staged move by returning attention to the unresolved urgent danger.",
+        "acceptableAlternatives": ["Ask whether the bishop is still safe after the pawn move.", "Ask how the learner could help the attacked bishop."],
+        "successCriteria": ["Prioritizes the bishop over unrelated opportunities.", "Connects the question to the staged move."],
+        "severeFailureCriteria": ["Approves the pawn move while ignoring the loose bishop."]
+      },
+      "availableUI": {"actions": ["tryAnotherMove"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Your bishop is still attacked after that pawn move. How could you help it?", "actions": ["tryAnotherMove"], "focus": [], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 5, "latestActionResponsiveness": 5, "discoveryAndIndependence": 5, "coherenceAndAnswerability": 5, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["It responds to the learner's latest move, keeps the urgent threat central, and asks the learner to solve it."]
+    },
+    {
+      "id": "ref-10",
+      "graderBrief": {
+        "verifiedFacts": ["The learner just closed coaching help.", "No coaching response buttons remain visible.", "The app's global Help control remains available if the learner later wants help again."],
+        "coachingPurpose": "Respect the close action without continuing the lesson.",
+        "acceptableAlternatives": ["Acknowledge that help is closed.", "Say nothing further."],
+        "successCriteria": ["Does not ask another coaching question.", "Does not imply that play is blocked."],
+        "severeFailureCriteria": ["Continues forcing the learner through coaching steps."]
+      },
+      "availableUI": {"actions": [], "expectedResponses": [], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "You closed help. Tap Help whenever you want another thought.", "actions": [], "focus": []},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 4, "latestActionResponsiveness": 5, "discoveryAndIndependence": 4, "coherenceAndAnswerability": 5, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["It directly respects the close action and accurately refers to the separate global Help control."]
+    },
+    {
+      "id": "ref-11",
+      "graderBrief": {
+        "verifiedFacts": ["White is to move in a quiet opening with several useful legal moves.", "Moving the central pawn to d4 is legal and reasonable.", "The board accepts staged moves directly."],
+        "coachingPurpose": "Encourage independent opening thought rather than prescribe one move.",
+        "acceptableAlternatives": ["Ask what piece or pawn could help the center.", "Ask what the learner wants to develop."],
+        "successCriteria": ["Leaves the choice among several good moves to the learner."],
+        "severeFailureCriteria": ["Invents danger or gives an illegal move."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Move your pawn to d4 now.", "actions": [], "focus": [], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 4, "coachingJudgment": 2, "latestActionResponsiveness": 4, "discoveryAndIndependence": 1, "coherenceAndAnswerability": 4, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["The move is legal and understandable, but the command is unnecessarily prescriptive and teaches no decision-making process."]
+    },
+    {
+      "id": "ref-12",
+      "graderBrief": {
+        "verifiedFacts": ["An opposing pawn attacks the learner's knight.", "The knight is loose and can be won if the learner ignores the threat."],
+        "coachingPurpose": "Help the learner recognize and solve the urgent danger.",
+        "acceptableAlternatives": ["Ask which piece is attacked.", "Ask how the knight could become safe."],
+        "successCriteria": ["Treats the knight as genuinely endangered."],
+        "severeFailureCriteria": ["Claims the knight is safe.", "Tells the learner to ignore the attack."]
+      },
+      "availableUI": {"actions": ["noPieceNeedsHelp"], "expectedResponses": ["findEndangeredPiece"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Your knight is safe, so ignore the pawn attacking it.", "actions": ["noPieceNeedsHelp"], "focus": [], "expects": "findEndangeredPiece"},
+      "referenceScores": {"chessCorrectness": 1, "coachingJudgment": 1, "latestActionResponsiveness": 2, "discoveryAndIndependence": 2, "coherenceAndAnswerability": 1, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": true, "wrongUrgentPriority": true, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": true},
+      "rationale": ["It reverses the decisive chess fact and directs the learner to ignore a piece-losing threat."]
+    },
+    {
+      "id": "ref-13",
+      "graderBrief": {
+        "verifiedFacts": ["The learner staged a bishop capture.", "An opposing pawn can immediately recapture the bishop.", "The exchange loses material for the learner."],
+        "coachingPurpose": "Help the learner evaluate the staged capture before committing it.",
+        "acceptableAlternatives": ["Ask what can recapture the bishop.", "Suggest trying another move after the learner sees the recapture."],
+        "successCriteria": ["Does not approve the losing capture."],
+        "severeFailureCriteria": ["Calls the capture good and recommends keeping it."]
+      },
+      "availableUI": {"actions": ["tryAnotherMove"], "expectedResponses": ["judgeMoveSafety"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Great capture! Keep it.", "actions": [], "focus": [], "expects": "judgeMoveSafety"},
+      "referenceScores": {"chessCorrectness": 1, "coachingJudgment": 1, "latestActionResponsiveness": 4, "discoveryAndIndependence": 1, "coherenceAndAnswerability": 2, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": true, "wrongUrgentPriority": true, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": true},
+      "rationale": ["It directly approves a move that the verified facts say loses material."]
+    },
+    {
+      "id": "ref-14",
+      "graderBrief": {
+        "verifiedFacts": ["The learner needs an answerable next step.", "The rook on a8 is not a learner piece and is not an available answer or move focus."],
+        "coachingPurpose": "Give an instruction the learner can complete through the current board or controls.",
+        "acceptableAlternatives": ["Ask the learner to stage a legal move.", "Offer the available hint action."],
+        "successCriteria": ["References only available interactions."],
+        "severeFailureCriteria": ["Directs the learner to an unavailable target and leaves no workable continuation."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Tap the rook on a8.", "actions": [], "focus": [{"type": "square", "square": "a8"}], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 2, "coachingJudgment": 1, "latestActionResponsiveness": 2, "discoveryAndIndependence": 1, "coherenceAndAnswerability": 1, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": true, "severeError": true},
+      "rationale": ["The instruction is clear but cannot be completed through the available interaction and prevents progress."]
+    },
+    {
+      "id": "ref-15",
+      "graderBrief": {
+        "verifiedFacts": ["There is no queen on f6.", "The learner's queen is not exposed to capture on the next move."],
+        "coachingPurpose": "Keep the advice grounded in the supplied position.",
+        "acceptableAlternatives": ["Discuss only verified threats.", "Ask a restrained question if no urgent fact is available."],
+        "successCriteria": ["Does not invent a piece or threat."],
+        "severeFailureCriteria": ["Invents an opponent queen and a false immediate threat."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "The queen on f6 can take your queen next.", "actions": [], "focus": [], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 1, "coachingJudgment": 1, "latestActionResponsiveness": 2, "discoveryAndIndependence": 2, "coherenceAndAnswerability": 1, "childClarity": 4},
+      "referenceFlags": {"factualOrIllegalAdvice": true, "wrongUrgentPriority": true, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": true},
+      "rationale": ["It invents both a piece and an urgent threat, making the chess advice unusable."]
+    },
+    {
+      "id": "ref-16",
+      "graderBrief": {
+        "verifiedFacts": ["The knight on f3 is endangered.", "The current step asks the learner to identify the endangered piece by tapping it."],
+        "coachingPurpose": "Let the learner find the endangered piece rather than revealing it.",
+        "acceptableAlternatives": ["Ask which piece the opponent can win next without naming or circling it."],
+        "successCriteria": ["Does not name, locate, or focus the answer."],
+        "severeFailureCriteria": ["Reveals the answer while simultaneously asking the learner to find it."]
+      },
+      "availableUI": {"actions": ["noPieceNeedsHelp"], "expectedResponses": ["findEndangeredPiece"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Look for the endangered knight. It is the knight on f3.", "actions": [], "focus": [{"type": "square", "square": "f3"}], "expects": "findEndangeredPiece"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 2, "latestActionResponsiveness": 3, "discoveryAndIndependence": 1, "coherenceAndAnswerability": 2, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": true, "unavailableUIOrDeadEnd": false, "severeError": true},
+      "rationale": ["It explicitly names and highlights the answer while telling the learner to look for it, defeating the teaching interaction."]
+    },
+    {
+      "id": "ref-17",
+      "graderBrief": {
+        "verifiedFacts": ["The learner first staged a pawn move, then replaced it with a knight move.", "Only the knight move is currently staged."],
+        "coachingPurpose": "Respond to and evaluate the learner's current knight move.",
+        "acceptableAlternatives": ["Acknowledge the knight move and ask whether it is safe.", "Ask what the knight now attacks or protects."],
+        "successCriteria": ["Does not discuss the replaced pawn move as current."],
+        "severeFailureCriteria": ["Gives stale advice about the removed move and blocks the current interaction."]
+      },
+      "availableUI": {"actions": ["looksSafe"], "expectedResponses": ["judgeMoveSafety"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "That first pawn move looks safe.", "actions": ["looksSafe"], "focus": [], "expects": "judgeMoveSafety"},
+      "referenceScores": {"chessCorrectness": 3, "coachingJudgment": 1, "latestActionResponsiveness": 1, "discoveryAndIndependence": 2, "coherenceAndAnswerability": 2, "childClarity": 5},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": true, "mixedStages": true, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": true},
+      "rationale": ["It ignores the learner's replacement and evaluates a move that is no longer staged."]
+    },
+    {
+      "id": "ref-18",
+      "graderBrief": {
+        "verifiedFacts": ["The learner's king is in check but is not checkmated.", "The staged bishop move is legal and resolves the check."],
+        "coachingPurpose": "Evaluate the legal response to check accurately.",
+        "acceptableAlternatives": ["Explain that the bishop move gets the king out of check.", "Invite the learner to keep the legal response."],
+        "successCriteria": ["Distinguishes check from checkmate."],
+        "severeFailureCriteria": ["Calls the position checkmate while also claiming a legal move exists."]
+      },
+      "availableUI": {"actions": ["playMove"], "expectedResponses": ["chooseWhetherToPlay"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Your king is checkmated, but you can move your bishop.", "actions": ["playMove"], "focus": [], "expects": "chooseWhetherToPlay"},
+      "referenceScores": {"chessCorrectness": 1, "coachingJudgment": 1, "latestActionResponsiveness": 3, "discoveryAndIndependence": 1, "coherenceAndAnswerability": 1, "childClarity": 3},
+      "referenceFlags": {"factualOrIllegalAdvice": true, "wrongUrgentPriority": true, "obsoleteStage": false, "mixedStages": true, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": true},
+      "rationale": ["The statement contradicts both the verified position and itself: a checkmated player has no legal move."]
+    },
+    {
+      "id": "ref-19",
+      "graderBrief": {
+        "verifiedFacts": ["Moving the learner's knight to c3 is legal and safe.", "The move develops the knight with tempo in this position.", "The learner is an early beginner who is not expected to know algebraic notation or advanced terminology."],
+        "coachingPurpose": "Use clear beginner language and preserve agency while discussing a reasonable move.",
+        "acceptableAlternatives": ["Refer to the knight and square c3 in plain language.", "Ask what the knight could do from its new square."],
+        "successCriteria": ["Avoids unexplained notation and jargon.", "Does not simply prescribe the move."],
+        "severeFailureCriteria": ["Gives an illegal move or makes progress impossible."]
+      },
+      "availableUI": {"actions": ["hint"], "expectedResponses": ["stageMove"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Nc3 is a legal safe square and develops with tempo.", "actions": [], "focus": [], "expects": "stageMove"},
+      "referenceScores": {"chessCorrectness": 5, "coachingJudgment": 2, "latestActionResponsiveness": 3, "discoveryAndIndependence": 2, "coherenceAndAnswerability": 3, "childClarity": 1},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": false, "mixedStages": false, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": false, "severeError": false},
+      "rationale": ["The chess content is accurate, but the notation, redundant legal safe wording, and tempo jargon are poorly suited to the learner."]
+    },
+    {
+      "id": "ref-20",
+      "graderBrief": {
+        "verifiedFacts": ["The learner has already staged a specific move.", "The current coaching step is to judge that move's safety.", "The available controls let the learner mark it safe or try another move."],
+        "coachingPurpose": "Help evaluate the current staged move rather than restart broad move selection.",
+        "acceptableAlternatives": ["Ask what the opponent could do after the staged move.", "Ask whether the moved piece remains safe."],
+        "successCriteria": ["Directly addresses the staged move and the available judgment controls."],
+        "severeFailureCriteria": ["Ignores the staged move and leaves the learner unable to answer through the current interaction." ]
+      },
+      "availableUI": {"actions": ["looksSafe", "tryAnotherMove"], "expectedResponses": ["judgeMoveSafety"], "allowableMoveFocus": []},
+      "candidateTurn": {"message": "Think about everything on the board and choose the best move.", "actions": [], "focus": [], "expects": "judgeMoveSafety"},
+      "referenceScores": {"chessCorrectness": 3, "coachingJudgment": 1, "latestActionResponsiveness": 1, "discoveryAndIndependence": 3, "coherenceAndAnswerability": 1, "childClarity": 3},
+      "referenceFlags": {"factualOrIllegalAdvice": false, "wrongUrgentPriority": false, "obsoleteStage": true, "mixedStages": true, "answerRevealingGuidance": false, "unavailableUIOrDeadEnd": true, "severeError": true},
+      "rationale": ["The generic instruction discards the current staged move and does not connect to the available safety judgment."]
+    }
+  ]
+}
