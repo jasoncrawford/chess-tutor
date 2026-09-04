@@ -240,6 +240,33 @@
     return index >= 0 && target ? target.id : null;
   }
 
+  function resolveCurrentCaseID(allCases, visible, currentID, retainCurrent) {
+    const exists = allCases.some(function (item) { return item.id === currentID; });
+    if (retainCurrent && exists) return currentID;
+    if (visible.some(function (item) { return item.id === currentID; })) return currentID;
+    return visible.length ? visible[0].id : null;
+  }
+
+  function navigationTargets(allCases, visible, currentID) {
+    const visibleIndex = visible.findIndex(function (item) { return item.id === currentID; });
+    if (visibleIndex >= 0) {
+      return {
+        previous: visibleIndex > 0 ? visible[visibleIndex - 1].id : null,
+        next: visibleIndex < visible.length - 1 ? visible[visibleIndex + 1].id : null
+      };
+    }
+    const currentIndex = allCases.findIndex(function (item) { return item.id === currentID; });
+    if (currentIndex < 0) return { previous: null, next: visible.length ? visible[0].id : null };
+    let previous = null;
+    let next = null;
+    visible.forEach(function (item) {
+      const index = allCases.findIndex(function (candidate) { return candidate.id === item.id; });
+      if (index < currentIndex) previous = item.id;
+      else if (index > currentIndex && next === null) next = item.id;
+    });
+    return { previous, next };
+  }
+
   function shortcutAction(event) {
     const tag = String(event.targetTagName || "").toUpperCase();
     if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || event.targetIsContentEditable ||
@@ -339,6 +366,8 @@
     progress,
     visibleCases,
     adjacentCaseID,
+    resolveCurrentCaseID,
+    navigationTargets,
     shortcutAction,
     formatSummary,
     parseFen

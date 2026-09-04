@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[3]
 REFERENCE_PATH = ROOT / "Tools/CoachingEval/benchmark/judge-reference-v2.json"
 LAUNCHER_PATH = ROOT / "scripts/review_judge_references.sh"
 CORE_TEST_PATH = ROOT / "Tools/CoachingEval/tests/test_benchmark_review_core.js"
+CONTROLLER_TEST_PATH = (
+    ROOT / "Tools/CoachingEval/tests/test_benchmark_review_controller.js"
+)
 EXPECTED_REFERENCE_SHA = (
     "3b0bb2ba35df5261967c1af4a0970fec67fd31dcc9f5616ab5c262af9f7c016d"
 )
@@ -178,7 +181,20 @@ class JudgeReferenceReviewHTTPTests(unittest.TestCase):
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("9 review core tests passed", completed.stdout)
+        self.assertIn("10 review core tests passed", completed.stdout)
+
+    def test_executes_the_actual_controller_filter_integration(self):
+        completed = subprocess.run(
+            ["node", str(CONTROLLER_TEST_PATH)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("1 review controller integration test passed", completed.stdout)
 
 
 class JudgeReferenceReviewLauncherTests(unittest.TestCase):

@@ -61,11 +61,14 @@
     if (focusReview) document.getElementById("case-review").focus();
   }
 
-  function render() {
+  function render(options) {
     const filtered = visibleCases();
-    if (!filtered.some(function (item) { return item.id === state.currentID; })) {
-      state.currentID = filtered.length ? filtered[0].id : null;
-    }
+    state.currentID = core.resolveCurrentCaseID(
+      state.model.cases,
+      filtered,
+      state.currentID,
+      Boolean(options && options.retainCurrent)
+    );
     renderHeader();
     renderProgress();
     renderLedger(filtered);
@@ -125,11 +128,11 @@
 
   function renderCase(item, filtered) {
     const review = reviewFor(item.id);
-    const visibleIndex = filtered.findIndex(function (value) { return value.id === item.id; });
+    const navigation = core.navigationTargets(state.model.cases, filtered, item.id);
     const allIndex = state.model.cases.findIndex(function (value) { return value.id === item.id; });
     document.getElementById("case-position").textContent = "Case " + (allIndex + 1) + " of " + state.model.cases.length;
-    document.getElementById("previous-case").disabled = visibleIndex <= 0;
-    document.getElementById("next-case").disabled = visibleIndex < 0 || visibleIndex >= filtered.length - 1;
+    document.getElementById("previous-case").disabled = navigation.previous === null;
+    document.getElementById("next-case").disabled = navigation.next === null;
     document.getElementById("case-kind").textContent = item.kind === "absolute" ? "Score one response" : "Compare two responses";
     document.getElementById("case-category").textContent = humanize(item.source.category) + " position · step " + item.source.stepIndex;
     document.getElementById("case-title").textContent = item.kind === "absolute" ? "Is this judgment right?" : "Which coaching response is better?";
@@ -307,7 +310,7 @@
       state.model, state.reviews, state.currentID, input.dataset.score, value
     );
     saveReviews();
-    render();
+    render({ retainCurrent: true });
   }
 
   function updateFlag(input) {
@@ -315,12 +318,13 @@
       state.model, state.reviews, state.currentID, input.dataset.flag, input.checked
     );
     saveReviews();
-    render();
+    render({ retainCurrent: true });
   }
 
   function changeCase(offset) {
     const filtered = visibleCases();
-    const targetID = core.adjacentCaseID(filtered, state.currentID, offset);
+    const targets = core.navigationTargets(state.model.cases, filtered, state.currentID);
+    const targetID = offset < 0 ? targets.previous : targets.next;
     if (targetID) setCurrent(targetID, true);
   }
 
@@ -367,7 +371,7 @@
           state.model, state.reviews, state.currentID, event.target.value
         );
         saveReviews();
-        render();
+        render({ retainCurrent: true });
       }
     });
     document.getElementById("case-filters").addEventListener("click", function (event) {

@@ -216,6 +216,21 @@ test("filters navigation and shortcuts share safe deterministic behavior", () =>
   assert.equal(core.shortcutAction({ key: "c", targetTagName: "DIV", targetIsContentEditable: true }), null);
 });
 
+test("retains an edited current case until explicit filtered navigation", () => {
+  const current = model();
+  let reviews = core.sanitizeStoredReview(current, null);
+  reviews = core.applyScore(current, reviews, "ref-01", "chessCorrectness", 4);
+  const filtered = core.visibleCases(current, reviews, "unreviewed");
+
+  assert.deepEqual(filtered.map((item) => item.id), ["ref-02", "pair-01"]);
+  assert.equal(core.resolveCurrentCaseID(current.cases, filtered, "ref-01", true), "ref-01");
+  assert.equal(core.resolveCurrentCaseID(current.cases, filtered, "ref-01", false), "ref-02");
+  assert.deepEqual(core.navigationTargets(current.cases, filtered, "ref-01"), {
+    previous: null,
+    next: "ref-02"
+  });
+});
+
 test("FEN parsing maps a black-to-move position onto named board squares", () => {
   const parsed = core.parseFen("8/8/8/3k4/8/8/4P3/4K3 b - - 0 1");
 
