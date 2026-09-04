@@ -51,9 +51,10 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertGreater(float(candidate["candidateCostUSD"]["total"]), 0)
         self.assertEqual(10, report["judgeOverhead"]["callCount"])
         self.assertEqual(1000, report["judgeOverhead"]["usage"]["inputTokens"])
-        self.assertEqual(60, report["judgeQualification"]["metrics"]["callCount"])
+        self.assertEqual(120, report["judgeQualification"]["metrics"]["callCount"])
         self.assertEqual(3, report["judgeQualification"]["repetitions"])
         self.assertEqual(0.95, report["judgeQualification"]["minimumSevereAgreement"])
+        self.assertEqual(0.9, report["judgeQualification"]["minimumPairwiseAgreement"])
         self.assertEqual(7.0, report["judgeQualification"]["ageDaysAtGrading"])
         self.assertTrue(candidate["promotionEligible"])
         self.assertIn("candidate", report["paretoFrontier"])
@@ -113,6 +114,28 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn("transcripts/candidate--s1-3--r1.md", summary)
         with self.assertRaisesRegex(ValueError, "overwrite"):
             write_report(self.run_root, self.grade_root, self.prices, destination)
+
+    def test_reports_unknown_judge_cost_when_accounting_is_incomplete(self):
+        grades_path = self.grade_root / "absolute-grades.jsonl"
+        grades = [json.loads(line) for line in grades_path.read_text().splitlines()]
+        grades[0]["judgeMetrics"]["accountingComplete"] = False
+        grades[0]["judgeMetrics"]["estimatedCostUSD"] = None
+        grades_bytes = self.jsonl(grades)
+        grades_path.write_bytes(grades_bytes)
+        manifest_path = self.grade_root / "grade-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["absoluteGradesSHA256"] = self.sha(grades_bytes)
+        manifest_path.write_text(json.dumps(manifest))
+
+        report = build_report(self.run_root, self.grade_root, self.prices)
+
+        self.assertFalse(report["judgeOverhead"]["accountingComplete"])
+        self.assertIsNone(report["judgeOverhead"]["estimatedCostUSD"])
+        destination = self.root / "incomplete-accounting-report"
+        _aggregate, summary = write_report(
+            self.run_root, self.grade_root, self.prices, destination
+        )
+        self.assertIn("unknown (accounting incomplete)", summary.read_text())
 
     def test_reads_legacy_calibration_artifacts(self):
         legacy_root = self.root / "legacy"
@@ -285,6 +308,7 @@ class BenchmarkReportTests(unittest.TestCase):
                     "repetitions": 3,
                     "minimumSevereAgreement": 0.95,
                     "minimumDimensionAgreement": 0.9,
+                    "minimumPairwiseAgreement": 0.9,
                     "validDays": 30,
                 },
                 "bindings": {
@@ -296,15 +320,18 @@ class BenchmarkReportTests(unittest.TestCase):
                 },
                 "minimumSevereAgreement": 0.95,
                 "minimumDimensionAgreement": 0.925,
-                "qualificationMetrics": self.metrics(60),
+                "minimumPairwiseAgreement": 0.9,
+                "qualificationMetrics": self.metrics(120),
                 "passes": [
                     {
                         "repetition": repetition,
                         "passed": True,
                         "severeAgreement": 1.0 if repetition < 3 else 0.95,
                         "dimensionWithinOne": 0.95 if repetition < 3 else 0.925,
-                        "judgeMetrics": self.metrics(20),
+                        "pairwiseAgreement": 1.0 if repetition < 3 else 0.9,
+                        "judgeMetrics": self.metrics(40),
                         "rows": [{} for _ in range(20)],
+                        "pairwiseRows": [{} for _ in range(20)],
                     }
                     for repetition in range(1, 4)
                 ],
@@ -323,6 +350,7 @@ class BenchmarkReportTests(unittest.TestCase):
 
     def metrics(self, calls):
         return {
+            "accountingComplete": True,
             "callCount": calls,
             "usage": {
                 "inputTokens": 100 * calls,

@@ -143,6 +143,8 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         self.assertTrue(candidate.baseline)
         self.assertEqual(64, len(candidate.sha256))
         self.assertEqual(20260901, judge.review_seed)
+        self.assertEqual(1, judge.qualification_repetitions)
+        self.assertEqual(0.0, judge.minimum_pairwise_agreement)
         self.assertEqual(
             Decimal("0.000011"),
             prices.estimate(
@@ -178,6 +180,7 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         for field, value in (
             ("qualificationRepetitions", 0),
             ("qualificationRepetitions", 2),
+            ("qualificationRepetitions", 4),
             ("minimumSevereAgreement", 1.01),
             ("minimumSevereAgreement", 0.94),
             ("minimumDimensionAgreement", 0),

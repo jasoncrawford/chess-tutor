@@ -36,20 +36,30 @@ class JudgeCallError(ValueError):
 
 def judge_call(configuration, client, payload, schema, price_table):
     started = time.monotonic()
-    response = client.complete(
-        system_prompt=configuration.system_prompt,
-        user_prompt=json.dumps(payload, sort_keys=True, separators=(",", ":")),
-        schema=schema,
-        model=configuration.model,
-        reasoning_effort=configuration.reasoning_effort,
-        maximum_output_tokens=configuration.maximum_output_tokens,
-        timeout=configuration.timeout_seconds,
-        previous_response_id=None,
-        store=False,
-    )
+    try:
+        response = client.complete(
+            system_prompt=configuration.system_prompt,
+            user_prompt=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            schema=schema,
+            model=configuration.model,
+            reasoning_effort=configuration.reasoning_effort,
+            maximum_output_tokens=configuration.maximum_output_tokens,
+            timeout=configuration.timeout_seconds,
+            previous_response_id=None,
+            store=False,
+        )
+    except JudgeCallError:
+        raise
+    except Exception:
+        latency = _bounded_float((time.monotonic() - started) * 1000)
+        raise JudgeCallError(
+            "Judge call failed with unknown accounting",
+            incomplete_metrics(latency),
+        ) from None
     latency = _bounded_float((time.monotonic() - started) * 1000)
     usage = _usage(response.get("usage") if isinstance(response, dict) else None)
     metrics = {
+        "accountingComplete": True,
         "callCount": 1,
         "usage": usage,
         "latencyMilliseconds": latency,
@@ -190,6 +200,7 @@ def pairwise_schema():
 
 def empty_metrics():
     return {
+        "accountingComplete": True,
         "callCount": 0,
         "usage": {
             "inputTokens": 0,
@@ -203,12 +214,25 @@ def empty_metrics():
     }
 
 
+def incomplete_metrics(latency_milliseconds=0.0):
+    metrics = empty_metrics()
+    metrics["accountingComplete"] = False
+    metrics["callCount"] = 1
+    metrics["latencyMilliseconds"] = _bounded_float(latency_milliseconds)
+    return metrics
+
+
 def add_metrics(total, current):
     total["callCount"] += current["callCount"]
     for key in total["usage"]:
         total["usage"][key] += current["usage"][key]
     total["latencyMilliseconds"] += current["latencyMilliseconds"]
-    if current["estimatedCostUSD"] is not None:
+    total["accountingComplete"] = (
+        total["accountingComplete"] and current["accountingComplete"]
+    )
+    if not total["accountingComplete"]:
+        total["estimatedCostUSD"] = None
+    elif current["estimatedCostUSD"] is not None:
         prior = total["estimatedCostUSD"] or "0"
         total["estimatedCostUSD"] = str(
             Decimal(prior) + Decimal(current["estimatedCostUSD"])

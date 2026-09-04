@@ -597,12 +597,14 @@ def _qualification_summary(qualification, grade_manifest):
         "minimumDimensionAgreement": qualification.get(
             "minimumDimensionAgreement"
         ),
+        "minimumPairwiseAgreement": qualification.get("minimumPairwiseAgreement"),
         "metrics": qualification.get("qualificationMetrics"),
     }
 
 
 def _empty_metrics():
     return {
+        "accountingComplete": True,
         "callCount": 0,
         "usage": {key: 0 for key in _USAGE_KEYS},
         "latencyMilliseconds": {"total": 0.0},
@@ -613,21 +615,37 @@ def _empty_metrics():
 def _add_metrics(total, value):
     if not isinstance(value, Mapping):
         return
-    total["callCount"] += _bounded_int(value.get("callCount"))
+    call_count = _bounded_int(value.get("callCount"))
+    total["callCount"] += call_count
     usage = value.get("usage") if isinstance(value.get("usage"), Mapping) else {}
     for key in _USAGE_KEYS:
         total["usage"][key] += _bounded_int(usage.get(key))
     total["latencyMilliseconds"]["total"] += _bounded_number(
         value.get("latencyMilliseconds")
     )
+    if value.get("accountingComplete", True) is not True:
+        total["accountingComplete"] = False
     cost = value.get("estimatedCostUSD")
-    if cost is not None:
+    if not total["accountingComplete"]:
+        total["estimatedCostUSD"] = None
+    elif cost is None and call_count:
+        total["estimatedCostUSD"] = None
+    elif cost is not None and total["estimatedCostUSD"] is not None:
         try:
             total["estimatedCostUSD"] = _decimal_string(
                 Decimal(total["estimatedCostUSD"]) + Decimal(str(cost))
             )
         except Exception:
             pass
+
+
+def _judge_cost_text(metrics):
+    if not isinstance(metrics, Mapping):
+        return "cost unavailable"
+    if metrics.get("accountingComplete", True) is not True:
+        return "cost unknown (accounting incomplete)"
+    cost = metrics.get("estimatedCostUSD")
+    return "cost not estimated" if cost is None else f"${cost} estimated"
 
 
 def _worst_examples(run_root, records_by_id, grades_by_id):
@@ -966,13 +984,14 @@ def _markdown(report):
                 (
                     f"{qualification['repetitions']} passes; minimum severe agreement "
                     f"{qualification['minimumSevereAgreement']:.1%}; minimum dimension agreement "
-                    f"{qualification['minimumDimensionAgreement']:.1%}."
+                    f"{qualification['minimumDimensionAgreement']:.1%}; minimum pairwise agreement "
+                    f"{qualification['minimumPairwiseAgreement']:.1%}."
                 ),
                 (
                     f"Created {qualification['createdAt']}; expires "
                     f"{qualification['expiresAt']}; age at grading "
-                    f"{age_text}. Qualification cost: "
-                    f"${qualification['metrics']['estimatedCostUSD']}."
+                    f"{age_text}. Qualification "
+                    f"{_judge_cost_text(qualification['metrics'])}."
                 ),
             ]
         )
@@ -981,7 +1000,7 @@ def _markdown(report):
             "",
             "## Judge overhead",
             "",
-            f"{report['judgeOverhead']['callCount']} calls; ${report['judgeOverhead']['estimatedCostUSD']} estimated.",
+            f"{report['judgeOverhead']['callCount']} calls; {_judge_cost_text(report['judgeOverhead'])}.",
             "",
             "## Pareto frontier",
             "",

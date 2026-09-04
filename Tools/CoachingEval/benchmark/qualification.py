@@ -19,6 +19,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     add_metrics as _add_metrics,
     canonical_json_bytes as _canonical_json_bytes,
     empty_metrics as _empty_metrics,
+    incomplete_metrics as _incomplete_metrics,
     judge_call as _judge_call,
     normalize_pairwise_winner as _normalize_pairwise_winner,
     pairwise_schema as _pairwise_schema,
@@ -90,7 +91,13 @@ _PAIRWISE_ROW_KEYS = frozenset(
     )
 )
 _METRICS_KEYS = frozenset(
-    ("callCount", "usage", "latencyMilliseconds", "estimatedCostUSD")
+    (
+        "accountingComplete",
+        "callCount",
+        "usage",
+        "latencyMilliseconds",
+        "estimatedCostUSD",
+    )
 )
 _USAGE_KEYS = frozenset(
     (
@@ -301,11 +308,8 @@ class JudgeQualification:
                 elif call_metrics is not None:
                     failed_metrics = call_metrics
                 else:
-                    failed_metrics = _empty_metrics()
-                    failed_metrics["callCount"] = 1
-                    failed_metrics["latencyMilliseconds"] = min(
+                    failed_metrics = _incomplete_metrics(
                         max((time.monotonic() - call_started) * 1000, 0.0),
-                        86_400_000.0,
                     )
                 _add_metrics(metrics, failed_metrics)
                 return _pass_result(
@@ -382,11 +386,8 @@ class JudgeQualification:
                     elif call_metrics is not None:
                         failed_metrics = call_metrics
                     else:
-                        failed_metrics = _empty_metrics()
-                        failed_metrics["callCount"] = 1
-                        failed_metrics["latencyMilliseconds"] = min(
+                        failed_metrics = _incomplete_metrics(
                             max((time.monotonic() - call_started) * 1000, 0.0),
-                            86_400_000.0,
                         )
                     _add_metrics(metrics, failed_metrics)
                     return _pass_result(
@@ -583,7 +584,11 @@ class JudgeQualification:
             ):
                 raise ValueError("Judge qualification pass is invalid")
             _validate_metrics(result["judgeMetrics"])
-            if result["judgeMetrics"]["callCount"] != len(rows) + len(pairwise_rows):
+            if (
+                result["judgeMetrics"]["accountingComplete"] is not True
+                or result["judgeMetrics"]["callCount"]
+                != len(rows) + len(pairwise_rows)
+            ):
                 raise ValueError("Judge qualification metrics are invalid")
             _add_metrics(qualification_metrics, result["judgeMetrics"])
             severe_values.append(severe)
@@ -644,10 +649,12 @@ def _validate_metrics(value):
     if not isinstance(value, dict) or set(value) != _METRICS_KEYS:
         raise ValueError("Judge qualification metrics are invalid")
     call_count = value["callCount"]
+    accounting_complete = value["accountingComplete"]
     latency = value["latencyMilliseconds"]
     usage = value["usage"]
     if (
-        isinstance(call_count, bool)
+        not isinstance(accounting_complete, bool)
+        or isinstance(call_count, bool)
         or not isinstance(call_count, int)
         or call_count < 0
         or isinstance(latency, bool)
@@ -665,6 +672,10 @@ def _validate_metrics(value):
     ):
         raise ValueError("Judge qualification metrics are invalid")
     cost = value["estimatedCostUSD"]
+    if not accounting_complete:
+        if cost is not None:
+            raise ValueError("Judge qualification metrics are invalid")
+        return
     if cost is None:
         return
     if not isinstance(cost, str):

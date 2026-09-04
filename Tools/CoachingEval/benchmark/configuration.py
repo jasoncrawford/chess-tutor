@@ -207,8 +207,8 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         qualification_repetitions = _positive_int(
             raw["qualificationRepetitions"], "qualificationRepetitions"
         )
-        if qualification_repetitions < 3:
-            raise ValueError("qualificationRepetitions must be at least 3")
+        if qualification_repetitions != 3:
+            raise ValueError("qualificationRepetitions must equal 3")
         minimum_severe_agreement = _unit_interval(
             raw["minimumSevereAgreement"], "minimumSevereAgreement"
         )

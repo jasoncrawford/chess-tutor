@@ -47,7 +47,13 @@ class FailingJudge(QueueJudge):
         output = self.outputs.pop(0)
         return {
             "output_text": json.dumps(output, separators=(",", ":")),
-            "usage": {},
+            "usage": {
+                "input_tokens": 50,
+                "cached_input_tokens": 10,
+                "output_tokens": 20,
+                "reasoning_tokens": 5,
+                "total_tokens": 70,
+            },
         }
 
 
@@ -173,6 +179,7 @@ class JudgeQualificationTests(unittest.TestCase):
         self.assertEqual(1.0, artifact["minimumDimensionAgreement"])
         self.assertEqual(1.0, artifact["minimumPairwiseAgreement"])
         self.assertEqual(120, artifact["qualificationMetrics"]["callCount"])
+        self.assertTrue(artifact["qualificationMetrics"]["accountingComplete"])
         self.assertEqual(1.0, artifact["passes"][0]["pairwiseAgreement"])
         self.assertEqual(20, len(artifact["passes"][0]["pairwiseRows"]))
         loaded = JudgeQualification.load_compatible(
@@ -436,6 +443,10 @@ class JudgeQualificationTests(unittest.TestCase):
         wrong_metrics["qualificationMetrics"]["callCount"] = 119
         mutations.append(("wrong-metrics", wrong_metrics, "metrics"))
 
+        incomplete_metrics = json.loads(json.dumps(original))
+        incomplete_metrics["passes"][0]["judgeMetrics"]["accountingComplete"] = False
+        mutations.append(("incomplete-metrics", incomplete_metrics, "metrics"))
+
         wrong_pair = json.loads(json.dumps(original))
         wrong_pair["passes"][0]["pairwiseRows"][0]["normalizedWinner"] = "tie"
         mutations.append(("wrong-pair", wrong_pair, "pairwise"))
@@ -461,7 +472,7 @@ class JudgeQualificationTests(unittest.TestCase):
             JudgeQualification.ensure(
                 self.configuration,
                 client,
-                None,
+                FixedPrice(),
                 self.root / "call-failure",
                 self.now,
             )
@@ -472,6 +483,10 @@ class JudgeQualificationTests(unittest.TestCase):
         self.assertEqual("judgeCallFailed", artifact["passes"][0]["failureCategory"])
         self.assertEqual(1, len(artifact["passes"][0]["rows"]))
         self.assertEqual(2, artifact["qualificationMetrics"]["callCount"])
+        self.assertEqual(50, artifact["qualificationMetrics"]["usage"]["inputTokens"])
+        self.assertFalse(artifact["passes"][0]["judgeMetrics"]["accountingComplete"])
+        self.assertFalse(artifact["qualificationMetrics"]["accountingComplete"])
+        self.assertIsNone(artifact["qualificationMetrics"]["estimatedCostUSD"])
         self.assertNotIn("private provider failure body", artifact_text)
 
     def test_invalid_structured_response_preserves_paid_call_usage(self):
@@ -521,6 +536,7 @@ class JudgeQualificationTests(unittest.TestCase):
         self.assertEqual(22, metrics["callCount"])
         self.assertEqual(1100, metrics["usage"]["inputTokens"])
         self.assertGreater(metrics["latencyMilliseconds"], 0)
+        self.assertTrue(metrics["accountingComplete"])
         self.assertEqual("0.022", metrics["estimatedCostUSD"])
         self.assertNotIn("private pairwise reasoning trace", artifact_text)
 
