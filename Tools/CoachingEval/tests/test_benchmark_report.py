@@ -8,7 +8,11 @@ from types import MappingProxyType
 
 from Tools.CoachingEval.benchmark.configuration import load_prices
 from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
-from Tools.CoachingEval.benchmark.report import build_report, write_report
+from Tools.CoachingEval.benchmark.report import (
+    _pair_counts,
+    build_report,
+    write_report,
+)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -148,6 +152,28 @@ class BenchmarkReportTests(unittest.TestCase):
         )
         self.assertIn("unknown (accounting incomplete)", summary.read_text())
 
+    def test_malformed_judge_cost_is_incomplete_and_blocks_holdout_promotion(self):
+        run_root, grade_root = self.make_complete_comparison(
+            self.root / "malformed-judge-cost",
+            include_holdout=True,
+        )
+        grades_path = grade_root / "absolute-grades.jsonl"
+        grades = [json.loads(line) for line in grades_path.read_text().splitlines()]
+        grades[0]["judgeMetrics"]["estimatedCostUSD"] = "not-a-cost"
+        grade_bytes = self.jsonl(grades)
+        grades_path.write_bytes(grade_bytes)
+        manifest_path = grade_root / "grade-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["absoluteGradesSHA256"] = self.sha(grade_bytes)
+        manifest_path.write_text(json.dumps(manifest))
+
+        report = build_report(run_root, grade_root, self.prices)
+
+        self.assertFalse(report["judgeOverhead"]["accountingComplete"])
+        self.assertIsNone(report["judgeOverhead"]["estimatedCostUSD"])
+        self.assertIn("judge accounting is incomplete", report["integrityIssues"])
+        self.assertFalse(report["promotionEligible"])
+
     def test_missing_candidate_price_is_unknown_not_zero_cost(self):
         missing_prices = replace(self.prices, models=MappingProxyType({}))
 
@@ -158,6 +184,57 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIsNone(candidate_cost["total"])
         self.assertIsNone(candidate_cost["perResponse"])
         self.assertIn("missing price coverage for candidate", report["integrityIssues"])
+
+    def test_missing_candidate_accounting_is_unknown_and_ineligible(self):
+        records_path = self.run_root / "records.jsonl"
+        records = [json.loads(line) for line in records_path.read_text().splitlines()]
+        records[4].pop("candidateAccountingComplete")
+        records[4]["candidateCostUSD"] = None
+        records_bytes = self.jsonl(records)
+        records_path.write_bytes(records_bytes)
+        run_manifest_path = self.run_root / "run-manifest.json"
+        run_manifest = json.loads(run_manifest_path.read_text())
+        run_manifest["recordsSHA256"] = self.sha(records_bytes)
+        run_manifest_path.write_text(json.dumps(run_manifest))
+        grade_manifest_path = self.grade_root / "grade-manifest.json"
+        grade_manifest = json.loads(grade_manifest_path.read_text())
+        grade_manifest["sourceRunRecordsSHA256"] = self.sha(records_bytes)
+        grade_manifest_path.write_text(json.dumps(grade_manifest))
+
+        report = build_report(self.run_root, self.grade_root, self.prices)
+
+        candidate_cost = report["configurations"]["candidate"]["candidateCostUSD"]
+        self.assertFalse(candidate_cost["accountingComplete"])
+        self.assertIsNone(candidate_cost["total"])
+        self.assertIn(
+            "candidate accounting is incomplete for candidate",
+            report["integrityIssues"],
+        )
+
+    def test_malformed_candidate_cost_is_unknown_and_ineligible(self):
+        records_path = self.run_root / "records.jsonl"
+        records = [json.loads(line) for line in records_path.read_text().splitlines()]
+        records[4]["candidateCostUSD"] = "not-a-cost"
+        records_bytes = self.jsonl(records)
+        records_path.write_bytes(records_bytes)
+        run_manifest_path = self.run_root / "run-manifest.json"
+        run_manifest = json.loads(run_manifest_path.read_text())
+        run_manifest["recordsSHA256"] = self.sha(records_bytes)
+        run_manifest_path.write_text(json.dumps(run_manifest))
+        grade_manifest_path = self.grade_root / "grade-manifest.json"
+        grade_manifest = json.loads(grade_manifest_path.read_text())
+        grade_manifest["sourceRunRecordsSHA256"] = self.sha(records_bytes)
+        grade_manifest_path.write_text(json.dumps(grade_manifest))
+
+        report = build_report(self.run_root, self.grade_root, self.prices)
+
+        candidate_cost = report["configurations"]["candidate"]["candidateCostUSD"]
+        self.assertFalse(candidate_cost["accountingComplete"])
+        self.assertIsNone(candidate_cost["total"])
+        self.assertIn(
+            "candidate cost accounting is invalid for candidate",
+            report["integrityIssues"],
+        )
 
     def test_development_comparison_can_qualify_a_trial_but_not_promotion(self):
         run_root, grade_root = self.make_complete_comparison(
@@ -215,6 +292,80 @@ class BenchmarkReportTests(unittest.TestCase):
                     report["recommendation"],
                 )
 
+    def test_complete_holdout_requires_accepted_correctly_bound_qualification(self):
+        mutations = (
+            (
+                "rejected",
+                lambda qualification: qualification.update(status="rejected"),
+                "judge qualification was not accepted",
+            ),
+            (
+                "wrong-binding",
+                lambda qualification: qualification["bindings"].update(
+                    judgePromptSHA256="0" * 64
+                ),
+                "judge qualification bindings do not match grade manifest",
+            ),
+        )
+        for name, mutate, issue in mutations:
+            with self.subTest(name=name):
+                run_root, grade_root = self.make_complete_comparison(
+                    self.root / f"qualification-{name}",
+                    include_holdout=True,
+                )
+                qualification_path = grade_root / "qualification.json"
+                qualification = json.loads(qualification_path.read_text())
+                mutate(qualification)
+                qualification_bytes = self.pretty(qualification)
+                qualification_path.write_bytes(qualification_bytes)
+                manifest_path = grade_root / "grade-manifest.json"
+                manifest = json.loads(manifest_path.read_text())
+                manifest["qualificationSHA256"] = self.sha(qualification_bytes)
+                manifest_path.write_text(json.dumps(manifest))
+
+                report = build_report(run_root, grade_root, self.prices)
+
+                self.assertFalse(report["promotionEligible"])
+                self.assertIn(issue, report["integrityIssues"])
+                self.assertEqual(
+                    {"decision": "keepBaseline", "configurationID": "baseline"},
+                    report["recommendation"],
+                )
+
+    def test_pairwise_counts_require_exact_unique_candidate_pair_ids(self):
+        records = [
+            {"caseID": "case-1", "repetition": 1},
+            {"caseID": "case-2", "repetition": 1},
+        ]
+        pairwise = [
+            {
+                "pairID": "a|case-1|r1|vs|baseline",
+                "outcome": "candidateWin",
+            },
+            {
+                "pairID": "a|b|case-1|r1|vs|baseline",
+                "outcome": "candidateWin",
+            },
+            {
+                "pairID": "a|case-2|r1|vs|baseline",
+                "outcome": "candidateLoss",
+            },
+            {
+                "pairID": "a|case-2|r1|vs|baseline",
+                "outcome": "candidateLoss",
+            },
+        ]
+
+        counts = _pair_counts(
+            "a",
+            {"baseline": False},
+            pairwise,
+            records,
+            "baseline",
+        )
+
+        self.assertEqual({"wins": 1, "losses": 0, "ties": 0}, counts)
+
     def test_incomplete_matrix_or_grading_cannot_support_eligibility(self):
         partial_parent = self.root / "partial-comparison"
         partial_parent.mkdir()
@@ -254,6 +405,42 @@ class BenchmarkReportTests(unittest.TestCase):
             incomplete_grading["integrityIssues"],
         )
 
+        legacy_run, legacy_grades = self.make_complete_comparison(
+            self.root / "legacy-holdout",
+            include_holdout=True,
+        )
+        calibration = {
+            "schemaVersion": "coaching-quality-calibration-result.v1",
+            "passed": True,
+            "severeAgreement": 1.0,
+            "dimensionWithinOne": 1.0,
+            "rowCount": 20,
+            "calibrationSHA256": "d" * 64,
+            "judgeMetrics": self.metrics(20),
+        }
+        calibration_bytes = self.pretty(calibration)
+        (legacy_grades / "calibration.json").write_bytes(calibration_bytes)
+        legacy_manifest_path = legacy_grades / "grade-manifest.json"
+        legacy_manifest = json.loads(legacy_manifest_path.read_text())
+        legacy_manifest["schemaVersion"] = "coaching-quality-grade-run.v1"
+        legacy_manifest["calibrationSHA256"] = self.sha(calibration_bytes)
+        for key in ("status", "gradedAt", "qualificationSHA256"):
+            legacy_manifest.pop(key, None)
+        legacy_manifest_path.write_text(json.dumps(legacy_manifest))
+
+        legacy = build_report(legacy_run, legacy_grades, self.prices)
+
+        self.assertFalse(legacy["trialEligible"])
+        self.assertFalse(legacy["promotionEligible"])
+        self.assertEqual(
+            {"decision": "keepBaseline", "configurationID": "baseline"},
+            legacy["recommendation"],
+        )
+        self.assertIn(
+            "legacy grade artifacts are diagnostic only",
+            legacy["integrityIssues"],
+        )
+
     def test_reads_legacy_calibration_artifacts(self):
         legacy_root = self.root / "legacy"
         legacy_root.mkdir()
@@ -264,7 +451,10 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual("coaching-quality-report.v2", report["schemaVersion"])
         self.assertIsNone(report["judgeQualification"])
         self.assertEqual(30, report["judgeOverhead"]["callCount"])
-        self.assertEqual([], report["integrityIssues"])
+        self.assertEqual(
+            ["legacy grade artifacts are diagnostic only"],
+            report["integrityIssues"],
+        )
 
     def make_complete_comparison(
         self,
@@ -333,7 +523,8 @@ class BenchmarkReportTests(unittest.TestCase):
                                 1000 if configuration_id == "baseline" else 900
                             ),
                             "attemptCount": 1,
-                            "candidateCostUSD": None,
+                            "candidateAccountingComplete": True,
+                            "candidateCostUSD": "0.000564",
                         }
                     )
                     score = 3 if configuration_id == "baseline" else 5
@@ -498,7 +689,10 @@ class BenchmarkReportTests(unittest.TestCase):
                         "usage": usage,
                         "latencyMilliseconds": latency,
                         "attemptCount": 3 if configuration_id == "baseline" and case_id == "q1" else 1,
-                        "candidateCostUSD": None,
+                        "candidateAccountingComplete": True,
+                        "candidateCostUSD": str(
+                            self.prices.estimate("gpt-5.6-sol", usage)
+                        ),
                     }
                 )
                 flags = {flag: False for flag in RUBRIC_FLAGS}

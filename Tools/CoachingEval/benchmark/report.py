@@ -39,6 +39,7 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
     qualification = None
     qualification_bytes = None
     if grade_version == "coaching-quality-grade-run.v1":
+        issues.append("legacy grade artifacts are diagnostic only")
         calibration = _read_object(grade_root / "calibration.json", "judge calibration")
     elif grade_version == "coaching-quality-grade-run.v2":
         if grade_manifest.get("status") != "completed":
@@ -132,6 +133,11 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
     if set(observed_pair_ids) != expected_pairs:
         issues.append("pairwise grade IDs do not match baseline pairs")
 
+    baseline_id = _baseline_id(
+        configurations,
+        issues,
+        comparison=run_manifest.get("mode") == "comparison",
+    )
     aggregates = {}
     for identifier, configuration in configurations.items():
         selected = [
@@ -143,20 +149,20 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
             selected,
             grades_by_id,
             pairwise,
+            records,
+            baseline_id,
             price_table,
             issues,
         )
 
-    baseline_id = _baseline_id(
-        configurations,
-        issues,
-        comparison=run_manifest.get("mode") == "comparison",
-    )
     evidence = _run_evidence(run_manifest, records, configurations, issues)
     confidence = _confidence_intervals(
         records, grades_by_id, baseline_id, configurations
     )
     frontier = _pareto_frontier(aggregates)
+    judge_overhead = _judge_overhead(calibration, absolute, pairwise)
+    if judge_overhead["accountingComplete"] is not True:
+        issues.append("judge accounting is incomplete")
     _apply_promotion_eligibility(
         aggregates,
         baseline_id,
@@ -166,7 +172,6 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
     global_eligible = not issues and any(
         value.get("promotionEligible") is True for value in aggregates.values()
     )
-    judge_overhead = _judge_overhead(calibration, absolute, pairwise)
     qualification_summary = _qualification_summary(qualification, grade_manifest)
     recommendation = _recommendation(aggregates, baseline_id)
 
@@ -236,6 +241,8 @@ def _aggregate_configuration(
     records,
     grades_by_id,
     pairwise,
+    all_records,
+    baseline_id,
     price_table,
     issues,
 ):
@@ -256,14 +263,32 @@ def _aggregate_configuration(
     candidate_cost = Decimal(0)
     candidate_accounting_complete = True
     for record in records:
+        if record.get("candidateAccountingComplete") is not True:
+            issues.append(f"candidate accounting is incomplete for {identifier}")
+            candidate_accounting_complete = False
         try:
-            candidate_cost += price_table.estimate(
+            expected_cost = price_table.estimate(
                 configuration.get("model"), record.get("usage", {})
             )
         except ValueError:
             issues.append(f"missing price coverage for {identifier}")
             candidate_accounting_complete = False
-    pair_counts = _pair_counts(identifier, configuration, pairwise)
+            continue
+        candidate_cost += expected_cost
+        stored_cost = _nonnegative_decimal(record.get("candidateCostUSD"))
+        if (
+            record.get("candidateAccountingComplete") is True
+            and stored_cost != expected_cost
+        ):
+            issues.append(f"candidate cost accounting is invalid for {identifier}")
+            candidate_accounting_complete = False
+    pair_counts = _pair_counts(
+        identifier,
+        configuration,
+        pairwise,
+        all_records if configuration.get("baseline") is True else records,
+        baseline_id,
+    )
     categories = sorted(
         {record.get("category") for record in records if isinstance(record.get("category"), str)}
     )
@@ -368,10 +393,30 @@ def _subset_quality(records, grades_by_id):
     }
 
 
-def _pair_counts(identifier, configuration, pairwise):
+def _pair_counts(identifier, configuration, pairwise, records, baseline_id):
+    pair_rows = defaultdict(list)
+    for grade in pairwise:
+        pair_id = grade.get("pairID") if isinstance(grade, Mapping) else None
+        if isinstance(pair_id, str):
+            pair_rows[pair_id].append(grade)
     if configuration.get("baseline") is True:
+        expected = {
+            f"{candidate_id}|{record.get('caseID')}|r{record.get('repetition')}|vs|{identifier}"
+            for candidate_id in {
+                record.get("configurationID")
+                for record in records
+                if isinstance(record.get("configurationID"), str)
+                and record.get("configurationID") != identifier
+            }
+            for record in records
+            if record.get("configurationID") == candidate_id
+        }
         outcomes = []
-        for grade in pairwise:
+        for pair_id in expected:
+            rows = pair_rows.get(pair_id, [])
+            if len(rows) != 1:
+                continue
+            grade = rows[0]
             outcome = grade.get("outcome")
             if outcome == "candidateWin":
                 outcomes.append("loss")
@@ -380,11 +425,13 @@ def _pair_counts(identifier, configuration, pairwise):
             elif outcome in ("tie", "unusableTie"):
                 outcomes.append("tie")
     else:
-        prefix = f"{identifier}|"
+        expected = _candidate_pair_ids(identifier, records, baseline_id)
         outcomes = []
-        for grade in pairwise:
-            if not str(grade.get("pairID", "")).startswith(prefix):
+        for pair_id in expected:
+            rows = pair_rows.get(pair_id, [])
+            if len(rows) != 1:
                 continue
+            grade = rows[0]
             outcome = grade.get("outcome")
             if outcome == "candidateWin":
                 outcomes.append("win")
@@ -397,6 +444,33 @@ def _pair_counts(identifier, configuration, pairwise):
         "losses": outcomes.count("loss"),
         "ties": outcomes.count("tie"),
     }
+
+
+def _candidate_pair_ids(identifier, records, baseline_id):
+    expected = set()
+    if not isinstance(baseline_id, str) or not baseline_id:
+        return expected
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        configuration_id = record.get("configurationID")
+        if configuration_id is not None and configuration_id != identifier:
+            continue
+        case_id = record.get("caseID")
+        repetition = record.get("repetition")
+        if (
+            not isinstance(case_id, str)
+            or not case_id
+            or isinstance(repetition, bool)
+            or not isinstance(repetition, int)
+            or repetition <= 0
+        ):
+            continue
+        cell_id = record.get("cellID")
+        if cell_id is not None and cell_id != f"{identifier}|{case_id}|r{repetition}":
+            continue
+        expected.add(f"{identifier}|{case_id}|r{repetition}|vs|{baseline_id}")
+    return expected
 
 
 def _sequence_costs(records, configuration, price_table, issues):
@@ -691,6 +765,8 @@ def _empty_metrics():
 
 def _add_metrics(total, value):
     if not isinstance(value, Mapping):
+        total["accountingComplete"] = False
+        total["estimatedCostUSD"] = None
         return
     call_count = _bounded_int(value.get("callCount"))
     total["callCount"] += call_count
@@ -700,20 +776,29 @@ def _add_metrics(total, value):
     total["latencyMilliseconds"]["total"] += _bounded_number(
         value.get("latencyMilliseconds")
     )
-    if value.get("accountingComplete", True) is not True:
+    raw_cost = value.get("estimatedCostUSD")
+    cost = _nonnegative_decimal(raw_cost)
+    cost_valid = "estimatedCostUSD" in value and (
+        raw_cost is None or cost is not None
+    )
+    accounting_complete = (
+        value.get("accountingComplete") is True
+        and _valid_bounded_int(value.get("callCount"))
+        and isinstance(value.get("usage"), Mapping)
+        and all(_valid_bounded_int(usage.get(key)) for key in _USAGE_KEYS)
+        and _valid_bounded_number(value.get("latencyMilliseconds"))
+        and cost_valid
+    )
+    if not accounting_complete:
         total["accountingComplete"] = False
-    cost = value.get("estimatedCostUSD")
     if not total["accountingComplete"]:
         total["estimatedCostUSD"] = None
-    elif cost is None and call_count:
+    elif cost is None:
         total["estimatedCostUSD"] = None
-    elif cost is not None and total["estimatedCostUSD"] is not None:
-        try:
-            total["estimatedCostUSD"] = _decimal_string(
-                Decimal(total["estimatedCostUSD"]) + Decimal(str(cost))
-            )
-        except Exception:
-            pass
+    elif total["estimatedCostUSD"] is not None:
+        total["estimatedCostUSD"] = _decimal_string(
+            Decimal(total["estimatedCostUSD"]) + cost
+        )
 
 
 def _judge_cost_text(metrics):
@@ -1102,11 +1187,38 @@ def _bounded_int(value):
     return min(value, 1_000_000_000)
 
 
+def _valid_bounded_int(value):
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 <= value <= 1_000_000_000
+    )
+
+
 def _bounded_number(value):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0.0
     value = float(value)
     return value if math.isfinite(value) and 0 <= value <= 86_400_000 else 0.0
+
+
+def _valid_bounded_number(value):
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+        and 0 <= float(value) <= 86_400_000
+    )
+
+
+def _nonnegative_decimal(value):
+    try:
+        result = Decimal(value) if isinstance(value, str) else None
+        if result is not None:
+            result.quantize(Decimal("0.000000000001"))
+    except Exception:
+        return None
+    return result if result is not None and result.is_finite() and result >= 0 else None
 
 
 def _decimal_string(value):

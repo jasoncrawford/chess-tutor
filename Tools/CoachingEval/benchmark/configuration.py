@@ -72,6 +72,8 @@ _JUDGE_V2_KEYS = frozenset(
 
 @dataclass(frozen=True)
 class CandidateConfiguration:
+    path: Path
+    repository_root: Path
     identifier: str
     baseline: bool
     model_configuration_path: Path
@@ -147,6 +149,8 @@ class PriceTable:
 
 
 def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
+    path = Path(path).resolve()
+    repository_root = Path(repository_root).resolve()
     raw, raw_bytes = _load_json(path)
     _exact_keys(raw, _CANDIDATE_KEYS, "Candidate")
     if raw["schemaVersion"] != "coaching-quality-candidate.v2":
@@ -157,6 +161,8 @@ def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
         raw["modelConfigurationSHA256"],
     )
     return CandidateConfiguration(
+        path=path,
+        repository_root=repository_root,
         identifier=_string(raw["id"], "id"),
         baseline=_boolean(raw["baseline"], "baseline"),
         model_configuration_path=model_path,

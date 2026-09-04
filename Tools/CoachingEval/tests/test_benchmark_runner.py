@@ -6,15 +6,15 @@ from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 
-from CoachingServer.model_configuration import HostedModelConfiguration
 from Tools.CoachingEval.benchmark.configuration import (
-    CandidateConfiguration,
+    load_candidate,
     load_prices,
 )
 from Tools.CoachingEval.benchmark.corpus import (
     BenchmarkCorpus,
     BenchmarkGraderBrief,
     BenchmarkTurn,
+    load_corpus,
 )
 from Tools.CoachingEval.benchmark.runner import run_candidates
 from Tools.CoachingEval.openai_responses import OpenAIResponsesError
@@ -58,6 +58,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        self.configuration_counter = 0
         self.corpus = self.make_corpus()
         self.configuration = self.make_configuration()
         self.prices = replace(
@@ -68,30 +69,49 @@ class BenchmarkRunnerTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def make_configuration(self, **changes):
-        model_configuration = HostedModelConfiguration.load(
-            ROOT / "CoachingServer/configs/production-v1.json",
-            ROOT,
+    def make_configuration(
+        self,
+        *,
+        identifier="production",
+        baseline=True,
+        pricing_version="test",
+        model_changes=None,
+    ):
+        self.configuration_counter += 1
+        repository_root = self.root / "configuration-repository"
+        prompt_path = repository_root / "prompts/tutor-v13.md"
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_bytes = (
+            ROOT / "Tools/CoachingEval/prompts/tutor-v13.md"
+        ).read_bytes()
+        prompt_path.write_bytes(prompt_bytes)
+        model_raw = json.loads(
+            (ROOT / "CoachingServer/configs/production-v1.json").read_text()
         )
+        model_raw["systemPromptPath"] = "prompts/tutor-v13.md"
+        model_raw.update(model_changes or {})
+        model_relative = (
+            f"model-configs/{identifier}-{self.configuration_counter}.json"
+        )
+        model_path = repository_root / model_relative
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        model_bytes = self.pretty(model_raw)
+        model_path.write_bytes(model_bytes)
         raw = {
             "schemaVersion": "coaching-quality-candidate.v2",
-            "id": "production",
-            "baseline": True,
-            "modelConfigurationPath": "CoachingServer/configs/production-v1.json",
-            "modelConfigurationSHA256": model_configuration.sha256,
-            "pricingVersion": "test",
+            "id": identifier,
+            "baseline": baseline,
+            "modelConfigurationPath": model_relative,
+            "modelConfigurationSHA256": hashlib.sha256(model_bytes).hexdigest(),
+            "pricingVersion": pricing_version,
         }
-        configuration = CandidateConfiguration(
-            identifier="production",
-            baseline=True,
-            model_configuration_path=ROOT / "CoachingServer/configs/production-v1.json",
-            model_configuration_sha256=model_configuration.sha256,
-            model_configuration=model_configuration,
-            pricing_version="test",
-            sha256="b" * 64,
-            raw=raw,
+        candidate_path = (
+            repository_root
+            / f"candidates/{identifier}-{self.configuration_counter}.json"
         )
-        return replace(configuration, **changes)
+        candidate_path.parent.mkdir(parents=True, exist_ok=True)
+        candidate_path.write_bytes(self.pretty(raw))
+        return load_candidate(candidate_path, repository_root)
 
     def make_corpus(self):
         request = json.loads(
@@ -135,7 +155,63 @@ class BenchmarkRunnerTests(unittest.TestCase):
                     detached["interaction"]["latestEvent"] = event
                     detached["interaction"]["episodeEvents"] = [event]
                 turns.append(BenchmarkTurn(identifier, group, step, split, "interaction", detached, brief, None))
-        return BenchmarkCorpus(self.root, "source", "c" * 64, tuple(turns), tuple())
+        raw_cases = tuple(self.raw_turn(turn) for turn in turns)
+        return BenchmarkCorpus(
+            self.root,
+            "source",
+            "c" * 64,
+            tuple(turns),
+            raw_cases,
+        )
+
+    def make_pinned_corpus(self):
+        corpus = self.make_corpus()
+        root = self.root / "pinned-corpus"
+        root.mkdir()
+        cases_bytes = b"".join(
+            json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+            + b"\n"
+            for value in corpus.raw_cases
+        )
+        (root / "cases.jsonl").write_bytes(cases_bytes)
+        manifest = {
+            "schemaVersion": "coaching-quality-benchmark-manifest.v1",
+            "sourceGitSHA": corpus.source_git_sha,
+            "independentGroupCount": 40,
+            "sequenceGroupCount": 10,
+            "turnCount": 70,
+            "developmentTurnCount": 56,
+            "holdoutTurnCount": 14,
+            "turnIDs": [turn.identifier for turn in corpus.turns],
+            "casesSHA256": hashlib.sha256(cases_bytes).hexdigest(),
+        }
+        (root / "benchmark-manifest.json").write_bytes(self.pretty(manifest))
+        return load_corpus(root)
+
+    @staticmethod
+    def raw_turn(turn):
+        brief = turn.grader_brief
+        return {
+            "schemaVersion": "coaching-quality-benchmark-case.v1",
+            "id": turn.identifier,
+            "groupID": turn.group_id,
+            "stepIndex": turn.step_index,
+            "split": turn.split,
+            "category": turn.category,
+            "request": turn.request,
+            "graderBrief": {
+                "verifiedFacts": list(brief.verified_facts),
+                "coachingPurpose": brief.coaching_purpose,
+                "acceptableAlternatives": list(brief.acceptable_alternatives),
+                "successCriteria": list(brief.success_criteria),
+                "severeFailureCriteria": list(brief.severe_failure_criteria),
+            },
+            "sourceTraceID": turn.source_trace_id,
+        }
+
+    @staticmethod
+    def pretty(value):
+        return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
 
     def test_quick_and_comparison_execute_exact_matrices(self):
         quick_client = FakeClient()
@@ -151,11 +227,9 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertEqual(56, quick["summary"]["recordCount"])
 
         comparison_client = FakeClient()
-        alternative = replace(
-            self.configuration,
+        alternative = self.make_configuration(
             identifier="alternative",
             baseline=False,
-            sha256="d" * 64,
         )
         comparison = run_candidates(
             corpus=self.corpus,
@@ -205,16 +279,9 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertEqual("none", resolved["simpleFollowUpReasoningEffort"])
         self.assertTrue(resolved["store"])
 
-        independent_runtime = replace(
-            self.configuration.model_configuration,
-            conversation_reuse=False,
-            store=False,
-        )
-        independent = replace(
-            self.configuration,
-            model_configuration=independent_runtime,
+        independent = self.make_configuration(
             identifier="no-reuse",
-            sha256="e" * 64,
+            model_changes={"conversationReuse": False, "store": False},
         )
         independent_client = FakeClient()
         run_candidates(
@@ -282,6 +349,52 @@ class BenchmarkRunnerTests(unittest.TestCase):
                     self.assertEqual(100, first["usage"]["inputTokens"])
                     self.assertEqual("gpt-5.6-sol", first["providerModel"])
 
+    def test_missing_or_malformed_usage_marks_candidate_accounting_incomplete(self):
+        cases = (
+            ("missing", lambda response: {key: value for key, value in response.items() if key != "usage"}),
+            (
+                "malformed",
+                lambda response: {
+                    **response,
+                    "usage": {
+                        "input_tokens": 100,
+                        "cached_input_tokens": "private-invalid-usage",
+                        "output_tokens": 10,
+                        "reasoning_tokens": 4,
+                        "total_tokens": 110,
+                    },
+                },
+            ),
+        )
+        for name, mutate in cases:
+            with self.subTest(name=name):
+                client = FakeClient()
+                valid_complete = client.complete
+
+                def complete(**arguments):
+                    return mutate(valid_complete(**arguments))
+
+                client.complete = complete
+                destination = self.root / f"accounting-{name}"
+                run_candidates(
+                    corpus=self.corpus,
+                    configurations=(self.configuration,),
+                    mode="quick",
+                    destination=destination,
+                    provider_factory=lambda _configuration: client,
+                    price_table=self.prices,
+                )
+
+                first = json.loads(
+                    (destination / "records.jsonl").read_text().splitlines()[0]
+                )
+                self.assertFalse(first["candidateAccountingComplete"])
+                self.assertIsNone(first["candidateCostUSD"])
+                if name == "malformed":
+                    self.assertEqual(100, first["usage"]["inputTokens"])
+                    self.assertEqual(10, first["usage"]["outputTokens"])
+                self.assertNotIn("private-invalid-usage", json.dumps(first))
+
     def test_invalid_sequence_step_blocks_later_steps(self):
         client = FakeClient()
         original_complete = client.complete
@@ -315,7 +428,13 @@ class BenchmarkRunnerTests(unittest.TestCase):
     def test_preflights_every_cell_before_provider_and_refuses_unsafe_runs(self):
         broken = list(self.corpus.turns)
         broken[55] = replace(broken[55], request={"bad": True})
-        broken_corpus = replace(self.corpus, turns=tuple(broken))
+        broken_raw = list(self.corpus.raw_cases)
+        broken_raw[55] = {**broken_raw[55], "request": {"bad": True}}
+        broken_corpus = replace(
+            self.corpus,
+            turns=tuple(broken),
+            raw_cases=tuple(broken_raw),
+        )
         factory_calls = []
         with self.assertRaises(ValueError):
             run_candidates(
@@ -349,11 +468,9 @@ class BenchmarkRunnerTests(unittest.TestCase):
             )
 
     def test_complete_candidate_preflight_precedes_provider_construction(self):
-        alternative = replace(
-            self.configuration,
+        alternative = self.make_configuration(
             identifier="alternative",
             baseline=False,
-            sha256="d" * 64,
         )
         missing_model_prices = replace(
             self.prices,
@@ -381,18 +498,54 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 system_prompt_sha256="0" * 64,
             ),
         )
+        invalid_effort = replace(
+            self.configuration,
+            model_configuration=replace(
+                self.configuration.model_configuration,
+                initial_reasoning_effort="low",
+            ),
+        )
+        invalid_runtime_limit = replace(
+            self.configuration,
+            model_configuration=replace(
+                self.configuration.model_configuration,
+                maximum_output_tokens=1,
+            ),
+        )
+        invalid_wrapper_pin = replace(
+            self.configuration,
+            model_configuration_sha256="0" * 64,
+        )
+        invalid_wrapper_identity = replace(
+            alternative,
+            identifier="mutated-alternative",
+        )
         broken_turns = list(self.corpus.turns)
         broken_turns[55] = replace(broken_turns[55], request={"bad": True})
+        broken_raw = list(self.corpus.raw_cases)
+        broken_raw[55] = {**broken_raw[55], "request": {"bad": True}}
         cases = (
             (
                 "zero-baselines",
-                (replace(self.configuration, baseline=False), alternative),
+                (
+                    self.make_configuration(
+                        identifier="other-one",
+                        baseline=False,
+                    ),
+                    alternative,
+                ),
                 self.prices,
                 self.corpus,
             ),
             (
                 "two-baselines",
-                (self.configuration, replace(alternative, baseline=True)),
+                (
+                    self.configuration,
+                    self.make_configuration(
+                        identifier="other-baseline",
+                        baseline=True,
+                    ),
+                ),
                 self.prices,
                 self.corpus,
             ),
@@ -404,15 +557,29 @@ class BenchmarkRunnerTests(unittest.TestCase):
             ),
             (
                 "pricing-version-mismatch",
-                (self.configuration, replace(alternative, pricing_version="other")),
+                (
+                    self.configuration,
+                    self.make_configuration(
+                        identifier="other-pricing",
+                        baseline=False,
+                        pricing_version="other",
+                    ),
+                ),
                 self.prices,
                 self.corpus,
             ),
             (
                 "selected-pricing-version-mismatch",
                 (
-                    replace(self.configuration, pricing_version="other"),
-                    replace(alternative, pricing_version="other"),
+                    self.make_configuration(
+                        identifier="baseline-other-pricing",
+                        pricing_version="other",
+                    ),
+                    self.make_configuration(
+                        identifier="candidate-other-pricing",
+                        baseline=False,
+                        pricing_version="other",
+                    ),
                 ),
                 self.prices,
                 self.corpus,
@@ -436,10 +603,38 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 self.corpus,
             ),
             (
+                "in-memory-effort-drift",
+                (invalid_effort, alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "in-memory-runtime-limit-drift",
+                (invalid_runtime_limit, alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "wrapper-pin-drift",
+                (invalid_wrapper_pin, alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "wrapper-identity-drift",
+                (self.configuration, invalid_wrapper_identity),
+                self.prices,
+                self.corpus,
+            ),
+            (
                 "compilation-failure",
                 (self.configuration, alternative),
                 self.prices,
-                replace(self.corpus, turns=tuple(broken_turns)),
+                replace(
+                    self.corpus,
+                    turns=tuple(broken_turns),
+                    raw_cases=tuple(broken_raw),
+                ),
             ),
         )
         for name, configurations, prices, corpus in cases:
@@ -459,11 +654,9 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 self.assertEqual([], factory_calls)
 
     def test_exactly_one_comparison_baseline_publishes_execution_evidence(self):
-        alternative = replace(
-            self.configuration,
+        alternative = self.make_configuration(
             identifier="alternative",
             baseline=False,
-            sha256="d" * 64,
         )
         factory_calls = []
 
@@ -497,7 +690,10 @@ class BenchmarkRunnerTests(unittest.TestCase):
             self.assertTrue(configuration["store"])
 
     def test_single_challenger_diagnostic_is_labeled_and_still_requires_pricing(self):
-        challenger = replace(self.configuration, baseline=False)
+        challenger = self.make_configuration(
+            identifier="challenger",
+            baseline=False,
+        )
         calls = []
         manifest = run_candidates(
             corpus=self.corpus,
@@ -531,13 +727,31 @@ class BenchmarkRunnerTests(unittest.TestCase):
             )
         self.assertEqual([], factory_calls)
 
+    def test_in_memory_corpus_mutation_stops_before_provider_construction(self):
+        mutated = self.make_pinned_corpus()
+        mutated.turns[0].request["requestID"] = "benchmark:valid-but-mutated"
+        factory_calls = []
+
+        with self.assertRaisesRegex(ValueError, "changed after loading"):
+            run_candidates(
+                corpus=mutated,
+                configurations=(self.configuration,),
+                mode="quick",
+                destination=self.root / "mutated-corpus",
+                provider_factory=lambda configuration: factory_calls.append(
+                    configuration
+                ),
+                price_table=self.prices,
+            )
+
+        self.assertEqual([], factory_calls)
+
     def test_rejects_reordered_loaded_corpus_and_changed_case_bytes(self):
-        raw_cases = tuple({"id": turn.identifier} for turn in self.corpus.turns)
         reordered = list(self.corpus.turns)
         reordered[0], reordered[1] = reordered[1], reordered[0]
         with self.assertRaises(ValueError):
             run_candidates(
-                corpus=replace(self.corpus, turns=tuple(reordered), raw_cases=raw_cases),
+                corpus=replace(self.corpus, turns=tuple(reordered)),
                 configurations=(self.configuration,),
                 mode="quick",
                 destination=self.root / "reordered",
@@ -579,12 +793,9 @@ class BenchmarkRunnerTests(unittest.TestCase):
         client = FakeClient(
             failures=[OpenAIResponsesError("secret-provider-body", category="timeout")]
         )
-        retrying = replace(
-            self.configuration,
-            model_configuration=replace(
-                self.configuration.model_configuration,
-                maximum_attempts=2,
-            ),
+        retrying = self.make_configuration(
+            identifier="retrying",
+            model_changes={"maximumAttempts": 2},
         )
         run_candidates(
             corpus=self.corpus,

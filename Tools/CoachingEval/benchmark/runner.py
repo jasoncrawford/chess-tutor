@@ -16,7 +16,9 @@ from Tools.CoachingEval.benchmark.configuration import (
     PROMPT_GENERATORS,
     PROVIDERS,
     RESPONSE_CONTRACTS,
+    load_candidate,
 )
+from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -180,6 +182,15 @@ def _validate_configurations(configurations, price_table):
     }
     priced_models = set()
     for configuration in configurations:
+        try:
+            canonical = load_candidate(
+                configuration.path,
+                configuration.repository_root,
+            )
+        except (AttributeError, OSError, ValueError) as error:
+            raise ValueError("Cannot reload pinned candidate configuration") from error
+        if canonical != configuration:
+            raise ValueError("Candidate configuration changed after loading")
         model_configuration = configuration.model_configuration
         if model_configuration.provider not in PROVIDERS:
             raise ValueError("Candidate provider is unsupported")
@@ -228,6 +239,8 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
     configuration = cell["configuration"]
     model_configuration = configuration.model_configuration
     record = _base_record(cell)
+    record["candidateAccountingComplete"] = False
+    record["candidateCostUSD"] = None
     response = None
     provider_returned = False
     final_category = "providerError"
@@ -267,13 +280,18 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
 
     if isinstance(response, Mapping):
         provider_model = _bounded_identifier(response.get("model"))
-        usage = _usage(response.get("usage"))
+        usage, accounting_complete = _usage(response.get("usage"))
         record["providerModel"] = provider_model
         record["usage"] = usage
-        if price_table is not None:
-            record["candidateCostUSD"] = str(
-                price_table.estimate(model_configuration.model, usage)
-            )
+        record["candidateAccountingComplete"] = accounting_complete
+        if accounting_complete and price_table is not None:
+            try:
+                record["candidateCostUSD"] = str(
+                    price_table.estimate(model_configuration.model, usage)
+                )
+            except ValueError:
+                record["candidateAccountingComplete"] = False
+                record["candidateCostUSD"] = None
     try:
         response_id, output = validate_provider_envelope(response)
     except ValueError:
@@ -348,7 +366,8 @@ def _base_record(cell):
         "latencyMilliseconds": 0.0,
         "timeToFirstTokenMilliseconds": None,
         "attemptCount": 0,
-        "candidateCostUSD": None,
+        "candidateAccountingComplete": True,
+        "candidateCostUSD": "0",
     }
 
 
@@ -468,12 +487,24 @@ def _validate_selected_groups(turns):
 
 
 def _verify_corpus_binding(corpus):
+    root = Path(corpus.root)
+    cases_path = root / "cases.jsonl"
+    manifest_path = root / "benchmark-manifest.json"
+    if cases_path.exists() and manifest_path.exists():
+        try:
+            canonical = load_corpus(root)
+        except (OSError, ValueError) as error:
+            raise ValueError("Cannot reload pinned benchmark corpus") from error
+        if canonical != corpus:
+            raise ValueError("Loaded benchmark corpus changed after loading")
     if corpus.raw_cases:
         raw_ids = [value.get("id") if isinstance(value, Mapping) else None for value in corpus.raw_cases]
         turn_ids = [turn.identifier for turn in corpus.turns]
         if raw_ids != turn_ids:
             raise ValueError("Loaded benchmark corpus order changed after validation")
-    cases_path = Path(corpus.root) / "cases.jsonl"
+        for raw, turn in zip(corpus.raw_cases, corpus.turns):
+            if not _turn_matches_raw_case(turn, raw):
+                raise ValueError("Loaded benchmark corpus changed after loading")
     if cases_path.exists():
         if _sha256(cases_path.read_bytes()) != corpus.sha256:
             raise ValueError("Benchmark corpus bytes changed after validation")
@@ -490,15 +521,60 @@ def _is_sequence(turns, group_id):
     return sum(turn.group_id == group_id for turn in turns) == 3
 
 
+def _turn_matches_raw_case(turn, raw):
+    if not isinstance(raw, Mapping):
+        return False
+    brief = turn.grader_brief
+    expected = {
+        "schemaVersion": "coaching-quality-benchmark-case.v1",
+        "id": turn.identifier,
+        "groupID": turn.group_id,
+        "stepIndex": turn.step_index,
+        "split": turn.split,
+        "category": turn.category,
+        "request": turn.request,
+        "graderBrief": {
+            "verifiedFacts": list(brief.verified_facts),
+            "coachingPurpose": brief.coaching_purpose,
+            "acceptableAlternatives": list(brief.acceptable_alternatives),
+            "successCriteria": list(brief.success_criteria),
+            "severeFailureCriteria": list(brief.severe_failure_criteria),
+        },
+    }
+    if turn.source_trace_id is not None or "sourceTraceID" in raw:
+        expected["sourceTraceID"] = turn.source_trace_id
+    return dict(raw) == expected
+
+
 def _usage(value):
-    value = value if isinstance(value, Mapping) else {}
-    return {
+    complete = isinstance(value, Mapping)
+    value = value if complete else {}
+    raw_values = (
+        value.get("input_tokens"),
+        value.get("cached_input_tokens"),
+        value.get("output_tokens"),
+        value.get("reasoning_tokens"),
+        value.get("total_tokens"),
+    )
+    complete = complete and all(_valid_metric(value) for value in raw_values)
+    usage = {
         "inputTokens": _bounded_int(value.get("input_tokens")),
         "cachedInputTokens": _bounded_int(value.get("cached_input_tokens")),
         "outputTokens": _bounded_int(value.get("output_tokens")),
         "reasoningTokens": _bounded_int(value.get("reasoning_tokens")),
         "totalTokens": _bounded_int(value.get("total_tokens")),
     }
+    if usage["cachedInputTokens"] > usage["inputTokens"]:
+        complete = False
+    return usage, complete
+
+
+def _valid_metric(value):
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 <= value <= _MAXIMUM_METRIC
+    )
 
 
 def _bounded_int(value):
