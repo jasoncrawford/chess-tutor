@@ -64,6 +64,7 @@ _JUDGE_V2_KEYS = frozenset(
         "qualificationRepetitions",
         "minimumSevereAgreement",
         "minimumDimensionAgreement",
+        "minimumPairwiseAgreement",
         "qualificationValidDays",
     )
 )
@@ -101,6 +102,7 @@ class JudgeConfiguration:
     qualification_repetitions: int
     minimum_severe_agreement: float
     minimum_dimension_agreement: float
+    minimum_pairwise_agreement: float
     qualification_valid_days: int
     review_seed: int
     sha256: str
@@ -191,6 +193,7 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         qualification_repetitions = 1
         minimum_severe_agreement = 0.90
         minimum_dimension_agreement = 0.80
+        minimum_pairwise_agreement = 0.0
         qualification_valid_days = 0
     else:
         reference_set_path, reference_set_sha, _reference_text = _load_pinned_text(
@@ -216,6 +219,11 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         )
         if minimum_dimension_agreement < 0.90:
             raise ValueError("minimumDimensionAgreement must be at least 0.90")
+        minimum_pairwise_agreement = _unit_interval(
+            raw["minimumPairwiseAgreement"], "minimumPairwiseAgreement"
+        )
+        if minimum_pairwise_agreement < 0.90:
+            raise ValueError("minimumPairwiseAgreement must be at least 0.90")
         qualification_valid_days = _positive_int(
             raw["qualificationValidDays"], "qualificationValidDays"
         )
@@ -241,6 +249,7 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         qualification_repetitions=qualification_repetitions,
         minimum_severe_agreement=minimum_severe_agreement,
         minimum_dimension_agreement=minimum_dimension_agreement,
+        minimum_pairwise_agreement=minimum_pairwise_agreement,
         qualification_valid_days=qualification_valid_days,
         review_seed=review_seed,
         sha256=hashlib.sha256(_canonical_bytes(raw)).hexdigest(),

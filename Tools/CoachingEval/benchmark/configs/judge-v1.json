@@ -10,6 +10,6 @@
   "reviewSeed": 20260901,
   "schemaVersion": "coaching-quality-judge.v1",
   "systemPromptPath": "Tools/CoachingEval/benchmark/judge-v1.md",
-  "systemPromptSHA256": "06a1f561970f6e0a74f0b86ac898df05b8df4248cde790bf977345bc8c8f0c38",
+  "systemPromptSHA256": "fed154ac5c0c6bdd5e99f80ef8f0affd49c18ad878898df9d8d2472c30eb4e21",
   "timeoutSeconds": 60
 }

@@ -103,6 +103,7 @@ class BenchmarkConfigurationTests(unittest.TestCase):
             "qualificationRepetitions": 3,
             "minimumSevereAgreement": 0.95,
             "minimumDimensionAgreement": 0.90,
+            "minimumPairwiseAgreement": 0.90,
             "qualificationValidDays": 30,
         }
         self.prices = {
@@ -166,6 +167,7 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         self.assertEqual(3, judge.qualification_repetitions)
         self.assertEqual(0.95, judge.minimum_severe_agreement)
         self.assertEqual(0.90, judge.minimum_dimension_agreement)
+        self.assertEqual(0.90, judge.minimum_pairwise_agreement)
         self.assertEqual(30, judge.qualification_valid_days)
         self.assertEqual(
             self.judge_v2["referenceSetSHA256"], judge.reference_set_sha256
@@ -180,6 +182,8 @@ class BenchmarkConfigurationTests(unittest.TestCase):
             ("minimumSevereAgreement", 0.94),
             ("minimumDimensionAgreement", 0),
             ("minimumDimensionAgreement", 0.89),
+            ("minimumPairwiseAgreement", 0),
+            ("minimumPairwiseAgreement", 0.89),
             ("qualificationValidDays", -1),
             ("qualificationValidDays", 31),
         ):

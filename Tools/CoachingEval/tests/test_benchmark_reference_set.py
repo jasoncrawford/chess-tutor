@@ -162,6 +162,17 @@ class JudgeReferenceSetTests(unittest.TestCase):
             {case["referencePreference"] for case in reference.pairwise_cases},
         )
 
+    def test_judge_prompt_maps_symbolic_expectations_to_visible_controls(self):
+        prompt = (ROOT / "Tools/CoachingEval/benchmark/judge-v1.md").read_text()
+        for mapping in (
+            '`findEndangeredPiece`: tap an occupied piece or choose “No piece needs help”',
+            '`findSafeCapture`: tap an opponent piece or choose “No safe capture”',
+            '`stageMove`: move a piece on the board',
+            '`judgeMoveSafety`: choose “Looks safe” or “Try another move”',
+            '`chooseWhetherToPlay`: choose “Play this move” or “Try another move”',
+        ):
+            self.assertIn(mapping, prompt)
+
     def test_derived_judge_context_contains_bounded_neutral_evidence(self):
         reference = self.load_committed()
         absolute = {case["sourceID"]: case for case in reference.absolute_cases}

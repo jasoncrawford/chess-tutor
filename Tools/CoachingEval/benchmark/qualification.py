@@ -20,12 +20,14 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     canonical_json_bytes as _canonical_json_bytes,
     empty_metrics as _empty_metrics,
     judge_call as _judge_call,
+    normalize_pairwise_winner as _normalize_pairwise_winner,
     pairwise_schema as _pairwise_schema,
     preflight_price as _preflight_price,
     pretty_json_bytes as _pretty_json_bytes,
     validate_absolute as _validate_absolute,
     validate_evidence as _validate_evidence,
     validate_flags as _validate_flags,
+    validate_pairwise as _validate_pairwise,
     validate_scores as _validate_scores,
 )
 from Tools.CoachingEval.benchmark.reference_set import JudgeReferenceSet
@@ -43,6 +45,7 @@ _ARTIFACT_KEYS = frozenset(
         "bindings",
         "minimumSevereAgreement",
         "minimumDimensionAgreement",
+        "minimumPairwiseAgreement",
         "qualificationMetrics",
         "passes",
     )
@@ -54,9 +57,11 @@ _PASS_KEYS = frozenset(
         "passed",
         "severeAgreement",
         "dimensionWithinOne",
+        "pairwiseAgreement",
         "failureCategory",
         "judgeMetrics",
         "rows",
+        "pairwiseRows",
     )
 )
 _ROW_KEYS = frozenset(
@@ -68,6 +73,19 @@ _ROW_KEYS = frozenset(
         "judgeScores",
         "referenceFlags",
         "judgeFlags",
+        "evidence",
+    )
+)
+_PAIRWISE_ROW_KEYS = frozenset(
+    (
+        "rowID",
+        "pairID",
+        "responseOnePresentedAs",
+        "judgeWinner",
+        "normalizedWinner",
+        "referencePreference",
+        "orderConsistent",
+        "winnerMatch",
         "evidence",
     )
 )
@@ -98,6 +116,7 @@ class JudgeQualification:
     expires_at: datetime
     minimum_severe_agreement: float
     minimum_dimension_agreement: float
+    minimum_pairwise_agreement: float
     artifact: Mapping[str, Any]
     artifact_bytes: bytes
 
@@ -134,6 +153,7 @@ class JudgeQualification:
 
         minimum_severe = min(result["severeAgreement"] for result in passes)
         minimum_dimension = min(result["dimensionWithinOne"] for result in passes)
+        minimum_pairwise = min(result["pairwiseAgreement"] for result in passes)
         accepted = (
             len(passes) == configuration.qualification_repetitions
             and all(result["passed"] for result in passes)
@@ -150,11 +170,13 @@ class JudgeQualification:
                 "repetitions": configuration.qualification_repetitions,
                 "minimumSevereAgreement": configuration.minimum_severe_agreement,
                 "minimumDimensionAgreement": configuration.minimum_dimension_agreement,
+                "minimumPairwiseAgreement": configuration.minimum_pairwise_agreement,
                 "validDays": configuration.qualification_valid_days,
             },
             "bindings": _bindings(configuration),
             "minimumSevereAgreement": minimum_severe,
             "minimumDimensionAgreement": minimum_dimension,
+            "minimumPairwiseAgreement": minimum_pairwise,
             "qualificationMetrics": qualification_metrics,
             "passes": passes,
         }
@@ -209,6 +231,7 @@ class JudgeQualification:
             expires_at=expires_at,
             minimum_severe_agreement=artifact["minimumSevereAgreement"],
             minimum_dimension_agreement=artifact["minimumDimensionAgreement"],
+            minimum_pairwise_agreement=artifact["minimumPairwiseAgreement"],
             artifact=artifact,
             artifact_bytes=artifact_bytes,
         )
@@ -252,6 +275,7 @@ class JudgeQualification:
         dimension_matches = 0
         metrics = _empty_metrics()
         rows = []
+        pairwise_rows = []
         for case in reference.cases:
             payload = {
                 "kind": "absolute",
@@ -289,8 +313,10 @@ class JudgeQualification:
                     False,
                     0.0,
                     0.0,
+                    0.0,
                     metrics,
                     rows,
+                    pairwise_rows,
                     "judgeCallFailed",
                 )
             reference_scores = dict(case["referenceScores"])
@@ -321,17 +347,105 @@ class JudgeQualification:
         dimension_agreement = dimension_matches / (
             len(reference.cases) * len(RUBRIC_DIMENSIONS)
         )
+        pairwise_matches = 0
+        for case in reference.pairwise_cases:
+            pair_rows = []
+            for response_one_presented_as in ("A", "B"):
+                if response_one_presented_as == "A":
+                    response_a = case["responseOne"]
+                    response_b = case["responseTwo"]
+                else:
+                    response_a = case["responseTwo"]
+                    response_b = case["responseOne"]
+                payload = {
+                    "kind": "pairwise",
+                    "graderBrief": _plain(case["graderBrief"]),
+                    "judgeContext": _plain(case["judgeContext"]),
+                    "availableUI": _plain(case["availableUI"]),
+                    "responseA": _plain(response_a),
+                    "responseB": _plain(response_b),
+                }
+                call_started = time.monotonic()
+                call_metrics = None
+                try:
+                    output, call_metrics = _judge_call(
+                        configuration,
+                        client,
+                        payload,
+                        _pairwise_schema(),
+                        price_table,
+                    )
+                    grade = _validate_pairwise(output)
+                except Exception as error:
+                    if isinstance(error, JudgeCallError):
+                        failed_metrics = error.metrics
+                    elif call_metrics is not None:
+                        failed_metrics = call_metrics
+                    else:
+                        failed_metrics = _empty_metrics()
+                        failed_metrics["callCount"] = 1
+                        failed_metrics["latencyMilliseconds"] = min(
+                            max((time.monotonic() - call_started) * 1000, 0.0),
+                            86_400_000.0,
+                        )
+                    _add_metrics(metrics, failed_metrics)
+                    return _pass_result(
+                        repetition,
+                        False,
+                        severe_agreement,
+                        dimension_agreement,
+                        0.0,
+                        metrics,
+                        rows,
+                        pairwise_rows,
+                        "judgeCallFailed",
+                    )
+                _add_metrics(metrics, call_metrics)
+                pair_row = {
+                    "rowID": (
+                        f"{case['id']}|responseOneAs{response_one_presented_as}"
+                    ),
+                    "pairID": case["id"],
+                    "responseOnePresentedAs": response_one_presented_as,
+                    "judgeWinner": grade["winner"],
+                    "normalizedWinner": _normalize_pairwise_winner(
+                        grade["winner"], response_one_presented_as
+                    ),
+                    "referencePreference": case["referencePreference"],
+                    "orderConsistent": None,
+                    "winnerMatch": None,
+                    "evidence": grade["evidence"],
+                }
+                pair_rows.append(pair_row)
+                pairwise_rows.append(pair_row)
+            order_consistent = (
+                pair_rows[0]["normalizedWinner"]
+                == pair_rows[1]["normalizedWinner"]
+            )
+            winner_match = (
+                order_consistent
+                and pair_rows[0]["normalizedWinner"]
+                == case["referencePreference"]
+            )
+            for row in pair_rows:
+                row["orderConsistent"] = order_consistent
+                row["winnerMatch"] = winner_match
+            pairwise_matches += 2 if winner_match else 0
+        pairwise_agreement = pairwise_matches / len(pairwise_rows)
         return _pass_result(
             repetition,
             True,
             severe_agreement,
             dimension_agreement,
+            pairwise_agreement,
             metrics,
             rows,
+            pairwise_rows,
             None,
             passed=(
                 severe_agreement >= configuration.minimum_severe_agreement
                 and dimension_agreement >= configuration.minimum_dimension_agreement
+                and pairwise_agreement >= configuration.minimum_pairwise_agreement
             ),
         )
 
@@ -342,6 +456,7 @@ class JudgeQualification:
             "repetitions": configuration.qualification_repetitions,
             "minimumSevereAgreement": configuration.minimum_severe_agreement,
             "minimumDimensionAgreement": configuration.minimum_dimension_agreement,
+            "minimumPairwiseAgreement": configuration.minimum_pairwise_agreement,
             "validDays": configuration.qualification_valid_days,
         }
         if criteria != expected_criteria:
@@ -351,6 +466,7 @@ class JudgeQualification:
             raise ValueError("Judge qualification pass inventory is invalid")
         severe_values = []
         dimension_values = []
+        pairwise_values = []
         qualification_metrics = _empty_metrics()
         for index, result in enumerate(passes, start=1):
             if (
@@ -362,6 +478,7 @@ class JudgeQualification:
             ):
                 raise ValueError("Judge qualification pass is invalid")
             rows = result["rows"]
+            pairwise_rows = result["pairwiseRows"]
             if not isinstance(rows, list) or len(rows) != len(reference.cases):
                 raise ValueError("Judge qualification pass is invalid")
             severe_matches = 0
@@ -409,22 +526,76 @@ class JudgeQualification:
             severe = severe_matches / len(rows)
             dimension = dimension_matches / (len(rows) * len(RUBRIC_DIMENSIONS))
             if (
+                not isinstance(pairwise_rows, list)
+                or len(pairwise_rows) != len(reference.pairwise_cases) * 2
+            ):
+                raise ValueError("Judge qualification pairwise inventory is invalid")
+            pairwise_matches = 0
+            for case_index, case in enumerate(reference.pairwise_cases):
+                first = pairwise_rows[case_index * 2]
+                second = pairwise_rows[case_index * 2 + 1]
+                for row, response_one_presented_as in ((first, "A"), (second, "B")):
+                    expected_row_id = (
+                        f"{case['id']}|responseOneAs{response_one_presented_as}"
+                    )
+                    if (
+                        not isinstance(row, dict)
+                        or set(row) != _PAIRWISE_ROW_KEYS
+                        or row["rowID"] != expected_row_id
+                        or row["pairID"] != case["id"]
+                        or row["responseOnePresentedAs"] != response_one_presented_as
+                        or row["judgeWinner"] not in ("A", "B", "tie")
+                        or row["normalizedWinner"]
+                        != _normalize_pairwise_winner(
+                            row["judgeWinner"], response_one_presented_as
+                        )
+                        or row["referencePreference"]
+                        != case["referencePreference"]
+                        or not isinstance(row["orderConsistent"], bool)
+                        or not isinstance(row["winnerMatch"], bool)
+                    ):
+                        raise ValueError("Judge qualification pairwise row is invalid")
+                    _validate_evidence(row["evidence"])
+                order_consistent = (
+                    first["normalizedWinner"] == second["normalizedWinner"]
+                )
+                winner_match = (
+                    order_consistent
+                    and first["normalizedWinner"] == case["referencePreference"]
+                )
+                if (
+                    first["orderConsistent"] is not order_consistent
+                    or second["orderConsistent"] is not order_consistent
+                    or first["winnerMatch"] is not winner_match
+                    or second["winnerMatch"] is not winner_match
+                ):
+                    raise ValueError("Judge qualification pairwise agreement is invalid")
+                pairwise_matches += 2 if winner_match else 0
+            pairwise = pairwise_matches / len(pairwise_rows)
+            if (
                 result["severeAgreement"] != severe
                 or result["dimensionWithinOne"] != dimension
+                or result["pairwiseAgreement"] != pairwise
                 or result["passed"] is not True
                 or severe < criteria["minimumSevereAgreement"]
                 or dimension < criteria["minimumDimensionAgreement"]
+                or pairwise < criteria["minimumPairwiseAgreement"]
             ):
                 raise ValueError("Judge qualification pass is invalid")
             _validate_metrics(result["judgeMetrics"])
+            if result["judgeMetrics"]["callCount"] != len(rows) + len(pairwise_rows):
+                raise ValueError("Judge qualification metrics are invalid")
             _add_metrics(qualification_metrics, result["judgeMetrics"])
             severe_values.append(severe)
             dimension_values.append(dimension)
+            pairwise_values.append(pairwise)
         if (
             not _agreement(artifact["minimumSevereAgreement"])
             or not _agreement(artifact["minimumDimensionAgreement"])
+            or not _agreement(artifact["minimumPairwiseAgreement"])
             or artifact["minimumSevereAgreement"] != min(severe_values)
             or artifact["minimumDimensionAgreement"] != min(dimension_values)
+            or artifact["minimumPairwiseAgreement"] != min(pairwise_values)
         ):
             raise ValueError("Judge qualification minimum agreement is invalid")
         _validate_metrics(artifact["qualificationMetrics"])
@@ -447,8 +618,10 @@ def _pass_result(
     completed,
     severe_agreement,
     dimension_agreement,
+    pairwise_agreement,
     metrics,
     rows,
+    pairwise_rows,
     failure_category,
     *,
     passed=False,
@@ -459,9 +632,11 @@ def _pass_result(
         "passed": passed,
         "severeAgreement": severe_agreement,
         "dimensionWithinOne": dimension_agreement,
+        "pairwiseAgreement": pairwise_agreement,
         "failureCategory": failure_category,
         "judgeMetrics": metrics,
         "rows": rows,
+        "pairwiseRows": pairwise_rows,
     }
 
 

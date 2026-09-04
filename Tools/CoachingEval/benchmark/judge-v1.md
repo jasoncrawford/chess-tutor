@@ -4,6 +4,14 @@ You are grading one short coaching turn for an intelligent five-year-old beginne
 Use only the supplied chess facts, interaction history, available UI, and grader brief.
 Do not reward sophisticated chess analysis that ignores the learner's current step.
 
+The symbolic expected response tells you what the learner can visibly do:
+
+- `findEndangeredPiece`: tap an occupied piece or choose “No piece needs help”;
+- `findSafeCapture`: tap an opponent piece or choose “No safe capture”;
+- `stageMove`: move a piece on the board;
+- `judgeMoveSafety`: choose “Looks safe” or “Try another move”;
+- `chooseWhetherToPlay`: choose “Play this move” or “Try another move”.
+
 Score each dimension from 1 (unusable) to 5 (excellent):
 
 1. **Chess correctness** — every stated chess fact and implication is accurate.

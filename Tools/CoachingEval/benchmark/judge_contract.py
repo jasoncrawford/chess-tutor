@@ -97,6 +97,16 @@ def validate_pairwise(value):
     return {"winner": value["winner"], "evidence": validate_evidence(value["evidence"])}
 
 
+def normalize_pairwise_winner(winner, response_one_presented_as):
+    if winner not in ("A", "B", "tie"):
+        raise ValueError("Pairwise winner is invalid")
+    if response_one_presented_as not in ("A", "B"):
+        raise ValueError("Pairwise presentation order is invalid")
+    if winner == "tie":
+        return "tie"
+    return "responseOne" if winner == response_one_presented_as else "responseTwo"
+
+
 def validate_scores(value):
     if not isinstance(value, dict) or tuple(sorted(value)) != tuple(
         sorted(RUBRIC_DIMENSIONS)

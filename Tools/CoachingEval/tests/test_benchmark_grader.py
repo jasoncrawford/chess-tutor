@@ -104,6 +104,7 @@ class BenchmarkGraderTests(unittest.TestCase):
             "qualificationRepetitions": 3,
             "minimumSevereAgreement": 0.95,
             "minimumDimensionAgreement": 0.90,
+            "minimumPairwiseAgreement": 0.90,
             "qualificationValidDays": 30,
         }
         judge_path = self.root / "judge.json"
@@ -115,13 +116,7 @@ class BenchmarkGraderTests(unittest.TestCase):
         self.now = datetime(2026, 9, 3, 12, 0, tzinfo=timezone.utc)
         self.qualification_path = JudgeQualification.ensure(
             self.configuration,
-            QueueJudge(
-                [
-                    self.absolute(case)
-                    for _repetition in range(3)
-                    for case in self.reference.cases
-                ]
-            ),
+            QueueJudge(self.qualification_outputs()),
             None,
             self.root / "qualifications",
             self.now,
@@ -153,6 +148,29 @@ class BenchmarkGraderTests(unittest.TestCase):
         )
         flags["severeError"] = severe if row is None else flags["severeError"]
         return {"scores": scores, "flags": flags, "evidence": ["Grounded in the supplied facts."]}
+
+    def qualification_outputs(self):
+        outputs = []
+        for _repetition in range(3):
+            outputs.extend(self.absolute(case) for case in self.reference.cases)
+            for case in self.reference.pairwise_cases:
+                for response_one_presented_as in ("A", "B"):
+                    preference = case["referencePreference"]
+                    if preference == "tie":
+                        winner = "tie"
+                    elif preference == "responseOne":
+                        winner = response_one_presented_as
+                    else:
+                        winner = (
+                            "B" if response_one_presented_as == "A" else "A"
+                        )
+                    outputs.append(
+                        {
+                            "winner": winner,
+                            "evidence": ["One response better fits the current step."],
+                        }
+                    )
+        return outputs
 
     def test_calibration_requires_exact_inventory_and_thresholds(self):
         client = QueueJudge([self.absolute(row) for row in self.rows])
