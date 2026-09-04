@@ -16,6 +16,7 @@ CORE_TEST_PATH = ROOT / "Tools/CoachingEval/tests/test_benchmark_review_core.js"
 CONTROLLER_TEST_PATH = (
     ROOT / "Tools/CoachingEval/tests/test_benchmark_review_controller.js"
 )
+REVIEW_CSS_PATH = ROOT / "Tools/CoachingEval/benchmark/review_app.css"
 EXPECTED_REFERENCE_SHA = (
     "3b0bb2ba35df5261967c1af4a0970fec67fd31dcc9f5616ab5c262af9f7c016d"
 )
@@ -135,6 +136,15 @@ class JudgeReferenceReviewHTTPTests(unittest.TestCase):
         self.assertNotIn(self.model["cases"][0]["candidate"]["message"].encode(), index.data)
         self.assertNotIn(self.model["cases"][0]["position"]["fen"].encode(), index.data)
         self.assertEqual(self.model, data.get_json())
+
+    def test_board_uses_min_content_independent_equal_rows(self):
+        css = REVIEW_CSS_PATH.read_text()
+        board_rule = css.split(".chess-board {", 1)[1].split("}\n", 1)[0]
+        square_rule = css.split(".square {", 1)[1].split("}\n", 1)[0]
+
+        self.assertIn("grid-template-columns: repeat(8, 1fr);", board_rule)
+        self.assertIn("grid-template-rows: repeat(8, minmax(0, 1fr));", board_rule)
+        self.assertIn("min-height: 0;", square_rule)
 
     def test_routes_are_read_only_local_assets_with_browser_security_headers(self):
         for path in (
