@@ -26,6 +26,14 @@ RUBRIC_FLAGS = (
 )
 
 
+class JudgeCallError(ValueError):
+    """A sanitized judge-response failure that retains bounded call metrics."""
+
+    def __init__(self, message, metrics):
+        super().__init__(message)
+        self.metrics = metrics
+
+
 def judge_call(configuration, client, payload, schema, price_table):
     started = time.monotonic()
     response = client.complete(
@@ -40,13 +48,6 @@ def judge_call(configuration, client, payload, schema, price_table):
         store=False,
     )
     latency = _bounded_float((time.monotonic() - started) * 1000)
-    output_text = response.get("output_text") if isinstance(response, dict) else None
-    if not isinstance(output_text, str) or not output_text:
-        raise ValueError("Judge returned no structured output")
-    try:
-        output = json.loads(output_text, object_pairs_hook=_strict_object)
-    except (TypeError, ValueError, _DuplicateKey) as error:
-        raise ValueError("Judge returned malformed structured output") from error
     usage = _usage(response.get("usage") if isinstance(response, dict) else None)
     metrics = {
         "callCount": 1,
@@ -58,6 +59,15 @@ def judge_call(configuration, client, payload, schema, price_table):
             else None
         ),
     }
+    output_text = response.get("output_text") if isinstance(response, dict) else None
+    if not isinstance(output_text, str) or not output_text:
+        raise JudgeCallError("Judge returned no structured output", metrics)
+    try:
+        output = json.loads(output_text, object_pairs_hook=_strict_object)
+    except (TypeError, ValueError, _DuplicateKey) as error:
+        raise JudgeCallError(
+            "Judge returned malformed structured output", metrics
+        ) from error
     return output, metrics
 
 

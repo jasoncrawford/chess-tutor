@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from Tools.CoachingEval.benchmark.judge_contract import (
+    JudgeCallError,
     RUBRIC_DIMENSIONS,
     absolute_schema as _absolute_schema,
     add_metrics as _add_metrics,
@@ -113,6 +114,8 @@ class JudgeQualification:
         reusable = cls._newest_compatible(artifact_root, configuration, now)
         if reusable is not None:
             return reusable.path
+        if price_table is not None:
+            price_table.estimate(configuration.model, _empty_metrics()["usage"])
 
         passes = []
         qualification_metrics = _empty_metrics()
@@ -257,6 +260,7 @@ class JudgeQualification:
                 "candidateTurn": _plain(case["candidateTurn"]),
             }
             call_started = time.monotonic()
+            call_metrics = None
             try:
                 output, call_metrics = _judge_call(
                     configuration,
@@ -266,13 +270,18 @@ class JudgeQualification:
                     price_table,
                 )
                 grade = _validate_absolute(output)
-            except Exception:
-                failed_metrics = _empty_metrics()
-                failed_metrics["callCount"] = 1
-                failed_metrics["latencyMilliseconds"] = min(
-                    max((time.monotonic() - call_started) * 1000, 0.0),
-                    86_400_000.0,
-                )
+            except Exception as error:
+                if isinstance(error, JudgeCallError):
+                    failed_metrics = error.metrics
+                elif call_metrics is not None:
+                    failed_metrics = call_metrics
+                else:
+                    failed_metrics = _empty_metrics()
+                    failed_metrics["callCount"] = 1
+                    failed_metrics["latencyMilliseconds"] = min(
+                        max((time.monotonic() - call_started) * 1000, 0.0),
+                        86_400_000.0,
+                    )
                 _add_metrics(metrics, failed_metrics)
                 return _pass_result(
                     repetition,

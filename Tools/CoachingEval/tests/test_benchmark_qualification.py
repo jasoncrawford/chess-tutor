@@ -50,6 +50,22 @@ class FailingJudge(QueueJudge):
         }
 
 
+class RawQueueJudge(QueueJudge):
+    def complete(self, **arguments):
+        self.calls.append(arguments)
+        output = self.outputs.pop(0)
+        return {
+            "output_text": output,
+            "usage": {
+                "input_tokens": 50,
+                "cached_input_tokens": 10,
+                "output_tokens": 20,
+                "reasoning_tokens": 5,
+                "total_tokens": 70,
+            },
+        }
+
+
 class JudgeQualificationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -289,6 +305,44 @@ class JudgeQualificationTests(unittest.TestCase):
         self.assertEqual(1, len(artifact["passes"][0]["rows"]))
         self.assertEqual(2, artifact["qualificationMetrics"]["callCount"])
         self.assertNotIn("private provider failure body", artifact_text)
+
+    def test_invalid_structured_response_preserves_paid_call_usage(self):
+        first = self.output(self.reference.cases[0])
+        client = RawQueueJudge(
+            [json.dumps(first), "not-json private provider response"]
+        )
+        with self.assertRaises(QualificationFailed) as failure:
+            JudgeQualification.ensure(
+                self.configuration,
+                client,
+                None,
+                self.root / "invalid-response",
+                self.now,
+            )
+
+        artifact_text = failure.exception.artifact_path.read_text()
+        artifact = json.loads(artifact_text)
+        metrics = artifact["qualificationMetrics"]
+        self.assertEqual(2, metrics["callCount"])
+        self.assertEqual(100, metrics["usage"]["inputTokens"])
+        self.assertEqual(40, metrics["usage"]["outputTokens"])
+        self.assertNotIn("private provider response", artifact_text)
+
+    def test_missing_judge_price_fails_before_provider_call(self):
+        class MissingPrice:
+            def estimate(self, _model, _usage):
+                raise ValueError("No price is pinned for judge")
+
+        client = QueueJudge([])
+        with self.assertRaisesRegex(ValueError, "price"):
+            JudgeQualification.ensure(
+                self.configuration,
+                client,
+                MissingPrice(),
+                self.root / "missing-price",
+                self.now,
+            )
+        self.assertEqual([], client.calls)
 
     def test_pending_reference_is_rejected_before_provider_calls(self):
         reference = json.loads(self.configuration.reference_set_path.read_text())
