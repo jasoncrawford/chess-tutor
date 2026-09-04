@@ -587,7 +587,7 @@ class JudgeReferenceSet:
                 "Judge reference source selected piece does not match the tentative move"
             )
         latest = interaction["latestEvent"]
-        if latest["kind"] == "pieceSelected" and tentative is None:
+        if latest["kind"] == "pieceSelected":
             piece = next(
                 piece
                 for piece in request["pieces"]
@@ -595,7 +595,10 @@ class JudgeReferenceSet:
             )
             if (
                 selected_piece != piece["id"]
-                or selected_square != piece["square"]
+                or (
+                    tentative is None
+                    and selected_square != piece["square"]
+                )
             ):
                 raise ValueError(
                     "Judge reference source selected piece does not match its event"

@@ -355,6 +355,32 @@ class JudgeReferenceSetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "legal move facts"):
             JudgeReferenceSet.load(path, sha, require_reviewed=False)
 
+    def test_rejects_piece_selection_that_contradicts_staged_state(self):
+        value = self.staged_reference_value()
+        request = value["sources"][0]["request"]
+        tentative = request["interaction"]["tentativeMove"]
+        other_piece = next(
+            piece["id"]
+            for piece in request["pieces"]
+            if piece["id"] != tentative["sourcePieceReference"]
+        )
+        contradictory_selection = {
+            "sequence": 3,
+            "kind": "pieceSelected",
+            "referencedIDs": [other_piece],
+        }
+        request["interaction"]["latestEvent"] = copy.deepcopy(
+            contradictory_selection
+        )
+        request["interaction"]["episodeEvents"].append(
+            copy.deepcopy(contradictory_selection)
+        )
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+
+        path, sha = self.write_value("contradictory-piece-selection.json", value)
+        with self.assertRaisesRegex(ValueError, "selected piece"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
     def test_rejects_lone_unicode_surrogate_via_full_production_validator(self):
         value = self.reference_value(review_status="pending")
         value["absoluteCases"][0]["candidateTurn"]["message"] = "\ud800"
