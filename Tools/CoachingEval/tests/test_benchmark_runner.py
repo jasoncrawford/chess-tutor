@@ -5,6 +5,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from CoachingServer.model_configuration import HostedModelConfiguration
 from Tools.CoachingEval.benchmark.configuration import CandidateConfiguration
 from Tools.CoachingEval.benchmark.corpus import (
     BenchmarkCorpus,
@@ -60,28 +61,24 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def make_configuration(self, **changes):
-        prompt = (ROOT / "Tools/CoachingEval/prompts/tutor-v13.md").read_text()
+        model_configuration = HostedModelConfiguration.load(
+            ROOT / "CoachingServer/configs/production-v1.json",
+            ROOT,
+        )
         raw = {
-            "schemaVersion": "coaching-quality-candidate.v1",
+            "schemaVersion": "coaching-quality-candidate.v2",
             "id": "production",
             "baseline": True,
+            "modelConfigurationPath": "CoachingServer/configs/production-v1.json",
+            "modelConfigurationSHA256": model_configuration.sha256,
+            "pricingVersion": "test",
         }
         configuration = CandidateConfiguration(
             identifier="production",
             baseline=True,
-            provider="openai-responses-v1",
-            model="gpt-5.6-sol",
-            initial_reasoning_effort="high",
-            follow_up_reasoning_effort="none",
-            conversation_reuse=True,
-            maximum_output_tokens=2048,
-            timeout_seconds=30,
-            maximum_attempts=1,
-            system_prompt_path=ROOT / "Tools/CoachingEval/prompts/tutor-v13.md",
-            system_prompt_sha256="a" * 64,
-            system_prompt=prompt,
-            user_prompt_generator="chess-native-v13",
-            response_contract="chess-native-v13",
+            model_configuration_path=ROOT / "CoachingServer/configs/production-v1.json",
+            model_configuration_sha256=model_configuration.sha256,
+            model_configuration=model_configuration,
             pricing_version="test",
             sha256="b" * 64,
             raw=raw,
@@ -113,6 +110,22 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 identifier = f"{group}-{step:02}"
                 detached = json.loads(json.dumps(request))
                 detached["requestID"] = f"benchmark:{identifier}"
+                if step == 2:
+                    event = {
+                        "sequence": 1,
+                        "kind": "moveStaged",
+                        "referencedIDs": ["move:b1-c3"],
+                    }
+                    detached["interaction"]["latestEvent"] = event
+                    detached["interaction"]["episodeEvents"] = [event]
+                elif step == 3:
+                    event = {
+                        "sequence": 1,
+                        "kind": "moveRemoved",
+                        "referencedIDs": ["move:b1-c3"],
+                    }
+                    detached["interaction"]["latestEvent"] = event
+                    detached["interaction"]["episodeEvents"] = [event]
                 turns.append(BenchmarkTurn(identifier, group, step, split, "interaction", detached, brief, None))
         return BenchmarkCorpus(self.root, "source", "c" * 64, tuple(turns), tuple())
 
@@ -160,13 +173,35 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertEqual("high", sequence_calls[0]["reasoning_effort"])
         self.assertIsNone(sequence_calls[0]["previous_response_id"])
         self.assertIn("# Chess coaching update", sequence_calls[1]["user_prompt"])
-        self.assertEqual("none", sequence_calls[1]["reasoning_effort"])
+        self.assertEqual("low", sequence_calls[1]["reasoning_effort"])
         self.assertEqual("resp_33", sequence_calls[1]["previous_response_id"])
+        self.assertTrue(sequence_calls[1]["store"])
+        self.assertEqual("none", sequence_calls[2]["reasoning_effort"])
         self.assertEqual("resp_34", sequence_calls[2]["previous_response_id"])
+        self.assertTrue(sequence_calls[2]["store"])
 
+        records = [
+            json.loads(line)
+            for line in (self.root / "run/records.jsonl").read_text().splitlines()
+        ]
+        for record in records:
+            self.assertNotIn("providerResponseID", record)
+            self.assertNotIn("previousResponseIDUsed", record)
+        manifest = json.loads((self.root / "run/run-manifest.json").read_text())
+        resolved = manifest["configurations"][0]
+        self.assertEqual("high", resolved["initialReasoningEffort"])
+        self.assertEqual("low", resolved["tacticalFollowUpReasoningEffort"])
+        self.assertEqual("none", resolved["simpleFollowUpReasoningEffort"])
+        self.assertTrue(resolved["store"])
+
+        independent_runtime = replace(
+            self.configuration.model_configuration,
+            conversation_reuse=False,
+            store=False,
+        )
         independent = replace(
             self.configuration,
-            conversation_reuse=False,
+            model_configuration=independent_runtime,
             identifier="no-reuse",
             sha256="e" * 64,
         )
@@ -290,7 +325,13 @@ class BenchmarkRunnerTests(unittest.TestCase):
         client = FakeClient(
             failures=[OpenAIResponsesError("secret-provider-body", category="timeout")]
         )
-        retrying = replace(self.configuration, maximum_attempts=2)
+        retrying = replace(
+            self.configuration,
+            model_configuration=replace(
+                self.configuration.model_configuration,
+                maximum_attempts=2,
+            ),
+        )
         run_candidates(
             corpus=self.corpus,
             configurations=(retrying,),

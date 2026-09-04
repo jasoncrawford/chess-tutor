@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from CoachingServer.chess_native_compiler import parse_neutral_request
 from Tools.CoachingEval.benchmark.configuration import PROMPT_GENERATORS
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
@@ -62,6 +63,7 @@ def run_candidates(
     prior_by_sequence = {}
     for cell in preflight:
         configuration = cell["configuration"]
+        model_configuration = configuration.model_configuration
         turn = cell["turn"]
         sequence_key = (
             configuration.identifier,
@@ -81,9 +83,13 @@ def run_candidates(
             continue
 
         previous_response_id = None
-        if turn.step_index > 1 and configuration.conversation_reuse and prior is not None:
+        if (
+            turn.step_index > 1
+            and model_configuration.conversation_reuse
+            and prior is not None
+        ):
             previous_response_id = prior["responseID"]
-        record = _execute_cell(
+        record, response_id = _execute_cell(
             cell,
             clients[configuration.identifier],
             previous_response_id=previous_response_id,
@@ -93,7 +99,7 @@ def run_candidates(
         if _is_sequence(turns, turn.group_id):
             prior_by_sequence[sequence_key] = {
                 "valid": record["mechanicalValidation"]["valid"],
-                "responseID": record.get("providerResponseID") or None,
+                "responseID": response_id,
             }
         if record["mechanicalValidation"]["valid"]:
             transcripts[_transcript_name(record)] = _transcript(record)
@@ -114,19 +120,24 @@ def _preflight(configurations, turns, repetitions):
     cells = []
     sequence_ids = _sequence_ids(turns)
     for configuration in configurations:
-        compilers = PROMPT_GENERATORS[configuration.user_prompt_generator]
+        model_configuration = configuration.model_configuration
+        compilers = PROMPT_GENERATORS[model_configuration.user_prompt_generator]
         for repetition in range(1, repetitions + 1):
             for turn in turns:
                 use_follow_up = (
                     turn.group_id in sequence_ids
                     and turn.step_index > 1
-                    and configuration.conversation_reuse
+                    and model_configuration.conversation_reuse
                 )
                 compiler = compilers[1] if use_follow_up else compilers[0]
-                compilation = compiler(turn.request, "tutor-v13")
+                compilation = compiler(
+                    turn.request,
+                    model_configuration.prompt_version,
+                )
                 contract = ChessNativeResponseContract.from_markdown(compilation.markdown)
                 schema = contract.json_schema()
                 json.dumps(schema, sort_keys=True)
+                normalized_request = parse_neutral_request(turn.request)
                 cells.append(
                     {
                         "configuration": configuration,
@@ -135,10 +146,9 @@ def _preflight(configurations, turns, repetitions):
                         "compilation": compilation,
                         "contract": contract,
                         "schema": schema,
-                        "reasoningEffort": (
-                            configuration.follow_up_reasoning_effort
-                            if use_follow_up
-                            else configuration.initial_reasoning_effort
+                        "reasoningEffort": model_configuration.reasoning_effort(
+                            normalized_request,
+                            use_follow_up,
                         ),
                     }
                 )
@@ -147,25 +157,25 @@ def _preflight(configurations, turns, repetitions):
 
 def _execute_cell(cell, client, *, previous_response_id, price_table):
     configuration = cell["configuration"]
+    model_configuration = configuration.model_configuration
     record = _base_record(cell)
-    record["previousResponseIDUsed"] = previous_response_id
     response = None
     final_category = "providerError"
     final_http_status = None
     started = time.monotonic()
-    for attempt in range(1, configuration.maximum_attempts + 1):
+    for attempt in range(1, model_configuration.maximum_attempts + 1):
         record["attemptCount"] = attempt
         try:
             response = client.complete(
-                system_prompt=configuration.system_prompt,
+                system_prompt=model_configuration.system_prompt,
                 user_prompt=cell["compilation"].markdown,
                 schema=cell["schema"],
-                model=configuration.model,
+                model=model_configuration.model,
                 reasoning_effort=cell["reasoningEffort"],
-                maximum_output_tokens=configuration.maximum_output_tokens,
-                timeout=configuration.timeout_seconds,
+                maximum_output_tokens=model_configuration.maximum_output_tokens,
+                timeout=model_configuration.timeout_seconds,
                 previous_response_id=previous_response_id,
-                store=False,
+                store=model_configuration.store,
             )
             break
         except OpenAIResponsesError as error:
@@ -182,48 +192,50 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
             "valid": False,
             "categories": [final_category],
         }
-        return record
+        return record, None
 
     response_id = _bounded_identifier(response.get("id"))
     provider_model = _bounded_identifier(response.get("model"))
     output = response.get("output_text")
     usage = _usage(response.get("usage"))
-    record["providerResponseID"] = response_id
     record["providerModel"] = provider_model
     record["usage"] = usage
     if price_table is not None:
-        record["candidateCostUSD"] = str(price_table.estimate(configuration.model, usage))
+        record["candidateCostUSD"] = str(
+            price_table.estimate(model_configuration.model, usage)
+        )
     if not isinstance(output, str) or not output or _TRACE_MARKER.search(output):
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {
             "valid": False,
             "categories": ["invalidResponse"],
         }
-        return record
+        return record, response_id or None
     try:
         parsed = cell["contract"].parse_and_validate(output)
     except ChessNativeResponseValidationError as error:
         categories = list(error.categories)
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {"valid": False, "categories": categories}
-        return record
+        return record, response_id or None
     except ValueError:
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {
             "valid": False,
             "categories": ["validation"],
         }
-        return record
+        return record, response_id or None
 
     record["generationStatus"] = "completed"
     record["sanitizedOutput"] = output
     record["parsedTurn"] = parsed
     record["mechanicalValidation"] = {"valid": True, "categories": []}
-    return record
+    return record, response_id or None
 
 
 def _base_record(cell):
     configuration = cell["configuration"]
+    model_configuration = configuration.model_configuration
     turn = cell["turn"]
     repetition = cell["repetition"]
     user_prompt = cell["compilation"].markdown
@@ -238,10 +250,9 @@ def _base_record(cell):
         "category": turn.category,
         "repetition": repetition,
         "requestSHA256": _sha256(_canonical_json_bytes(turn.request)),
-        "systemPromptSHA256": configuration.system_prompt_sha256,
+        "systemPromptSHA256": model_configuration.system_prompt_sha256,
         "userPrompt": user_prompt,
         "userPromptSHA256": _sha256(user_prompt.encode("utf-8")),
-        "providerResponseID": "",
         "providerModel": "",
         "providerHTTPStatus": None,
         "sanitizedOutput": "",
@@ -258,7 +269,6 @@ def _base_record(cell):
         "latencyMilliseconds": 0.0,
         "timeToFirstTokenMilliseconds": None,
         "attemptCount": 0,
-        "previousResponseIDUsed": None,
         "candidateCostUSD": None,
     }
 
@@ -279,23 +289,35 @@ def _manifest(
 ):
     resolved = []
     for configuration in configurations:
+        model_configuration = configuration.model_configuration
         resolved.append(
             {
                 "id": configuration.identifier,
                 "configurationSHA256": configuration.sha256,
                 "baseline": configuration.baseline,
-                "provider": configuration.provider,
-                "model": configuration.model,
-                "initialReasoningEffort": configuration.initial_reasoning_effort,
-                "followUpReasoningEffort": configuration.follow_up_reasoning_effort,
-                "conversationReuse": configuration.conversation_reuse,
-                "maximumOutputTokens": configuration.maximum_output_tokens,
-                "timeoutSeconds": configuration.timeout_seconds,
-                "maximumAttempts": configuration.maximum_attempts,
-                "systemPromptSHA256": configuration.system_prompt_sha256,
-                "systemPrompt": configuration.system_prompt,
-                "userPromptGenerator": configuration.user_prompt_generator,
-                "responseContract": configuration.response_contract,
+                "modelConfigurationPath": configuration.raw[
+                    "modelConfigurationPath"
+                ],
+                "modelConfigurationSHA256": configuration.model_configuration_sha256,
+                "provider": model_configuration.provider,
+                "model": model_configuration.model,
+                "initialReasoningEffort": model_configuration.initial_reasoning_effort,
+                "tacticalFollowUpReasoningEffort": (
+                    model_configuration.tactical_follow_up_reasoning_effort
+                ),
+                "simpleFollowUpReasoningEffort": (
+                    model_configuration.simple_follow_up_reasoning_effort
+                ),
+                "conversationReuse": model_configuration.conversation_reuse,
+                "store": model_configuration.store,
+                "maximumOutputTokens": model_configuration.maximum_output_tokens,
+                "timeoutSeconds": model_configuration.timeout_seconds,
+                "maximumAttempts": model_configuration.maximum_attempts,
+                "systemPromptSHA256": model_configuration.system_prompt_sha256,
+                "systemPrompt": model_configuration.system_prompt,
+                "promptVersion": model_configuration.prompt_version,
+                "userPromptGenerator": model_configuration.user_prompt_generator,
+                "responseContract": model_configuration.response_contract,
                 "pricingVersion": configuration.pricing_version,
             }
         )

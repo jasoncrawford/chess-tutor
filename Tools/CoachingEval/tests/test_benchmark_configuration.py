@@ -24,15 +24,15 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         prompt_path.write_text("Coach one turn.\n", encoding="utf-8")
         self.prompt_path = prompt_path
         self.prompt_sha = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
-        self.candidate = {
-            "schemaVersion": "coaching-quality-candidate.v1",
-            "id": "production-sol-v1",
-            "baseline": True,
+        model_configuration = {
+            "schemaVersion": "hosted-coaching-model.v1",
             "provider": "openai-responses-v1",
             "model": "gpt-5.6-sol",
             "initialReasoningEffort": "high",
-            "followUpReasoningEffort": "none",
+            "tacticalFollowUpReasoningEffort": "low",
+            "simpleFollowUpReasoningEffort": "none",
             "conversationReuse": True,
+            "store": True,
             "maximumOutputTokens": 2048,
             "timeoutSeconds": 30,
             "maximumAttempts": 1,
@@ -40,6 +40,21 @@ class BenchmarkConfigurationTests(unittest.TestCase):
             "systemPromptSHA256": self.prompt_sha,
             "userPromptGenerator": "chess-native-v13",
             "responseContract": "chess-native-v13",
+        }
+        self.model_configuration_path = self.root / "configs/model.json"
+        self.model_configuration_path.parent.mkdir(parents=True)
+        self.model_configuration_path.write_text(
+            json.dumps(model_configuration), encoding="utf-8"
+        )
+        self.model_configuration_sha = hashlib.sha256(
+            self.model_configuration_path.read_bytes()
+        ).hexdigest()
+        self.candidate = {
+            "schemaVersion": "coaching-quality-candidate.v2",
+            "id": "production-sol-v1",
+            "baseline": True,
+            "modelConfigurationPath": "configs/model.json",
+            "modelConfigurationSHA256": self.model_configuration_sha,
             "pricingVersion": "openai-2026-09-01",
         }
         self.judge = {
@@ -117,7 +132,13 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         judge = load_judge(self.dump("judge.json", self.judge), self.root)
         prices = load_prices(self.dump("prices.json", self.prices))
 
-        self.assertEqual("Coach one turn.\n", candidate.system_prompt)
+        self.assertEqual(
+            "Coach one turn.\n", candidate.model_configuration.system_prompt
+        )
+        self.assertEqual(
+            self.model_configuration_sha,
+            candidate.model_configuration_sha256,
+        )
         self.assertTrue(candidate.baseline)
         self.assertEqual(64, len(candidate.sha256))
         self.assertEqual(20260901, judge.review_seed)
@@ -130,9 +151,11 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         )
 
         self.prompt_path.write_text("changed", encoding="utf-8")
-        self.assertEqual("Coach one turn.\n", candidate.system_prompt)
+        self.assertEqual(
+            "Coach one turn.\n", candidate.model_configuration.system_prompt
+        )
         with self.assertRaises(TypeError):
-            candidate.raw["model"] = "changed"
+            candidate.raw["modelConfigurationPath"] = "changed"
         with self.assertRaises(TypeError):
             prices.models["other"] = prices.models["gpt-5.6-sol"]
 
@@ -168,31 +191,21 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "hash"):
             load_judge(self.dump("reference-drift.json", judge), self.root)
 
-    def test_candidate_rejects_unknown_fields_hash_drift_unsupported_ids_and_escape(self):
-        for field, value in (
-            ("provider", "shell-command"),
-            ("userPromptGenerator", "arbitrary-python"),
-            ("responseContract", "permissive"),
-        ):
-            candidate = dict(self.candidate)
-            candidate[field] = value
-            with self.subTest(field=field), self.assertRaises(ValueError):
-                load_candidate(self.dump(f"{field}.json", candidate), self.root)
-
+    def test_candidate_rejects_unknown_fields_hash_drift_and_escape(self):
         candidate = dict(self.candidate, unexpected=True)
         with self.assertRaises(ValueError):
             load_candidate(self.dump("unknown.json", candidate), self.root)
 
-        candidate = dict(self.candidate, systemPromptSHA256="0" * 64)
+        candidate = dict(self.candidate, modelConfigurationSHA256="0" * 64)
         with self.assertRaisesRegex(ValueError, "hash"):
             load_candidate(self.dump("drift.json", candidate), self.root)
 
-        outside = self.root.parent / "outside-prompt.md"
-        outside.write_text("outside", encoding="utf-8")
+        outside = self.root.parent / "outside-model.json"
+        outside.write_text("{}", encoding="utf-8")
         candidate = dict(
             self.candidate,
-            systemPromptPath="../outside-prompt.md",
-            systemPromptSHA256=hashlib.sha256(outside.read_bytes()).hexdigest(),
+            modelConfigurationPath="../outside-model.json",
+            modelConfigurationSHA256=hashlib.sha256(outside.read_bytes()).hexdigest(),
         )
         with self.assertRaises(ValueError):
             load_candidate(self.dump("escape.json", candidate), self.root)
@@ -224,6 +237,7 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         prices = load_prices(benchmark / "pricing-v1.json")
 
         self.assertEqual("production-sol-v1", candidate.identifier)
+        self.assertEqual("gpt-5.6-sol", candidate.model_configuration.model)
         self.assertEqual("judge-sol-v1", judge.identifier)
         self.assertEqual("judge-sol-v2", judge_v2.identifier)
         self.assertEqual("openai-2026-09-01", prices.version)

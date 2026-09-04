@@ -14,6 +14,7 @@ import uuid
 from flask import Flask, Response, request
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
+from CoachingServer.model_configuration import HostedModelConfiguration
 from CoachingServer.service import (
     HostedCoachingCompletion,
     HostedCoachingService,
@@ -176,18 +177,16 @@ def create_environment_application():
     api_key = _required_environment("OPENAI_API_KEY")
     access_token = _required_environment("CHESS_TUTOR_COACHING_ACCESS_TOKEN")
     root = Path(__file__).resolve().parents[1]
-    system_prompt = (
-        root / "Tools/CoachingEval/prompts/tutor-v13.md"
-    ).read_text(encoding="utf-8")
+    configuration_path = os.environ.get(
+        "CHESS_TUTOR_COACHING_MODEL_CONFIG",
+        "CoachingServer/configs/production-v1.json",
+    )
+    configuration = HostedModelConfiguration.load(configuration_path, root)
     from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 
     service = HostedCoachingService(
         provider=OpenAIResponsesClient(api_key=api_key),
-        system_prompt=system_prompt,
-        follow_up_reasoning_effort=os.environ.get(
-            "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT",
-            "none",
-        ),
+        configuration=configuration,
     )
     return create_application(service=service, access_token=access_token)
 

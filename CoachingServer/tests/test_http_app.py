@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from flask import Flask
@@ -14,6 +15,7 @@ from CoachingServer.http_app import create_application, create_environment_appli
 from CoachingServer.service import HostedCoachingCompletion, HostedCoachingServiceError
 
 
+ROOT = Path(__file__).resolve().parents[2]
 GAME_ID = "a1111111-1111-4111-8111-111111111111"
 EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
 SAFE_DIAGNOSTICS = {
@@ -220,14 +222,13 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
                     self.assertIsNone(terminal[0]["request"])
                 self.assertNotIn("PRIVATE", json.dumps(events))
 
-    def test_environment_application_owns_v13_prompt_and_simple_follow_up_effort(self):
+    def test_environment_application_loads_the_pinned_shared_model_configuration(self):
         fake_service = FakeService()
         with mock.patch.dict(
             os.environ,
             {
                 "OPENAI_API_KEY": "private-key",
                 "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
-                "CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT": "none",
             },
             clear=True,
         ), mock.patch(
@@ -241,8 +242,39 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
         self.assertIsInstance(application, Flask)
         client_type.assert_called_once_with(api_key="private-key")
         arguments = service_type.call_args.kwargs
-        self.assertEqual("none", arguments["follow_up_reasoning_effort"])
-        self.assertTrue(arguments["system_prompt"].startswith("# Chess Tutor v13\n"))
+        configuration = arguments["configuration"]
+        self.assertEqual("gpt-5.6-sol", configuration.model)
+        self.assertEqual("high", configuration.initial_reasoning_effort)
+        self.assertEqual("low", configuration.tactical_follow_up_reasoning_effort)
+        self.assertEqual("none", configuration.simple_follow_up_reasoning_effort)
+        self.assertTrue(configuration.store)
+        self.assertTrue(configuration.system_prompt.startswith("# Chess Tutor v13\n"))
+
+    def test_environment_application_loads_a_repository_contained_override(self):
+        fake_service = FakeService()
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "private-key",
+                "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
+                "CHESS_TUTOR_COACHING_MODEL_CONFIG": (
+                    "CoachingServer/configs/production-v1.json"
+                ),
+            },
+            clear=True,
+        ), mock.patch(
+            "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
+        ), mock.patch(
+            "CoachingServer.http_app.HostedCoachingService",
+            return_value=fake_service,
+        ) as service_type:
+            create_environment_application()
+
+        configuration = service_type.call_args.kwargs["configuration"]
+        self.assertEqual(
+            ROOT / "CoachingServer/configs/production-v1.json",
+            configuration.path,
+        )
 
     def test_uses_flask_for_the_http_boundary(self):
         app = create_application(

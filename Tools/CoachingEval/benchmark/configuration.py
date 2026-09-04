@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
 from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
+from CoachingServer.model_configuration import HostedModelConfiguration
 
 
 PROMPT_GENERATORS = {
@@ -23,18 +24,8 @@ _CANDIDATE_KEYS = frozenset(
         "schemaVersion",
         "id",
         "baseline",
-        "provider",
-        "model",
-        "initialReasoningEffort",
-        "followUpReasoningEffort",
-        "conversationReuse",
-        "maximumOutputTokens",
-        "timeoutSeconds",
-        "maximumAttempts",
-        "systemPromptPath",
-        "systemPromptSHA256",
-        "userPromptGenerator",
-        "responseContract",
+        "modelConfigurationPath",
+        "modelConfigurationSHA256",
         "pricingVersion",
     )
 )
@@ -82,19 +73,9 @@ _JUDGE_V2_KEYS = frozenset(
 class CandidateConfiguration:
     identifier: str
     baseline: bool
-    provider: str
-    model: str
-    initial_reasoning_effort: str
-    follow_up_reasoning_effort: str
-    conversation_reuse: bool
-    maximum_output_tokens: int
-    timeout_seconds: float
-    maximum_attempts: int
-    system_prompt_path: Path
-    system_prompt_sha256: str
-    system_prompt: str
-    user_prompt_generator: str
-    response_contract: str
+    model_configuration_path: Path
+    model_configuration_sha256: str
+    model_configuration: HostedModelConfiguration
     pricing_version: str
     sha256: str
     raw: Mapping[str, Any]
@@ -166,32 +147,21 @@ class PriceTable:
 def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
     raw, raw_bytes = _load_json(path)
     _exact_keys(raw, _CANDIDATE_KEYS, "Candidate")
-    if raw["schemaVersion"] != "coaching-quality-candidate.v1":
+    if raw["schemaVersion"] != "coaching-quality-candidate.v2":
         raise ValueError("Unsupported candidate schema")
-    provider = _choice(raw["provider"], PROVIDERS, "provider")
-    generator = _choice(raw["userPromptGenerator"], PROMPT_GENERATORS, "user prompt generator")
-    contract = _choice(raw["responseContract"], RESPONSE_CONTRACTS, "response contract")
-    prompt_path, prompt_sha, prompt_text = _load_pinned_text(
-        repository_root, raw["systemPromptPath"], raw["systemPromptSHA256"], "System prompt"
+    model_path, model_configuration = _load_pinned_model_configuration(
+        repository_root,
+        raw["modelConfigurationPath"],
+        raw["modelConfigurationSHA256"],
     )
     return CandidateConfiguration(
         identifier=_string(raw["id"], "id"),
         baseline=_boolean(raw["baseline"], "baseline"),
-        provider=provider,
-        model=_string(raw["model"], "model"),
-        initial_reasoning_effort=_reasoning(raw["initialReasoningEffort"]),
-        follow_up_reasoning_effort=_reasoning(raw["followUpReasoningEffort"]),
-        conversation_reuse=_boolean(raw["conversationReuse"], "conversationReuse"),
-        maximum_output_tokens=_positive_int(raw["maximumOutputTokens"], "maximumOutputTokens"),
-        timeout_seconds=float(_positive_number(raw["timeoutSeconds"], "timeoutSeconds")),
-        maximum_attempts=_positive_int(raw["maximumAttempts"], "maximumAttempts"),
-        system_prompt_path=prompt_path,
-        system_prompt_sha256=prompt_sha,
-        system_prompt=prompt_text,
-        user_prompt_generator=generator,
-        response_contract=contract,
+        model_configuration_path=model_path,
+        model_configuration_sha256=model_configuration.sha256,
+        model_configuration=model_configuration,
         pricing_version=_string(raw["pricingVersion"], "pricingVersion"),
-        sha256=hashlib.sha256(_canonical_bytes(raw)).hexdigest(),
+        sha256=hashlib.sha256(raw_bytes).hexdigest(),
         raw=_frozen_copy(raw),
     )
 
@@ -351,6 +321,23 @@ def _load_pinned_text(repository_root, relative_path, expected_sha, label):
     if actual_sha != expected_sha:
         raise ValueError(f"{label} hash does not match")
     return resolved, actual_sha, text
+
+
+def _load_pinned_model_configuration(repository_root, relative_path, expected_sha):
+    repository_root = Path(repository_root).resolve()
+    relative_path = Path(_string(relative_path, "Model configuration path"))
+    if relative_path.is_absolute():
+        raise ValueError("Model configuration path must be repository-relative")
+    resolved = (repository_root / relative_path).resolve()
+    try:
+        resolved.relative_to(repository_root)
+    except ValueError:
+        raise ValueError("Model configuration path escapes repository root") from None
+    expected_sha = _hash(expected_sha, "Model configuration hash")
+    configuration = HostedModelConfiguration.load(resolved, repository_root)
+    if configuration.sha256 != expected_sha:
+        raise ValueError("Model configuration hash does not match")
+    return resolved, configuration
 
 
 def _exact_keys(value, expected, label):
