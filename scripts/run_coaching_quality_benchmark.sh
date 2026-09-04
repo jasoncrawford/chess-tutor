@@ -54,6 +54,11 @@ session_root="$artifact_root/runs/$timestamp"
 run_root="$session_root/candidates"
 grade_root="$session_root/grades"
 report_root="$session_root/report"
+qualification_root="$artifact_root/qualifications"
+production="$repository_root/Tools/CoachingEval/benchmark/configs/production-v1.json"
+judge="$repository_root/Tools/CoachingEval/benchmark/configs/judge-v2.json"
+prices="$repository_root/Tools/CoachingEval/benchmark/pricing-v1.json"
+cli=(python3 -m Tools.CoachingEval.benchmark.cli)
 completed=false
 interrupted=false
 
@@ -67,7 +72,21 @@ trap cleanup EXIT
 trap 'interrupted=true; exit 130' INT
 trap 'interrupted=true; exit 143' TERM
 
-mkdir -p "$(dirname "$corpus_root")" "$(dirname "$session_root")"
+mkdir -p "$qualification_root" "$(dirname "$corpus_root")" "$(dirname "$session_root")"
+
+echo "Ensuring the automatic judge is qualified..."
+set +e
+qualification_summary="$(OPENAI_API_KEY="$openai_api_key" "${cli[@]}" qualify \
+  --judge "$judge" --pricing "$prices" --artifact-root "$qualification_root")"
+qualification_status=$?
+set -e
+if [ "$qualification_status" -ne 0 ]; then
+  unset openai_api_key
+  echo "Judge qualification failed; candidate work was not started." >&2
+  exit "$qualification_status"
+fi
+qualification_path="$(printf '%s' "$qualification_summary" | /usr/bin/python3 -c \
+  'import json, sys; print(json.load(sys.stdin)["qualification"])')"
 
 echo "Exporting the deterministic coaching corpus..."
 COACHING_QUALITY_BENCHMARK_OUTPUT_DIR="$corpus_root" \
@@ -76,10 +95,6 @@ COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$source_sha" \
     -destination 'platform=iOS Simulator,name=iPad (A16)' \
     -only-testing:ChessTutorTests/CoachingQualityBenchmarkCorpusTests/testOptInExport
 
-production="$repository_root/Tools/CoachingEval/benchmark/configs/production-v1.json"
-judge="$repository_root/Tools/CoachingEval/benchmark/configs/judge-v1.json"
-prices="$repository_root/Tools/CoachingEval/benchmark/pricing-v1.json"
-cli=(python3 -m Tools.CoachingEval.benchmark.cli)
 run_arguments=(
   run --corpus "$corpus_root" --mode "$mode"
   --candidate "$production" --pricing "$prices" --output "$run_root"
@@ -105,11 +120,12 @@ fi
 echo "Running candidate coaching configurations..."
 OPENAI_API_KEY="$openai_api_key" "${cli[@]}" "${run_arguments[@]}"
 
-echo "Calibrating and running the automatic judge..."
+echo "Running the qualified automatic judge..."
 set +e
 OPENAI_API_KEY="$openai_api_key" "${cli[@]}" grade \
   --run "$run_root" --corpus "$corpus_root" --judge "$judge" \
-  --pricing "$prices" --output "$grade_root"
+  --pricing "$prices" --output "$grade_root" \
+  --qualification "$qualification_path"
 grade_status=$?
 set -e
 unset openai_api_key

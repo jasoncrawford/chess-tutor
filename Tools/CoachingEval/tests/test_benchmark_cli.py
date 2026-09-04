@@ -102,6 +102,7 @@ class BenchmarkCLITests(unittest.TestCase):
                     "grade", "--run", "run", "--corpus", "corpus",
                     "--judge", "judge.json", "--pricing", "prices.json",
                     "--output", str(grade_destination), "--api-key-env", "JUDGE_SECRET",
+                    "--qualification", "qualification.json",
                 ]
             )
         self.assertEqual(0, status)
@@ -128,6 +129,45 @@ class BenchmarkCLITests(unittest.TestCase):
         self.assertEqual(0, status)
         report_summary = json.loads(output.getvalue())
         self.assertEqual(str(summary_path), report_summary["summary"])
+        self.assertNotIn(self.secret, output.getvalue())
+
+    def test_qualify_prints_only_selected_artifact_and_keeps_key_private(self):
+        output = io.StringIO()
+        selected = self.root / "qualifications/accepted/qualification.json"
+        clients = []
+
+        class Client:
+            def __init__(self, *, api_key):
+                clients.append(api_key)
+
+        with (
+            mock.patch.dict(os.environ, {"JUDGE_SECRET": self.secret}, clear=True),
+            mock.patch.object(
+                cli, "load_judge", return_value=SimpleNamespace(identifier="judge-v2")
+            ),
+            mock.patch.object(cli, "load_prices", return_value=SimpleNamespace()),
+            mock.patch.object(
+                cli.JudgeQualification, "ensure", return_value=selected
+            ) as ensure,
+            mock.patch.object(cli, "OpenAIResponsesClient", Client),
+            redirect_stdout(output),
+        ):
+            status = cli.main(
+                [
+                    "qualify",
+                    "--judge", "judge.json",
+                    "--pricing", "prices.json",
+                    "--artifact-root", str(self.root / "qualifications"),
+                    "--api-key-env", "JUDGE_SECRET",
+                ]
+            )
+
+        self.assertEqual(0, status)
+        self.assertEqual([self.secret], clients)
+        self.assertEqual(1, ensure.call_count)
+        result = json.loads(output.getvalue())
+        self.assertEqual(str(selected), result["qualification"])
+        self.assertEqual("judge-v2", result["judgeID"])
         self.assertNotIn(self.secret, output.getvalue())
 
     def test_missing_named_credential_fails_before_provider_work(self):
@@ -189,11 +229,18 @@ class BenchmarkLauncherTests(unittest.TestCase):
             destination=''
             previous=''
             for value in "$@"; do
-              if [ "$previous" = '--output' ]; then destination="$value"; fi
+            if [ "$previous" = '--output' ]; then destination="$value"; fi
               previous="$value"
             done
             [ -n "$destination" ] && mkdir -p "$destination"
-            printf '%s\n' '{"status":"completed"}'
+            if [[ "$*" == *"benchmark.cli qualify"* ]]; then
+              printf '{"status":"completed","qualification":"%s/qualifications/fake/qualification.json"}\n' "$CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT"
+            else
+              printf '%s\n' '{"status":"completed"}'
+            fi
+            if [ "${FAKE_QUALIFY_FAIL:-}" = "1" ] && [[ "$*" == *"benchmark.cli qualify"* ]]; then
+              exit 8
+            fi
             if [ "${FAKE_GRADE_FAIL:-}" = "1" ] && [[ "$*" == *"benchmark.cli grade"* ]]; then
               exit 7
             fi
@@ -216,9 +263,13 @@ class BenchmarkLauncherTests(unittest.TestCase):
         commands = self.log.read_text()
         self.assertEqual(0, result.returncode, combined)
         self.assertEqual(1, commands.count("xcodebuild"))
+        self.assertEqual(1, commands.count("benchmark.cli qualify"))
         self.assertEqual(1, commands.count("benchmark.cli run"))
         self.assertEqual(1, commands.count("benchmark.cli grade"))
         self.assertEqual(1, commands.count("benchmark.cli report"))
+        self.assertLess(commands.index("benchmark.cli qualify"), commands.index("xcodebuild"))
+        self.assertLess(commands.index("benchmark.cli qualify"), commands.index("benchmark.cli run"))
+        self.assertIn("--qualification", commands)
         self.assertIn("production-v1.json", commands)
         self.assertIn("candidate.json", commands)
         self.assertNotIn("sk-private-launcher-key", combined)
@@ -282,6 +333,24 @@ class BenchmarkLauncherTests(unittest.TestCase):
         process.communicate(timeout=5)
         self.assertFalse((self.artifacts / "corpus/source-sha-20260901T120000Z").exists())
         self.assertFalse((self.artifacts / "runs/20260901T120000Z").exists())
+
+    def test_failed_qualification_prevents_corpus_and_candidate_work(self):
+        self.env["FAKE_QUALIFY_FAIL"] = "1"
+        result = subprocess.run(
+            [str(LAUNCHER), "quick"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        commands = self.log.read_text()
+        self.assertEqual(8, result.returncode)
+        self.assertEqual(1, commands.count("benchmark.cli qualify"))
+        self.assertNotIn("xcodebuild", commands)
+        self.assertNotIn("benchmark.cli run", commands)
+        self.assertNotIn("benchmark.cli grade", commands)
 
     def test_failed_grade_preserves_artifacts_and_still_builds_diagnostic_report(self):
         self.env["FAKE_GRADE_FAIL"] = "1"
