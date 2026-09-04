@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Judge reference review</title>
   <link rel="stylesheet" href="/review_app.css">
+  <script src="/review_core.js" defer></script>
   <script src="/review_app.js" defer></script>
 </head>
 <body>
@@ -105,7 +106,7 @@
             <label class="notes-field" for="review-notes">
               Notes <span>Optional; included in the copied summary</span>
             </label>
-            <textarea id="review-notes" rows="4" placeholder="What should change, or what did you verify?"></textarea>
+            <textarea id="review-notes" rows="4" maxlength="2000" placeholder="What should change, or what did you verify?"></textarea>
           </form>
         </article>
       </div>

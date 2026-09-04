@@ -217,6 +217,10 @@ def create_application(view_model: Mapping[str, Any]) -> Flask:
     def stylesheet():
         return _asset_response("review_app.css", "text/css; charset=utf-8")
 
+    @application.get("/review_core.js")
+    def review_core():
+        return _asset_response("review_core.js", "text/javascript; charset=utf-8")
+
     @application.get("/review_app.js")
     def javascript():
         return _asset_response("review_app.js", "text/javascript; charset=utf-8")

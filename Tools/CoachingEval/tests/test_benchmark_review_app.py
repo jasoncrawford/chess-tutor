@@ -12,6 +12,7 @@ from Tools.CoachingEval.benchmark import review_app
 ROOT = Path(__file__).resolve().parents[3]
 REFERENCE_PATH = ROOT / "Tools/CoachingEval/benchmark/judge-reference-v2.json"
 LAUNCHER_PATH = ROOT / "scripts/review_judge_references.sh"
+CORE_TEST_PATH = ROOT / "Tools/CoachingEval/tests/test_benchmark_review_core.js"
 EXPECTED_REFERENCE_SHA = (
     "3b0bb2ba35df5261967c1af4a0970fec67fd31dcc9f5616ab5c262af9f7c016d"
 )
@@ -110,18 +111,22 @@ class JudgeReferenceReviewHTTPTests(unittest.TestCase):
     def test_serves_static_shell_assets_and_separate_json_data(self):
         index = self.client.get("/")
         style = self.client.get("/review_app.css")
+        core_script = self.client.get("/review_core.js")
         script = self.client.get("/review_app.js")
         data = self.client.get("/api/review")
 
         self.assertEqual(200, index.status_code)
         self.assertEqual(200, style.status_code)
+        self.assertEqual(200, core_script.status_code)
         self.assertEqual(200, script.status_code)
         self.assertEqual(200, data.status_code)
         self.assertTrue(index.content_type.startswith("text/html"))
         self.assertTrue(style.content_type.startswith("text/css"))
+        self.assertTrue(core_script.content_type.startswith("text/javascript"))
         self.assertTrue(script.content_type.startswith("text/javascript"))
         self.assertEqual("application/json", data.content_type)
         self.assertIn(b'rel="stylesheet" href="/review_app.css"', index.data)
+        self.assertIn(b'src="/review_core.js"', index.data)
         self.assertIn(b'src="/review_app.js"', index.data)
         self.assertIn(b'<details class="reference-mark">', index.data)
         self.assertNotIn(self.model["cases"][0]["candidate"]["message"].encode(), index.data)
@@ -129,7 +134,13 @@ class JudgeReferenceReviewHTTPTests(unittest.TestCase):
         self.assertEqual(self.model, data.get_json())
 
     def test_routes_are_read_only_local_assets_with_browser_security_headers(self):
-        for path in ("/", "/review_app.css", "/review_app.js", "/api/review"):
+        for path in (
+            "/",
+            "/review_app.css",
+            "/review_core.js",
+            "/review_app.js",
+            "/api/review",
+        ):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual("nosniff", response.headers["X-Content-Type-Options"])
@@ -148,10 +159,26 @@ class JudgeReferenceReviewHTTPTests(unittest.TestCase):
         ), mock.patch(
             "socket.create_connection", side_effect=AssertionError("unexpected network call")
         ):
+            reference = review_app.load_reference_set()
+            model = review_app.build_review_view_model(reference)
+            self.assertEqual(30, len(model["cases"]))
             self.assertEqual(200, self.client.get("/api/review").status_code)
             self.assertEqual(200, self.client.get("/").status_code)
         self.assertEqual(before, REFERENCE_PATH.read_bytes())
         self.assertEqual(EXPECTED_REFERENCE_SHA, hashlib.sha256(before).hexdigest())
+
+    def test_executes_the_dependency_free_browser_review_core(self):
+        completed = subprocess.run(
+            ["node", str(CORE_TEST_PATH)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("9 review core tests passed", completed.stdout)
 
 
 class JudgeReferenceReviewLauncherTests(unittest.TestCase):

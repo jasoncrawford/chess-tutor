@@ -1,14 +1,7 @@
 (function () {
   "use strict";
 
-  const PIECES = {
-    K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
-    k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"
-  };
-  const PIECE_NAMES = {
-    K: "white king", Q: "white queen", R: "white rook", B: "white bishop", N: "white knight", P: "white pawn",
-    k: "black king", q: "black queen", r: "black rook", b: "black bishop", n: "black knight", p: "black pawn"
-  };
+  const core = window.JudgeReviewCore;
   const state = { model: null, reviews: {}, filter: "all", currentID: null };
 
   function element(tag, className, text) {
@@ -26,17 +19,15 @@
   }
 
   function reviewFor(caseID) {
-    if (!state.reviews[caseID]) state.reviews[caseID] = { decision: "unreviewed", notes: "" };
     return state.reviews[caseID];
   }
 
   function saveReviews() {
     try {
-      localStorage.setItem(state.model.reviewStorageKey, JSON.stringify({
-        schemaVersion: "judge-reference-browser-review.v1",
-        referenceSHA256: state.model.reference.sha256,
-        reviews: state.reviews
-      }));
+      localStorage.setItem(
+        state.model.reviewStorageKey,
+        JSON.stringify(core.storagePayload(state.model, state.reviews))
+      );
     } catch (_error) {
       announce("Review changed, but browser storage is unavailable.");
     }
@@ -45,13 +36,9 @@
   function loadReviews() {
     try {
       const saved = JSON.parse(localStorage.getItem(state.model.reviewStorageKey) || "null");
-      if (saved && saved.schemaVersion === "judge-reference-browser-review.v1" &&
-          saved.referenceSHA256 === state.model.reference.sha256 && saved.reviews &&
-          typeof saved.reviews === "object" && !Array.isArray(saved.reviews)) {
-        state.reviews = saved.reviews;
-      }
+      state.reviews = core.sanitizeStoredReview(state.model, saved);
     } catch (_error) {
-      state.reviews = {};
+      state.reviews = core.sanitizeStoredReview(state.model, null);
       announce("A saved review could not be read. Starting with a clean review.");
     }
   }
@@ -61,12 +48,7 @@
   }
 
   function visibleCases() {
-    return state.model.cases.filter(function (item) {
-      const decision = reviewFor(item.id).decision;
-      if (state.filter === "unreviewed") return decision === "unreviewed";
-      if (state.filter === "needsChange") return decision === "needsChange";
-      return true;
-    });
+    return core.visibleCases(state.model, state.reviews, state.filter);
   }
 
   function setCurrent(caseID, focusReview) {
@@ -107,10 +89,10 @@
   }
 
   function renderProgress() {
-    const decisions = state.model.cases.map(function (item) { return reviewFor(item.id).decision; });
-    const reviewed = decisions.filter(function (value) { return value !== "unreviewed"; }).length;
-    const needsChange = decisions.filter(function (value) { return value === "needsChange"; }).length;
-    const total = decisions.length;
+    const counts = core.progress(state.model, state.reviews);
+    const reviewed = counts.reviewed;
+    const needsChange = counts.needsChange;
+    const total = counts.total;
     const percent = total ? Math.round((reviewed / total) * 100) : 0;
     document.getElementById("progress-copy").textContent = reviewed + " of " + total + " reviewed" +
       (needsChange ? " · " + needsChange + " need change" : "");
@@ -179,29 +161,17 @@
   function renderBoard(fen) {
     const board = document.getElementById("chess-board");
     board.replaceChildren();
-    const rows = fen.split(" ")[0].split("/");
-    rows.forEach(function (row, rowIndex) {
-      let fileIndex = 0;
-      Array.from(row).forEach(function (symbol) {
-        const emptyCount = Number(symbol);
-        const count = Number.isInteger(emptyCount) && emptyCount > 0 ? emptyCount : 1;
-        for (let offset = 0; offset < count; offset += 1) {
-          const rank = 8 - rowIndex;
-          const file = String.fromCharCode(97 + fileIndex);
-          const square = element("div", "square " + ((rowIndex + fileIndex) % 2 === 0 ? "light" : "dark"));
-          square.setAttribute("role", "gridcell");
-          square.dataset.file = file;
-          square.dataset.rank = String(rank);
-          if (!Number.isInteger(emptyCount)) {
-            square.textContent = PIECES[symbol] || "";
-            square.setAttribute("aria-label", file + rank + ", " + (PIECE_NAMES[symbol] || "piece"));
-          } else {
-            square.setAttribute("aria-label", file + rank + ", empty");
-          }
-          board.append(square);
-          fileIndex += 1;
-        }
-      });
+    const parsed = core.parseFen(fen);
+    parsed.squares.forEach(function (value, index) {
+      const rowIndex = Math.floor(index / 8);
+      const fileIndex = index % 8;
+      const square = element("div", "square " + ((rowIndex + fileIndex) % 2 === 0 ? "light" : "dark"));
+      square.setAttribute("role", "gridcell");
+      square.dataset.file = value.file;
+      square.dataset.rank = String(value.rank);
+      square.textContent = value.piece || "";
+      square.setAttribute("aria-label", value.square + ", " + (value.pieceName || "empty"));
+      board.append(square);
     });
   }
 
@@ -326,74 +296,36 @@
 
   function updateDecision(decision) {
     if (!state.currentID) return;
-    reviewFor(state.currentID).decision = decision;
+    state.reviews = core.setDecision(state.model, state.reviews, state.currentID, decision);
     saveReviews();
     render();
   }
 
   function updateScore(input) {
-    const item = currentCase();
-    const review = reviewFor(item.id);
-    if (!review.scores) review.scores = {};
     const value = Number(input.value);
-    if (value === item.proposed.scores[input.dataset.score]) delete review.scores[input.dataset.score];
-    else review.scores[input.dataset.score] = value;
-    if (!Object.keys(review.scores).length) delete review.scores;
+    state.reviews = core.applyScore(
+      state.model, state.reviews, state.currentID, input.dataset.score, value
+    );
     saveReviews();
+    render();
   }
 
   function updateFlag(input) {
-    const item = currentCase();
-    const review = reviewFor(item.id);
-    if (!review.flags) review.flags = {};
-    if (input.checked === item.proposed.flags[input.dataset.flag]) delete review.flags[input.dataset.flag];
-    else review.flags[input.dataset.flag] = input.checked;
-    if (!Object.keys(review.flags).length) delete review.flags;
+    state.reviews = core.applyFlag(
+      state.model, state.reviews, state.currentID, input.dataset.flag, input.checked
+    );
     saveReviews();
+    render();
   }
 
   function changeCase(offset) {
     const filtered = visibleCases();
-    const index = filtered.findIndex(function (item) { return item.id === state.currentID; });
-    const target = filtered[index + offset];
-    if (target) setCurrent(target.id, true);
-  }
-
-  function summaryLine(item) {
-    const review = reviewFor(item.id);
-    const parts = ["case=" + item.id, "decision=" + review.decision];
-    if (item.kind === "absolute") {
-      const scoreChanges = state.model.rubric.scores.filter(function (rubric) {
-        return review.scores && review.scores[rubric.id] !== undefined;
-      }).map(function (rubric) {
-        return rubric.id + ":" + item.proposed.scores[rubric.id] + "->" + review.scores[rubric.id];
-      });
-      const flagChanges = state.model.rubric.flags.filter(function (rubric) {
-        return review.flags && review.flags[rubric.id] !== undefined;
-      }).map(function (rubric) {
-        return rubric.id + ":" + item.proposed.flags[rubric.id] + "->" + review.flags[rubric.id];
-      });
-      if (scoreChanges.length) parts.push("scores=[" + scoreChanges.join(",") + "]");
-      if (flagChanges.length) parts.push("flags=[" + flagChanges.join(",") + "]");
-    } else if (review.preference && review.preference !== item.proposed.preference) {
-      parts.push("preference=" + item.proposed.preference + "->" + review.preference);
-    }
-    const note = typeof review.notes === "string" ? review.notes.trim().replace(/\s+/g, " ") : "";
-    if (note) parts.push("note=" + JSON.stringify(note));
-    return parts.join(" ");
-  }
-
-  function reviewSummary() {
-    const reviewed = state.model.cases.filter(function (item) { return reviewFor(item.id).decision !== "unreviewed"; }).length;
-    return [
-      "JUDGE REFERENCE REVIEW v1",
-      "referenceSHA256=" + state.model.reference.sha256,
-      "reviewed=" + reviewed + "/" + state.model.cases.length
-    ].concat(state.model.cases.map(summaryLine)).join("\n") + "\n";
+    const targetID = core.adjacentCaseID(filtered, state.currentID, offset);
+    if (targetID) setCurrent(targetID, true);
   }
 
   async function copySummary() {
-    const summary = reviewSummary();
+    const summary = core.formatSummary(state.model, state.reviews);
     try {
       await navigator.clipboard.writeText(summary);
       announce("Review summary copied.");
@@ -422,18 +354,20 @@
     document.getElementById("change-decision").addEventListener("click", function () { updateDecision("needsChange"); });
     document.getElementById("review-form").addEventListener("submit", function (event) { event.preventDefault(); });
     document.getElementById("review-notes").addEventListener("input", function (event) {
-      reviewFor(state.currentID).notes = event.target.value;
+      state.reviews = core.setNotes(
+        state.model, state.reviews, state.currentID, event.target.value
+      );
       saveReviews();
     });
     document.getElementById("case-content").addEventListener("change", function (event) {
       if (event.target.matches("[data-score]")) updateScore(event.target);
       else if (event.target.matches("[data-flag]")) updateFlag(event.target);
       else if (event.target.matches('input[name="preference"]')) {
-        const item = currentCase();
-        const review = reviewFor(item.id);
-        if (event.target.value === item.proposed.preference) delete review.preference;
-        else review.preference = event.target.value;
+        state.reviews = core.applyPreference(
+          state.model, state.reviews, state.currentID, event.target.value
+        );
         saveReviews();
+        render();
       }
     });
     document.getElementById("case-filters").addEventListener("click", function (event) {
@@ -446,22 +380,33 @@
       render();
     });
     document.getElementById("approve-remaining").addEventListener("click", function () {
-      state.model.cases.forEach(function (item) {
-        const review = reviewFor(item.id);
-        if (review.decision === "unreviewed") review.decision = "agree";
-      });
+      const result = core.approveRemaining(state.model, state.reviews);
+      state.reviews = result.reviews;
       saveReviews();
       render();
-      announce("All previously unreviewed cases marked Agree.");
+      const approvedLabel = result.approved === 1 ? "case" : "cases";
+      const skippedLabel = result.skippedEdited.length === 1 ? "case" : "cases";
+      announce(
+        "Approved " + result.approved + " unchanged " + approvedLabel + "." +
+        (result.skippedEdited.length ? " " + result.skippedEdited.length +
+          " edited " + skippedLabel + " left unchanged." : "")
+      );
     });
     document.getElementById("copy-summary").addEventListener("click", copySummary);
     document.addEventListener("keydown", function (event) {
-      const tag = event.target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "ArrowLeft") { event.preventDefault(); changeCase(-1); }
-      else if (event.key === "ArrowRight") { event.preventDefault(); changeCase(1); }
-      else if (event.key.toLowerCase() === "a") { event.preventDefault(); updateDecision("agree"); }
-      else if (event.key.toLowerCase() === "c") { event.preventDefault(); updateDecision("needsChange"); }
+      const action = core.shortcutAction({
+        key: event.key,
+        targetTagName: event.target.tagName,
+        targetIsContentEditable: event.target.isContentEditable,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey
+      });
+      if (!action) return;
+      event.preventDefault();
+      if (action === "previous") changeCase(-1);
+      else if (action === "next") changeCase(1);
+      else updateDecision(action);
     });
   }
 
