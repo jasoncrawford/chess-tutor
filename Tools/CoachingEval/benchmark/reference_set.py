@@ -12,6 +12,7 @@ from typing import Any, Mapping, Optional
 from CoachingServer.chess_native_compiler import (
     compile_context,
     compile_follow_up_context,
+    parse_neutral_request,
 )
 from Tools.CoachingEval.benchmark.judge_contract import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
@@ -91,6 +92,22 @@ _CATEGORIES = frozenset(
 )
 _REQUEST_KINDS = frozenset(("initial", "followUp"))
 _REFERENCE_PREFERENCES = frozenset(("responseOne", "responseTwo", "tie"))
+_ACTION_REFERENCES = frozenset(
+    f"action:{action}"
+    for action in (
+        "hint",
+        "noPieceNeedsHelp",
+        "noSafeCapture",
+        "looksSafe",
+        "playMove",
+        "tryAnotherMove",
+        "closeHelp",
+    )
+)
+_NO_REFERENCE_EVENTS = frozenset(("helpOpened", "helpReopened", "helpClosed"))
+_PIECE_REFERENCE_EVENTS = frozenset(("pieceSelected", "squareInspected"))
+_MOVE_REFERENCE_EVENTS = frozenset(("moveStaged", "moveReplaced", "moveRemoved"))
+_MAXIMUM_JUDGE_CONTEXT_BYTES = 16_384
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _DIMENSION_LABELS = {
@@ -296,6 +313,9 @@ class JudgeReferenceSet:
             f"actions={json.dumps(list(case['availableUI']['actions']))}; "
             f"expectedResponses={json.dumps(list(case['availableUI']['expectedResponses']))}; "
             f"allowableMoveFocus={json.dumps([list(move) for move in case['availableUI']['allowableMoveFocus']])}.",
+            "",
+            "**Bounded judge context:** "
+            + json.dumps(self._thaw(case["judgeContext"]), sort_keys=True),
         ]
 
     @classmethod
@@ -341,11 +361,11 @@ class JudgeReferenceSet:
         sources = []
         compiled = {}
         for raw in raw_sources:
-            source, compilation = cls._validate_source(raw)
+            source, compilation, judge_context = cls._validate_source(raw)
             if source["id"] in compiled:
                 raise ValueError("Judge reference-set source IDs must be unique")
             sources.append(source)
-            compiled[source["id"]] = (source, compilation)
+            compiled[source["id"]] = (source, compilation, judge_context)
         return sources, compiled
 
     @classmethod
@@ -387,13 +407,15 @@ class JudgeReferenceSet:
 
         compiler = compile_context if request_kind == "initial" else compile_follow_up_context
         try:
+            parsed_request = parse_neutral_request(request)
             compilation = compiler(request, "tutor-v13")
         except (TypeError, ValueError) as error:
             raise ValueError("Judge reference source does not compile with production v13") from error
-        if request["interaction"]["latestEvent"]["kind"] == "helpClosed":
+        if parsed_request["interaction"]["latestEvent"]["kind"] == "helpClosed":
             raise ValueError("Judge reference source cannot be a help-closed turn")
-        cls._validate_event_references(request)
-        return source, compilation
+        cls._validate_event_semantics(parsed_request)
+        judge_context = cls._judge_context(parsed_request)
+        return source, compilation, judge_context
 
     @classmethod
     def _load_absolute_cases(cls, raw_cases, compiled):
@@ -405,7 +427,9 @@ class JudgeReferenceSet:
                 raise ValueError("Judge reference-set absolute case fields do not match")
             if raw["id"] != f"ref-{index:02}":
                 raise ValueError("Judge reference-set absolute case IDs or order do not match")
-            source, compilation = cls._resolve_source(raw["sourceID"], compiled)
+            source, compilation, judge_context = cls._resolve_source(
+                raw["sourceID"], compiled
+            )
             contract, available_ui = cls._contract_and_ui(compilation)
             cls._validate_turn(raw["candidateTurn"], contract)
             cls._validate_scores(raw["referenceScores"])
@@ -416,6 +440,7 @@ class JudgeReferenceSet:
                     raw,
                     graderBrief=source["graderBrief"],
                     availableUI=available_ui,
+                    judgeContext=judge_context,
                 )
             )
         return cases
@@ -430,7 +455,9 @@ class JudgeReferenceSet:
                 raise ValueError("Judge reference-set pairwise case fields do not match")
             if raw["id"] != f"pair-{index:02}":
                 raise ValueError("Judge reference-set pairwise case IDs or order do not match")
-            source, compilation = cls._resolve_source(raw["sourceID"], compiled)
+            source, compilation, judge_context = cls._resolve_source(
+                raw["sourceID"], compiled
+            )
             contract, available_ui = cls._contract_and_ui(compilation)
             cls._validate_turn(raw["responseOne"], contract)
             cls._validate_turn(raw["responseTwo"], contract)
@@ -442,6 +469,7 @@ class JudgeReferenceSet:
                     raw,
                     graderBrief=source["graderBrief"],
                     availableUI=available_ui,
+                    judgeContext=judge_context,
                 )
             )
         return cases
@@ -466,8 +494,15 @@ class JudgeReferenceSet:
     def _validate_turn(cls, value, contract):
         if not isinstance(value, dict) or set(value) != _TURN_KEYS:
             raise ValueError("Judge reference-set candidate turn is invalid")
-        issues = contract.validation_issues(cls._thaw(value))
-        if issues:
+        try:
+            candidate = json.dumps(
+                cls._thaw(value),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            )
+            contract.parse_and_validate(candidate)
+        except (TypeError, ValueError):
             raise ValueError("Judge reference-set candidate turn fails the app contract")
 
     @staticmethod
@@ -484,19 +519,158 @@ class JudgeReferenceSet:
         }
 
     @classmethod
-    def _validate_event_references(cls, request):
-        known = {piece["id"] for piece in request["pieces"]}
-        known.update(move["id"] for move in request["legalMoves"])
-        known.update(reply["move"]["id"] for reply in request["tentativeReplies"])
-        tentative = request["interaction"].get("tentativeMove")
-        if tentative is not None:
-            known.add(tentative["id"])
-        for event in request["interaction"]["episodeEvents"]:
-            for reference in event["referencedIDs"]:
-                if reference.startswith("action:") and len(reference) > len("action:"):
-                    continue
-                if reference not in known:
-                    raise ValueError("Judge reference source event reference does not resolve")
+    def _validate_event_semantics(cls, request):
+        interaction = request["interaction"]
+        events = interaction["episodeEvents"]
+        piece_ids = {piece["id"] for piece in request["pieces"]}
+        legal_moves_by_id = {move["id"]: move for move in request["legalMoves"]}
+        move_ids = set(legal_moves_by_id)
+        tentative = interaction["tentativeMove"]
+        if tentative is not None and legal_moves_by_id.get(tentative["id"]) != tentative:
+            raise ValueError(
+                "Judge reference source tentative move does not match legal move facts"
+            )
+
+        active_move = None
+        for index, event in enumerate(events):
+            kind = event["kind"]
+            references = event["referencedIDs"]
+            expected_count = 0 if kind in _NO_REFERENCE_EVENTS else 1
+            if len(references) != expected_count:
+                raise ValueError("Judge reference source event reference arity is invalid")
+            if expected_count == 0:
+                if kind == "helpReopened" and (
+                    index == 0 or events[index - 1]["kind"] != "helpClosed"
+                ):
+                    raise ValueError("Judge reference source Help reopen history is invalid")
+                continue
+
+            reference = references[0]
+            if kind == "actionChosen":
+                if reference not in _ACTION_REFERENCES:
+                    raise ValueError("Judge reference source action reference is invalid")
+                continue
+            if kind in _PIECE_REFERENCE_EVENTS:
+                if reference not in piece_ids:
+                    raise ValueError(
+                        "Judge reference source event reference does not resolve"
+                    )
+                continue
+            if kind not in _MOVE_REFERENCE_EVENTS or reference not in move_ids:
+                raise ValueError("Judge reference source event reference does not resolve")
+
+            if kind == "moveStaged":
+                if active_move is not None:
+                    raise ValueError("Judge reference source staged-move history is invalid")
+                active_move = reference
+            elif kind == "moveReplaced":
+                if active_move is None or reference == active_move:
+                    raise ValueError("Judge reference source replaced-move history is invalid")
+                active_move = reference
+            else:
+                if active_move is None or reference != active_move:
+                    raise ValueError("Judge reference source removed-move history is invalid")
+                active_move = None
+
+        tentative_id = tentative["id"] if tentative is not None else None
+        if active_move != tentative_id:
+            raise ValueError(
+                "Judge reference source event history does not match the tentative move"
+            )
+        selected_piece = interaction["selectedPieceReference"]
+        selected_square = interaction["selectedSquare"]
+        if tentative is not None and (
+            selected_piece != tentative["sourcePieceReference"]
+            or selected_square != tentative["destinationSquare"]
+        ):
+            raise ValueError(
+                "Judge reference source selected piece does not match the tentative move"
+            )
+        latest = interaction["latestEvent"]
+        if latest["kind"] == "pieceSelected" and tentative is None:
+            piece = next(
+                piece
+                for piece in request["pieces"]
+                if piece["id"] == latest["referencedIDs"][0]
+            )
+            if (
+                selected_piece != piece["id"]
+                or selected_square != piece["square"]
+            ):
+                raise ValueError(
+                    "Judge reference source selected piece does not match its event"
+                )
+
+    @classmethod
+    def _judge_context(cls, request):
+        interaction = request["interaction"]
+        context = {
+            "position": dict(request["position"]),
+            "moveHistory": [dict(move) for move in request["gameHistory"]],
+            "interaction": {
+                "events": [cls._event_evidence(event) for event in interaction["episodeEvents"]],
+                "latestEvent": cls._event_evidence(interaction["latestEvent"]),
+                "selectedPieceReference": interaction["selectedPieceReference"],
+                "selectedSquare": interaction["selectedSquare"],
+                "tentativeMove": (
+                    cls._move_evidence(interaction["tentativeMove"])
+                    if interaction["tentativeMove"] is not None
+                    else None
+                ),
+            },
+            "legalCaptures": [
+                cls._move_evidence(move)
+                for move in sorted(request["legalMoves"], key=lambda item: item["id"])
+                if move["capturePieceReference"] is not None
+            ],
+            "immediateReplies": [
+                cls._move_evidence(reply["move"])
+                for reply in cls._scoped_replies(request)
+            ],
+        }
+        if len(cls._canonical_json_bytes(context)) > _MAXIMUM_JUDGE_CONTEXT_BYTES:
+            raise ValueError("Judge reference source derived context is too large")
+        return context
+
+    @staticmethod
+    def _event_evidence(event):
+        return {
+            "sequence": event["sequence"],
+            "kind": event["kind"],
+            "referencedIDs": list(event["referencedIDs"]),
+        }
+
+    @staticmethod
+    def _move_evidence(move):
+        return {
+            "id": move["id"],
+            "sourcePieceReference": move["sourcePieceReference"],
+            "destinationSquare": move["destinationSquare"],
+            "capturePieceReference": move["capturePieceReference"],
+            "special": move["special"],
+            "isLegal": move["isLegal"],
+            "givesCheck": move["givesCheck"],
+            "givesCheckmate": move["givesCheckmate"],
+        }
+
+    @staticmethod
+    def _scoped_replies(request):
+        replies = tuple(
+            sorted(request["tentativeReplies"], key=lambda item: item["move"]["id"])
+        )
+        interaction = request["interaction"]
+        latest = interaction["latestEvent"]
+        if latest["kind"] != "squareInspected" or interaction["tentativeMove"] is None:
+            return replies
+        inspected_id = latest["referencedIDs"][0]
+        piece = next(piece for piece in request["pieces"] if piece["id"] == inspected_id)
+        if piece["color"] == request["position"]["sideToMove"]:
+            return replies
+        return tuple(
+            reply
+            for reply in replies
+            if reply["move"]["sourcePieceReference"] == inspected_id
+        )
 
     @staticmethod
     def _validate_scores(scores):
@@ -554,13 +728,16 @@ class JudgeReferenceSet:
 
     @staticmethod
     def _canonical_sha256(value):
-        data = json.dumps(
+        return hashlib.sha256(JudgeReferenceSet._canonical_json_bytes(value)).hexdigest()
+
+    @staticmethod
+    def _canonical_json_bytes(value):
+        return json.dumps(
             value,
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
-        return hashlib.sha256(data).hexdigest()
 
     @classmethod
     def _freeze(cls, value):

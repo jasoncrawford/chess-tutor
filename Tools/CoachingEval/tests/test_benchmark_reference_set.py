@@ -162,6 +162,93 @@ class JudgeReferenceSetTests(unittest.TestCase):
             {case["referencePreference"] for case in reference.pairwise_cases},
         )
 
+    def test_derived_judge_context_contains_bounded_neutral_evidence(self):
+        reference = self.load_committed()
+        absolute = {case["sourceID"]: case for case in reference.absolute_cases}
+
+        safe_capture = self.thaw(
+            absolute["c01-safe-queen-capture"]["judgeContext"]
+        )
+        self.assertEqual(
+            "rnb1kbnr/pppp1ppp/8/4p3/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+            safe_capture["position"]["fen"],
+        )
+        self.assertIn(
+            {
+                "id": "move:f3-h4",
+                "sourcePieceReference": "piece:white:knight:f3",
+                "destinationSquare": "h4",
+                "capturePieceReference": "piece:black:queen:h4",
+                "special": "none",
+                "isLegal": True,
+                "givesCheck": False,
+                "givesCheckmate": False,
+            },
+            safe_capture["legalCaptures"],
+        )
+
+        poisoned = self.thaw(
+            absolute["c02-poisoned-bishop-capture"]["judgeContext"]
+        )
+        self.assertEqual(
+            ["move:e8-f7"],
+            [move["id"] for move in poisoned["immediateReplies"]],
+        )
+        inspected = self.thaw(
+            absolute["s07-inspect-reply-03"]["judgeContext"]
+        )
+        self.assertEqual(
+            {
+                "sequence": 3,
+                "kind": "squareInspected",
+                "referencedIDs": ["piece:black:queen:f6"],
+            },
+            inspected["interaction"]["latestEvent"],
+        )
+        self.assertEqual(
+            ["move:f6-f3"],
+            [move["id"] for move in inspected["immediateReplies"]],
+        )
+
+        hint = self.thaw(absolute["s08-hint-then-act-02"]["judgeContext"])
+        self.assertEqual(
+            ["action:hint"],
+            hint["interaction"]["latestEvent"]["referencedIDs"],
+        )
+        en_passant = self.thaw(absolute["c06-en-passant"]["judgeContext"])
+        self.assertEqual(
+            ("en-passant", True, "piece:black:pawn:d5"),
+            (
+                en_passant["interaction"]["tentativeMove"]["special"],
+                en_passant["interaction"]["tentativeMove"]["isLegal"],
+                en_passant["interaction"]["tentativeMove"][
+                    "capturePieceReference"
+                ],
+            ),
+        )
+        mating_capture = self.thaw(
+            absolute["c05-mating-capture"]["judgeContext"]
+        )
+        self.assertIn(
+            ("move:h5-f7", True),
+            [
+                (move["id"], move["givesCheckmate"])
+                for move in mating_capture["legalCaptures"]
+            ],
+        )
+
+        pair_hint = self.thaw(reference.pairwise_cases[-1]["judgeContext"])
+        self.assertEqual(hint, pair_hint)
+        for case in (*reference.absolute_cases, *reference.pairwise_cases):
+            context = self.thaw(case["judgeContext"])
+            self.assertLessEqual(
+                len(json.dumps(context, separators=(",", ":")).encode("utf-8")),
+                16_384,
+            )
+            self.assertNotIn("request", case)
+            self.assertNotIn("rationale", context)
+            self.assertNotIn("referenceScores", context)
+
     def test_rejects_request_hash_source_resolution_and_candidate_contract_drift(self):
         value = self.reference_value(review_status="pending")
         value["sources"][0]["request"]["positionRevision"] = 1
@@ -209,6 +296,83 @@ class JudgeReferenceSetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "help-closed"):
             JudgeReferenceSet.load(path, sha, require_reviewed=False)
 
+    def test_rejects_fabricated_action_and_wrong_event_reference_arity(self):
+        value = self.reference_value(review_status="pending")
+        request = value["sources"][0]["request"]
+        fabricated = {
+            "sequence": 2,
+            "kind": "actionChosen",
+            "referencedIDs": ["action:fabricated"],
+        }
+        request["interaction"]["latestEvent"] = copy.deepcopy(fabricated)
+        request["interaction"]["episodeEvents"].append(copy.deepcopy(fabricated))
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+        path, sha = self.write_value("fabricated-action.json", value)
+        with self.assertRaisesRegex(ValueError, "action reference"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
+        value = self.reference_value(review_status="pending")
+        request = value["sources"][0]["request"]
+        request["interaction"]["latestEvent"]["referencedIDs"] = []
+        request["interaction"]["episodeEvents"][-1]["referencedIDs"] = []
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+        path, sha = self.write_value("wrong-event-arity.json", value)
+        with self.assertRaisesRegex(ValueError, "reference arity"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
+    def test_rejects_mismatched_staged_move_and_selected_piece(self):
+        value = self.staged_reference_value()
+        request = value["sources"][0]["request"]
+        request["interaction"]["latestEvent"]["referencedIDs"] = [
+            request["legalMoves"][1]["id"]
+        ]
+        request["interaction"]["episodeEvents"][-1]["referencedIDs"] = [
+            request["legalMoves"][1]["id"]
+        ]
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+        path, sha = self.write_value("mismatched-staged-move.json", value)
+        with self.assertRaisesRegex(ValueError, "tentative move"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
+        value = self.staged_reference_value()
+        request = value["sources"][0]["request"]
+        tentative = request["interaction"]["tentativeMove"]
+        request["interaction"]["selectedPieceReference"] = next(
+            piece["id"]
+            for piece in request["pieces"]
+            if piece["id"] != tentative["sourcePieceReference"]
+        )
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+        path, sha = self.write_value("mismatched-selected-piece.json", value)
+        with self.assertRaisesRegex(ValueError, "selected piece"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
+        value = self.staged_reference_value()
+        request = value["sources"][0]["request"]
+        request["interaction"]["tentativeMove"]["special"] = "castle-kingside"
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+        path, sha = self.write_value("mismatched-tentative-facts.json", value)
+        with self.assertRaisesRegex(ValueError, "legal move facts"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
+    def test_rejects_lone_unicode_surrogate_via_full_production_validator(self):
+        value = self.reference_value(review_status="pending")
+        value["absoluteCases"][0]["candidateTurn"]["message"] = "\ud800"
+        path, sha = self.write_value("lone-surrogate.json", value)
+        with self.assertRaisesRegex(ValueError, "app contract"):
+            JudgeReferenceSet.load(path, sha, require_reviewed=False)
+
+    def test_obsolete_commit_prompt_is_flagged_as_unavailable_dead_end(self):
+        reference = self.load_committed()
+        case = reference.absolute_cases[10]
+
+        self.assertEqual("h05-stale-selection-replaced", case["sourceID"])
+        self.assertEqual("chooseWhetherToPlay", case["candidateTurn"]["expects"])
+        self.assertTrue(case["referenceFlags"]["obsoleteStage"])
+        self.assertTrue(case["referenceFlags"]["mixedStages"])
+        self.assertTrue(case["referenceFlags"]["unavailableUIOrDeadEnd"])
+        self.assertTrue(case["referenceFlags"]["severeError"])
+
     def test_rejects_hash_wrong_inventories_and_handwritten_ui(self):
         path, sha = self.write_reference(review_status="pending")
         with self.assertRaisesRegex(ValueError, "hash"):
@@ -254,6 +418,7 @@ class JudgeReferenceSetTests(unittest.TestCase):
         self.assertIn("**Latest interaction:**", rendered)
         self.assertIn("**Staged move:**", rendered)
         self.assertIn("**Request SHA-256:**", rendered)
+        self.assertIn("**Bounded judge context:**", rendered)
         self.assertIn("allowableMoveFocus=", rendered)
         self.assertIn("**Reference preference:** responseTwo", rendered)
         self.assertIn("answerRevealingGuidance: true", rendered)
@@ -363,6 +528,26 @@ class JudgeReferenceSetTests(unittest.TestCase):
             "absoluteCases": absolute_cases,
             "pairwiseCases": pairwise_cases,
         }
+
+    def staged_reference_value(self):
+        value = self.reference_value(review_status="pending")
+        request = value["sources"][0]["request"]
+        tentative = copy.deepcopy(request["legalMoves"][0])
+        opened = {"sequence": 1, "kind": "helpOpened", "referencedIDs": []}
+        staged = {
+            "sequence": 2,
+            "kind": "moveStaged",
+            "referencedIDs": [tentative["id"]],
+        }
+        request["interaction"] = {
+            "selectedSquare": tentative["destinationSquare"],
+            "selectedPieceReference": tentative["sourcePieceReference"],
+            "tentativeMove": tentative,
+            "latestEvent": copy.deepcopy(staged),
+            "episodeEvents": [opened, copy.deepcopy(staged)],
+        }
+        value["sources"][0]["requestSHA256"] = canonical_sha(request)
+        return value
 
     @classmethod
     def thaw(cls, value):

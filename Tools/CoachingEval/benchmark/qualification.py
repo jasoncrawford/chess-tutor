@@ -256,6 +256,7 @@ class JudgeQualification:
             payload = {
                 "kind": "absolute",
                 "graderBrief": _plain(case["graderBrief"]),
+                "judgeContext": _plain(case["judgeContext"]),
                 "availableUI": _plain(case["availableUI"]),
                 "candidateTurn": _plain(case["candidateTurn"]),
             }

@@ -348,7 +348,7 @@
       "id": "ref-11",
       "rationale": [
         "The sentence can be factually true about the earlier move, so chess correctness remains separate from pedagogy.",
-        "It ignores the latest knight replacement and asks the learner to act on an obsolete stage, which is a severe coherence failure."
+        "It ignores the latest knight replacement, and chooseWhetherToPlay would act on the current knight rather than the obsolete pawn, so the requested choice is an unavailable severe dead end."
       ],
       "referenceFlags": {
         "answerRevealingGuidance": false,
@@ -356,7 +356,7 @@
         "mixedStages": true,
         "obsoleteStage": true,
         "severeError": true,
-        "unavailableUIOrDeadEnd": false,
+        "unavailableUIOrDeadEnd": true,
         "wrongUrgentPriority": false
       },
       "referenceScores": {

@@ -152,6 +152,63 @@ class JudgeQualificationTests(unittest.TestCase):
         )
         self.assertEqual(path, loaded.path)
 
+    def test_qualification_sends_bounded_replayed_context_to_judge(self):
+        client = QueueJudge(self.passing_outputs())
+        JudgeQualification.ensure(
+            self.configuration,
+            client,
+            None,
+            self.root / "context-qualification",
+            self.now,
+        )
+
+        safe_capture = json.loads(client.calls[3]["user_prompt"])
+        self.assertEqual(
+            {
+                "kind",
+                "graderBrief",
+                "judgeContext",
+                "availableUI",
+                "candidateTurn",
+            },
+            set(safe_capture),
+        )
+        self.assertEqual(
+            "rnb1kbnr/pppp1ppp/8/4p3/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+            safe_capture["judgeContext"]["position"]["fen"],
+        )
+        self.assertIn(
+            "move:f3-h4",
+            [
+                move["id"]
+                for move in safe_capture["judgeContext"]["legalCaptures"]
+            ],
+        )
+        poisoned = json.loads(client.calls[7]["user_prompt"])
+        self.assertEqual(
+            ["move:e8-f7"],
+            [
+                move["id"]
+                for move in poisoned["judgeContext"]["immediateReplies"]
+            ],
+        )
+        hint = json.loads(client.calls[12]["user_prompt"])
+        self.assertEqual(
+            ["action:hint"],
+            hint["judgeContext"]["interaction"]["latestEvent"][
+                "referencedIDs"
+            ],
+        )
+        for call in client.calls:
+            payload = json.loads(call["user_prompt"])
+            self.assertLessEqual(
+                len(json.dumps(payload["judgeContext"]).encode("utf-8")),
+                16_384,
+            )
+            self.assertNotIn("request", payload)
+            self.assertNotIn("rationale", payload["judgeContext"])
+            self.assertNotIn("referenceScores", payload["judgeContext"])
+
     def test_each_pass_must_clear_severe_and_dimension_thresholds(self):
         severe_outputs = self.passing_outputs()
         for index in (0, 1):
