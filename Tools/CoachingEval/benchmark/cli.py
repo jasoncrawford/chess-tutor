@@ -110,6 +110,7 @@ def _run(arguments):
         price_table=prices,
         diagnostic_subset=bool(arguments.case_ids),
     )
+    evidence = manifest["evidence"]
     return {
         "status": "completed",
         "command": "run",
@@ -120,6 +121,9 @@ def _run(arguments):
         "validCount": manifest["summary"]["validCount"],
         "failedCount": manifest["summary"]["failedCount"],
         "diagnosticSubset": bool(arguments.case_ids),
+        "evidenceClassification": evidence["classification"],
+        "trialEligible": evidence["trialEligible"],
+        "promotionEvidenceEligible": evidence["promotionEvidenceEligible"],
     }
 
 

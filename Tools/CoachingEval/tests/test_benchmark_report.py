@@ -2,7 +2,9 @@ import hashlib
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 from Tools.CoachingEval.benchmark.configuration import load_prices
 from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
@@ -56,7 +58,15 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(0.95, report["judgeQualification"]["minimumSevereAgreement"])
         self.assertEqual(0.9, report["judgeQualification"]["minimumPairwiseAgreement"])
         self.assertEqual(7.0, report["judgeQualification"]["ageDaysAtGrading"])
-        self.assertTrue(candidate["promotionEligible"])
+        self.assertFalse(candidate["trialEligible"])
+        self.assertFalse(candidate["promotionEligible"])
+        self.assertEqual("diagnosticSubset", report["evidence"]["classification"])
+        self.assertFalse(report["evidence"]["trialEligible"])
+        self.assertFalse(report["evidence"]["promotionEvidenceEligible"])
+        self.assertEqual(
+            {"decision": "keepBaseline", "configurationID": "baseline"},
+            report["recommendation"],
+        )
         self.assertIn("candidate", report["paretoFrontier"])
         self.assertNotIn("baseline", report["paretoFrontier"])
         self.assertEqual(
@@ -72,15 +82,9 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(10_000, first["confidenceIntervals"]["draws"])
         self.assertEqual(20260901, first["confidenceIntervals"]["seed"])
 
-        manifest_path = self.run_root / "run-manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        manifest["diagnosticSubset"] = True
-        manifest_path.write_text(json.dumps(manifest))
         diagnostic_subset = build_report(self.run_root, self.grade_root, self.prices)
         self.assertFalse(diagnostic_subset["promotionEligible"])
-        self.assertIn("diagnostic subset is not promotion eligible", diagnostic_subset["integrityIssues"])
-        manifest["diagnosticSubset"] = False
-        manifest_path.write_text(json.dumps(manifest))
+        self.assertEqual([], diagnostic_subset["integrityIssues"])
 
         records_path = self.run_root / "records.jsonl"
         lines = records_path.read_text().splitlines()
@@ -104,6 +108,13 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn("Experiment changes", summary)
         self.assertIn("Quality and reliability", summary)
         self.assertIn("Candidate cost", summary)
+        self.assertIn("Execution policy", summary)
+        self.assertIn("Eligibility gates", summary)
+        self.assertIn(
+            "Complete holdout comparison evidence is required for promotion.",
+            summary,
+        )
+        self.assertIn("Keep the production baseline", summary)
         self.assertIn("Judge overhead", summary)
         self.assertIn("Judge qualification", summary)
         self.assertIn("Pareto frontier", summary)
@@ -137,6 +148,112 @@ class BenchmarkReportTests(unittest.TestCase):
         )
         self.assertIn("unknown (accounting incomplete)", summary.read_text())
 
+    def test_missing_candidate_price_is_unknown_not_zero_cost(self):
+        missing_prices = replace(self.prices, models=MappingProxyType({}))
+
+        report = build_report(self.run_root, self.grade_root, missing_prices)
+
+        candidate_cost = report["configurations"]["candidate"]["candidateCostUSD"]
+        self.assertFalse(candidate_cost["accountingComplete"])
+        self.assertIsNone(candidate_cost["total"])
+        self.assertIsNone(candidate_cost["perResponse"])
+        self.assertIn("missing price coverage for candidate", report["integrityIssues"])
+
+    def test_development_comparison_can_qualify_a_trial_but_not_promotion(self):
+        run_root, grade_root = self.make_complete_comparison(
+            self.root / "development-comparison",
+            include_holdout=False,
+        )
+
+        report = build_report(run_root, grade_root, self.prices)
+        candidate = report["configurations"]["candidate"]
+
+        self.assertEqual("developmentComparison", report["evidence"]["classification"])
+        self.assertTrue(report["evidence"]["completeMatrix"])
+        self.assertTrue(candidate["trialEligible"])
+        self.assertFalse(candidate["promotionEligible"])
+        self.assertIn(
+            "Complete holdout comparison evidence is required for promotion.",
+            candidate["promotionReasons"],
+        )
+        self.assertEqual(
+            {"decision": "keepBaseline", "configurationID": "baseline"},
+            report["recommendation"],
+        )
+
+    def test_complete_holdout_requires_every_concrete_promotion_gate(self):
+        passing_run, passing_grades = self.make_complete_comparison(
+            self.root / "passing-holdout",
+            include_holdout=True,
+        )
+        passing = build_report(passing_run, passing_grades, self.prices)
+        self.assertTrue(passing["configurations"]["candidate"]["promotionEligible"])
+        self.assertEqual(
+            {"decision": "promoteChallenger", "configurationID": "candidate"},
+            passing["recommendation"],
+        )
+
+        blocked = (
+            ("newMechanicalFailure", "Introduces a new mechanical failure category."),
+            ("higherSevereRate", "Severe-error rate is higher than production."),
+            ("noStrongImprovement", "Strong-response rate does not improve on production."),
+            ("noPairwiseAdvantage", "Pairwise wins do not exceed losses."),
+        )
+        for gate, reason in blocked:
+            with self.subTest(gate=gate):
+                run_root, grade_root = self.make_complete_comparison(
+                    self.root / gate,
+                    include_holdout=True,
+                    blocked_gate=gate,
+                )
+                report = build_report(run_root, grade_root, self.prices)
+                candidate = report["configurations"]["candidate"]
+                self.assertFalse(candidate["promotionEligible"])
+                self.assertIn(reason, candidate["promotionReasons"])
+                self.assertEqual(
+                    {"decision": "keepBaseline", "configurationID": "baseline"},
+                    report["recommendation"],
+                )
+
+    def test_incomplete_matrix_or_grading_cannot_support_eligibility(self):
+        partial_parent = self.root / "partial-comparison"
+        partial_parent.mkdir()
+        partial_run, partial_grades = self.make_artifacts(partial_parent)
+        manifest_path = partial_run / "run-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update(
+            {
+                "diagnosticSubset": False,
+                "evidence": {
+                    "classification": "developmentComparison",
+                    "trialEligible": True,
+                    "promotionEvidenceEligible": False,
+                },
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest))
+        partial = build_report(partial_run, partial_grades, self.prices)
+        self.assertFalse(partial["trialEligible"])
+        self.assertIn(
+            "candidate comparison matrix is incomplete",
+            partial["integrityIssues"],
+        )
+
+        run_root, grade_root = self.make_complete_comparison(
+            self.root / "incomplete-grading",
+            include_holdout=True,
+        )
+        grade_manifest_path = grade_root / "grade-manifest.json"
+        grade_manifest = json.loads(grade_manifest_path.read_text())
+        grade_manifest["status"] = "failed"
+        grade_manifest_path.write_text(json.dumps(grade_manifest))
+        incomplete_grading = build_report(run_root, grade_root, self.prices)
+        self.assertFalse(incomplete_grading["promotionEligible"])
+        self.assertIn(
+            "grade run did not complete",
+            incomplete_grading["integrityIssues"],
+        )
+
     def test_reads_legacy_calibration_artifacts(self):
         legacy_root = self.root / "legacy"
         legacy_root.mkdir()
@@ -148,6 +265,163 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIsNone(report["judgeQualification"])
         self.assertEqual(30, report["judgeOverhead"]["callCount"])
         self.assertEqual([], report["integrityIssues"])
+
+    def make_complete_comparison(
+        self,
+        parent,
+        *,
+        include_holdout,
+        blocked_gate=None,
+    ):
+        parent.mkdir()
+        run_root, grade_root = self.make_artifacts(parent)
+        run_manifest = json.loads((run_root / "run-manifest.json").read_text())
+        grade_manifest = json.loads((grade_root / "grade-manifest.json").read_text())
+        configurations = run_manifest["configurations"]
+        case_splits = [
+            (f"development-{index:02}", "development")
+            for index in range(1, 57)
+        ]
+        if include_holdout:
+            case_splits.extend(
+                (f"holdout-{index:02}", "holdout")
+                for index in range(1, 15)
+            )
+
+        records = []
+        grades = []
+        for configuration_id in ("baseline", "candidate"):
+            for repetition in range(1, 4):
+                for case_index, (case_id, split) in enumerate(case_splits):
+                    cell_id = f"{configuration_id}|{case_id}|r{repetition}"
+                    is_first_candidate = (
+                        configuration_id == "candidate"
+                        and repetition == 1
+                        and case_index == 0
+                    )
+                    mechanically_valid = not (
+                        blocked_gate == "newMechanicalFailure"
+                        and is_first_candidate
+                    )
+                    categories = [] if mechanically_valid else ["invalidResponse"]
+                    records.append(
+                        {
+                            "cellID": cell_id,
+                            "configurationID": configuration_id,
+                            "caseID": case_id,
+                            "groupID": case_id,
+                            "stepIndex": 1,
+                            "split": split,
+                            "category": "quiet",
+                            "repetition": repetition,
+                            "generationStatus": (
+                                "completed" if mechanically_valid else "invalid"
+                            ),
+                            "providerHTTPStatus": None,
+                            "mechanicalValidation": {
+                                "valid": mechanically_valid,
+                                "categories": categories,
+                            },
+                            "usage": {
+                                "inputTokens": 100,
+                                "cachedInputTokens": 10,
+                                "outputTokens": 10,
+                                "reasoningTokens": 2,
+                                "totalTokens": 110,
+                            },
+                            "latencyMilliseconds": (
+                                1000 if configuration_id == "baseline" else 900
+                            ),
+                            "attemptCount": 1,
+                            "candidateCostUSD": None,
+                        }
+                    )
+                    score = 3 if configuration_id == "baseline" else 5
+                    if blocked_gate == "noStrongImprovement" and configuration_id == "candidate":
+                        score = 3
+                    flags = {flag: False for flag in RUBRIC_FLAGS}
+                    if blocked_gate == "higherSevereRate" and is_first_candidate:
+                        flags["severeError"] = True
+                    grades.append(
+                        {
+                            "schemaVersion": "coaching-quality-absolute-grade.v1",
+                            "cellID": cell_id,
+                            "disposition": (
+                                "judged" if mechanically_valid else "unusable"
+                            ),
+                            "scores": {
+                                dimension: score for dimension in RUBRIC_DIMENSIONS
+                            },
+                            "flags": flags,
+                            "evidence": ["Synthetic complete-matrix evidence."],
+                            "judgeMetrics": self.metrics(1),
+                        }
+                    )
+
+        pairs = []
+        pair_index = 0
+        pair_total = len(case_splits) * 3
+        for repetition in range(1, 4):
+            for case_id, _split in case_splits:
+                outcome = "candidateWin"
+                if blocked_gate == "noPairwiseAdvantage" and pair_index >= pair_total // 2:
+                    outcome = "candidateLoss"
+                pairs.append(
+                    {
+                        "schemaVersion": "coaching-quality-pairwise-grade.v1",
+                        "pairID": f"candidate|{case_id}|r{repetition}|vs|baseline",
+                        "outcome": outcome,
+                        "candidatePresentedAs": "A",
+                        "evidence": ["Synthetic complete-matrix pair evidence."],
+                        "judgeMetrics": self.metrics(1),
+                    }
+                )
+                pair_index += 1
+
+        records_bytes = self.jsonl(records)
+        absolute_bytes = self.jsonl(grades)
+        pairwise_bytes = self.jsonl(pairs)
+        (run_root / "records.jsonl").write_bytes(records_bytes)
+        (grade_root / "absolute-grades.jsonl").write_bytes(absolute_bytes)
+        (grade_root / "pairwise-grades.jsonl").write_bytes(pairwise_bytes)
+        classification = (
+            "holdoutComparison" if include_holdout else "developmentComparison"
+        )
+        run_manifest.update(
+            {
+                "mode": "comparison",
+                "diagnosticSubset": False,
+                "includeHoldout": include_holdout,
+                "evidence": {
+                    "classification": classification,
+                    "trialEligible": True,
+                    "promotionEvidenceEligible": include_holdout,
+                },
+                "recordIDs": [record["cellID"] for record in records],
+                "recordsSHA256": self.sha(records_bytes),
+                "summary": {
+                    "recordCount": len(records),
+                    "validCount": sum(
+                        record["mechanicalValidation"]["valid"] for record in records
+                    ),
+                    "failedCount": sum(
+                        not record["mechanicalValidation"]["valid"] for record in records
+                    ),
+                },
+            }
+        )
+        (run_root / "run-manifest.json").write_text(json.dumps(run_manifest))
+        grade_manifest.update(
+            {
+                "sourceRunRecordsSHA256": self.sha(records_bytes),
+                "absoluteGradesSHA256": self.sha(absolute_bytes),
+                "pairwiseGradesSHA256": self.sha(pairwise_bytes),
+                "absoluteGradeCount": len(grades),
+                "pairwiseGradeCount": len(pairs),
+            }
+        )
+        (grade_root / "grade-manifest.json").write_text(json.dumps(grade_manifest))
+        return run_root, grade_root
 
     def make_artifacts(self, parent=None, *, legacy=False):
         parent = parent or self.root
@@ -162,10 +436,13 @@ class BenchmarkReportTests(unittest.TestCase):
                 "model": "gpt-5.6-sol",
                 "systemPromptSHA256": "a" * 64,
                 "initialReasoningEffort": "high",
-                "followUpReasoningEffort": "none",
+                "tacticalFollowUpReasoningEffort": "low",
+                "simpleFollowUpReasoningEffort": "none",
                 "conversationReuse": True,
+                "store": True,
                 "maximumOutputTokens": 2048,
                 "userPromptGenerator": "chess-native-v13",
+                "pricingVersion": self.prices.version,
             },
             {
                 "id": "candidate",
@@ -173,10 +450,13 @@ class BenchmarkReportTests(unittest.TestCase):
                 "model": "gpt-5.6-sol",
                 "systemPromptSHA256": "b" * 64,
                 "initialReasoningEffort": "medium",
-                "followUpReasoningEffort": "none",
+                "tacticalFollowUpReasoningEffort": "low",
+                "simpleFollowUpReasoningEffort": "none",
                 "conversationReuse": True,
+                "store": True,
                 "maximumOutputTokens": 1024,
                 "userPromptGenerator": "chess-native-v13",
+                "pricingVersion": self.prices.version,
             },
         ]
         records = []
@@ -239,8 +519,13 @@ class BenchmarkReportTests(unittest.TestCase):
         run_manifest = {
             "schemaVersion": "coaching-quality-candidate-run.v1",
             "mode": "comparison",
-            "diagnosticSubset": False,
+            "diagnosticSubset": True,
             "includeHoldout": False,
+            "evidence": {
+                "classification": "diagnosticSubset",
+                "trialEligible": False,
+                "promotionEvidenceEligible": False,
+            },
             "corpusSHA256": "c" * 64,
             "sourceGitSHA": "source",
             "configurations": configurations,

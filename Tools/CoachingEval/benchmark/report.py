@@ -41,6 +41,8 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
     if grade_version == "coaching-quality-grade-run.v1":
         calibration = _read_object(grade_root / "calibration.json", "judge calibration")
     elif grade_version == "coaching-quality-grade-run.v2":
+        if grade_manifest.get("status") != "completed":
+            issues.append("grade run did not complete")
         qualification_bytes, qualification = _read_object_bytes(
             grade_root / "qualification.json", "judge qualification"
         )
@@ -96,10 +98,8 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         issues.append("grade source run hash mismatch")
     if grade_manifest.get("corpusSHA256") != run_manifest.get("corpusSHA256"):
         issues.append("grade corpus hash mismatch")
-    if run_manifest.get("diagnosticSubset") is True:
-        issues.append("diagnostic subset is not promotion eligible")
-
     configurations = _configurations(run_manifest, issues)
+    _validate_configuration_policies(configurations, price_table, issues)
     record_ids = _unique_ids(records, "cellID", "candidate record", issues)
     manifest_ids = run_manifest.get("recordIDs")
     if not isinstance(manifest_ids, list) or any(
@@ -147,7 +147,12 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
             issues,
         )
 
-    baseline_id = _baseline_id(configurations, issues)
+    baseline_id = _baseline_id(
+        configurations,
+        issues,
+        comparison=run_manifest.get("mode") == "comparison",
+    )
+    evidence = _run_evidence(run_manifest, records, configurations, issues)
     confidence = _confidence_intervals(
         records, grades_by_id, baseline_id, configurations
     )
@@ -156,12 +161,14 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         aggregates,
         baseline_id,
         issues,
+        evidence,
     )
     global_eligible = not issues and any(
         value.get("promotionEligible") is True for value in aggregates.values()
     )
     judge_overhead = _judge_overhead(calibration, absolute, pairwise)
     qualification_summary = _qualification_summary(qualification, grade_manifest)
+    recommendation = _recommendation(aggregates, baseline_id)
 
     return {
         "schemaVersion": "coaching-quality-report.v2",
@@ -178,13 +185,19 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
             ),
         },
         "mode": run_manifest.get("mode"),
+        "evidence": evidence,
+        "executionPolicies": _execution_policies(configurations),
         "experimentChanges": _experiment_changes(configurations, baseline_id),
         "configurations": aggregates,
         "confidenceIntervals": confidence,
         "paretoFrontier": frontier,
         "judgeOverhead": judge_overhead,
         "judgeQualification": qualification_summary,
+        "trialEligible": not issues and any(
+            value.get("trialEligible") is True for value in aggregates.values()
+        ),
         "promotionEligible": global_eligible,
+        "recommendation": recommendation,
         "integrityIssues": _ordered_unique(issues),
         "mechanicalFailures": _mechanical_failures(records),
         "worstExamples": _worst_examples(run_root, records_by_id, grades_by_id),
@@ -241,6 +254,7 @@ def _aggregate_configuration(
     usage = _usage_total(record.get("usage") for record in records)
     latencies = [_bounded_number(record.get("latencyMilliseconds")) for record in records]
     candidate_cost = Decimal(0)
+    candidate_accounting_complete = True
     for record in records:
         try:
             candidate_cost += price_table.estimate(
@@ -248,6 +262,7 @@ def _aggregate_configuration(
             )
         except ValueError:
             issues.append(f"missing price coverage for {identifier}")
+            candidate_accounting_complete = False
     pair_counts = _pair_counts(identifier, configuration, pairwise)
     categories = sorted(
         {record.get("category") for record in records if isinstance(record.get("category"), str)}
@@ -293,14 +308,27 @@ def _aggregate_configuration(
             ),
         },
         "candidateCostUSD": {
-            "total": _decimal_string(candidate_cost),
-            "perResponse": _decimal_string(
-                candidate_cost / response_count if response_count else Decimal(0)
+            "accountingComplete": candidate_accounting_complete,
+            "total": (
+                _decimal_string(candidate_cost)
+                if candidate_accounting_complete
+                else None
+            ),
+            "perResponse": (
+                _decimal_string(
+                    candidate_cost / response_count
+                    if response_count
+                    else Decimal(0)
+                )
+                if candidate_accounting_complete
+                else None
             ),
         },
         "completeSequenceCostsUSD": _sequence_costs(
             records, configuration, price_table, issues
         ),
+        "trialEligible": False,
+        "trialReasons": [],
         "promotionEligible": False,
         "promotionReasons": [],
     }
@@ -489,37 +517,86 @@ def _pareto_frontier(aggregates):
 
 
 def _pareto_metrics(value):
+    cost = value["candidateCostUSD"]["total"]
     return (
         value["quality"]["allDimensionsAtLeast4Rate"],
         value["quality"]["severeErrorRate"],
         value["latencyMilliseconds"]["p90"],
-        Decimal(value["candidateCostUSD"]["total"]),
+        Decimal(cost) if cost is not None else Decimal("Infinity"),
     )
 
 
-def _apply_promotion_eligibility(aggregates, baseline_id, issues):
+def _apply_promotion_eligibility(aggregates, baseline_id, issues, evidence):
     if baseline_id is None or baseline_id not in aggregates:
         return
     baseline = aggregates[baseline_id]
+    baseline["trialReasons"] = ["Production baseline is the comparison reference."]
     baseline["promotionReasons"] = ["Production baseline is the comparison reference."]
     for identifier, candidate in aggregates.items():
         if identifier == baseline_id:
             continue
-        reasons = []
+        gate_reasons = []
         candidate_failures = set(candidate["reliability"]["mechanicalFailureCategories"])
         baseline_failures = set(baseline["reliability"]["mechanicalFailureCategories"])
         if candidate_failures - baseline_failures:
-            reasons.append("Introduces a new mechanical failure category.")
+            gate_reasons.append("Introduces a new mechanical failure category.")
         if candidate["quality"]["severeErrorRate"] > baseline["quality"]["severeErrorRate"]:
-            reasons.append("Severe-error rate is higher than production.")
+            gate_reasons.append("Severe-error rate is higher than production.")
         if candidate["pairwise"]["wins"] <= candidate["pairwise"]["losses"]:
-            reasons.append("Pairwise wins do not exceed losses.")
+            gate_reasons.append("Pairwise wins do not exceed losses.")
         if candidate["quality"]["allDimensionsAtLeast4Rate"] <= baseline["quality"]["allDimensionsAtLeast4Rate"]:
-            reasons.append("Strong-response rate does not improve on production.")
+            gate_reasons.append("Strong-response rate does not improve on production.")
         if issues:
-            reasons.append("Artifact integrity is incomplete.")
-        candidate["promotionReasons"] = reasons or ["Eligible for a human app trial."]
-        candidate["promotionEligible"] = not reasons
+            gate_reasons.append("Artifact integrity is incomplete.")
+
+        trial_reasons = list(gate_reasons)
+        if not evidence["trialEligible"]:
+            trial_reasons.append(
+                "Complete development or holdout comparison evidence is required for trial."
+            )
+        candidate["trialReasons"] = trial_reasons or [
+            "Eligible to advance from comparison evidence."
+        ]
+        candidate["trialEligible"] = not trial_reasons
+
+        promotion_reasons = list(gate_reasons)
+        if not evidence["promotionEvidenceEligible"]:
+            promotion_reasons.append(
+                "Complete holdout comparison evidence is required for promotion."
+            )
+        candidate["promotionReasons"] = promotion_reasons or [
+            "Eligible to replace the production baseline."
+        ]
+        candidate["promotionEligible"] = not promotion_reasons
+
+
+def _recommendation(aggregates, baseline_id):
+    eligible = [
+        (identifier, value)
+        for identifier, value in aggregates.items()
+        if value.get("promotionEligible") is True
+    ]
+    if eligible:
+        identifier, _value = min(
+            eligible,
+            key=lambda item: (
+                -item[1]["quality"]["allDimensionsAtLeast4Rate"],
+                item[1]["quality"]["severeErrorRate"],
+                -(item[1]["pairwise"]["wins"] - item[1]["pairwise"]["losses"]),
+                item[1]["latencyMilliseconds"]["p90"],
+                _candidate_cost_sort_value(item[1]),
+                item[0],
+            ),
+        )
+        return {"decision": "promoteChallenger", "configurationID": identifier}
+    if baseline_id is not None:
+        return {"decision": "keepBaseline", "configurationID": baseline_id}
+    return {"decision": "noPromotionRecommendation", "configurationID": None}
+
+
+def _candidate_cost_sort_value(value):
+    cost = value["candidateCostUSD"]["total"]
+    return Decimal(cost) if cost is not None else Decimal("Infinity")
 
 
 def _judge_overhead(calibration, absolute, pairwise):
@@ -730,6 +807,147 @@ def _public_configuration(configuration):
     }
 
 
+def _validate_configuration_policies(configurations, price_table, issues):
+    pricing_versions = {
+        value.get("pricingVersion") for value in configurations.values()
+    }
+    if pricing_versions != {price_table.version}:
+        issues.append("candidate pricing version does not match report pricing")
+    for identifier, configuration in configurations.items():
+        if (
+            configuration.get("conversationReuse") is True
+            and configuration.get("store") is not True
+        ):
+            issues.append(
+                f"conversation reuse without response storage for {identifier}"
+            )
+
+
+def _execution_policies(configurations):
+    keys = (
+        "initialReasoningEffort",
+        "tacticalFollowUpReasoningEffort",
+        "simpleFollowUpReasoningEffort",
+        "conversationReuse",
+        "store",
+    )
+    return {
+        identifier: {key: configuration.get(key) for key in keys}
+        for identifier, configuration in configurations.items()
+    }
+
+
+def _run_evidence(manifest, records, configurations, issues):
+    mode = manifest.get("mode")
+    diagnostic_subset = manifest.get("diagnosticSubset") is True
+    include_holdout = manifest.get("includeHoldout") is True
+    if diagnostic_subset:
+        classification = "diagnosticSubset"
+    elif mode == "comparison" and include_holdout:
+        classification = "holdoutComparison"
+    elif mode == "comparison":
+        classification = "developmentComparison"
+    else:
+        classification = "quickDevelopment"
+
+    complete_matrix = _complete_matrix(
+        mode,
+        include_holdout,
+        diagnostic_subset,
+        records,
+        configurations,
+    )
+    if not diagnostic_subset and not complete_matrix:
+        issues.append("candidate comparison matrix is incomplete")
+    trial_eligible = (
+        mode == "comparison" and not diagnostic_subset and complete_matrix
+    )
+    promotion_evidence_eligible = trial_eligible and include_holdout
+    expected_manifest_evidence = {
+        "classification": classification,
+        "trialEligible": trial_eligible,
+        "promotionEvidenceEligible": promotion_evidence_eligible,
+    }
+    if manifest.get("evidence") != expected_manifest_evidence:
+        issues.append("candidate run evidence label does not match its matrix")
+    return {
+        "classification": classification,
+        "includesHoldout": include_holdout,
+        "diagnosticSubset": diagnostic_subset,
+        "completeMatrix": complete_matrix,
+        "trialEligible": trial_eligible,
+        "promotionEvidenceEligible": promotion_evidence_eligible,
+    }
+
+
+def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configurations):
+    if diagnostic_subset or mode not in ("quick", "comparison"):
+        return False
+    repetitions = 1 if mode == "quick" else 3
+    expected_split_counts = {"development": 56}
+    if include_holdout:
+        expected_split_counts["holdout"] = 14
+    expected_case_count = sum(expected_split_counts.values())
+    expected_record_count = expected_case_count * repetitions
+    configuration_ids = set(configurations)
+    if not configuration_ids or any(
+        record.get("configurationID") not in configuration_ids for record in records
+    ):
+        return False
+
+    common_cases = None
+    for identifier in configurations:
+        selected = [
+            record
+            for record in records
+            if record.get("configurationID") == identifier
+        ]
+        if len(selected) != expected_record_count:
+            return False
+        cells = {
+            (record.get("caseID"), record.get("repetition"))
+            for record in selected
+        }
+        if len(cells) != expected_record_count:
+            return False
+        case_splits = {}
+        repetition_cases = defaultdict(set)
+        for record in selected:
+            case_id = record.get("caseID")
+            split = record.get("split")
+            repetition = record.get("repetition")
+            if (
+                not isinstance(case_id, str)
+                or split not in expected_split_counts
+                or repetition not in range(1, repetitions + 1)
+                or record.get("cellID")
+                != f"{identifier}|{case_id}|r{repetition}"
+            ):
+                return False
+            if case_id in case_splits and case_splits[case_id] != split:
+                return False
+            case_splits[case_id] = split
+            repetition_cases[repetition].add(case_id)
+        actual_split_counts = {
+            split: sum(value == split for value in case_splits.values())
+            for split in expected_split_counts
+        }
+        if actual_split_counts != expected_split_counts:
+            return False
+        case_ids = set(case_splits)
+        if any(
+            repetition_cases[repetition] != case_ids
+            for repetition in range(1, repetitions + 1)
+        ):
+            return False
+        comparable_cases = frozenset(case_splits.items())
+        if common_cases is None:
+            common_cases = comparable_cases
+        elif common_cases != comparable_cases:
+            return False
+    return True
+
+
 def _expected_pairs(records, configurations):
     baselines = [identifier for identifier, value in configurations.items() if value.get("baseline") is True]
     candidates = [identifier for identifier, value in configurations.items() if value.get("baseline") is False]
@@ -761,12 +979,12 @@ def _configurations(manifest, issues):
     return output
 
 
-def _baseline_id(configurations, issues):
+def _baseline_id(configurations, issues, *, comparison):
     baselines = [identifier for identifier, value in configurations.items() if value.get("baseline") is True]
-    if len(baselines) != 1:
+    if comparison and len(baselines) != 1:
         issues.append("comparison baseline is not unique")
         return None
-    return baselines[0]
+    return baselines[0] if len(baselines) == 1 else None
 
 
 def _unique_ids(values, key, label, issues):
@@ -928,15 +1146,28 @@ def _check_hash(issues, message, expected, data):
 
 
 def _markdown(report):
+    recommendation = report["recommendation"]
+    if recommendation["decision"] == "promoteChallenger":
+        decision_text = (
+            f"Promote **{recommendation['configurationID']}** over the production baseline."
+        )
+    elif recommendation["decision"] == "keepBaseline":
+        decision_text = (
+            f"Keep the production baseline **{recommendation['configurationID']}**."
+        )
+    else:
+        decision_text = "No promotion recommendation is available from this run."
     lines = [
         "# Coaching quality benchmark",
         "",
         "## Decision",
         "",
+        decision_text,
+        "",
         (
-            "At least one candidate is eligible for a human app trial."
-            if report["promotionEligible"]
-            else "No candidate is currently eligible for a human app trial."
+            f"Evidence: {report['evidence']['classification']}; "
+            f"complete matrix={str(report['evidence']['completeMatrix']).lower()}; "
+            f"includes holdout={str(report['evidence']['includesHoldout']).lower()}."
         ),
         "",
         "## Experiment changes",
@@ -947,6 +1178,15 @@ def _markdown(report):
             lines.append(f"- **{identifier}**: {', '.join(changes) if changes else 'no material changes'}")
     else:
         lines.append("- No candidate changes were available.")
+    lines.extend(["", "## Execution policy", ""])
+    for identifier, policy in report["executionPolicies"].items():
+        lines.append(
+            f"- **{identifier}**: initial {policy['initialReasoningEffort']}; "
+            f"tactical follow-up {policy['tacticalFollowUpReasoningEffort']}; "
+            f"simple follow-up {policy['simpleFollowUpReasoningEffort']}; "
+            f"conversation reuse={str(policy['conversationReuse']).lower()}; "
+            f"store={str(policy['store']).lower()}."
+        )
     lines.extend(["", "## Quality and reliability", ""])
     for identifier, value in report["configurations"].items():
         line = (
@@ -969,9 +1209,23 @@ def _markdown(report):
             )
             line += f" Provider failures: {details}."
         lines.append(line)
+    lines.extend(["", "## Eligibility gates", ""])
+    for identifier, value in report["configurations"].items():
+        reasons = "; ".join(value["promotionReasons"])
+        lines.append(
+            f"- **{identifier}**: trial eligible="
+            f"{str(value['trialEligible']).lower()}; promotion eligible="
+            f"{str(value['promotionEligible']).lower()}. {reasons}"
+        )
     lines.extend(["", "## Candidate cost", ""])
     for identifier, value in report["configurations"].items():
-        lines.append(f"- **{identifier}**: ${value['candidateCostUSD']['total']}")
+        cost = value["candidateCostUSD"]
+        cost_text = (
+            f"${cost['total']}"
+            if cost["accountingComplete"] and cost["total"] is not None
+            else "unknown (accounting incomplete)"
+        )
+        lines.append(f"- **{identifier}**: {cost_text}")
     qualification = report["judgeQualification"]
     if qualification is not None:
         age = qualification["ageDaysAtGrading"]

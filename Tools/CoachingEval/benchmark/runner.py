@@ -12,7 +12,11 @@ from typing import Any, Mapping, Sequence
 
 from CoachingServer.chess_native_compiler import parse_neutral_request
 from CoachingServer.provider_envelope import validate_provider_envelope
-from Tools.CoachingEval.benchmark.configuration import PROMPT_GENERATORS
+from Tools.CoachingEval.benchmark.configuration import (
+    PROMPT_GENERATORS,
+    PROVIDERS,
+    RESPONSE_CONTRACTS,
+)
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -47,14 +51,17 @@ def run_candidates(
         raise ValueError("Candidate configuration IDs must be unique")
     if mode not in ("quick", "comparison"):
         raise ValueError("Benchmark mode must be quick or comparison")
-    if mode == "comparison" and not any(configuration.baseline for configuration in configurations):
-        raise ValueError("Comparison mode requires a baseline configuration")
+    if mode == "comparison" and sum(
+        configuration.baseline for configuration in configurations
+    ) != 1:
+        raise ValueError("Comparison mode requires exactly one baseline configuration")
     _verify_corpus_binding(corpus)
     repetitions = 1 if mode == "quick" else 3
     turns = corpus.select(include_holdout=include_holdout)
     _validate_selected_groups(turns)
+    _validate_matrix(turns, include_holdout, diagnostic_subset)
 
-    preflight = _preflight(configurations, turns, repetitions)
+    preflight = _preflight(configurations, turns, repetitions, price_table)
     clients = {
         configuration.identifier: provider_factory(configuration)
         for configuration in configurations
@@ -117,7 +124,8 @@ def run_candidates(
     return manifest
 
 
-def _preflight(configurations, turns, repetitions):
+def _preflight(configurations, turns, repetitions, price_table):
+    _validate_configurations(configurations, price_table)
     cells = []
     sequence_ids = _sequence_ids(turns)
     for configuration in configurations:
@@ -154,6 +162,66 @@ def _preflight(configurations, turns, repetitions):
                     }
                 )
     return cells
+
+
+def _validate_configurations(configurations, price_table):
+    if price_table is None:
+        raise ValueError("Candidate execution requires a pinned price table")
+    pricing_versions = {configuration.pricing_version for configuration in configurations}
+    if len(pricing_versions) != 1 or pricing_versions != {price_table.version}:
+        raise ValueError("Candidate configurations must use the selected pricing version")
+
+    zero_usage = {
+        "inputTokens": 0,
+        "cachedInputTokens": 0,
+        "outputTokens": 0,
+        "reasoningTokens": 0,
+        "totalTokens": 0,
+    }
+    priced_models = set()
+    for configuration in configurations:
+        model_configuration = configuration.model_configuration
+        if model_configuration.provider not in PROVIDERS:
+            raise ValueError("Candidate provider is unsupported")
+        if model_configuration.user_prompt_generator not in PROMPT_GENERATORS:
+            raise ValueError("Candidate prompt generator is unsupported")
+        if model_configuration.response_contract not in RESPONSE_CONTRACTS:
+            raise ValueError("Candidate response contract is unsupported")
+        if model_configuration.conversation_reuse and not model_configuration.store:
+            raise ValueError("Conversation reuse requires response storage")
+        try:
+            configuration_bytes = model_configuration.path.read_bytes()
+            prompt_bytes = model_configuration.system_prompt_path.read_bytes()
+        except OSError as error:
+            raise ValueError("Cannot reload pinned candidate configuration") from error
+        if _sha256(configuration_bytes) != model_configuration.sha256:
+            raise ValueError("Candidate model configuration changed after loading")
+        if configuration.model_configuration_sha256 != model_configuration.sha256:
+            raise ValueError("Candidate model configuration pin does not match")
+        if _sha256(prompt_bytes) != model_configuration.system_prompt_sha256:
+            raise ValueError("Candidate system prompt changed after loading")
+        try:
+            prompt_text = prompt_bytes.decode("utf-8")
+        except UnicodeError as error:
+            raise ValueError("Candidate system prompt is not UTF-8") from error
+        if prompt_text != model_configuration.system_prompt:
+            raise ValueError("Candidate system prompt content changed after loading")
+        if model_configuration.model not in priced_models:
+            price_table.estimate(model_configuration.model, zero_usage)
+            priced_models.add(model_configuration.model)
+
+
+def _validate_matrix(turns, include_holdout, diagnostic_subset):
+    identifiers = [turn.identifier for turn in turns]
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError("Selected benchmark case IDs must be unique")
+    if diagnostic_subset:
+        return
+    development_count = sum(turn.split == "development" for turn in turns)
+    holdout_count = sum(turn.split == "holdout" for turn in turns)
+    expected = (56, 14) if include_holdout else (56, 0)
+    if (development_count, holdout_count) != expected or len(turns) != sum(expected):
+        raise ValueError("Candidate matrix does not contain the complete requested corpus")
 
 
 def _execute_cell(cell, client, *, previous_response_id, price_table):
@@ -332,11 +400,30 @@ def _manifest(
                 "pricingVersion": configuration.pricing_version,
             }
         )
+    if diagnostic_subset:
+        evidence_classification = "diagnosticSubset"
+    elif mode == "comparison" and include_holdout:
+        evidence_classification = "holdoutComparison"
+    elif mode == "comparison":
+        evidence_classification = "developmentComparison"
+    else:
+        evidence_classification = "quickDevelopment"
     return {
         "schemaVersion": "coaching-quality-candidate-run.v1",
         "mode": mode,
         "diagnosticSubset": diagnostic_subset,
         "includeHoldout": include_holdout,
+        "evidence": {
+            "classification": evidence_classification,
+            "trialEligible": (
+                mode == "comparison" and not diagnostic_subset
+            ),
+            "promotionEvidenceEligible": (
+                mode == "comparison"
+                and include_holdout
+                and not diagnostic_subset
+            ),
+        },
         "corpusSHA256": corpus.sha256,
         "sourceGitSHA": corpus.source_git_sha,
         "configurations": resolved,

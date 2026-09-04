@@ -41,6 +41,16 @@ if [ "$mode" = "comparison" ] && [ "${#candidate_paths[@]}" -eq 0 ]; then
   exit 2
 fi
 
+if [ "$smoke" = true ]; then
+  echo "Diagnostic subset evidence: not eligible for trial or promotion."
+elif [ "$mode" = "comparison" ] && [ "$include_holdout" = true ]; then
+  echo "Holdout comparison evidence: may support promotion only if every report gate passes."
+elif [ "$mode" = "comparison" ]; then
+  echo "Development comparison evidence: may narrow finalists but cannot support promotion."
+else
+  echo "Quick development evidence: diagnostic only and cannot support promotion."
+fi
+
 if ! openai_api_key="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null)" || [ -z "$openai_api_key" ]; then
   echo "Could not read the OpenAI key from Keychain service '$KEYCHAIN_SERVICE'." >&2
   echo "Add the key to that Keychain item, then run this command again." >&2

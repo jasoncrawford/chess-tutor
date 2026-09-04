@@ -4,9 +4,13 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 from CoachingServer.model_configuration import HostedModelConfiguration
-from Tools.CoachingEval.benchmark.configuration import CandidateConfiguration
+from Tools.CoachingEval.benchmark.configuration import (
+    CandidateConfiguration,
+    load_prices,
+)
 from Tools.CoachingEval.benchmark.corpus import (
     BenchmarkCorpus,
     BenchmarkGraderBrief,
@@ -56,6 +60,10 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.corpus = self.make_corpus()
         self.configuration = self.make_configuration()
+        self.prices = replace(
+            load_prices(ROOT / "Tools/CoachingEval/benchmark/pricing-v1.json"),
+            version="test",
+        )
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -137,6 +145,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "quick",
             provider_factory=lambda _configuration: quick_client,
+            price_table=self.prices,
         )
         self.assertEqual(56, len(quick_client.calls))
         self.assertEqual(56, quick["summary"]["recordCount"])
@@ -154,6 +163,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="comparison",
             destination=self.root / "comparison",
             provider_factory=lambda _configuration: comparison_client,
+            price_table=self.prices,
         )
         self.assertEqual(336, len(comparison_client.calls))
         self.assertEqual(336, comparison["summary"]["recordCount"])
@@ -166,6 +176,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "run",
             provider_factory=lambda _configuration: client,
+            price_table=self.prices,
         )
 
         sequence_calls = client.calls[32:35]
@@ -212,6 +223,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "independent",
             provider_factory=lambda _configuration: independent_client,
+            price_table=self.prices,
         )
         for call in independent_client.calls[32:35]:
             self.assertIn("# Chess coaching situation", call["user_prompt"])
@@ -250,6 +262,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                         mode="quick",
                         destination=self.root / f"invalid-envelope-{name}",
                         provider_factory=lambda _configuration: client,
+                        price_table=self.prices,
                     )
                 except Exception as error:
                     self.fail(f"invalid provider envelope crashed the runner: {error!r}")
@@ -292,6 +305,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "blocked",
             provider_factory=lambda _configuration: client,
+            price_table=self.prices,
         )
         records = [json.loads(line) for line in (self.root / "blocked/records.jsonl").read_text().splitlines()]
         sequence = [record for record in records if record["groupID"] == "s-01"]
@@ -310,6 +324,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 mode="quick",
                 destination=self.root / "broken",
                 provider_factory=lambda configuration: factory_calls.append(configuration),
+                price_table=self.prices,
             )
         self.assertEqual([], factory_calls)
 
@@ -320,6 +335,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 mode="comparison",
                 destination=self.root / "missing-baseline",
                 provider_factory=lambda _configuration: FakeClient(),
+                price_table=self.prices,
             )
 
         with self.assertRaises(ValueError):
@@ -329,7 +345,191 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 mode="quick",
                 destination=self.root / "duplicate-config",
                 provider_factory=lambda _configuration: FakeClient(),
+                price_table=self.prices,
             )
+
+    def test_complete_candidate_preflight_precedes_provider_construction(self):
+        alternative = replace(
+            self.configuration,
+            identifier="alternative",
+            baseline=False,
+            sha256="d" * 64,
+        )
+        missing_model_prices = replace(
+            self.prices,
+            models=MappingProxyType({}),
+        )
+        invalid_storage = replace(
+            self.configuration,
+            model_configuration=replace(
+                self.configuration.model_configuration,
+                conversation_reuse=True,
+                store=False,
+            ),
+        )
+        invalid_contract = replace(
+            self.configuration,
+            model_configuration=replace(
+                self.configuration.model_configuration,
+                response_contract="unknown-contract",
+            ),
+        )
+        invalid_pin = replace(
+            self.configuration,
+            model_configuration=replace(
+                self.configuration.model_configuration,
+                system_prompt_sha256="0" * 64,
+            ),
+        )
+        broken_turns = list(self.corpus.turns)
+        broken_turns[55] = replace(broken_turns[55], request={"bad": True})
+        cases = (
+            (
+                "zero-baselines",
+                (replace(self.configuration, baseline=False), alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "two-baselines",
+                (self.configuration, replace(alternative, baseline=True)),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "missing-model-price",
+                (self.configuration, alternative),
+                missing_model_prices,
+                self.corpus,
+            ),
+            (
+                "pricing-version-mismatch",
+                (self.configuration, replace(alternative, pricing_version="other")),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "selected-pricing-version-mismatch",
+                (
+                    replace(self.configuration, pricing_version="other"),
+                    replace(alternative, pricing_version="other"),
+                ),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "invalid-conversation-storage",
+                (invalid_storage, alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "unsupported-response-contract",
+                (invalid_contract, alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "prompt-pin-drift",
+                (invalid_pin, alternative),
+                self.prices,
+                self.corpus,
+            ),
+            (
+                "compilation-failure",
+                (self.configuration, alternative),
+                self.prices,
+                replace(self.corpus, turns=tuple(broken_turns)),
+            ),
+        )
+        for name, configurations, prices, corpus in cases:
+            with self.subTest(name=name):
+                factory_calls = []
+                with self.assertRaises(ValueError):
+                    run_candidates(
+                        corpus=corpus,
+                        configurations=configurations,
+                        mode="comparison",
+                        destination=self.root / name,
+                        provider_factory=lambda configuration: factory_calls.append(
+                            configuration
+                        ),
+                        price_table=prices,
+                    )
+                self.assertEqual([], factory_calls)
+
+    def test_exactly_one_comparison_baseline_publishes_execution_evidence(self):
+        alternative = replace(
+            self.configuration,
+            identifier="alternative",
+            baseline=False,
+            sha256="d" * 64,
+        )
+        factory_calls = []
+
+        def provider_factory(configuration):
+            factory_calls.append(configuration.identifier)
+            return FakeClient()
+
+        manifest = run_candidates(
+            corpus=self.corpus,
+            configurations=(self.configuration, alternative),
+            mode="comparison",
+            destination=self.root / "one-baseline",
+            provider_factory=provider_factory,
+            price_table=self.prices,
+        )
+
+        self.assertEqual(["production", "alternative"], factory_calls)
+        self.assertEqual(
+            {
+                "classification": "developmentComparison",
+                "trialEligible": True,
+                "promotionEvidenceEligible": False,
+            },
+            manifest["evidence"],
+        )
+        for configuration in manifest["configurations"]:
+            self.assertEqual("high", configuration["initialReasoningEffort"])
+            self.assertEqual("low", configuration["tacticalFollowUpReasoningEffort"])
+            self.assertEqual("none", configuration["simpleFollowUpReasoningEffort"])
+            self.assertTrue(configuration["conversationReuse"])
+            self.assertTrue(configuration["store"])
+
+    def test_single_challenger_diagnostic_is_labeled_and_still_requires_pricing(self):
+        challenger = replace(self.configuration, baseline=False)
+        calls = []
+        manifest = run_candidates(
+            corpus=self.corpus,
+            configurations=(challenger,),
+            mode="quick",
+            destination=self.root / "challenger-diagnostic",
+            provider_factory=lambda _configuration: calls.append(True) or FakeClient(),
+            price_table=self.prices,
+            diagnostic_subset=True,
+        )
+        self.assertEqual([True], calls)
+        self.assertEqual(
+            {
+                "classification": "diagnosticSubset",
+                "trialEligible": False,
+                "promotionEvidenceEligible": False,
+            },
+            manifest["evidence"],
+        )
+
+        factory_calls = []
+        with self.assertRaisesRegex(ValueError, "price"):
+            run_candidates(
+                corpus=self.corpus,
+                configurations=(challenger,),
+                mode="quick",
+                destination=self.root / "unpriced-challenger-diagnostic",
+                provider_factory=lambda configuration: factory_calls.append(configuration),
+                price_table=replace(self.prices, models=MappingProxyType({})),
+                diagnostic_subset=True,
+            )
+        self.assertEqual([], factory_calls)
 
     def test_rejects_reordered_loaded_corpus_and_changed_case_bytes(self):
         raw_cases = tuple({"id": turn.identifier} for turn in self.corpus.turns)
@@ -342,6 +542,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 mode="quick",
                 destination=self.root / "reordered",
                 provider_factory=lambda _configuration: FakeClient(),
+                price_table=self.prices,
             )
 
         artifact_root = self.root / "bound-corpus"
@@ -361,6 +562,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 mode="quick",
                 destination=self.root / "hash-drift",
                 provider_factory=lambda _configuration: FakeClient(),
+                price_table=self.prices,
             )
         (self.root / "exists").mkdir()
         with self.assertRaises(ValueError):
@@ -370,6 +572,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 mode="quick",
                 destination=self.root / "exists",
                 provider_factory=lambda _configuration: FakeClient(),
+                price_table=self.prices,
             )
 
     def test_retries_only_when_configured_and_redacts_exception_text(self):
@@ -389,6 +592,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "retry",
             provider_factory=lambda _configuration: client,
+            price_table=self.prices,
         )
         first = json.loads((self.root / "retry/records.jsonl").read_text().splitlines()[0])
         self.assertEqual(2, first["attemptCount"])
@@ -403,6 +607,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "one-attempt",
             provider_factory=lambda _configuration: production_client,
+            price_table=self.prices,
         )
         first = json.loads((self.root / "one-attempt/records.jsonl").read_text().splitlines()[0])
         self.assertEqual(1, first["attemptCount"])
@@ -425,6 +630,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             mode="quick",
             destination=self.root / "http-failure",
             provider_factory=lambda _configuration: client,
+            price_table=self.prices,
         )
 
         records_text = (self.root / "http-failure/records.jsonl").read_text()
