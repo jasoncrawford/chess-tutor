@@ -6,16 +6,18 @@ from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 
+from Tools.CoachingEval.benchmark.cli import _select_cases
 from Tools.CoachingEval.benchmark.configuration import load_prices
-from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS, RUBRIC_FLAGS
+from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS, RUBRIC_FLAGS, grade_run
 from Tools.CoachingEval.benchmark.report import (
     _pair_counts,
     build_report,
     write_report,
 )
-from Tools.CoachingEval.benchmark.runner import _execute_cell, _preflight
+from Tools.CoachingEval.benchmark.runner import _execute_cell, _preflight, run_candidates
 from Tools.CoachingEval.openai_responses import OpenAIResponsesError
 from Tools.CoachingEval.tests import test_benchmark_runner as runner_fixtures
+from Tools.CoachingEval.tests import test_benchmark_grader as grader_fixtures
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -353,6 +355,64 @@ class BenchmarkReportTests(unittest.TestCase):
             {"decision": "keepBaseline", "configurationID": "baseline"},
             report["recommendation"],
         )
+
+    def test_real_quick_candidate_grade_report_accepts_no_pairs_and_rejects_unexpected_pairs(self):
+        runner = runner_fixtures.BenchmarkRunnerTests()
+        runner.setUp()
+        self.addCleanup(runner.tearDown)
+        grader = grader_fixtures.BenchmarkGraderTests()
+        grader.setUp()
+        self.addCleanup(grader.tearDown)
+        corpus = _select_cases(runner.corpus, ["d-01", "d-02"], False)
+        configurations = (
+            runner.make_configuration(identifier="baseline", pricing_version=self.prices.version),
+            runner.make_configuration(identifier="candidate", baseline=False, pricing_version=self.prices.version),
+        )
+        run_root, grade_root = self.root / "real-quick-run", self.root / "real-quick-grades"
+        manifest = run_candidates(
+            corpus=corpus, configurations=configurations, mode="quick", destination=run_root,
+            provider_factory=lambda _configuration: runner_fixtures.FakeClient(),
+            price_table=self.prices, diagnostic_subset=True,
+        )
+        self.assertEqual(4, manifest["summary"]["validCount"])
+        judge = grader_fixtures.QueueJudge([grader.absolute() for _ in range(4)])
+        grade_run(
+            run_root=run_root, corpus=corpus, judge_configuration=grader.configuration,
+            client=judge, destination=grade_root, qualification_path=grader.qualification_path,
+            price_table=self.prices, now=grader.now,
+        )
+        self.assertEqual(["absolute"] * 4, [json.loads(call["user_prompt"])["kind"] for call in judge.calls])
+        self.assertEqual(b"", (grade_root / "pairwise-grades.jsonl").read_bytes())
+        report = build_report(run_root, grade_root, self.prices)
+        self.assertEqual([], report["integrityIssues"])
+        self.assertEqual("diagnosticSubset", report["evidence"]["classification"])
+        self.assertFalse(report["trialEligible"])
+        self.assertFalse(report["promotionEligible"])
+
+        unexpected = [
+            {"pairID": f"candidate|{case_id}|r1|vs|baseline", "outcome": "tie", "judgeMetrics": self.metrics(1)}
+            for case_id in ("d-01", "d-02")
+        ]
+        pairwise_bytes = self.jsonl(unexpected)
+        (grade_root / "pairwise-grades.jsonl").write_bytes(pairwise_bytes)
+        manifest_path = grade_root / "grade-manifest.json"
+        grade_manifest = json.loads(manifest_path.read_text())
+        grade_manifest.update(pairwiseGradeCount=2, pairwiseGradesSHA256=self.sha(pairwise_bytes))
+        manifest_path.write_text(json.dumps(grade_manifest))
+        rejected = build_report(run_root, grade_root, self.prices)
+        self.assertEqual(["pairwise grade IDs do not match baseline pairs"], rejected["integrityIssues"])
+
+    def test_comparison_report_still_rejects_a_missing_pair_with_valid_hashes(self):
+        pairwise_path = self.grade_root / "pairwise-grades.jsonl"
+        pairs = [json.loads(line) for line in pairwise_path.read_text().splitlines()]
+        pairwise_bytes = self.jsonl(pairs[:-1])
+        pairwise_path.write_bytes(pairwise_bytes)
+        manifest_path = self.grade_root / "grade-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update(pairwiseGradeCount=len(pairs) - 1, pairwiseGradesSHA256=self.sha(pairwise_bytes))
+        manifest_path.write_text(json.dumps(manifest))
+        report = build_report(self.run_root, self.grade_root, self.prices)
+        self.assertEqual(["pairwise grade IDs do not match baseline pairs"], report["integrityIssues"])
 
     def test_development_comparison_can_qualify_a_trial_but_not_promotion(self):
         run_root, grade_root = self.make_complete_comparison(

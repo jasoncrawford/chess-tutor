@@ -144,7 +144,11 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         for value in absolute
         if isinstance(value, dict) and isinstance(value.get("cellID"), str)
     }
-    expected_pairs = _expected_pairs(records, configurations)
+    expected_pairs = (
+        _expected_pairs(records, configurations)
+        if run_manifest.get("mode") == "comparison"
+        else set()
+    )
     observed_pair_ids = _unique_ids(pairwise, "pairID", "pairwise grade", issues)
     if set(observed_pair_ids) != expected_pairs:
         issues.append("pairwise grade IDs do not match baseline pairs")
