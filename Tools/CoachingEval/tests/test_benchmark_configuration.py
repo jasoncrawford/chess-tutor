@@ -232,6 +232,38 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_prices(self.dump("extra.json", prices))
 
+    def test_repository_astra_judge_and_current_baseline_pricing_load_together(self):
+        benchmark = ROOT / "Tools/CoachingEval/benchmark"
+        judge = load_judge(benchmark / "configs/judge-v3.json", ROOT)
+        candidate = load_candidate(benchmark / "configs/production-v2.json", ROOT)
+        previous_candidate = load_candidate(benchmark / "configs/production-v1.json", ROOT)
+        previous_judge = load_judge(benchmark / "configs/judge-v2.json", ROOT)
+        prices = load_prices(benchmark / "pricing-v2.json")
+
+        self.assertEqual("judge-astra-v3", judge.identifier)
+        self.assertEqual("gpt-6-astra", judge.model)
+        self.assertEqual("low", judge.reasoning_effort)
+        self.assertEqual(4096, judge.maximum_output_tokens)
+        self.assertEqual(benchmark / "judge-v2.md", judge.system_prompt_path)
+        self.assertEqual(
+            "35b6efb23fcdd7d1e6b501ad34946b9a0c5f79d5beaae17e607fb9b2571d0807",
+            judge.system_prompt_sha256,
+        )
+        self.assertEqual(previous_judge.reference_set_sha256, judge.reference_set_sha256)
+        self.assertEqual(3, judge.qualification_repetitions)
+        self.assertEqual(0.95, judge.minimum_severe_agreement)
+        self.assertEqual(0.90, judge.minimum_dimension_agreement)
+        self.assertEqual(0.90, judge.minimum_pairwise_agreement)
+        self.assertEqual(30, judge.qualification_valid_days)
+        self.assertEqual("production-sol-v2", candidate.identifier)
+        self.assertTrue(candidate.baseline)
+        self.assertEqual(previous_candidate.model_configuration, candidate.model_configuration)
+        self.assertEqual("openai-2026-09-06", candidate.pricing_version)
+        self.assertEqual(candidate.pricing_version, prices.version)
+        usage = {"inputTokens": 100, "cachedInputTokens": 20, "outputTokens": 10, "reasoningTokens": 4}
+        self.assertEqual(Decimal("0.000528"), prices.estimate(candidate.model_configuration.model, usage))
+        self.assertEqual(Decimal("0.00132"), prices.estimate(judge.model, usage))
+
     def test_repository_production_judge_and_pricing_pins_load(self):
         repository_root = ROOT
         benchmark = repository_root / "Tools/CoachingEval/benchmark"

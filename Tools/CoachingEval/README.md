@@ -33,6 +33,8 @@ The dependency-free browser state logic is exercised directly with `node Tools/C
 
 The script reads `ChessTutor-CoachingEval-OpenAI` from Keychain, ensures the pinned automatic judge has a compatible qualification from the last 30 days, exports a fresh 70-turn corpus from Swift, runs the production configuration, and writes an ignored report beneath `.coaching-eval/benchmark/runs/<timestamp>/report/summary.md`. It never places the key in a command argument or artifact. Qualification happens before corpus export or candidate inference, so an unqualified judge cannot waste a candidate run.
 
+The benchmark defaults are `configs/judge-v3.json` (GPT-6 Astra at low reasoning with `judge-v2.md`), `pricing-v2.json` (dated 2026-09-06), and `configs/production-v2.json`. The production wrapper still pins the unchanged live Sol model configuration; only its benchmark identity and pricing version are updated. Every additional candidate wrapper must use the same `openai-2026-09-06` pricing version. Previous judge, prompt, pricing, and production-wrapper versions remain immutable for replaying earlier runs. The new judge uses the same provisional agent-reviewed references and unchanged qualification thresholds; publishing the configuration is not itself qualification or model-promotion approval.
+
 Compare one or more candidate configuration files against production with three repetitions per case:
 
 ```bash
@@ -55,29 +57,29 @@ Each phase can also be run directly:
 
 ```bash
 python3 -m Tools.CoachingEval.benchmark.cli qualify \
-  --judge Tools/CoachingEval/benchmark/configs/judge-v2.json \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --judge Tools/CoachingEval/benchmark/configs/judge-v3.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --artifact-root .coaching-eval/benchmark/qualifications
 
 python3 -m Tools.CoachingEval.benchmark.cli run \
   --corpus .coaching-eval/benchmark/corpus/<export> --mode comparison \
-  --candidate Tools/CoachingEval/benchmark/configs/production-v1.json \
+  --candidate Tools/CoachingEval/benchmark/configs/production-v2.json \
   --candidate path/to/candidate.json \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --output .coaching-eval/benchmark/runs/<run>/candidates
 
 python3 -m Tools.CoachingEval.benchmark.cli grade \
   --run .coaching-eval/benchmark/runs/<run>/candidates \
   --corpus .coaching-eval/benchmark/corpus/<export> \
-  --judge Tools/CoachingEval/benchmark/configs/judge-v2.json \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --judge Tools/CoachingEval/benchmark/configs/judge-v3.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --qualification .coaching-eval/benchmark/qualifications/<qualification>/qualification.json \
   --output .coaching-eval/benchmark/runs/<run>/grades
 
 python3 -m Tools.CoachingEval.benchmark.cli report \
   --run .coaching-eval/benchmark/runs/<run>/candidates \
   --grades .coaching-eval/benchmark/runs/<run>/grades \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --output .coaching-eval/benchmark/runs/<run>/report
 ```
 
