@@ -91,9 +91,9 @@ class JudgeQualificationTests(unittest.TestCase):
         )
         reference_value["provenance"].update(
             {
-                "reviewStatus": "humanReviewed",
-                "reviewedBy": "Test Reviewer",
-                "reviewedAt": "2026-09-03",
+                "reviewStatus": "agentReviewed",
+                "reviewedBy": "GPT-6 Astra",
+                "reviewedAt": "2026-09-06",
             }
         )
         reference = self.root / "reference.json"
@@ -178,6 +178,14 @@ class JudgeQualificationTests(unittest.TestCase):
         self.assertEqual(1.0, artifact["minimumSevereAgreement"])
         self.assertEqual(1.0, artifact["minimumDimensionAgreement"])
         self.assertEqual(1.0, artifact["minimumPairwiseAgreement"])
+        self.assertEqual(
+            {
+                "status": "agentReviewed",
+                "reviewedBy": "GPT-6 Astra",
+                "reviewedAt": "2026-09-06",
+            },
+            artifact["referenceReview"],
+        )
         self.assertEqual(120, artifact["qualificationMetrics"]["callCount"])
         self.assertTrue(artifact["qualificationMetrics"]["accountingComplete"])
         self.assertEqual(1.0, artifact["passes"][0]["pairwiseAgreement"])
@@ -585,7 +593,7 @@ class JudgeQualificationTests(unittest.TestCase):
             ).hexdigest(),
         )
         client = QueueJudge([])
-        with self.assertRaisesRegex(ValueError, "human-reviewed"):
+        with self.assertRaisesRegex(ValueError, "has not been reviewed"):
             JudgeQualification.ensure(
                 configuration,
                 client,

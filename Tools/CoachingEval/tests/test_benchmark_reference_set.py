@@ -71,7 +71,7 @@ class JudgeReferenceSetTests(unittest.TestCase):
         path, sha = self.write_reference(review_status="pending")
         proposed = JudgeReferenceSet.load(path, sha, require_reviewed=False)
         self.assertEqual("pending", proposed.review_status)
-        with self.assertRaisesRegex(ValueError, "human-reviewed"):
+        with self.assertRaisesRegex(ValueError, "has not been reviewed"):
             JudgeReferenceSet.load(path, sha)
 
         path, sha = self.write_reference(
@@ -83,6 +83,39 @@ class JudgeReferenceSetTests(unittest.TestCase):
         self.assertEqual("Test Reviewer", reviewed.reviewed_by)
         self.assertEqual(20, len(reviewed.absolute_cases))
         self.assertEqual(reviewed.absolute_cases, reviewed.cases)
+
+    def test_accepts_and_truthfully_renders_agent_reviewed_provenance(self):
+        path, sha = self.write_reference(
+            review_status="agentReviewed",
+            reviewed_by="GPT-6 Astra",
+            reviewed_at="2026-09-06",
+        )
+
+        reviewed = JudgeReferenceSet.load(path, sha)
+
+        self.assertEqual("agentReviewed", reviewed.review_status)
+        self.assertEqual("GPT-6 Astra", reviewed.reviewed_by)
+        self.assertEqual("2026-09-06", reviewed.reviewed_at)
+        self.assertIn(
+            "Status: **agent-reviewed by GPT-6 Astra on 2026-09-06**",
+            reviewed.render_review(),
+        )
+        self.assertIn("provisional reference judgments", reviewed.render_review())
+
+    def test_reviewed_provenance_requires_reviewer_and_actual_date(self):
+        for status in ("humanReviewed", "agentReviewed"):
+            for missing, reviewer, review_date in (
+                ("reviewer", None, "2026-09-06"),
+                ("review date", "Test Reviewer", None),
+            ):
+                with self.subTest(status=status, missing=missing):
+                    path, sha = self.write_reference(
+                        review_status=status,
+                        reviewed_by=reviewer,
+                        reviewed_at=review_date,
+                    )
+                    with self.assertRaisesRegex(ValueError, missing):
+                        JudgeReferenceSet.load(path, sha)
 
     def test_loads_exact_replayable_source_absolute_and_pairwise_inventories(self):
         reference = self.load_committed()
@@ -444,7 +477,12 @@ class JudgeReferenceSetTests(unittest.TestCase):
         rendered = reference.render_review()
 
         self.assertEqual((benchmark / "judge-reference-v2-review.md").read_text(), rendered)
-        self.assertIn("Status: **pending human review**", rendered)
+        self.assertIn(
+            "Status: **agent-reviewed by GPT-6 Astra (delegated by Jason Crawford) "
+            "on 2026-09-06**",
+            rendered,
+        )
+        self.assertIn("provisional reference judgments", rendered)
         self.assertIn("Response contract: `chess-native-v13`", rendered)
         self.assertIn("Source corpus cases SHA-256:", rendered)
         self.assertIn("## Absolute ref-02", rendered)
@@ -459,6 +497,33 @@ class JudgeReferenceSetTests(unittest.TestCase):
         self.assertIn("allowableMoveFocus=", rendered)
         self.assertIn("**Reference preference:** responseTwo", rendered)
         self.assertIn("answerRevealingGuidance: true", rendered)
+
+    def test_committed_reference_matches_delegated_agent_audit(self):
+        reference = self.load_committed()
+        absolute = {case["id"]: case for case in reference.absolute_cases}
+        pairwise = {case["id"]: case for case in reference.pairwise_cases}
+        corrected_message = (
+            "Your knight is nearer the middle. Does it look safe there?"
+        )
+
+        self.assertEqual("agentReviewed", reference.review_status)
+        self.assertEqual(
+            "GPT-6 Astra (delegated by Jason Crawford)", reference.reviewed_by
+        )
+        self.assertEqual("2026-09-06", reference.reviewed_at)
+        self.assertEqual(corrected_message, absolute["ref-06"]["candidateTurn"]["message"])
+        self.assertEqual(corrected_message, pairwise["pair-04"]["responseOne"]["message"])
+        self.assertEqual(
+            {dimension: 5 for dimension in RUBRIC_DIMENSIONS},
+            self.thaw(absolute["ref-06"]["referenceScores"]),
+        )
+        self.assertFalse(any(absolute["ref-06"]["referenceFlags"].values()))
+        self.assertEqual(5, absolute["ref-15"]["referenceScores"]["discoveryAndIndependence"])
+        self.assertEqual(5, absolute["ref-16"]["referenceScores"]["discoveryAndIndependence"])
+        for case in (absolute["ref-12"], pairwise["pair-08"]):
+            rationale = " ".join(case["rationale"])
+            self.assertIn("Qxf3", rationale)
+            self.assertIn("gxf3", rationale)
 
     def load_committed(self):
         path = ROOT / "Tools/CoachingEval/benchmark/judge-reference-v2.json"

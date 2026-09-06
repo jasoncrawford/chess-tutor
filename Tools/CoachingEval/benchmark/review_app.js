@@ -83,8 +83,14 @@
 
   function renderHeader() {
     const reference = state.model.reference;
-    document.getElementById("reference-status").textContent =
-      reference.reviewStatus === "pending" ? "Human provenance pending" : humanize(reference.reviewStatus);
+    let reviewStatus = "Review pending";
+    if (reference.reviewStatus === "humanReviewed") {
+      reviewStatus = "Human-reviewed by " + reference.reviewedBy + " on " + reference.reviewedAt;
+    } else if (reference.reviewStatus === "agentReviewed") {
+      reviewStatus = "Agent-reviewed by " + reference.reviewedBy + " on " + reference.reviewedAt +
+        " · provisional";
+    }
+    document.getElementById("reference-status").textContent = reviewStatus;
     document.getElementById("reference-sha").textContent = reference.sha256;
     document.getElementById("source-git-sha").textContent = reference.sourceGitSHA;
     document.getElementById("source-cases-sha").textContent = reference.sourceCasesSHA256;

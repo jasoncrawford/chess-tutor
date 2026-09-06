@@ -176,9 +176,11 @@ shipping.
 
 The judge prompt, model, settings, schemas, reference set, and hashes are pinned
 as one qualification identity. The reference set contains exactly 20 examples
-using the same payload shape as real absolute grading. Its proposed scores and
-flags do not become ground truth until a named human reviewer explicitly
-approves them.
+using the same payload shape as real absolute grading. A named, dated human
+review may establish human ground truth. A user may instead delegate the
+judgments to a named agent; those references may qualify the judge but remain
+explicitly provisional and never claim human approval. Pending provenance is
+always rejected.
 
 A qualification runs three complete passes over the reviewed set. Every pass
 must match severe/non-severe classification on at least 95% of examples and be

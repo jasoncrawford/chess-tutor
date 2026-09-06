@@ -98,7 +98,9 @@ function model() {
   return {
     reference: {
       sha256: sha,
-      reviewStatus: "pending",
+      reviewStatus: "agentReviewed",
+      reviewedBy: "GPT-6 Astra",
+      reviewedAt: "2026-09-06",
       sourceGitSHA: "b".repeat(40),
       sourceCasesSHA256: "c".repeat(64),
       sourceManifestSHA256: "d".repeat(64)
@@ -170,6 +172,10 @@ require(path.join(__dirname, "../benchmark/review_app.js"));
 
 (async function run() {
   await domContentLoaded();
+  assert.equal(
+    elements["reference-status"].textContent,
+    "Agent-reviewed by GPT-6 Astra on 2026-09-06 · provisional"
+  );
   elements["case-filters"].listeners.click({ target: filterButtons[1] });
 
   const score = new FakeElement("select");

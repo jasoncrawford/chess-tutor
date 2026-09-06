@@ -268,7 +268,7 @@ class BenchmarkGraderTests(unittest.TestCase):
             reference_set_path=pending_path,
             reference_set_sha256=hashlib.sha256(pending_path.read_bytes()).hexdigest(),
         )
-        bad_paths.append(("human-reviewed", self.qualification_path, pending_configuration))
+        bad_paths.append(("reviewed", self.qualification_path, pending_configuration))
 
         for label, path, configuration in bad_paths:
             client = QueueJudge([])

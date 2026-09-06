@@ -10,9 +10,9 @@ Make the automatic coaching judge trustworthy enough for benchmark comparisons w
 
 The current `judge-calibration-v1.jsonl` is provisional: its `humanScores` and `humanFlags` were authored during implementation, were not independently human-reviewed, and do not consistently use the same payload shape as real grading calls.
 
-Version 2 replaces it with one structured reference-set document. Each of its 20 cases uses the real absolute-grading payload shape: `graderBrief`, `availableUI`, and `candidateTurn`. It records six proposed reference scores and seven proposed reference flags. Top-level provenance distinguishes an agent-authored proposal from a product-owner-reviewed reference set.
+Version 2 replaces it with one structured reference-set document. Each of its 20 cases uses the real absolute-grading payload shape: `graderBrief`, `availableUI`, and `candidateTurn`. It records six proposed reference scores and seven proposed reference flags. Top-level provenance distinguishes pending proposals, human-reviewed references, and user-delegated agent-reviewed references.
 
-The repository also contains a deterministically rendered Markdown review sheet. A test requires it to match the JSON source. Real qualification refuses a reference set unless its provenance says it was human-reviewed, names the reviewer, and records the review date. The product owner must explicitly approve or amend the proposed judgments before those provenance fields are set.
+The repository also contains a deterministically rendered Markdown review sheet. A test requires it to match the JSON source. Real qualification refuses a pending reference set. Both `humanReviewed` and `agentReviewed` require reviewer identity and the actual review date; `agentReviewed` is permitted only when the product owner delegates the judgments and remains explicitly provisional rather than claiming human approval.
 
 ## Qualification
 
@@ -44,4 +44,4 @@ Credentials, provider error bodies, and reasoning traces remain excluded from ar
 - Changing the live iPad coaching path.
 - Retrying provider requests.
 - Automatically promoting a candidate model.
-- Treating agent-authored scores as human ground truth.
+- Treating agent-reviewed provisional judgments as human ground truth.

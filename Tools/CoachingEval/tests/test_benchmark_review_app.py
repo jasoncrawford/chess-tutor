@@ -18,7 +18,7 @@ CONTROLLER_TEST_PATH = (
 )
 REVIEW_CSS_PATH = ROOT / "Tools/CoachingEval/benchmark/review_app.css"
 EXPECTED_REFERENCE_SHA = (
-    "3b0bb2ba35df5261967c1af4a0970fec67fd31dcc9f5616ab5c262af9f7c016d"
+    "34dfd86cbae1bc69d811fa3ac9083c4a8af79e3eec8ab6a50979e55df81e93af"
 )
 
 
@@ -36,7 +36,7 @@ class JudgeReferenceReviewViewModelTests(unittest.TestCase):
         )
         self.assertEqual("judge-reference-review-view.v1", self.model["schemaVersion"])
         self.assertEqual(EXPECTED_REFERENCE_SHA, self.model["reference"]["sha256"])
-        self.assertEqual("pending", self.model["reference"]["reviewStatus"])
+        self.assertEqual("agentReviewed", self.model["reference"]["reviewStatus"])
         self.assertEqual(30, len(self.model["cases"]))
         self.assertEqual(20, sum(case["kind"] == "absolute" for case in self.model["cases"]))
         self.assertEqual(10, sum(case["kind"] == "pairwise" for case in self.model["cases"]))
@@ -101,6 +101,10 @@ class JudgeReferenceReviewViewModelTests(unittest.TestCase):
     def test_keeps_complete_reference_provenance_available_for_audit(self):
         reference = self.model["reference"]
 
+        self.assertEqual(
+            "GPT-6 Astra (delegated by Jason Crawford)", reference["reviewedBy"]
+        )
+        self.assertEqual("2026-09-06", reference["reviewedAt"])
         self.assertEqual("29d24c8bc081fe17431d0e88ab5a0e085c3f1b20", reference["sourceGitSHA"])
         self.assertEqual(64, len(reference["sourceCasesSHA256"]))
         self.assertEqual(64, len(reference["sourceManifestSHA256"]))

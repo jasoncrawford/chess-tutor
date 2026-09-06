@@ -170,12 +170,12 @@
             "type": "move"
           }
         ],
-        "message": "Your knight move has no immediate forcing reply. Does it look safe?"
+        "message": "Your knight is nearer the middle. Does it look safe there?"
       },
       "id": "ref-06",
       "rationale": [
-        "The response evaluates the actual staged knight move and uses its allowable move focus.",
-        "It gives a grounded clue while leaving the learner to judge safety."
+        "The response acknowledges the actual staged knight move and uses its allowable move focus.",
+        "It leaves the learner to answer the safety question without supplying the answer."
       ],
       "referenceFlags": {
         "answerRevealingGuidance": false,
@@ -191,7 +191,7 @@
         "childClarity": 5,
         "coachingJudgment": 5,
         "coherenceAndAnswerability": 5,
-        "discoveryAndIndependence": 4,
+        "discoveryAndIndependence": 5,
         "latestActionResponsiveness": 5
       },
       "sourceID": "s04-safe-move-confirm-02"
@@ -384,7 +384,7 @@
       "id": "ref-12",
       "rationale": [
         "The response acknowledges the inspected black queen and reconnects it to the staged pawn move's safety.",
-        "Its square focus identifies the square the learner just inspected without revealing the reply."
+        "Black's legal Qxf3 can be answered by gxf3 or Qxf3, so the question correctly avoids implying that d3 loses a knight."
       ],
       "referenceFlags": {
         "answerRevealingGuidance": false,
@@ -491,7 +491,7 @@
       "id": "ref-15",
       "rationale": [
         "The explanation accurately describes the legal staged en-passant capture in plain terms.",
-        "The rule explanation is somewhat long but leaves the safety judgment to the learner."
+        "The rule explanation names only an already staged special move, preserving the learner's safety decision."
       ],
       "referenceFlags": {
         "answerRevealingGuidance": false,
@@ -507,7 +507,7 @@
         "childClarity": 4,
         "coachingJudgment": 5,
         "coherenceAndAnswerability": 5,
-        "discoveryAndIndependence": 3,
+        "discoveryAndIndependence": 5,
         "latestActionResponsiveness": 5
       },
       "sourceID": "c06-en-passant"
@@ -528,7 +528,7 @@
       "id": "ref-16",
       "rationale": [
         "The response accurately describes the selected queen promotion and points to the staged move.",
-        "It explains the consequence before asking the learner to judge the move's safety."
+        "It explains only the consequence of the already staged special move, preserving the learner's safety decision."
       ],
       "referenceFlags": {
         "answerRevealingGuidance": false,
@@ -544,7 +544,7 @@
         "childClarity": 5,
         "coachingJudgment": 5,
         "coherenceAndAnswerability": 5,
-        "discoveryAndIndependence": 3,
+        "discoveryAndIndependence": 5,
         "latestActionResponsiveness": 5
       },
       "sourceID": "m06-promotion"
@@ -756,7 +756,7 @@
             "type": "move"
           }
         ],
-        "message": "Your knight move has no immediate forcing reply. Does it look safe?"
+          "message": "Your knight is nearer the middle. Does it look safe there?"
       },
       "responseTwo": {
         "actions": [],
@@ -853,7 +853,7 @@
     {
       "id": "pair-08",
       "rationale": [
-        "Both are accurate and responsive, but response one is preferred because it uses the learner's inspection without revealing the reply."
+        "Black's legal Qxf3 can be answered by gxf3 or Qxf3; response one is preferred because it uses the learner's inspection without implying that d3 loses a knight."
       ],
       "referencePreference": "responseOne",
       "responseOne": {
@@ -938,9 +938,9 @@
   "provenance": {
     "authoredAt": "2026-09-03",
     "authoredBy": "Codex implementation agent",
-    "reviewStatus": "pending",
-    "reviewedAt": null,
-    "reviewedBy": null,
+    "reviewStatus": "agentReviewed",
+    "reviewedAt": "2026-09-06",
+    "reviewedBy": "GPT-6 Astra (delegated by Jason Crawford)",
     "sourceCasesSHA256": "d882d31605462b856266e6578ddfd2eec37dfbbd6d329150ae4b997398465afb",
     "sourceGitSHA": "29d24c8bc081fe17431d0e88ab5a0e085c3f1b20",
     "sourceManifestSHA256": "17b55d3222dadc818b738a0994b523b791b839015cdedbd184582b7bfccb9213"

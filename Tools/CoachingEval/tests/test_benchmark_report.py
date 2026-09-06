@@ -58,6 +58,14 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertEqual(10, report["judgeOverhead"]["callCount"])
         self.assertEqual(1000, report["judgeOverhead"]["usage"]["inputTokens"])
         self.assertEqual(120, report["judgeQualification"]["metrics"]["callCount"])
+        self.assertEqual(
+            {
+                "status": "agentReviewed",
+                "reviewedBy": "GPT-6 Astra",
+                "reviewedAt": "2026-09-06",
+            },
+            report["judgeQualification"]["referenceReview"],
+        )
         self.assertEqual(3, report["judgeQualification"]["repetitions"])
         self.assertEqual(0.95, report["judgeQualification"]["minimumSevereAgreement"])
         self.assertEqual(0.9, report["judgeQualification"]["minimumPairwiseAgreement"])
@@ -121,6 +129,10 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn("Keep the production baseline", summary)
         self.assertIn("Judge overhead", summary)
         self.assertIn("Judge qualification", summary)
+        self.assertIn(
+            "Agent-reviewed by GPT-6 Astra on 2026-09-06; provisional reference judgments.",
+            summary,
+        )
         self.assertIn("Pareto frontier", summary)
         self.assertIn("Mechanical failures", summary)
         self.assertIn("baseline|s1-3|r1", summary)
@@ -357,6 +369,13 @@ class BenchmarkReportTests(unittest.TestCase):
                     judgePromptSHA256="0" * 64
                 ),
                 "judge qualification bindings do not match grade manifest",
+            ),
+            (
+                "missing-reference-review-date",
+                lambda qualification: qualification["referenceReview"].update(
+                    reviewedAt=None
+                ),
+                "judge qualification reference review is invalid",
             ),
         )
         for name, mutate, issue in mutations:
@@ -885,6 +904,11 @@ class BenchmarkReportTests(unittest.TestCase):
                 "status": "accepted",
                 "judgeConfigurationID": "judge-sol-v2",
                 "referenceSetID": "judge-reference-v2",
+                "referenceReview": {
+                    "status": "agentReviewed",
+                    "reviewedBy": "GPT-6 Astra",
+                    "reviewedAt": "2026-09-06",
+                },
                 "createdAt": "2026-09-03T12:00:00Z",
                 "expiresAt": "2026-10-03T12:00:00Z",
                 "criteria": {

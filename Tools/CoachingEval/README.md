@@ -21,13 +21,13 @@ The current hosted coach has a separate production-shaped benchmark for comparin
 ./scripts/run_coaching_quality_benchmark.sh quick
 ```
 
-Before the v2 judge reference becomes qualification ground truth, review its proposed 20 absolute judgments and 10 pairwise preferences in the local study desk:
+The v2 judge reference contains 20 absolute judgments and 10 pairwise preferences. Its provenance may record either a named human review or a named delegated agent review with the actual review date. Delegated agent judgments are provisional references, not human scores or human approval; both reviewed states may qualify the judge, while `pending` always fails closed. Inspect the exact pinned set in the local study desk:
 
 ```bash
 ./scripts/review_judge_references.sh
 ```
 
-The launcher uses the repository `.venv` when present and otherwise uses `python3`; Flask is pinned in the root `requirements.txt`. It binds only to `127.0.0.1` and makes no provider or model calls. The app reads the exact reference set pinned by `benchmark/configs/judge-v2.json`, while edits, decisions, and notes remain only in browser local storage under that reference file's SHA-256. Use **Copy review summary** after reviewing all 30 cases and paste the result into Codex. This does not modify `judge-reference-v2.json` or record human provenance: those remain separate, explicit follow-up steps. For a validation-only launch with no browser or listening server, run `./scripts/review_judge_references.sh --no-open --check`.
+The launcher uses the repository `.venv` when present and otherwise uses `python3`; Flask is pinned in the root `requirements.txt`. It binds only to `127.0.0.1` and makes no provider or model calls. The app reads the exact reference set pinned by `benchmark/configs/judge-v2.json`, while edits, decisions, and notes remain only in browser local storage under that reference file's SHA-256. Use **Copy review summary** after reviewing all 30 cases and paste the result into Codex. This does not modify `judge-reference-v2.json` or record provenance: those remain separate, explicit follow-up steps. The checked-in review was delegated to GPT-6 Astra by Jason Crawford and is rendered explicitly as agent-reviewed and provisional. For a validation-only launch with no browser or listening server, run `./scripts/review_judge_references.sh --no-open --check`.
 
 The dependency-free browser state logic is exercised directly with `node Tools/CoachingEval/tests/test_benchmark_review_core.js`, and the real DOM controller/filter integration with `node Tools/CoachingEval/tests/test_benchmark_review_controller.js`; `test_benchmark_review_app.py` runs both commands as part of the existing Python CI discovery path.
 

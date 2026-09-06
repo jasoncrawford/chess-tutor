@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Do not make a paid call until the revised ground truth is explicitly human-reviewed.
+- Do not make a paid call while reference provenance is `pending`. A named, dated human review or user-delegated agent review may qualify; delegated agent judgments remain provisional and never claim human approval.
 - Derive reference `availableUI` only by compiling replayable sources through `tutor-v13`.
 - Use exactly 20 absolute and 10 pairwise reference cases.
 - Run three qualification passes; each must clear 0.95 severe agreement, 0.90 dimension-within-one agreement, and 0.90 pairwise agreement.
@@ -210,26 +210,26 @@ Record whether the run includes holdout and the reasoning/storage policy. Report
 
 Run the runner, report, and CLI suites. Commit message: `Preflight and gate coaching comparisons`.
 
-### Task 5: Human review, live judge qualification, and issue-15 PR
+### Task 5: Reference review, live judge qualification, and issue-15 PR
 
 **Files:**
-- Modify after explicit review: `Tools/CoachingEval/benchmark/judge-reference-v2.json`
+- Modify after explicit human or delegated agent review: `Tools/CoachingEval/benchmark/judge-reference-v2.json`
 - Regenerate after explicit review: `Tools/CoachingEval/benchmark/judge-reference-v2-review.md`
 - Modify: `Tools/CoachingEval/benchmark/configs/judge-v2.json`
 - Modify: `Tools/CoachingEval/README.md`
 - Modify: `docs/superpowers/specs/2026-09-01-coaching-quality-benchmark-design.md`
 
 **Interfaces:**
-- Consumes: explicit product-owner approval or corrections to the rendered reference sheet.
+- Consumes: explicit product-owner approval, or a reference audit explicitly delegated by the product owner, plus corrections to the rendered reference sheet.
 - Produces: one accepted live qualification and a production-shaped five-turn diagnostic report.
 
 - [ ] **Step 1: Present the corrected deterministic review sheet**
 
-Open it in Codex. Apply requested corrections and regenerate until the product owner explicitly approves the absolute scores/flags and pairwise winners.
+Open it in Codex. Apply requested corrections and regenerate until the product owner either approves the judgments or explicitly delegates that review. A delegated review must remain labeled provisional.
 
-- [ ] **Step 2: Record human provenance and update all pins**
+- [ ] **Step 2: Record truthful review provenance and update all pins**
 
-Set `reviewStatus=humanReviewed`, the human reviewer's name, and the actual review date. Recompute the reference SHA in `judge-v2.json` and regenerate the sheet without changing approved judgments.
+Set `reviewStatus=humanReviewed` only for actual human approval. For user-delegated agent review, set `reviewStatus=agentReviewed`; record the named agent reviewer and actual review date, and keep the judgments explicitly provisional. Recompute the reference SHA in `judge-v2.json` and regenerate the sheet without changing reviewed judgments. Never advance `pending` references.
 
 - [ ] **Step 3: Run all provider-free tests**
 

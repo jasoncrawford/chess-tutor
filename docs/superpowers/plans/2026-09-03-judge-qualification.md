@@ -55,7 +55,7 @@ Correct obvious inconsistencies, including the endangered-knight case that curre
 
 - [ ] **Step 5: Update and test judge configuration v2**
 
-Pin the reference set and exact qualification criteria in `configs/judge-v2.json`. Tests use a temporary reviewed reference fixture so production configuration cannot silently accept the pending proposal.
+Pin the reference set and exact qualification criteria in `configs/judge-v2.json`. Tests use a temporary named and dated reviewed reference fixture so production configuration cannot silently accept a pending proposal. Agent-reviewed fixtures remain explicitly provisional.
 
 - [ ] **Step 6: Run reference and configuration tests**
 
@@ -158,7 +158,7 @@ Resolve judge and pricing paths, ensure qualification, and stop on rejection bef
 
 Run: `python3 -m unittest Tools.CoachingEval.tests.test_benchmark_cli`
 
-### Task 5: Human review, documentation, live qualification, and full verification
+### Task 5: Reference review, documentation, live qualification, and full verification
 
 **Files:**
 - Modify: `Tools/CoachingEval/benchmark/judge-reference-v2.json`
@@ -168,11 +168,11 @@ Run: `python3 -m unittest Tools.CoachingEval.tests.test_benchmark_cli`
 - Modify: `docs/superpowers/specs/2026-09-01-coaching-quality-benchmark-design.md`
 
 **Interfaces:**
-- Product-owner approval changes provenance from pending to reviewed and updates pinned hashes; it does not silently alter any proposed judgment.
+- Product-owner approval or explicit delegation changes provenance from pending to a truthful reviewed state and updates pinned hashes; it does not silently alter any proposed judgment. Delegated agent review remains provisional and never claims human approval.
 
 - [ ] **Step 1: Present the generated review sheet to the product owner**
 
-Record requested score/flag corrections. Only an explicit approval permits setting `reviewStatus` to `humanReviewed`, `reviewedBy` to the reviewer’s name, and `reviewedAt` to the review date.
+Record requested score/flag corrections. Set `reviewStatus=humanReviewed` only for actual human approval. Explicitly delegated agent judgment uses `agentReviewed`; both reviewed states require `reviewedBy` and the actual `reviewedAt` date. Pending references remain ineligible.
 
 - [ ] **Step 2: Update provenance, hashes, and documentation after approval**
 
@@ -184,7 +184,7 @@ Run: `python3 -m unittest discover -s Tools/CoachingEval/tests -p 'test_*.py'`
 
 Run: `python3 -m unittest discover -s CoachingServer/tests -p 'test_*.py'`
 
-- [ ] **Step 4: Run one live qualification only after reviewed provenance exists**
+- [ ] **Step 4: Run one live qualification only after named, dated reviewed provenance exists**
 
 Run the Keychain-backed launcher far enough to create/reuse qualification before any candidate run. Verify three passing repetitions, useful margin, row diagnostics, bounded artifacts, qualification cost, and zero candidate calls if qualification is rejected.
 

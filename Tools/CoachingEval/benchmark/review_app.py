@@ -40,7 +40,7 @@ _FLAG_LABELS = {
 
 
 def load_reference_set() -> JudgeReferenceSet:
-    """Load the configured pin while allowing its pending human-review state."""
+    """Load the configured pin while allowing its pending review state."""
     configuration = load_judge(_JUDGE_CONFIGURATION_PATH, _REPOSITORY_ROOT)
     if configuration.reference_set_path is None or configuration.reference_set_sha256 is None:
         raise ValueError("Judge configuration does not pin a reference set")
@@ -65,6 +65,8 @@ def build_review_view_model(reference: JudgeReferenceSet) -> dict[str, Any]:
             "id": reference.identifier,
             "sha256": reference.sha256,
             "reviewStatus": reference.review_status,
+            "reviewedBy": reference.reviewed_by,
+            "reviewedAt": reference.reviewed_at,
             "authoredBy": reference.authored_by,
             "authoredAt": reference.authored_at,
             "responseContract": reference.response_contract,

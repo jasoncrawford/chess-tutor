@@ -40,6 +40,7 @@ _ARTIFACT_KEYS = frozenset(
         "status",
         "judgeConfigurationID",
         "referenceSetID",
+        "referenceReview",
         "createdAt",
         "expiresAt",
         "criteria",
@@ -171,6 +172,7 @@ class JudgeQualification:
             "status": "accepted" if accepted else "rejected",
             "judgeConfigurationID": configuration.identifier,
             "referenceSetID": reference.identifier,
+            "referenceReview": _reference_review(reference),
             "createdAt": _format_datetime(now),
             "expiresAt": _format_datetime(expires),
             "criteria": {
@@ -215,6 +217,8 @@ class JudgeQualification:
         if artifact["judgeConfigurationID"] != configuration.identifier:
             raise ValueError("Judge qualification is not compatible")
         if artifact["referenceSetID"] != reference.identifier:
+            raise ValueError("Judge qualification is not compatible")
+        if artifact["referenceReview"] != _reference_review(reference):
             raise ValueError("Judge qualification is not compatible")
         if artifact["bindings"] != _bindings(configuration):
             raise ValueError("Judge qualification is not compatible")
@@ -686,6 +690,14 @@ def _validate_metrics(value):
         raise ValueError("Judge qualification metrics are invalid") from error
     if not parsed.is_finite() or parsed < 0:
         raise ValueError("Judge qualification metrics are invalid")
+
+
+def _reference_review(reference):
+    return {
+        "status": reference.review_status,
+        "reviewedBy": reference.reviewed_by,
+        "reviewedAt": reference.reviewed_at,
+    }
 
 
 def _publish(artifact_root, artifact, now):

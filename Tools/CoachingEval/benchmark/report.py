@@ -20,6 +20,7 @@ from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS
 _BOOTSTRAP_DRAWS = 10_000
 _BOOTSTRAP_SEED = 20260901
 _PROVIDER_SUCCESS = frozenset(("completed", "invalid"))
+_REVIEWED_REFERENCE_STATUSES = frozenset(("humanReviewed", "agentReviewed"))
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _QUALIFICATION_BINDING_KEYS = frozenset(
     (
@@ -731,6 +732,16 @@ def _validate_qualification_binding(qualification, manifest, issues):
         for key in _MANIFEST_QUALIFICATION_BINDING_KEYS
     ):
         issues.append("judge qualification bindings do not match grade manifest")
+    reference_review = qualification.get("referenceReview")
+    if (
+        not isinstance(reference_review, Mapping)
+        or set(reference_review) != {"status", "reviewedBy", "reviewedAt"}
+        or reference_review.get("status") not in _REVIEWED_REFERENCE_STATUSES
+        or not isinstance(reference_review.get("reviewedBy"), str)
+        or not reference_review["reviewedBy"].strip()
+        or not _valid_review_date(reference_review.get("reviewedAt"))
+    ):
+        issues.append("judge qualification reference review is invalid")
     criteria = qualification.get("criteria")
     passes = qualification.get("passes")
     if (
@@ -772,6 +783,11 @@ def _qualification_summary(qualification, grade_manifest):
         pass
     return {
         "id": qualification.get("referenceSetID"),
+        "referenceReview": (
+            dict(qualification["referenceReview"])
+            if isinstance(qualification.get("referenceReview"), Mapping)
+            else None
+        ),
         "createdAt": qualification.get("createdAt"),
         "expiresAt": qualification.get("expiresAt"),
         "ageDaysAtGrading": age_days,
@@ -783,6 +799,16 @@ def _qualification_summary(qualification, grade_manifest):
         "minimumPairwiseAgreement": qualification.get("minimumPairwiseAgreement"),
         "metrics": qualification.get("qualificationMetrics"),
     }
+
+
+def _valid_review_date(value):
+    if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
 
 
 def _empty_metrics():
@@ -1378,10 +1404,23 @@ def _markdown(report):
     if qualification is not None:
         age = qualification["ageDaysAtGrading"]
         age_text = f"{age:.1f} days" if age is not None else "unknown"
+        reference_review = qualification["referenceReview"]
+        if reference_review["status"] == "agentReviewed":
+            review_text = (
+                f"Agent-reviewed by {reference_review['reviewedBy']} on "
+                f"{reference_review['reviewedAt']}; provisional reference judgments."
+            )
+        else:
+            review_text = (
+                f"Human-reviewed by {reference_review['reviewedBy']} on "
+                f"{reference_review['reviewedAt']}."
+            )
         lines.extend(
             [
                 "",
                 "## Judge qualification",
+                "",
+                review_text,
                 "",
                 (
                     f"{qualification['repetitions']} passes; minimum severe agreement "

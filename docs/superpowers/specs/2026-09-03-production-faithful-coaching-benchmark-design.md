@@ -35,9 +35,9 @@ Stored continuation is required whenever conversation reuse is enabled. Initial 
 
 ## Replayable judge reference set
 
-The pending reference set remains version 2 because it has never been approved or used for qualification. Its revised document contains:
+The reference set remains version 2 because it had not previously been reviewed or used for qualification. Its revised document contains:
 
-- provenance, including the existing mandatory human-review gate;
+- provenance that distinguishes pending, named human review, and named delegated agent review;
 - a pinned `chess-native-v13` response-contract identifier;
 - replayable sources copied from the deterministic Swift benchmark export;
 - exactly 20 absolute cases; and
@@ -47,9 +47,9 @@ Each source stores the exported benchmark case ID, group and step, split, exact 
 
 The 20 absolute cases cover all five expected-response types, correct and incorrect responses, latest-action handling, quiet positions, urgent danger, safe and unsafe captures, staged and replaced moves, special rules, Hint escalation, square focus, move focus, answer revelation, stale stages, impossible instructions, beginner wording, and factual errors. Help closing remains in orchestration tests because the app does not request or display a model turn after closing Help.
 
-Each pairwise case uses one replayable source, two mechanically valid responses, a human preference of response one, response two, or tie, and a rationale. The set includes obvious quality gaps and close alternatives. Qualification presents every pair in both orders so positional bias cannot masquerade as agreement.
+Each pairwise case uses one replayable source, two mechanically valid responses, a reviewed preference of response one, response two, or tie, and a rationale. The set includes obvious quality gaps and close alternatives. Qualification presents every pair in both orders so positional bias cannot masquerade as agreement.
 
-The deterministic review sheet displays the source ID, FEN, move history, latest interaction, staged move, source/request hashes, derived UI, full candidate controls, scores, flags, winners, and rationales. Human approval applies to this rendered sheet. Agent review can find errors but cannot set human provenance.
+The deterministic review sheet displays the source ID, FEN, move history, latest interaction, staged move, source/request hashes, derived UI, full candidate controls, scores, flags, winners, and rationales. `humanReviewed` records human approval. `agentReviewed` records a user-delegated agent review and remains explicitly provisional; it never claims human provenance. Either reviewed state requires reviewer identity and the actual review date and may qualify the judge. `pending` always fails closed.
 
 ## Judge qualification
 
@@ -58,7 +58,7 @@ Qualification remains bound to the judge configuration, judge prompt, structured
 Each pass must achieve:
 
 - at least 95% severe/non-severe agreement across the 20 absolute cases;
-- at least 90% of absolute dimension scores within one point of the human score; and
+- at least 90% of absolute dimension scores within one point of the reviewed reference score; and
 - at least 90% normalized winner agreement across both presentations of the 10 pairwise cases.
 
 Every pair must receive the same normalized outcome in both presentation orders. An order-inconsistent pair counts as incorrect in both rows. Every pass must clear every threshold; averages cannot hide an unstable pass.
@@ -103,7 +103,7 @@ The API key remains in Keychain and appears only in child-process environment va
 
 ## Success criteria
 
-- Human-reviewed replayable absolute and pairwise ground truth.
+- Replayable absolute and pairwise references with truthful named review provenance; delegated agent judgments remain provisional.
 - A judge that clears every qualification threshold in all three passes.
 - Candidate execution behavior identical to the live server for prompt compilation, effort routing, continuation storage, and validation.
 - A complete, inspectable comparison report with quality, latency, and cost.

@@ -1,6 +1,6 @@
 # Judge reference set v2
 
-Status: **pending human review**
+Status: **agent-reviewed by GPT-6 Astra (delegated by Jason Crawford) on 2026-09-06**
 
 Proposed by: Codex implementation agent on 2026-09-03
 
@@ -12,7 +12,7 @@ Source corpus cases SHA-256: `d882d31605462b856266e6578ddfd2eec37dfbbd6d329150ae
 
 Source corpus manifest SHA-256: `17b55d3222dadc818b738a0994b523b791b839015cdedbd184582b7bfccb9213`
 
-Review every replayed context, candidate response, score, flag, preference, and rationale. Approval of this sheet is required before these judgments become qualification ground truth.
+These are provisional reference judgments delegated to an agent; this provenance does not claim human review.
 
 The raw source requests remain in the JSON reference set. This sheet renders the bounded facts needed for review.
 
@@ -234,15 +234,15 @@ The raw source requests remain in the JSON reference set. This sheet renders the
 
 **Bounded judge context:** {"immediateReplies": [], "interaction": {"events": [{"kind": "helpOpened", "referencedIDs": [], "sequence": 1}, {"kind": "moveStaged", "referencedIDs": ["move:b1-c3"], "sequence": 2}], "latestEvent": {"kind": "moveStaged", "referencedIDs": ["move:b1-c3"], "sequence": 2}, "selectedPieceReference": "piece:white:knight:b1", "selectedSquare": "c3", "tentativeMove": {"capturePieceReference": null, "destinationSquare": "c3", "givesCheck": false, "givesCheckmate": false, "id": "move:b1-c3", "isLegal": true, "sourcePieceReference": "piece:white:knight:b1", "special": "none"}}, "legalCaptures": [], "moveHistory": [{"canonicalMove": "d2d4", "displayNotation": "d4", "ply": 1}, {"canonicalMove": "d7d5", "displayNotation": "d5", "ply": 2}, {"canonicalMove": "g1f3", "displayNotation": "Nf3", "ply": 3}, {"canonicalMove": "g8f6", "displayNotation": "Nf6", "ply": 4}], "position": {"fen": "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3", "sideToMove": "white", "status": "ongoing"}}
 
-**Candidate:** “Your knight move has no immediate forcing reply. Does it look safe?”
+**Candidate:** “Your knight is nearer the middle. Does it look safe there?”
 
 **Candidate controls:** actions=[]; focus=[{"from": "b1", "to": "c3", "type": "move"}]; expects="judgeMoveSafety".
 
-**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 4; Coherence and answerability: 5; Child clarity: 5.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The response evaluates the actual staged knight move and uses its allowable move focus. It gives a grounded clue while leaving the learner to judge safety.
+**Rationale:** The response acknowledges the actual staged knight move and uses its allowable move focus. It leaves the learner to answer the safety question without supplying the answer.
 
 ## Absolute ref-07
 
@@ -470,7 +470,7 @@ The raw source requests remain in the JSON reference set. This sheet renders the
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The response acknowledges the inspected black queen and reconnects it to the staged pawn move's safety. Its square focus identifies the square the learner just inspected without revealing the reply.
+**Rationale:** The response acknowledges the inspected black queen and reconnects it to the staged pawn move's safety. Black's legal Qxf3 can be answered by gxf3 or Qxf3, so the question correctly avoids implying that d3 loses a knight.
 
 ## Absolute ref-13
 
@@ -580,11 +580,11 @@ The raw source requests remain in the JSON reference set. This sheet renders the
 
 **Candidate controls:** actions=[]; focus=[{"from": "e5", "to": "d6", "type": "move"}]; expects="judgeMoveSafety".
 
-**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 5; Child clarity: 4.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 4.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The explanation accurately describes the legal staged en-passant capture in plain terms. The rule explanation is somewhat long but leaves the safety judgment to the learner.
+**Rationale:** The explanation accurately describes the legal staged en-passant capture in plain terms. The rule explanation names only an already staged special move, preserving the learner's safety decision.
 
 ## Absolute ref-16
 
@@ -618,11 +618,11 @@ The raw source requests remain in the JSON reference set. This sheet renders the
 
 **Candidate controls:** actions=[]; focus=[{"from": "b7", "to": "a8", "type": "move"}]; expects="judgeMoveSafety".
 
-**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 3; Coherence and answerability: 5; Child clarity: 5.
+**Scores:** Chess correctness: 5; Coaching judgment: 5; Latest-action responsiveness: 5; Discovery and independence: 5; Coherence and answerability: 5; Child clarity: 5.
 
 **Flags:** factualOrIllegalAdvice: false; wrongUrgentPriority: false; obsoleteStage: false; mixedStages: false; answerRevealingGuidance: false; unavailableUIOrDeadEnd: false; severeError: false.
 
-**Rationale:** The response accurately describes the selected queen promotion and points to the staged move. It explains the consequence before asking the learner to judge the move's safety.
+**Rationale:** The response accurately describes the selected queen promotion and points to the staged move. It explains only the consequence of the already staged special move, preserving the learner's safety decision.
 
 ## Absolute ref-17
 
@@ -924,7 +924,7 @@ The raw source requests remain in the JSON reference set. This sheet renders the
 
 **Bounded judge context:** {"immediateReplies": [], "interaction": {"events": [{"kind": "helpOpened", "referencedIDs": [], "sequence": 1}, {"kind": "moveStaged", "referencedIDs": ["move:b1-c3"], "sequence": 2}], "latestEvent": {"kind": "moveStaged", "referencedIDs": ["move:b1-c3"], "sequence": 2}, "selectedPieceReference": "piece:white:knight:b1", "selectedSquare": "c3", "tentativeMove": {"capturePieceReference": null, "destinationSquare": "c3", "givesCheck": false, "givesCheckmate": false, "id": "move:b1-c3", "isLegal": true, "sourcePieceReference": "piece:white:knight:b1", "special": "none"}}, "legalCaptures": [], "moveHistory": [{"canonicalMove": "d2d4", "displayNotation": "d4", "ply": 1}, {"canonicalMove": "d7d5", "displayNotation": "d5", "ply": 2}, {"canonicalMove": "g1f3", "displayNotation": "Nf3", "ply": 3}, {"canonicalMove": "g8f6", "displayNotation": "Nf6", "ply": 4}], "position": {"fen": "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3", "sideToMove": "white", "status": "ongoing"}}
 
-**Response one:** “Your knight move has no immediate forcing reply. Does it look safe?”
+**Response one:** “Your knight is nearer the middle. Does it look safe there?”
 
 **Response one controls:** actions=[]; focus=[{"from": "b1", "to": "c3", "type": "move"}]; expects="judgeMoveSafety".
 
@@ -1094,7 +1094,7 @@ The raw source requests remain in the JSON reference set. This sheet renders the
 
 **Reference preference:** responseOne
 
-**Rationale:** Both are accurate and responsive, but response one is preferred because it uses the learner's inspection without revealing the reply.
+**Rationale:** Black's legal Qxf3 can be answered by gxf3 or Qxf3; response one is preferred because it uses the learner's inspection without implying that d3 loses a knight.
 
 ## Pairwise pair-09
 

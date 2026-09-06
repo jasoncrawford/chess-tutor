@@ -92,6 +92,7 @@ _CATEGORIES = frozenset(
 )
 _REQUEST_KINDS = frozenset(("initial", "followUp"))
 _REFERENCE_PREFERENCES = frozenset(("responseOne", "responseTwo", "tie"))
+_REVIEWED_STATUSES = frozenset(("humanReviewed", "agentReviewed"))
 _ACTION_REFERENCES = frozenset(
     f"action:{action}"
     for action in (
@@ -195,8 +196,23 @@ class JudgeReferenceSet:
     def render_review(self) -> str:
         if self.review_status == "humanReviewed":
             status = f"human-reviewed by {self.reviewed_by} on {self.reviewed_at}"
+            review_note = (
+                "Human approval of this sheet makes these judgments qualification "
+                "ground truth."
+            )
+        elif self.review_status == "agentReviewed":
+            status = f"agent-reviewed by {self.reviewed_by} on {self.reviewed_at}"
+            review_note = (
+                "These are provisional reference judgments delegated to an agent; "
+                "this provenance does not claim human review."
+            )
         else:
             status = "pending human review"
+            review_note = (
+                "Review every replayed context, candidate response, score, flag, "
+                "preference, and rationale before these judgments become qualification "
+                "ground truth."
+            )
         sources = {source["id"]: source for source in self.sources}
         lines = [
             "# Judge reference set v2",
@@ -213,7 +229,7 @@ class JudgeReferenceSet:
             "",
             f"Source corpus manifest SHA-256: `{self.source_manifest_sha256}`",
             "",
-            "Review every replayed context, candidate response, score, flag, preference, and rationale. Approval of this sheet is required before these judgments become qualification ground truth.",
+            review_note,
             "",
             "The raw source requests remain in the JSON reference set. This sheet renders the bounded facts needed for review.",
         ]
@@ -341,7 +357,7 @@ class JudgeReferenceSet:
         if status == "pending":
             if value["reviewedBy"] is not None or value["reviewedAt"] is not None:
                 raise ValueError("Pending reference-set review cannot name a reviewer")
-        elif status == "humanReviewed":
+        elif status in _REVIEWED_STATUSES:
             provenance["reviewedBy"] = cls._text(
                 value["reviewedBy"], "reference-set reviewer"
             )
@@ -350,8 +366,8 @@ class JudgeReferenceSet:
             )
         else:
             raise ValueError("Judge reference-set review status is invalid")
-        if require_reviewed and status != "humanReviewed":
-            raise ValueError("Judge reference set has not been human-reviewed")
+        if require_reviewed and status not in _REVIEWED_STATUSES:
+            raise ValueError("Judge reference set has not been reviewed")
         return provenance
 
     @classmethod
