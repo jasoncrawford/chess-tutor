@@ -19,6 +19,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.fake_bin.mkdir()
         self.command_log = self.temp_path / "commands.log"
         self.env = os.environ.copy()
+        self.env.pop("CHESS_TUTOR_COACHING_MODEL_CONFIG", None)
         self.env.update(
             {
                 "PATH": f"{self.fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
@@ -26,6 +27,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 "CHESS_TUTOR_COACHING_DEV_PORT": "18787",
                 "CHESS_TUTOR_COACHING_VENV_DIR": str(self.temp_path / "venv"),
                 "SIMCTL_CHILD_UNRELATED_SECRET": "do-not-forward",
+                "SIMCTL_CHILD_CHESS_TUTOR_COACHING_MODEL_CONFIG": "do-not-forward-model",
             }
         )
         self._install_successful_fakes()
@@ -34,6 +36,52 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.temporary_directory.cleanup()
 
     def test_launches_configured_app_without_printing_secrets_and_stops_server(self):
+        returncode, combined_output, command_log = self._launch_and_stop()
+
+        self.assertEqual(returncode, 130, combined_output)
+        self.assertNotIn("sk-private-key", combined_output)
+        self.assertNotIn("local-token-secret", combined_output)
+        self.assertNotIn("sk-private-key", command_log)
+        self.assertNotIn("local-token-secret", command_log)
+        self.assertIn("simctl boot AA821CF0", command_log)
+        self.assertIn("simctl bootstatus AA821CF0 -b", command_log)
+        self.assertIn("simctl install AA821CF0", command_log)
+        self.assertIn(
+            "simctl launch --terminate-running-process AA821CF0 "
+            "org.jasoncrawford.chesstutor base-url=set token=set extra-child=missing model-config=missing",
+            command_log,
+        )
+        self.assertIn("server-start key=set token=set", command_log)
+        self.assertIn("server-stopped", command_log)
+        self.assertIn("venv-create", command_log)
+        self.assertIn("dependency-install requirements.txt", command_log)
+        selected = "Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json"
+        self.assertIn(f"server-model-config={selected}\n", command_log)
+        self.assertIn("Local coaching: provisional Astra discovery trial; production default unchanged.", combined_output)
+        self.assertIn(f"Model configuration: {selected}", combined_output)
+        self.assertNotIn("explicit model configuration override", combined_output)
+
+    def test_explicit_model_configuration_override_is_preserved(self):
+        for selected in (
+            "CoachingServer/configs/production-v1.json",
+            "Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json",
+            "",
+            "missing model configuration.json",
+        ):
+            with self.subTest(selected=selected):
+                self.env["CHESS_TUTOR_COACHING_MODEL_CONFIG"] = selected
+                self.command_log.write_text("")
+                returncode, output, command_log = self._launch_and_stop()
+                self.assertEqual(returncode, 130, output)
+                self.assertIn(f"server-model-config={selected}\n", command_log)
+                self.assertIn("Local coaching: explicit model configuration override.", output)
+                self.assertNotIn("provisional Astra discovery trial", output)
+                self.assertIn(f"Model configuration: {selected}\n", output)
+                self.assertNotIn("sk-private-key", output + command_log)
+                self.assertNotIn("local-token-secret", output + command_log)
+                self.assertIn("server-stopped", command_log)
+
+    def _launch_and_stop(self):
         process = subprocess.Popen(
             [str(LAUNCHER)],
             cwd=REPOSITORY_ROOT,
@@ -61,23 +109,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         combined_output = "".join(observed_lines) + remaining_output
         command_log = self.command_log.read_text() if self.command_log.exists() else ""
 
-        self.assertEqual(process.returncode, 130, combined_output)
-        self.assertNotIn("sk-private-key", combined_output)
-        self.assertNotIn("local-token-secret", combined_output)
-        self.assertNotIn("sk-private-key", command_log)
-        self.assertNotIn("local-token-secret", command_log)
-        self.assertIn("simctl boot AA821CF0", command_log)
-        self.assertIn("simctl bootstatus AA821CF0 -b", command_log)
-        self.assertIn("simctl install AA821CF0", command_log)
-        self.assertIn(
-            "simctl launch --terminate-running-process AA821CF0 "
-            "org.jasoncrawford.chesstutor base-url=set token=set extra-child=missing",
-            command_log,
-        )
-        self.assertIn("server-start key=set token=set", command_log)
-        self.assertIn("server-stopped", command_log)
-        self.assertIn("venv-create", command_log)
-        self.assertIn("dependency-install requirements.txt", command_log)
+        return process.returncode, combined_output, command_log
 
     def test_reports_actionable_error_when_keychain_item_is_missing(self):
         self._write_executable(
@@ -200,6 +232,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             [ -n "${OPENAI_API_KEY:-}" ] && key_state=set
             [ -n "${CHESS_TUTOR_COACHING_ACCESS_TOKEN:-}" ] && token_state=set
             printf 'server-start key=%s token=%s\n' "$key_state" "$token_state" >> "$FAKE_COMMAND_LOG"
+            printf 'server-model-config=%s\n' "${CHESS_TUTOR_COACHING_MODEL_CONFIG-unset}" >> "$FAKE_COMMAND_LOG"
             [ "${FAKE_SERVER_EXITS_IMMEDIATELY:-}" = "1" ] && exit 0
             [ "${FAKE_SERVER_FAILS_AFTER_DELAY:-}" = "1" ] && sleep 2 && exit 0
             trap 'printf "%s\n" server-stopped >> "$FAKE_COMMAND_LOG"; exit 0' TERM INT
@@ -233,10 +266,12 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
               base_state=missing
               token_state=missing
               extra_child_state=missing
+              model_config_state=missing
               [ -n "${SIMCTL_CHILD_CHESS_TUTOR_COACHING_BASE_URL:-}" ] && base_state=set
               [ -n "${SIMCTL_CHILD_CHESS_TUTOR_COACHING_ACCESS_TOKEN:-}" ] && token_state=set
               [ -n "${SIMCTL_CHILD_UNRELATED_SECRET:-}" ] && extra_child_state=present
-              printf '%s base-url=%s token=%s extra-child=%s\n' "$*" "$base_state" "$token_state" "$extra_child_state" >> "$FAKE_COMMAND_LOG"
+              [ -n "${SIMCTL_CHILD_CHESS_TUTOR_COACHING_MODEL_CONFIG:-}" ] && model_config_state=present
+              printf '%s base-url=%s token=%s extra-child=%s model-config=%s\n' "$*" "$base_state" "$token_state" "$extra_child_state" "$model_config_state" >> "$FAKE_COMMAND_LOG"
               printf '%s\n' 'org.jasoncrawford.chesstutor: 12345'
               exit 0
             fi

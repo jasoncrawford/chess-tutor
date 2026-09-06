@@ -4,9 +4,10 @@ The private prototype accepts mechanically generated chess facts from the iPad,
 renders the coaching prompts on the server, and returns one validated coaching
 turn. The device never receives the OpenAI key.
 
-The server owns the `tutor-v13` system prompt, converts the structured device
-request into model-facing Markdown, and validates the model's strict JSON
-before returning it. Opening Help uses GPT-5.6 Sol with high reasoning. A
+The server owns the system prompt, converts the structured device request
+into model-facing Markdown, and validates the model's strict JSON before
+returning it. The deployed and direct-server default remains `tutor-v13`
+with GPT-5.6 Sol: opening Help uses high reasoning. A
 meaningful follow-up continues that Responses API chain with a compact update.
 Move evaluation, inspected tactical replies, and Hint use low reasoning; simple
 episode updates use none. Selecting a piece remains local and does not call the
@@ -29,6 +30,27 @@ service `ChessTutor-CoachingEval-OpenAI`, then run:
 ./scripts/run_hosted_coaching_dev.sh
 ```
 
+This convenience launcher selects a **provisional local Astra discovery
+trial**, not a deployed production promotion. It reuses the immutable shared
+configuration at
+`Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json`:
+GPT-6 Astra with low reasoning for initial and follow-up requests, the
+`tutor-v13-discovery.md` prompt, stored conversation reuse, a 2,048-token output
+cap, a 30-second timeout, and one attempt. The v13 compiler and response
+contract are unchanged. This local selection does not change the deployed
+Sol default or establish that the automatic benchmark promotion gates passed.
+
+An explicitly set `CHESS_TUTOR_COACHING_MODEL_CONFIG` takes precedence. The
+launcher prints whether it selected the trial default or an explicit override,
+and passes that selection only to its server child, not the iPad. Empty or
+invalid overrides fail configuration loading; they do not silently fall back
+to Astra. To use the unchanged Sol policy locally:
+
+```bash
+CHESS_TUTOR_COACHING_MODEL_CONFIG=CoachingServer/configs/production-v1.json \
+  ./scripts/run_hosted_coaching_dev.sh
+```
+
 The script creates an ignored `.venv` when needed, installs the pinned server
 dependency, chooses and boots `iPad (A16)`, starts the server, builds the app,
 and installs and launches it with hosted coaching configured. Leave the
@@ -47,7 +69,9 @@ for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 .venv/bin/python -m CoachingServer.local --host 127.0.0.1 --port 8787
 ```
 
-The server loads `CoachingServer/configs/production-v1.json`. To compare a
+Direct server invocation and deployment still load
+`CoachingServer/configs/production-v1.json` when the model override is unset;
+the local launcher's Astra default does not apply to them. To compare a
 different pinned model policy locally, set `CHESS_TUTOR_COACHING_MODEL_CONFIG`
 to another repository-relative configuration path. The app cannot choose the
 model policy. No Fast service tier is used.

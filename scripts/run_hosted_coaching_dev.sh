@@ -5,10 +5,12 @@ set -euo pipefail
 readonly KEYCHAIN_SERVICE="ChessTutor-CoachingEval-OpenAI"
 readonly DEFAULT_SIMULATOR="iPad (A16)"
 readonly BUNDLE_IDENTIFIER="org.jasoncrawford.chesstutor"
+readonly DEFAULT_TRIAL_MODEL_CONFIG="Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json"
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 simulator_name="${1:-$DEFAULT_SIMULATOR}"
 venv_directory="${CHESS_TUTOR_COACHING_VENV_DIR:-$repository_root/.venv}"
+model_configuration="${CHESS_TUTOR_COACHING_MODEL_CONFIG-$DEFAULT_TRIAL_MODEL_CONFIG}"
 server_pid=""
 
 if [ "$#" -gt 1 ]; then
@@ -78,9 +80,16 @@ fi
 xcrun simctl bootstatus "$simulator_udid" -b
 open -a Simulator
 
+if [ "${CHESS_TUTOR_COACHING_MODEL_CONFIG+set}" = set ]; then
+  echo "Local coaching: explicit model configuration override."
+else
+  echo "Local coaching: provisional Astra discovery trial; production default unchanged."
+fi
+printf 'Model configuration: %s\n' "$model_configuration"
 echo "Starting the coaching server..."
 OPENAI_API_KEY="$openai_api_key" \
 CHESS_TUTOR_COACHING_ACCESS_TOKEN="$access_token" \
+CHESS_TUTOR_COACHING_MODEL_CONFIG="$model_configuration" \
   "$venv_directory/bin/python" -m CoachingServer.local --host 127.0.0.1 --port "$port" &
 server_pid=$!
 unset openai_api_key

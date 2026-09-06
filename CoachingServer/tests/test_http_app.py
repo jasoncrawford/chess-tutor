@@ -258,7 +258,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
                 "OPENAI_API_KEY": "private-key",
                 "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
                 "CHESS_TUTOR_COACHING_MODEL_CONFIG": (
-                    "CoachingServer/configs/production-v1.json"
+                    "Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json"
                 ),
             },
             clear=True,
@@ -272,9 +272,51 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
 
         configuration = service_type.call_args.kwargs["configuration"]
         self.assertEqual(
-            ROOT / "CoachingServer/configs/production-v1.json",
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json",
             configuration.path,
         )
+        self.assertEqual("gpt-6-astra", configuration.model)
+        self.assertEqual("low", configuration.initial_reasoning_effort)
+        self.assertEqual("low", configuration.tactical_follow_up_reasoning_effort)
+        self.assertEqual("low", configuration.simple_follow_up_reasoning_effort)
+        self.assertTrue(configuration.conversation_reuse)
+        self.assertTrue(configuration.store)
+        self.assertEqual(2048, configuration.maximum_output_tokens)
+        self.assertEqual(30, configuration.timeout_seconds)
+        self.assertEqual(1, configuration.maximum_attempts)
+        self.assertEqual(
+            ROOT / "Tools/CoachingEval/prompts/tutor-v13-discovery.md",
+            configuration.system_prompt_path,
+        )
+        self.assertEqual(
+            "88b95067d763ec020d2aa6f4e0ce37430cdf818591f8a76b6eaa3d9bf2d9fcc6",
+            configuration.system_prompt_sha256,
+        )
+
+    def test_environment_application_rejects_invalid_explicit_overrides_before_provider_construction(self):
+        for selected in (
+            "",
+            "missing model configuration.json",
+            "../outside-model.json",
+            "Tools/CoachingEval/benchmark/configs/astra-discovery-low.json",
+        ):
+            with self.subTest(selected=selected), mock.patch.dict(
+                os.environ,
+                {
+                    "OPENAI_API_KEY": "private-key",
+                    "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "private-token",
+                    "CHESS_TUTOR_COACHING_MODEL_CONFIG": selected,
+                },
+                clear=True,
+            ), mock.patch(
+                "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
+            ) as client_type, mock.patch(
+                "CoachingServer.http_app.HostedCoachingService"
+            ) as service_type:
+                with self.assertRaises(ValueError):
+                    create_environment_application()
+                client_type.assert_not_called()
+                service_type.assert_not_called()
 
     def test_uses_flask_for_the_http_boundary(self):
         app = create_application(
