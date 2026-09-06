@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from CoachingServer.chess_native_compiler import parse_neutral_request
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
 from Tools.CoachingEval.benchmark.judge_contract import (
     RUBRIC_DIMENSIONS,
@@ -27,6 +28,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     validate_scores as _validate_scores,
 )
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
+from Tools.CoachingEval.benchmark.reference_set import JudgeReferenceSet
 
 
 @dataclass(frozen=True)
@@ -231,6 +233,7 @@ def _pairwise_grades(
             payload = {
                 "kind": "pairwise",
                 "graderBrief": _brief_payload(turn.grader_brief),
+                "judgeContext": JudgeReferenceSet.judge_context(parse_neutral_request(turn.request)),
                 "availableUI": _available_ui(candidate),
                 "responseA": response_a,
                 "responseB": response_b,
@@ -301,6 +304,7 @@ def _absolute_payload(turn, record):
     return {
         "kind": "absolute",
         "graderBrief": _brief_payload(turn.grader_brief),
+        "judgeContext": JudgeReferenceSet.judge_context(parse_neutral_request(turn.request)),
         "availableUI": _available_ui(record),
         "candidateTurn": record["parsedTurn"],
     }

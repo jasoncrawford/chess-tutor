@@ -13,6 +13,9 @@ from Tools.CoachingEval.benchmark.report import (
     build_report,
     write_report,
 )
+from Tools.CoachingEval.benchmark.runner import _execute_cell, _preflight
+from Tools.CoachingEval.openai_responses import OpenAIResponsesError
+from Tools.CoachingEval.tests import test_benchmark_runner as runner_fixtures
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -196,6 +199,57 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIsNone(candidate_cost["total"])
         self.assertIsNone(candidate_cost["perResponse"])
         self.assertIn("missing price coverage for candidate", report["integrityIssues"])
+
+    def test_timeout_then_success_keeps_report_cost_unknown_and_ineligible(self):
+        run_root, grade_root = self.make_complete_comparison(
+            self.root / "retry-accounting", include_holdout=True,
+        )
+        before = build_report(run_root, grade_root, self.prices)
+        self.assertTrue(before["configurations"]["candidate"]["promotionEligible"])
+        fixture = runner_fixtures.BenchmarkRunnerTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        configuration = fixture.make_configuration(
+            identifier="candidate", baseline=False, pricing_version=self.prices.version,
+            model_changes={"maximumAttempts": 2},
+        )
+        records_path = run_root / "records.jsonl"
+        records = [json.loads(line) for line in records_path.read_text().splitlines()]
+        index = next(index for index, record in enumerate(records) if record["configurationID"] == "candidate")
+        original = records[index]
+        turn = replace(fixture.corpus.turns[0], identifier=original["caseID"], group_id=original["groupID"])
+        cell = _preflight((configuration,), (turn,), 1, self.prices)[0]
+        record, response_id = _execute_cell(
+            cell, runner_fixtures.FakeClient(failures=[OpenAIResponsesError("private-timeout", category="timeout")]),
+            previous_response_id=None, price_table=self.prices,
+        )
+        self.assertTrue(record["mechanicalValidation"]["valid"])
+        self.assertIsNotNone(response_id)
+        self.assertEqual(2, record["attemptCount"])
+        self.assertEqual(100, record["usage"]["inputTokens"])
+        self.assertEqual(10, record["usage"]["outputTokens"])
+        records[index] = record
+        records_bytes = self.jsonl(records)
+        records_path.write_bytes(records_bytes)
+        manifest_path = run_root / "run-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["recordsSHA256"] = self.sha(records_bytes)
+        manifest_path.write_text(json.dumps(manifest))
+        grade_manifest_path = grade_root / "grade-manifest.json"
+        grade_manifest = json.loads(grade_manifest_path.read_text())
+        grade_manifest["sourceRunRecordsSHA256"] = self.sha(records_bytes)
+        grade_manifest_path.write_text(json.dumps(grade_manifest))
+
+        report = build_report(run_root, grade_root, self.prices)
+        candidate = report["configurations"]["candidate"]
+        self.assertFalse(candidate["candidateCostUSD"]["accountingComplete"])
+        self.assertIsNone(candidate["candidateCostUSD"]["total"])
+        self.assertFalse(candidate["trialEligible"])
+        self.assertFalse(candidate["promotionEligible"])
+        self.assertIn("candidate accounting is incomplete for candidate", report["integrityIssues"])
+        self.assertFalse(record["candidateAccountingComplete"])
+        self.assertIsNone(record["candidateCostUSD"])
+        self.assertNotIn("private-timeout", json.dumps(report))
 
     def test_missing_candidate_accounting_is_unknown_and_ineligible(self):
         records_path = self.run_root / "records.jsonl"

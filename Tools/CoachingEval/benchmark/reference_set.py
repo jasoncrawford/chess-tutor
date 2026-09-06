@@ -430,7 +430,7 @@ class JudgeReferenceSet:
         if parsed_request["interaction"]["latestEvent"]["kind"] == "helpClosed":
             raise ValueError("Judge reference source cannot be a help-closed turn")
         cls._validate_event_semantics(parsed_request)
-        judge_context = cls._judge_context(parsed_request)
+        judge_context = cls.judge_context(parsed_request)
         return source, compilation, judge_context
 
     @classmethod
@@ -621,7 +621,11 @@ class JudgeReferenceSet:
                 )
 
     @classmethod
-    def _judge_context(cls, request):
+    def judge_context(cls, request):
+        """Build bounded factual evidence from a normalized neutral request.
+
+        Qualification and candidate grading share this exact projection.
+        """
         interaction = request["interaction"]
         context = {
             "position": dict(request["position"]),

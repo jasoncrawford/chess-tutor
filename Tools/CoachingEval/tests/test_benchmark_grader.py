@@ -114,9 +114,10 @@ class BenchmarkGraderTests(unittest.TestCase):
             reference, self.configuration.reference_set_sha256
         )
         self.now = datetime(2026, 9, 3, 12, 0, tzinfo=timezone.utc)
+        self.qualification_client = QueueJudge(self.qualification_outputs())
         self.qualification_path = JudgeQualification.ensure(
             self.configuration,
-            QueueJudge(self.qualification_outputs()),
+            self.qualification_client,
             None,
             self.root / "qualifications",
             self.now,
@@ -350,6 +351,51 @@ class BenchmarkGraderTests(unittest.TestCase):
         self.assertRegex(manifest["absoluteSchemaSHA256"], r"^[0-9a-f]{64}$")
         self.assertRegex(manifest["pairwiseSchemaSHA256"], r"^[0-9a-f]{64}$")
 
+    def test_grading_preserves_the_context_supplied_during_qualification(self):
+        source_ids = ("s07-inspect-reply-03", "s04-safe-move-confirm-03", "s06-replace-move-03")
+        sources = {
+            source["id"]: source
+            for source in json.loads(self.configuration.reference_set_path.read_text())["sources"]
+        }
+        corpus = self.make_corpus()
+        turns = []
+        for turn, source_id in zip(corpus.turns, source_ids):
+            source = sources[source_id]
+            brief = source["graderBrief"]
+            turns.append(replace(turn, request=source["request"], grader_brief=BenchmarkGraderBrief(
+                tuple(brief["verifiedFacts"]), brief["coachingPurpose"],
+                tuple(brief["acceptableAlternatives"]), tuple(brief["successCriteria"]),
+                tuple(brief["severeFailureCriteria"]),
+            )))
+        corpus = replace(corpus, turns=tuple(turns))
+        client = QueueJudge(
+            [self.absolute() for _ in range(6)]
+            + [{"winner": "tie", "evidence": ["Both fit the supplied facts."]} for _ in range(3)]
+        )
+        grade_run(
+            run_root=self.make_run(all_valid=True), corpus=corpus,
+            judge_configuration=self.configuration, client=client,
+            destination=self.root / "context-grades", qualification_path=self.qualification_path,
+            now=self.now,
+        )
+        qualification_payloads = [json.loads(call["user_prompt"]) for call in self.qualification_client.calls]
+        payloads = [json.loads(call["user_prompt"]) for call in client.calls]
+        for index, source_id in enumerate(source_ids):
+            latest = sources[source_id]["request"]["interaction"]["latestEvent"]
+            qualified = next(payload for payload in qualification_payloads
+                if payload["judgeContext"]["interaction"]["latestEvent"] == latest
+                and payload["judgeContext"]["position"] == sources[source_id]["request"]["position"])
+            for payload in (payloads[index * 2], payloads[index * 2 + 1], payloads[6 + index]):
+                self.assertEqual(qualified["judgeContext"], payload.get("judgeContext"))
+                self.assertEqual(qualified["graderBrief"], payload["graderBrief"])
+        inspection = payloads[0]["judgeContext"]
+        self.assertEqual(["piece:black:queen:f6"], inspection["interaction"]["latestEvent"]["referencedIDs"])
+        self.assertTrue(inspection["legalCaptures"])
+        self.assertTrue(inspection["immediateReplies"])
+        self.assertTrue(all(reply["sourcePieceReference"] == "piece:black:queen:f6" for reply in inspection["immediateReplies"]))
+        self.assertEqual(["action:looksSafe"], payloads[2]["judgeContext"]["interaction"]["latestEvent"]["referencedIDs"])
+        self.assertEqual("moveReplaced", payloads[4]["judgeContext"]["interaction"]["latestEvent"]["kind"])
+
     def make_corpus(self):
         brief = BenchmarkGraderBrief(
             verified_facts=("White to move.", "Position ongoing.", "Latest event helpOpened."),
@@ -358,13 +404,14 @@ class BenchmarkGraderTests(unittest.TestCase):
             success_criteria=("Accurate.",),
             severe_failure_criteria=("Invents danger.",),
         )
+        request = json.loads((ROOT / "Tools/CoachingEval/fixtures/chess-native-context-v1.json").read_text())["request"]
         turns = tuple(
-            BenchmarkTurn(f"case-{index}", f"case-{index}", 1, "development", "quiet", {"requestID": f"case-{index}"}, brief, None)
+            BenchmarkTurn(f"case-{index}", f"case-{index}", 1, "development", "quiet", dict(request, requestID=f"case-{index}"), brief, None)
             for index in range(1, 4)
         )
         return BenchmarkCorpus(self.root, "source", "c" * 64, turns, tuple())
 
-    def make_run(self):
+    def make_run(self, *, all_valid=False):
         root = self.root / f"run-{len(list(self.root.glob('run-*')))}"
         root.mkdir()
         records = []
@@ -375,6 +422,7 @@ class BenchmarkGraderTests(unittest.TestCase):
         }
         for case_id, validities in statuses.items():
             for configuration_id, valid in zip(("baseline-id", "candidate-id"), validities):
+                valid = valid or all_valid
                 records.append(
                     {
                         "cellID": f"{configuration_id}|{case_id}|r1",

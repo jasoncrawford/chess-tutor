@@ -162,7 +162,10 @@ global.localStorage = {
   getItem(key) { return stored.has(key) ? stored.get(key) : null; },
   setItem(key, value) { stored.set(key, value); }
 };
-global.navigator = { clipboard: { async writeText(value) { copiedSummary = value; } } };
+Object.defineProperty(global, "navigator", {
+  configurable: true,
+  value: { clipboard: { async writeText(value) { copiedSummary = value; } } }
+});
 global.fetch = async function () { return { ok: true, async json() { return model(); } }; };
 global.window = {
   JudgeReviewCore: require(path.join(__dirname, "../benchmark/review_core.js"))

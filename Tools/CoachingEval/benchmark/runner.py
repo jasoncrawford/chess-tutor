@@ -7,6 +7,7 @@ import os
 import re
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -58,7 +59,7 @@ def run_candidates(
         configuration.baseline for configuration in configurations
     ) != 1:
         raise ValueError("Comparison mode requires exactly one baseline configuration")
-    _verify_corpus_binding(corpus)
+    _verify_corpus_binding(corpus, diagnostic_subset=diagnostic_subset)
     repetitions = 1 if mode == "quick" else 3
     turns = corpus.select(include_holdout=include_holdout)
     _validate_selected_groups(turns)
@@ -139,7 +140,6 @@ def _preflight(configurations, turns, repetitions, price_table):
                 use_follow_up = (
                     turn.group_id in sequence_ids
                     and turn.step_index > 1
-                    and model_configuration.conversation_reuse
                 )
                 compiler = compilers[1] if use_follow_up else compilers[0]
                 compilation = compiler(
@@ -284,6 +284,9 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
         usage, accounting_complete = _usage(response.get("usage"))
         record["providerModel"] = provider_model
         record["usage"] = usage
+        # Every earlier attempt raised without verifiable usage. A successful
+        # retry preserves its known tokens but cannot make the total cost known.
+        accounting_complete = accounting_complete and record["attemptCount"] == 1
         record["candidateAccountingComplete"] = accounting_complete
         if accounting_complete and price_table is not None:
             try:
@@ -487,7 +490,7 @@ def _validate_selected_groups(turns):
             raise ValueError("Selected benchmark sequence is out of order")
 
 
-def _verify_corpus_binding(corpus):
+def _verify_corpus_binding(corpus, *, diagnostic_subset=False):
     root = Path(corpus.root).resolve()
     cases_path = (root / "cases.jsonl").resolve()
     manifest_path = (root / "benchmark-manifest.json").resolve()
@@ -502,6 +505,13 @@ def _verify_corpus_binding(corpus):
         canonical = load_corpus(root)
     except (OSError, ValueError) as error:
         raise ValueError("Cannot reload pinned benchmark corpus") from error
+    if diagnostic_subset:
+        selected_ids = {turn.identifier for turn in corpus.turns}
+        canonical = replace(
+            canonical,
+            turns=tuple(turn for turn in canonical.turns if turn.identifier in selected_ids),
+            raw_cases=tuple(raw for raw in canonical.raw_cases if raw["id"] in selected_ids),
+        )
     if canonical != corpus:
         raise ValueError("Loaded benchmark corpus changed after loading")
     if corpus.raw_cases:

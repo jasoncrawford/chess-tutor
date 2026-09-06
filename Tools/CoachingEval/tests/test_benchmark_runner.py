@@ -1,11 +1,17 @@
 import json
 import hashlib
+import io
+import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
+from unittest import mock
 
+from CoachingServer.service import HostedCoachingService
+from Tools.CoachingEval.benchmark import cli
 from Tools.CoachingEval.benchmark.configuration import (
     load_candidate,
     load_prices,
@@ -211,6 +217,48 @@ class BenchmarkRunnerTests(unittest.TestCase):
     def pretty(value):
         return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
 
+    def test_real_cli_runs_five_turn_diagnostic_with_pinned_corpus(self):
+        client = FakeClient()
+        selected_ids = ["d-01", "d-02", "s-01-01", "s-01-02", "s-01-03"]
+        destination = self.root / "smoke"
+        output, errors = io.StringIO(), io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"BENCHMARK_TEST_KEY": "test-only"}),
+            mock.patch.object(cli, "OpenAIResponsesClient", return_value=client),
+            redirect_stdout(output),
+            redirect_stderr(errors),
+        ):
+            status = cli.main([
+                "run", "--corpus", str(self.corpus.root), "--mode", "quick",
+                "--candidate", str(ROOT / "Tools/CoachingEval/benchmark/configs/production-v1.json"),
+                "--pricing", str(ROOT / "Tools/CoachingEval/benchmark/pricing-v1.json"),
+                "--output", str(destination), "--api-key-env", "BENCHMARK_TEST_KEY",
+                *[argument for identifier in selected_ids for argument in ("--case", identifier)],
+            ])
+        self.assertEqual(0, status, errors.getvalue())
+        records = [json.loads(line) for line in (destination / "records.jsonl").read_text().splitlines()]
+        self.assertEqual(selected_ids, [record["caseID"] for record in records])
+        self.assertTrue(all(record["mechanicalValidation"]["valid"] for record in records))
+        self.assertEqual(5, len(client.calls))
+        self.assertEqual("resp_3", client.calls[3]["previous_response_id"])
+        self.assertEqual("resp_4", client.calls[4]["previous_response_id"])
+        summary = json.loads(output.getvalue())
+        self.assertEqual("diagnosticSubset", summary["evidenceClassification"])
+        self.assertFalse(summary["trialEligible"])
+
+    def test_diagnostic_projection_rejects_altered_selected_request(self):
+        selected = cli._select_cases(self.corpus, ["d-01"], False)
+        selected.turns[0].request["requestID"] = "benchmark:altered"
+        calls = []
+        with self.assertRaisesRegex(ValueError, "changed after loading"):
+            run_candidates(
+                corpus=selected, configurations=(self.configuration,), mode="quick",
+                destination=self.root / "altered-selection",
+                provider_factory=lambda configuration: calls.append(configuration),
+                price_table=self.prices, diagnostic_subset=True,
+            )
+        self.assertEqual([], calls)
+
     def test_quick_and_comparison_execute_exact_matrices(self):
         quick_client = FakeClient()
         quick = run_candidates(
@@ -290,9 +338,23 @@ class BenchmarkRunnerTests(unittest.TestCase):
             provider_factory=lambda _configuration: independent_client,
             price_table=self.prices,
         )
-        for call in independent_client.calls[32:35]:
-            self.assertIn("# Chess coaching situation", call["user_prompt"])
-            self.assertEqual("high", call["reasoning_effort"])
+        live_client = FakeClient()
+        service = HostedCoachingService(
+            provider=live_client, configuration=independent.model_configuration,
+        )
+        previous_response_id = None
+        sequence_turns = [turn for turn in self.corpus.turns if turn.group_id == "s-01"]
+        for turn, call, effort in zip(sequence_turns, independent_client.calls[32:35], ("high", "low", "none")):
+            result = service.complete({
+                "schemaVersion": "hosted-coaching-request.v3",
+                "gameID": "00000000-0000-0000-0000-000000000001",
+                "episodeID": "00000000-0000-0000-0000-000000000002",
+                "request": turn.request,
+                "previousResponseID": previous_response_id,
+            })
+            previous_response_id = result.response["continuationID"]
+            self.assertEqual(effort, live_client.calls[-1]["reasoning_effort"])
+            self.assertEqual(live_client.calls[-1], call)
             self.assertIsNone(call["previous_response_id"])
 
     def test_invalid_provider_envelopes_become_invalid_records_without_crashing(self):
