@@ -288,7 +288,7 @@ class BenchmarkLauncherTests(unittest.TestCase):
             line = next(line for line in command_lines if f"benchmark.cli {command}" in line)
             self.assertIn("--pricing " + str(ROOT / "Tools/CoachingEval/benchmark/pricing-v2.json"), line)
             if command in ("qualify", "grade"):
-                self.assertIn("--judge " + str(ROOT / "Tools/CoachingEval/benchmark/configs/judge-v3.json"), line)
+                self.assertIn("--judge " + str(ROOT / "Tools/CoachingEval/benchmark/configs/judge-v4.json"), line)
         self.assertIn("candidate.json", commands)
         self.assertNotIn("sk-private-launcher-key", combined)
         self.assertNotIn("sk-private-launcher-key", commands)

@@ -310,6 +310,24 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         self.assertEqual(Decimal("0.000528"), prices.estimate(candidate.model_configuration.model, usage))
         self.assertEqual(Decimal("0.00132"), prices.estimate(judge.model, usage))
 
+    def test_play_led_judge_keeps_references_and_strict_qualification_policy(self):
+        benchmark = ROOT / "Tools/CoachingEval/benchmark"
+        judge = load_judge(benchmark / "configs/judge-v4.json", ROOT)
+        previous = load_judge(benchmark / "configs/judge-v3.json", ROOT)
+        self.assertEqual("judge-astra-v4", judge.identifier)
+        self.assertEqual(benchmark / "judge-v3.md", judge.system_prompt_path)
+        self.assertEqual(
+            "d420044387fa67b62f1af9bd5a0c41fe11bbd2b3ed6962cbff4293e5ec269c31",
+            judge.system_prompt_sha256,
+        )
+        self.assertEqual(previous.reference_set_sha256, judge.reference_set_sha256)
+        self.assertEqual(
+            {key: value for key, value in previous.raw.items()
+             if key not in ("id", "systemPromptPath", "systemPromptSHA256")},
+            {key: value for key, value in judge.raw.items()
+             if key not in ("id", "systemPromptPath", "systemPromptSHA256")},
+        )
+
     def test_repository_production_judge_and_pricing_pins_load(self):
         repository_root = ROOT
         benchmark = repository_root / "Tools/CoachingEval/benchmark"
