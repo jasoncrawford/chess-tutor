@@ -253,6 +253,8 @@ Run whole-branch review, push `codex/stabilize-benchmark-judge`, and open a PR a
 
 ### Task 6: Hosted comparison and recommendation
 
+Execution update (2026-09-06, delegated controller judgment): prepare the immutable challenger fixtures in the benchmark PR so paid evidence binds their final tracked paths. The five-turn smoke narrows the finalist comparison to Astra/low with the discovery prompt versus production Sol; retain the Sol/medium fixture for future runs. Run the full 70-turn, three-repetition finalist matrix directly, retaining its development/holdout splits, rather than first duplicating all development turns in a separate full run. The recommendation/promotion remains a separate worktree and PR after the benchmark merges. Evidence and promotion gates are unchanged.
+
 **Files:**
 - Create: tracked shared model configurations and benchmark wrappers for justified hosted challengers.
 - Create: a versioned price table covering every compared model.
