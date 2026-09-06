@@ -76,6 +76,8 @@ class BenchmarkCorpus:
     sha256: str
     turns: Tuple[BenchmarkTurn, ...]
     raw_cases: Tuple[Mapping[str, Any], ...]
+    cases_path: Optional[Path] = None
+    manifest_path: Optional[Path] = None
 
     def select(self, *, include_holdout: bool = False) -> Tuple[BenchmarkTurn, ...]:
         if not isinstance(include_holdout, bool):
@@ -110,6 +112,8 @@ def load_corpus(root: Path) -> BenchmarkCorpus:
         sha256=cases_sha,
         turns=turns,
         raw_cases=raw_cases,
+        cases_path=cases_path.resolve(),
+        manifest_path=manifest_path.resolve(),
     )
 
 

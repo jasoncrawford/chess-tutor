@@ -1,0 +1,20 @@
+{
+  "conversationReuse": false,
+  "id": "judge-sol-v2",
+  "maximumOutputTokens": 2048,
+  "minimumDimensionAgreement": 0.9,
+  "minimumPairwiseAgreement": 0.9,
+  "minimumSevereAgreement": 0.95,
+  "model": "gpt-5.6-sol",
+  "provider": "openai-responses-v1",
+  "qualificationRepetitions": 3,
+  "qualificationValidDays": 30,
+  "reasoningEffort": "high",
+  "referenceSetPath": "Tools/CoachingEval/benchmark/judge-reference-v2.json",
+  "referenceSetSHA256": "34dfd86cbae1bc69d811fa3ac9083c4a8af79e3eec8ab6a50979e55df81e93af",
+  "reviewSeed": 20260901,
+  "schemaVersion": "coaching-quality-judge.v2",
+  "systemPromptPath": "Tools/CoachingEval/benchmark/judge-v1.md",
+  "systemPromptSHA256": "fed154ac5c0c6bdd5e99f80ef8f0affd49c18ad878898df9d8d2472c30eb4e21",
+  "timeoutSeconds": 60
+}

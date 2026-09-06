@@ -7,10 +7,20 @@ import os
 import re
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from Tools.CoachingEval.benchmark.configuration import PROMPT_GENERATORS
+from CoachingServer.chess_native_compiler import parse_neutral_request
+from CoachingServer.provider_envelope import validate_provider_envelope
+from Tools.CoachingEval.benchmark.configuration import (
+    PROMPT_GENERATORS,
+    PROVIDERS,
+    RESPONSE_CONTRACTS,
+    load_candidate,
+    validate_candidate_usage,
+)
+from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -45,14 +55,17 @@ def run_candidates(
         raise ValueError("Candidate configuration IDs must be unique")
     if mode not in ("quick", "comparison"):
         raise ValueError("Benchmark mode must be quick or comparison")
-    if mode == "comparison" and not any(configuration.baseline for configuration in configurations):
-        raise ValueError("Comparison mode requires a baseline configuration")
-    _verify_corpus_binding(corpus)
+    if mode == "comparison" and sum(
+        configuration.baseline for configuration in configurations
+    ) != 1:
+        raise ValueError("Comparison mode requires exactly one baseline configuration")
+    _verify_corpus_binding(corpus, diagnostic_subset=diagnostic_subset)
     repetitions = 1 if mode == "quick" else 3
     turns = corpus.select(include_holdout=include_holdout)
     _validate_selected_groups(turns)
+    _validate_matrix(turns, include_holdout, diagnostic_subset)
 
-    preflight = _preflight(configurations, turns, repetitions)
+    preflight = _preflight(configurations, turns, repetitions, price_table)
     clients = {
         configuration.identifier: provider_factory(configuration)
         for configuration in configurations
@@ -62,6 +75,7 @@ def run_candidates(
     prior_by_sequence = {}
     for cell in preflight:
         configuration = cell["configuration"]
+        model_configuration = configuration.model_configuration
         turn = cell["turn"]
         sequence_key = (
             configuration.identifier,
@@ -81,9 +95,13 @@ def run_candidates(
             continue
 
         previous_response_id = None
-        if turn.step_index > 1 and configuration.conversation_reuse and prior is not None:
+        if (
+            turn.step_index > 1
+            and model_configuration.conversation_reuse
+            and prior is not None
+        ):
             previous_response_id = prior["responseID"]
-        record = _execute_cell(
+        record, response_id = _execute_cell(
             cell,
             clients[configuration.identifier],
             previous_response_id=previous_response_id,
@@ -93,7 +111,7 @@ def run_candidates(
         if _is_sequence(turns, turn.group_id):
             prior_by_sequence[sequence_key] = {
                 "valid": record["mechanicalValidation"]["valid"],
-                "responseID": record.get("providerResponseID") or None,
+                "responseID": response_id,
             }
         if record["mechanicalValidation"]["valid"]:
             transcripts[_transcript_name(record)] = _transcript(record)
@@ -110,23 +128,28 @@ def run_candidates(
     return manifest
 
 
-def _preflight(configurations, turns, repetitions):
+def _preflight(configurations, turns, repetitions, price_table):
+    _validate_configurations(configurations, price_table)
     cells = []
     sequence_ids = _sequence_ids(turns)
     for configuration in configurations:
-        compilers = PROMPT_GENERATORS[configuration.user_prompt_generator]
+        model_configuration = configuration.model_configuration
+        compilers = PROMPT_GENERATORS[model_configuration.user_prompt_generator]
         for repetition in range(1, repetitions + 1):
             for turn in turns:
                 use_follow_up = (
                     turn.group_id in sequence_ids
                     and turn.step_index > 1
-                    and configuration.conversation_reuse
                 )
                 compiler = compilers[1] if use_follow_up else compilers[0]
-                compilation = compiler(turn.request, "tutor-v13")
+                compilation = compiler(
+                    turn.request,
+                    model_configuration.prompt_version,
+                )
                 contract = ChessNativeResponseContract.from_markdown(compilation.markdown)
                 schema = contract.json_schema()
                 json.dumps(schema, sort_keys=True)
+                normalized_request = parse_neutral_request(turn.request)
                 cells.append(
                     {
                         "configuration": configuration,
@@ -135,38 +158,110 @@ def _preflight(configurations, turns, repetitions):
                         "compilation": compilation,
                         "contract": contract,
                         "schema": schema,
-                        "reasoningEffort": (
-                            configuration.follow_up_reasoning_effort
-                            if use_follow_up
-                            else configuration.initial_reasoning_effort
+                        "reasoningEffort": model_configuration.reasoning_effort(
+                            normalized_request,
+                            use_follow_up,
                         ),
                     }
                 )
     return cells
 
 
+def _validate_configurations(configurations, price_table):
+    if price_table is None:
+        raise ValueError("Candidate execution requires a pinned price table")
+    pricing_versions = {configuration.pricing_version for configuration in configurations}
+    if len(pricing_versions) != 1 or pricing_versions != {price_table.version}:
+        raise ValueError("Candidate configurations must use the selected pricing version")
+
+    zero_usage = {
+        "inputTokens": 0,
+        "cachedInputTokens": 0,
+        "outputTokens": 0,
+        "reasoningTokens": 0,
+        "totalTokens": 0,
+    }
+    priced_models = set()
+    for configuration in configurations:
+        try:
+            canonical = load_candidate(
+                configuration.path,
+                configuration.repository_root,
+            )
+        except (AttributeError, OSError, ValueError) as error:
+            raise ValueError("Cannot reload pinned candidate configuration") from error
+        if canonical != configuration:
+            raise ValueError("Candidate configuration changed after loading")
+        model_configuration = configuration.model_configuration
+        if model_configuration.provider not in PROVIDERS:
+            raise ValueError("Candidate provider is unsupported")
+        if model_configuration.user_prompt_generator not in PROMPT_GENERATORS:
+            raise ValueError("Candidate prompt generator is unsupported")
+        if model_configuration.response_contract not in RESPONSE_CONTRACTS:
+            raise ValueError("Candidate response contract is unsupported")
+        if model_configuration.conversation_reuse and not model_configuration.store:
+            raise ValueError("Conversation reuse requires response storage")
+        try:
+            configuration_bytes = model_configuration.path.read_bytes()
+            prompt_bytes = model_configuration.system_prompt_path.read_bytes()
+        except OSError as error:
+            raise ValueError("Cannot reload pinned candidate configuration") from error
+        if _sha256(configuration_bytes) != model_configuration.sha256:
+            raise ValueError("Candidate model configuration changed after loading")
+        if configuration.model_configuration_sha256 != model_configuration.sha256:
+            raise ValueError("Candidate model configuration pin does not match")
+        if _sha256(prompt_bytes) != model_configuration.system_prompt_sha256:
+            raise ValueError("Candidate system prompt changed after loading")
+        try:
+            prompt_text = prompt_bytes.decode("utf-8")
+        except UnicodeError as error:
+            raise ValueError("Candidate system prompt is not UTF-8") from error
+        if prompt_text != model_configuration.system_prompt:
+            raise ValueError("Candidate system prompt content changed after loading")
+        if model_configuration.model not in priced_models:
+            price_table.estimate(model_configuration.model, zero_usage)
+            priced_models.add(model_configuration.model)
+
+
+def _validate_matrix(turns, include_holdout, diagnostic_subset):
+    identifiers = [turn.identifier for turn in turns]
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError("Selected benchmark case IDs must be unique")
+    if diagnostic_subset:
+        return
+    development_count = sum(turn.split == "development" for turn in turns)
+    holdout_count = sum(turn.split == "holdout" for turn in turns)
+    expected = (56, 14) if include_holdout else (56, 0)
+    if (development_count, holdout_count) != expected or len(turns) != sum(expected):
+        raise ValueError("Candidate matrix does not contain the complete requested corpus")
+
+
 def _execute_cell(cell, client, *, previous_response_id, price_table):
     configuration = cell["configuration"]
+    model_configuration = configuration.model_configuration
     record = _base_record(cell)
-    record["previousResponseIDUsed"] = previous_response_id
+    record["candidateAccountingComplete"] = False
+    record["candidateCostUSD"] = None
     response = None
+    provider_returned = False
     final_category = "providerError"
     final_http_status = None
     started = time.monotonic()
-    for attempt in range(1, configuration.maximum_attempts + 1):
+    for attempt in range(1, model_configuration.maximum_attempts + 1):
         record["attemptCount"] = attempt
         try:
             response = client.complete(
-                system_prompt=configuration.system_prompt,
+                system_prompt=model_configuration.system_prompt,
                 user_prompt=cell["compilation"].markdown,
                 schema=cell["schema"],
-                model=configuration.model,
+                model=model_configuration.model,
                 reasoning_effort=cell["reasoningEffort"],
-                maximum_output_tokens=configuration.maximum_output_tokens,
-                timeout=configuration.timeout_seconds,
+                maximum_output_tokens=model_configuration.maximum_output_tokens,
+                timeout=model_configuration.timeout_seconds,
                 previous_response_id=previous_response_id,
-                store=False,
+                store=model_configuration.store,
             )
+            provider_returned = True
             break
         except OpenAIResponsesError as error:
             final_category = error.category
@@ -175,55 +270,73 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
             final_category = "providerError"
             final_http_status = None
     record["latencyMilliseconds"] = _bounded_float((time.monotonic() - started) * 1000)
-    if response is None:
+    if not provider_returned:
         record["generationStatus"] = final_category
         record["providerHTTPStatus"] = final_http_status
         record["mechanicalValidation"] = {
             "valid": False,
             "categories": [final_category],
         }
-        return record
+        return record, None
 
-    response_id = _bounded_identifier(response.get("id"))
-    provider_model = _bounded_identifier(response.get("model"))
-    output = response.get("output_text")
-    usage = _usage(response.get("usage"))
-    record["providerResponseID"] = response_id
-    record["providerModel"] = provider_model
-    record["usage"] = usage
-    if price_table is not None:
-        record["candidateCostUSD"] = str(price_table.estimate(configuration.model, usage))
+    if isinstance(response, Mapping):
+        provider_model = _bounded_identifier(response.get("model"))
+        usage, accounting_complete = _usage(response.get("usage"))
+        record["providerModel"] = provider_model
+        record["usage"] = usage
+        # Every earlier attempt raised without verifiable usage. A successful
+        # retry preserves its known tokens but cannot make the total cost known.
+        accounting_complete = accounting_complete and record["attemptCount"] == 1
+        record["candidateAccountingComplete"] = accounting_complete
+        if accounting_complete and price_table is not None:
+            try:
+                record["candidateCostUSD"] = str(
+                    price_table.estimate(model_configuration.model, usage)
+                )
+            except ValueError:
+                record["candidateAccountingComplete"] = False
+                record["candidateCostUSD"] = None
+    try:
+        response_id, output = validate_provider_envelope(response)
+    except ValueError:
+        record["generationStatus"] = "invalid"
+        record["mechanicalValidation"] = {
+            "valid": False,
+            "categories": ["invalidResponse"],
+        }
+        return record, None
     if not isinstance(output, str) or not output or _TRACE_MARKER.search(output):
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {
             "valid": False,
             "categories": ["invalidResponse"],
         }
-        return record
+        return record, response_id or None
     try:
         parsed = cell["contract"].parse_and_validate(output)
     except ChessNativeResponseValidationError as error:
         categories = list(error.categories)
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {"valid": False, "categories": categories}
-        return record
+        return record, response_id or None
     except ValueError:
         record["generationStatus"] = "invalid"
         record["mechanicalValidation"] = {
             "valid": False,
             "categories": ["validation"],
         }
-        return record
+        return record, response_id or None
 
     record["generationStatus"] = "completed"
     record["sanitizedOutput"] = output
     record["parsedTurn"] = parsed
     record["mechanicalValidation"] = {"valid": True, "categories": []}
-    return record
+    return record, response_id or None
 
 
 def _base_record(cell):
     configuration = cell["configuration"]
+    model_configuration = configuration.model_configuration
     turn = cell["turn"]
     repetition = cell["repetition"]
     user_prompt = cell["compilation"].markdown
@@ -238,10 +351,9 @@ def _base_record(cell):
         "category": turn.category,
         "repetition": repetition,
         "requestSHA256": _sha256(_canonical_json_bytes(turn.request)),
-        "systemPromptSHA256": configuration.system_prompt_sha256,
+        "systemPromptSHA256": model_configuration.system_prompt_sha256,
         "userPrompt": user_prompt,
         "userPromptSHA256": _sha256(user_prompt.encode("utf-8")),
-        "providerResponseID": "",
         "providerModel": "",
         "providerHTTPStatus": None,
         "sanitizedOutput": "",
@@ -258,8 +370,8 @@ def _base_record(cell):
         "latencyMilliseconds": 0.0,
         "timeToFirstTokenMilliseconds": None,
         "attemptCount": 0,
-        "previousResponseIDUsed": None,
-        "candidateCostUSD": None,
+        "candidateAccountingComplete": True,
+        "candidateCostUSD": "0",
     }
 
 
@@ -279,31 +391,62 @@ def _manifest(
 ):
     resolved = []
     for configuration in configurations:
+        model_configuration = configuration.model_configuration
         resolved.append(
             {
                 "id": configuration.identifier,
                 "configurationSHA256": configuration.sha256,
                 "baseline": configuration.baseline,
-                "provider": configuration.provider,
-                "model": configuration.model,
-                "initialReasoningEffort": configuration.initial_reasoning_effort,
-                "followUpReasoningEffort": configuration.follow_up_reasoning_effort,
-                "conversationReuse": configuration.conversation_reuse,
-                "maximumOutputTokens": configuration.maximum_output_tokens,
-                "timeoutSeconds": configuration.timeout_seconds,
-                "maximumAttempts": configuration.maximum_attempts,
-                "systemPromptSHA256": configuration.system_prompt_sha256,
-                "systemPrompt": configuration.system_prompt,
-                "userPromptGenerator": configuration.user_prompt_generator,
-                "responseContract": configuration.response_contract,
+                "modelConfigurationPath": configuration.raw[
+                    "modelConfigurationPath"
+                ],
+                "modelConfigurationSHA256": configuration.model_configuration_sha256,
+                "provider": model_configuration.provider,
+                "model": model_configuration.model,
+                "initialReasoningEffort": model_configuration.initial_reasoning_effort,
+                "tacticalFollowUpReasoningEffort": (
+                    model_configuration.tactical_follow_up_reasoning_effort
+                ),
+                "simpleFollowUpReasoningEffort": (
+                    model_configuration.simple_follow_up_reasoning_effort
+                ),
+                "conversationReuse": model_configuration.conversation_reuse,
+                "store": model_configuration.store,
+                "maximumOutputTokens": model_configuration.maximum_output_tokens,
+                "timeoutSeconds": model_configuration.timeout_seconds,
+                "maximumAttempts": model_configuration.maximum_attempts,
+                "systemPromptSHA256": model_configuration.system_prompt_sha256,
+                "systemPrompt": model_configuration.system_prompt,
+                "promptVersion": model_configuration.prompt_version,
+                "userPromptGenerator": model_configuration.user_prompt_generator,
+                "responseContract": model_configuration.response_contract,
                 "pricingVersion": configuration.pricing_version,
             }
         )
+    if diagnostic_subset:
+        evidence_classification = "diagnosticSubset"
+    elif mode == "comparison" and include_holdout:
+        evidence_classification = "holdoutComparison"
+    elif mode == "comparison":
+        evidence_classification = "developmentComparison"
+    else:
+        evidence_classification = "quickDevelopment"
     return {
         "schemaVersion": "coaching-quality-candidate-run.v1",
         "mode": mode,
         "diagnosticSubset": diagnostic_subset,
         "includeHoldout": include_holdout,
+        "evidence": {
+            "classification": evidence_classification,
+            "trialEligible": (
+                mode == "comparison" and not diagnostic_subset
+            ),
+            "promotionEvidenceEligible": (
+                mode == "comparison"
+                and include_holdout
+                and not diagnostic_subset
+            ),
+        },
         "corpusSHA256": corpus.sha256,
         "sourceGitSHA": corpus.source_git_sha,
         "configurations": resolved,
@@ -347,13 +490,38 @@ def _validate_selected_groups(turns):
             raise ValueError("Selected benchmark sequence is out of order")
 
 
-def _verify_corpus_binding(corpus):
+def _verify_corpus_binding(corpus, *, diagnostic_subset=False):
+    root = Path(corpus.root).resolve()
+    cases_path = (root / "cases.jsonl").resolve()
+    manifest_path = (root / "benchmark-manifest.json").resolve()
+    if (
+        getattr(corpus, "cases_path", None) != cases_path
+        or getattr(corpus, "manifest_path", None) != manifest_path
+        or not cases_path.is_file()
+        or not manifest_path.is_file()
+    ):
+        raise ValueError("Pinned benchmark corpus artifacts are missing or repointed")
+    try:
+        canonical = load_corpus(root)
+    except (OSError, ValueError) as error:
+        raise ValueError("Cannot reload pinned benchmark corpus") from error
+    if diagnostic_subset:
+        selected_ids = {turn.identifier for turn in corpus.turns}
+        canonical = replace(
+            canonical,
+            turns=tuple(turn for turn in canonical.turns if turn.identifier in selected_ids),
+            raw_cases=tuple(raw for raw in canonical.raw_cases if raw["id"] in selected_ids),
+        )
+    if canonical != corpus:
+        raise ValueError("Loaded benchmark corpus changed after loading")
     if corpus.raw_cases:
         raw_ids = [value.get("id") if isinstance(value, Mapping) else None for value in corpus.raw_cases]
         turn_ids = [turn.identifier for turn in corpus.turns]
         if raw_ids != turn_ids:
             raise ValueError("Loaded benchmark corpus order changed after validation")
-    cases_path = Path(corpus.root) / "cases.jsonl"
+        for raw, turn in zip(corpus.raw_cases, corpus.turns):
+            if not _turn_matches_raw_case(turn, raw):
+                raise ValueError("Loaded benchmark corpus changed after loading")
     if cases_path.exists():
         if _sha256(cases_path.read_bytes()) != corpus.sha256:
             raise ValueError("Benchmark corpus bytes changed after validation")
@@ -370,15 +538,64 @@ def _is_sequence(turns, group_id):
     return sum(turn.group_id == group_id for turn in turns) == 3
 
 
+def _turn_matches_raw_case(turn, raw):
+    if not isinstance(raw, Mapping):
+        return False
+    brief = turn.grader_brief
+    expected = {
+        "schemaVersion": "coaching-quality-benchmark-case.v1",
+        "id": turn.identifier,
+        "groupID": turn.group_id,
+        "stepIndex": turn.step_index,
+        "split": turn.split,
+        "category": turn.category,
+        "request": turn.request,
+        "graderBrief": {
+            "verifiedFacts": list(brief.verified_facts),
+            "coachingPurpose": brief.coaching_purpose,
+            "acceptableAlternatives": list(brief.acceptable_alternatives),
+            "successCriteria": list(brief.success_criteria),
+            "severeFailureCriteria": list(brief.severe_failure_criteria),
+        },
+    }
+    if turn.source_trace_id is not None or "sourceTraceID" in raw:
+        expected["sourceTraceID"] = turn.source_trace_id
+    return dict(raw) == expected
+
+
 def _usage(value):
-    value = value if isinstance(value, Mapping) else {}
-    return {
+    complete = isinstance(value, Mapping)
+    value = value if complete else {}
+    raw_values = (
+        value.get("input_tokens"),
+        value.get("cached_input_tokens"),
+        value.get("output_tokens"),
+        value.get("reasoning_tokens"),
+        value.get("total_tokens"),
+    )
+    complete = complete and all(_valid_metric(value) for value in raw_values)
+    usage = {
         "inputTokens": _bounded_int(value.get("input_tokens")),
         "cachedInputTokens": _bounded_int(value.get("cached_input_tokens")),
         "outputTokens": _bounded_int(value.get("output_tokens")),
         "reasoningTokens": _bounded_int(value.get("reasoning_tokens")),
         "totalTokens": _bounded_int(value.get("total_tokens")),
     }
+    if usage["cachedInputTokens"] > usage["inputTokens"]:
+        complete = False
+    try:
+        validate_candidate_usage(usage)
+    except ValueError:
+        complete = False
+    return usage, complete
+
+
+def _valid_metric(value):
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 <= value <= _MAXIMUM_METRIC
+    )
 
 
 def _bounded_int(value):

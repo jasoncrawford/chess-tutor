@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
+from CoachingServer.model_configuration import HostedModelConfiguration
 
 
 PROMPT_GENERATORS = {
@@ -18,27 +19,26 @@ PROMPT_GENERATORS = {
 PROVIDERS = frozenset(("openai-responses-v1",))
 RESPONSE_CONTRACTS = frozenset(("chess-native-v13",))
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_CANDIDATE_USAGE_KEYS = frozenset(
+    (
+        "inputTokens",
+        "cachedInputTokens",
+        "outputTokens",
+        "reasoningTokens",
+        "totalTokens",
+    )
+)
 _CANDIDATE_KEYS = frozenset(
     (
         "schemaVersion",
         "id",
         "baseline",
-        "provider",
-        "model",
-        "initialReasoningEffort",
-        "followUpReasoningEffort",
-        "conversationReuse",
-        "maximumOutputTokens",
-        "timeoutSeconds",
-        "maximumAttempts",
-        "systemPromptPath",
-        "systemPromptSHA256",
-        "userPromptGenerator",
-        "responseContract",
+        "modelConfigurationPath",
+        "modelConfigurationSHA256",
         "pricingVersion",
     )
 )
-_JUDGE_KEYS = frozenset(
+_JUDGE_V1_KEYS = frozenset(
     (
         "schemaVersion",
         "id",
@@ -55,25 +55,39 @@ _JUDGE_KEYS = frozenset(
         "reviewSeed",
     )
 )
+_JUDGE_V2_KEYS = frozenset(
+    (
+        "schemaVersion",
+        "id",
+        "provider",
+        "model",
+        "reasoningEffort",
+        "conversationReuse",
+        "maximumOutputTokens",
+        "timeoutSeconds",
+        "systemPromptPath",
+        "systemPromptSHA256",
+        "referenceSetPath",
+        "referenceSetSHA256",
+        "reviewSeed",
+        "qualificationRepetitions",
+        "minimumSevereAgreement",
+        "minimumDimensionAgreement",
+        "minimumPairwiseAgreement",
+        "qualificationValidDays",
+    )
+)
 
 
 @dataclass(frozen=True)
 class CandidateConfiguration:
+    path: Path
+    repository_root: Path
     identifier: str
     baseline: bool
-    provider: str
-    model: str
-    initial_reasoning_effort: str
-    follow_up_reasoning_effort: str
-    conversation_reuse: bool
-    maximum_output_tokens: int
-    timeout_seconds: float
-    maximum_attempts: int
-    system_prompt_path: Path
-    system_prompt_sha256: str
-    system_prompt: str
-    user_prompt_generator: str
-    response_contract: str
+    model_configuration_path: Path
+    model_configuration_sha256: str
+    model_configuration: HostedModelConfiguration
     pricing_version: str
     sha256: str
     raw: Mapping[str, Any]
@@ -81,6 +95,7 @@ class CandidateConfiguration:
 
 @dataclass(frozen=True)
 class JudgeConfiguration:
+    schema_version: str
     identifier: str
     provider: str
     model: str
@@ -91,8 +106,15 @@ class JudgeConfiguration:
     system_prompt_path: Path
     system_prompt_sha256: str
     system_prompt: str
-    calibration_path: Path
-    calibration_sha256: str
+    calibration_path: Optional[Path]
+    calibration_sha256: Optional[str]
+    reference_set_path: Optional[Path]
+    reference_set_sha256: Optional[str]
+    qualification_repetitions: int
+    minimum_severe_agreement: float
+    minimum_dimension_agreement: float
+    minimum_pairwise_agreement: float
+    qualification_valid_days: int
     review_seed: int
     sha256: str
     raw: Mapping[str, Any]
@@ -135,56 +157,109 @@ class PriceTable:
         ) / million
 
 
+def validate_candidate_usage(value: Any) -> None:
+    if not isinstance(value, Mapping) or set(value) != _CANDIDATE_USAGE_KEYS:
+        raise ValueError("Candidate usage fields do not match the contract")
+    for key in _CANDIDATE_USAGE_KEYS:
+        _bounded_nonnegative_usage(value[key], key)
+    if value["cachedInputTokens"] > value["inputTokens"]:
+        raise ValueError("Cached input tokens cannot exceed input tokens")
+    if value["reasoningTokens"] > value["outputTokens"]:
+        raise ValueError("Reasoning tokens cannot exceed output tokens")
+    if value["totalTokens"] != value["inputTokens"] + value["outputTokens"]:
+        raise ValueError("Total tokens must equal input plus output tokens")
+
+
 def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
+    path = Path(path).resolve()
+    repository_root = Path(repository_root).resolve()
     raw, raw_bytes = _load_json(path)
     _exact_keys(raw, _CANDIDATE_KEYS, "Candidate")
-    if raw["schemaVersion"] != "coaching-quality-candidate.v1":
+    if raw["schemaVersion"] != "coaching-quality-candidate.v2":
         raise ValueError("Unsupported candidate schema")
-    provider = _choice(raw["provider"], PROVIDERS, "provider")
-    generator = _choice(raw["userPromptGenerator"], PROMPT_GENERATORS, "user prompt generator")
-    contract = _choice(raw["responseContract"], RESPONSE_CONTRACTS, "response contract")
-    prompt_path, prompt_sha, prompt_text = _load_pinned_text(
-        repository_root, raw["systemPromptPath"], raw["systemPromptSHA256"], "System prompt"
+    model_path, model_configuration = _load_pinned_model_configuration(
+        repository_root,
+        raw["modelConfigurationPath"],
+        raw["modelConfigurationSHA256"],
     )
     return CandidateConfiguration(
+        path=path,
+        repository_root=repository_root,
         identifier=_string(raw["id"], "id"),
         baseline=_boolean(raw["baseline"], "baseline"),
-        provider=provider,
-        model=_string(raw["model"], "model"),
-        initial_reasoning_effort=_reasoning(raw["initialReasoningEffort"]),
-        follow_up_reasoning_effort=_reasoning(raw["followUpReasoningEffort"]),
-        conversation_reuse=_boolean(raw["conversationReuse"], "conversationReuse"),
-        maximum_output_tokens=_positive_int(raw["maximumOutputTokens"], "maximumOutputTokens"),
-        timeout_seconds=float(_positive_number(raw["timeoutSeconds"], "timeoutSeconds")),
-        maximum_attempts=_positive_int(raw["maximumAttempts"], "maximumAttempts"),
-        system_prompt_path=prompt_path,
-        system_prompt_sha256=prompt_sha,
-        system_prompt=prompt_text,
-        user_prompt_generator=generator,
-        response_contract=contract,
+        model_configuration_path=model_path,
+        model_configuration_sha256=model_configuration.sha256,
+        model_configuration=model_configuration,
         pricing_version=_string(raw["pricingVersion"], "pricingVersion"),
-        sha256=hashlib.sha256(_canonical_bytes(raw)).hexdigest(),
+        sha256=hashlib.sha256(raw_bytes).hexdigest(),
         raw=_frozen_copy(raw),
     )
 
 
 def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
     raw, _raw_bytes = _load_json(path)
-    _exact_keys(raw, _JUDGE_KEYS, "Judge")
-    if raw["schemaVersion"] != "coaching-quality-judge.v1":
+    schema_version = raw.get("schemaVersion")
+    if schema_version == "coaching-quality-judge.v1":
+        _exact_keys(raw, _JUDGE_V1_KEYS, "Judge")
+    elif schema_version == "coaching-quality-judge.v2":
+        _exact_keys(raw, _JUDGE_V2_KEYS, "Judge")
+    else:
         raise ValueError("Unsupported judge schema")
     provider = _choice(raw["provider"], PROVIDERS, "provider")
     prompt_path, prompt_sha, prompt_text = _load_pinned_text(
         repository_root, raw["systemPromptPath"], raw["systemPromptSHA256"], "Judge prompt"
     )
-    calibration_path, calibration_sha, _calibration_text = _load_pinned_text(
-        repository_root,
-        raw["calibrationPath"],
-        raw["calibrationSHA256"],
-        "Judge calibration",
-    )
+    if schema_version == "coaching-quality-judge.v1":
+        calibration_path, calibration_sha, _calibration_text = _load_pinned_text(
+            repository_root,
+            raw["calibrationPath"],
+            raw["calibrationSHA256"],
+            "Judge calibration",
+        )
+        reference_set_path = None
+        reference_set_sha = None
+        qualification_repetitions = 1
+        minimum_severe_agreement = 0.90
+        minimum_dimension_agreement = 0.80
+        minimum_pairwise_agreement = 0.0
+        qualification_valid_days = 0
+    else:
+        reference_set_path, reference_set_sha, _reference_text = _load_pinned_text(
+            repository_root,
+            raw["referenceSetPath"],
+            raw["referenceSetSHA256"],
+            "Judge reference set",
+        )
+        calibration_path = None
+        calibration_sha = None
+        qualification_repetitions = _positive_int(
+            raw["qualificationRepetitions"], "qualificationRepetitions"
+        )
+        if qualification_repetitions != 3:
+            raise ValueError("qualificationRepetitions must equal 3")
+        minimum_severe_agreement = _unit_interval(
+            raw["minimumSevereAgreement"], "minimumSevereAgreement"
+        )
+        if minimum_severe_agreement < 0.95:
+            raise ValueError("minimumSevereAgreement must be at least 0.95")
+        minimum_dimension_agreement = _unit_interval(
+            raw["minimumDimensionAgreement"], "minimumDimensionAgreement"
+        )
+        if minimum_dimension_agreement < 0.90:
+            raise ValueError("minimumDimensionAgreement must be at least 0.90")
+        minimum_pairwise_agreement = _unit_interval(
+            raw["minimumPairwiseAgreement"], "minimumPairwiseAgreement"
+        )
+        if minimum_pairwise_agreement < 0.90:
+            raise ValueError("minimumPairwiseAgreement must be at least 0.90")
+        qualification_valid_days = _positive_int(
+            raw["qualificationValidDays"], "qualificationValidDays"
+        )
+        if qualification_valid_days > 30:
+            raise ValueError("qualificationValidDays cannot exceed 30")
     review_seed = _positive_int(raw["reviewSeed"], "reviewSeed")
     return JudgeConfiguration(
+        schema_version=schema_version,
         identifier=_string(raw["id"], "id"),
         provider=provider,
         model=_string(raw["model"], "model"),
@@ -197,6 +272,13 @@ def load_judge(path: Path, repository_root: Path) -> JudgeConfiguration:
         system_prompt=prompt_text,
         calibration_path=calibration_path,
         calibration_sha256=calibration_sha,
+        reference_set_path=reference_set_path,
+        reference_set_sha256=reference_set_sha,
+        qualification_repetitions=qualification_repetitions,
+        minimum_severe_agreement=minimum_severe_agreement,
+        minimum_dimension_agreement=minimum_dimension_agreement,
+        minimum_pairwise_agreement=minimum_pairwise_agreement,
+        qualification_valid_days=qualification_valid_days,
         review_seed=review_seed,
         sha256=hashlib.sha256(_canonical_bytes(raw)).hexdigest(),
         raw=_frozen_copy(raw),
@@ -278,6 +360,23 @@ def _load_pinned_text(repository_root, relative_path, expected_sha, label):
     return resolved, actual_sha, text
 
 
+def _load_pinned_model_configuration(repository_root, relative_path, expected_sha):
+    repository_root = Path(repository_root).resolve()
+    relative_path = Path(_string(relative_path, "Model configuration path"))
+    if relative_path.is_absolute():
+        raise ValueError("Model configuration path must be repository-relative")
+    resolved = (repository_root / relative_path).resolve()
+    try:
+        resolved.relative_to(repository_root)
+    except ValueError:
+        raise ValueError("Model configuration path escapes repository root") from None
+    expected_sha = _hash(expected_sha, "Model configuration hash")
+    configuration = HostedModelConfiguration.load(resolved, repository_root)
+    if configuration.sha256 != expected_sha:
+        raise ValueError("Model configuration hash does not match")
+    return resolved, configuration
+
+
 def _exact_keys(value, expected, label):
     if set(value) != set(expected):
         raise ValueError(f"{label} fields do not match the contract")
@@ -321,6 +420,13 @@ def _positive_number(value, label):
     return value
 
 
+def _unit_interval(value, label):
+    value = _positive_number(value, label)
+    if value > 1:
+        raise ValueError(f"{label} cannot exceed 1")
+    return float(value)
+
+
 def _reasoning(value):
     return _choice(value, frozenset(("none", "low", "medium", "high")), "reasoning effort")
 
@@ -340,6 +446,13 @@ def _nonnegative_decimal(value, label):
 def _nonnegative_usage(value, label):
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{label} must be a nonnegative integer")
+    return value
+
+
+def _bounded_nonnegative_usage(value, label):
+    value = _nonnegative_usage(value, label)
+    if value > 1_000_000_000:
+        raise ValueError(f"{label} exceeds the accounting bound")
     return value
 
 

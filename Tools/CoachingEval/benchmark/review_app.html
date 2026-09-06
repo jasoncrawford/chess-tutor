@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Judge reference review</title>
+  <link rel="stylesheet" href="/review_app.css">
+  <script src="/review_core.js" defer></script>
+  <script src="/review_app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#case-review">Skip to the current case</a>
+  <header class="masthead">
+    <div>
+      <p class="product-name">Chess Tutor judge reference</p>
+      <h1>Calibration study desk</h1>
+      <p class="introduction">Review each proposed judgment before it becomes ground truth.</p>
+    </div>
+    <details class="reference-mark">
+      <summary id="reference-status">Loading reference…</summary>
+      <dl>
+        <dt>Reference SHA-256</dt><dd><code id="reference-sha"></code></dd>
+        <dt>Source Git SHA</dt><dd><code id="source-git-sha"></code></dd>
+        <dt>Cases SHA-256</dt><dd><code id="source-cases-sha"></code></dd>
+        <dt>Manifest SHA-256</dt><dd><code id="source-manifest-sha"></code></dd>
+      </dl>
+    </details>
+  </header>
+
+  <div id="app-error" class="error-message" role="alert" hidden></div>
+  <main id="review-app" class="workspace" aria-busy="true">
+    <aside class="case-ledger" aria-labelledby="ledger-title">
+      <div class="ledger-heading">
+        <div>
+          <h2 id="ledger-title">Cases</h2>
+          <p id="progress-copy">Loading…</p>
+        </div>
+        <div class="progress-ring" id="progress-ring" aria-hidden="true"><span id="progress-number">0</span></div>
+      </div>
+      <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
+      <fieldset class="filter-control">
+        <legend>Show</legend>
+        <div id="case-filters" class="segmented-control">
+          <button type="button" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" data-filter="unreviewed" aria-pressed="false">Unreviewed</button>
+          <button type="button" data-filter="needsChange" aria-pressed="false">Needs change</button>
+        </div>
+      </fieldset>
+      <ol id="case-list" class="case-list" aria-label="Reference cases"></ol>
+      <div class="bulk-actions">
+        <button id="approve-remaining" class="quiet-button" type="button">Approve remaining unchanged</button>
+        <button id="copy-summary" class="accent-button" type="button">Copy review summary</button>
+        <p id="copy-status" class="action-status" role="status" aria-live="polite"></p>
+      </div>
+    </aside>
+
+    <section class="study-surface" aria-label="Current reference case">
+      <nav class="case-navigation" aria-label="Case navigation">
+        <button id="previous-case" class="quiet-button" type="button">Previous</button>
+        <p id="case-position">Case 1 of 30</p>
+        <button id="next-case" class="quiet-button" type="button">Next</button>
+      </nav>
+
+      <div id="case-stage" class="case-stage">
+        <section class="position-panel" aria-labelledby="position-title">
+          <div class="position-heading">
+            <div>
+              <h2 id="position-title">Position</h2>
+              <p id="position-summary"></p>
+            </div>
+            <p id="case-kind" class="case-kind"></p>
+          </div>
+          <div id="chess-board" class="chess-board" role="grid" aria-label="Chess position"></div>
+          <dl class="interaction-strip">
+            <div><dt>Moves</dt><dd id="move-history"></dd></div>
+            <div><dt>Latest action</dt><dd id="latest-interaction"></dd></div>
+            <div><dt>Staged move</dt><dd id="tentative-move"></dd></div>
+          </dl>
+        </section>
+
+        <article id="case-review" class="review-paper" tabindex="-1" aria-labelledby="case-title">
+          <header class="case-heading">
+            <div>
+              <p id="case-category" class="case-category"></p>
+              <h2 id="case-title">Loading case…</h2>
+            </div>
+            <span id="decision-stamp" class="decision-stamp">Unreviewed</span>
+          </header>
+          <div id="case-content"></div>
+          <details class="context-details">
+            <summary>Review context and criteria</summary>
+            <div id="brief-content" class="details-content"></div>
+          </details>
+          <details class="technical-details">
+            <summary>Identifiers, hashes, and technical facts</summary>
+            <pre id="technical-content"></pre>
+          </details>
+          <form id="review-form" class="review-form">
+            <fieldset class="decision-control">
+              <legend>Your decision</legend>
+              <div class="decision-buttons">
+                <button id="agree-decision" type="button" data-decision="agree">Agree</button>
+                <button id="change-decision" type="button" data-decision="needsChange">Needs change</button>
+              </div>
+            </fieldset>
+            <label class="notes-field" for="review-notes">
+              Notes <span>Optional; included in the copied summary</span>
+            </label>
+            <textarea id="review-notes" rows="4" maxlength="2000" placeholder="What should change, or what did you verify?"></textarea>
+          </form>
+        </article>
+      </div>
+      <p class="keyboard-help">Keyboard: ←/→ previous or next · A agree · C needs change</p>
+    </section>
+  </main>
+</body>
+</html>

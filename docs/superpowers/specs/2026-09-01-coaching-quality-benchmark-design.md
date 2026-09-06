@@ -23,7 +23,7 @@ Version 1 includes:
 - immutable experiment configurations and artifacts;
 - provider calls through narrow adapters;
 - mechanical response validation;
-- calibrated automatic absolute and pairwise grading;
+- qualified automatic absolute and pairwise grading;
 - latency, token, reliability, and estimated-cost measurement; and
 - reports that compare quality with operational tradeoffs.
 
@@ -172,18 +172,27 @@ Absolute scores show why a configuration behaves as it does. Pairwise results
 answer the practical question of whether it is better than what is currently
 shipping.
 
-### Judge calibration
+### Judge qualification
 
-The judge prompt, model, settings, schema, and hashes are pinned per benchmark
-version. Before accepting a benchmark run, the judge is tested against at
-least 20 human-scored calibration examples containing both good responses and
-known severe failures. It must match human severe/non-severe classification on
-at least 90% of examples and be within one point of the human score on at least
-80% of positive-dimension ratings. A failed calibration invalidates the
-automatic grading run rather than silently changing the judge.
+The judge prompt, model, settings, schemas, reference set, and hashes are pinned
+as one qualification identity. The reference set contains exactly 20 examples
+using the same payload shape as real absolute grading. A named, dated human
+review may establish human ground truth. A user may instead delegate the
+judgments to a named agent; those references may qualify the judge but remain
+explicitly provisional and never claim human approval. Pending provenance is
+always rejected.
 
-Calibration examples and candidate responses are kept separate. The judge
-never sees model names, prices, latencies, or prior scores while grading.
+A qualification runs three complete passes over the reviewed set. Every pass
+must match severe/non-severe classification on at least 95% of examples and be
+within one point of the reference score on at least 90% of dimension ratings.
+Passing qualifications remain valid for 30 days and may be reused only while
+all binding hashes still match. Failed attempts retain bounded row diagnostics.
+
+The launcher qualifies the judge before corpus export or candidate inference.
+Ordinary grading validates and embeds the accepted qualification but makes no
+calibration calls. Reference examples and candidate responses remain separate;
+the judge never sees model names, prices, latencies, or prior scores while
+grading.
 
 ## Operational measurements
 
@@ -201,7 +210,8 @@ Reports show totals, rates, median, p90, and per-fixture outliers. Cost is shown
 per response, per complete game sequence, and per benchmark run. Pricing
 changes never rewrite old reports; a new price table produces a new estimate.
 Candidate inference cost and latency are reported separately from the automatic
-judge's benchmark overhead, so grading expense is never mistaken for a
+judge's current-run overhead, while qualification cost and latency are shown as
+a separate historical expense. Grading expense is never mistaken for a
 production operating cost.
 
 ## Reporting and decisions
@@ -229,7 +239,7 @@ errors over production, wins more pairwise comparisons than it loses, and
 improves the all-dimensions-at-least-4 rate. Latency and cost remain explicit
 product tradeoffs rather than hidden pass/fail weights.
 
-After calibration and several trusted runs, pull-request CI may block on
+After qualification and several trusted runs, pull-request CI may block on
 deterministic fixture, schema, and mechanical-validator regressions. Provider
 inference and judge calls remain opt-in because they require credentials, have
 variable cost and latency, and can fail for external reasons.
@@ -244,9 +254,11 @@ variable cost and latency, and can fail for external reasons.
    writes immutable sanitized records.
 4. **Mechanical validator** applies the existing strict request-aware response
    contract.
-5. **Automatic grader** runs calibration, absolute grading, and blinded
-   pairwise comparisons with structured outputs.
-6. **Reporter** verifies artifact completeness and produces machine-readable
+5. **Judge qualifier** finds or creates a compatible, unexpired qualification
+   before any candidate inference.
+6. **Automatic grader** validates that qualification, then runs absolute grading
+   and blinded pairwise comparisons with structured outputs.
+7. **Reporter** verifies artifact completeness and produces machine-readable
    aggregates plus a concise Markdown comparison.
 
 The evaluation package remains outside the shipping ChessTutor target. The app
@@ -257,7 +269,7 @@ not import the benchmark runner or grader.
 
 The runner preflights the complete requested matrix before the first paid call.
 It rejects missing fixtures, duplicate cells, prompt or generator hash drift,
-unknown model aliases, incomplete price entries, invalid grader calibration,
+unknown model aliases, incomplete price entries, invalid judge qualification,
 and an existing destination.
 
 Individual provider failures are recorded generically and later cells continue.
@@ -281,7 +293,8 @@ Implementation must include tests for:
 - complete quick and comparison matrices;
 - stateful sequence continuation and blocked-turn accounting;
 - mechanical gate precedence;
-- judge calibration acceptance and rejection;
+- reviewed reference-set provenance and hash pinning;
+- repeated judge qualification acceptance, rejection, reuse, and expiration;
 - blinded randomized pairwise ordering and identity isolation;
 - token, latency, retry, and cost accounting;
 - Pareto and confidence-interval calculations;

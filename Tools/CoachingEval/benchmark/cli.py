@@ -6,6 +6,7 @@ import os
 import re
 import sys
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 from Tools.CoachingEval.benchmark.configuration import (
@@ -15,6 +16,10 @@ from Tools.CoachingEval.benchmark.configuration import (
 )
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.benchmark.grader import grade_run
+from Tools.CoachingEval.benchmark.qualification import (
+    JudgeQualification,
+    QualificationFailed,
+)
 from Tools.CoachingEval.benchmark.report import write_report
 from Tools.CoachingEval.benchmark.runner import run_candidates
 from Tools.CoachingEval.openai_responses import OpenAIResponsesClient, OpenAIResponsesError
@@ -35,6 +40,8 @@ def main(argv=None):
     try:
         if arguments.command == "run":
             summary = _run(arguments)
+        elif arguments.command == "qualify":
+            summary = _qualify(arguments)
         elif arguments.command == "grade":
             summary = _grade(arguments)
         else:
@@ -42,6 +49,17 @@ def main(argv=None):
     except _SafeCLIError as error:
         _print_json(
             {"status": "failed", "category": error.category, "message": str(error)},
+            sys.stderr,
+        )
+        return 1
+    except QualificationFailed as error:
+        _print_json(
+            {
+                "status": "failed",
+                "category": "qualificationRejected",
+                "message": "The automatic judge did not qualify.",
+                "qualification": str(error.artifact_path),
+            },
             sys.stderr,
         )
         return 1
@@ -92,6 +110,7 @@ def _run(arguments):
         price_table=prices,
         diagnostic_subset=bool(arguments.case_ids),
     )
+    evidence = manifest["evidence"]
     return {
         "status": "completed",
         "command": "run",
@@ -102,6 +121,9 @@ def _run(arguments):
         "validCount": manifest["summary"]["validCount"],
         "failedCount": manifest["summary"]["failedCount"],
         "diagnosticSubset": bool(arguments.case_ids),
+        "evidenceClassification": evidence["classification"],
+        "trialEligible": evidence["trialEligible"],
+        "promotionEvidenceEligible": evidence["promotionEvidenceEligible"],
     }
 
 
@@ -118,12 +140,34 @@ def _grade(arguments):
         judge_configuration=judge,
         client=client,
         destination=Path(arguments.output),
+        qualification_path=Path(arguments.qualification),
         price_table=prices,
     )
     return {
         "status": "completed",
         "command": "grade",
         "output": str(destination),
+        "judgeID": judge.identifier,
+    }
+
+
+def _qualify(arguments):
+    api_key = _credential(arguments.api_key_env)
+    repository_root = _repository_root()
+    judge = load_judge(Path(arguments.judge), repository_root)
+    prices = load_prices(Path(arguments.pricing))
+    client = OpenAIResponsesClient(api_key=api_key)
+    qualification = JudgeQualification.ensure(
+        judge,
+        client,
+        prices,
+        Path(arguments.artifact_root),
+        datetime.now(timezone.utc),
+    )
+    return {
+        "status": "completed",
+        "command": "qualify",
+        "qualification": str(qualification),
         "judgeID": judge.identifier,
     }
 
@@ -197,7 +241,14 @@ def _parser():
     grade.add_argument("--judge", required=True)
     grade.add_argument("--pricing", required=True)
     grade.add_argument("--output", required=True)
+    grade.add_argument("--qualification", required=True)
     grade.add_argument("--api-key-env", default="OPENAI_API_KEY")
+
+    qualify = commands.add_parser("qualify")
+    qualify.add_argument("--judge", required=True)
+    qualify.add_argument("--pricing", required=True)
+    qualify.add_argument("--artifact-root", required=True)
+    qualify.add_argument("--api-key-env", default="OPENAI_API_KEY")
 
     report = commands.add_parser("report")
     report.add_argument("--run", required=True)

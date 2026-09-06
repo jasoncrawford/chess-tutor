@@ -28,3 +28,7 @@ an answer revealed while simultaneously asking the learner to find it.
 For pairwise review, choose A, B, or tie based on tutoring quality only. Treat a mechanically
 invalid candidate as worse than a valid candidate. Do not infer candidate identity from style.
 Return only the requested strict JSON object.
+
+Score dimensions independently. An accurate but vague response can have good chess correctness and poor coaching judgment. Judge child clarity by the language a beginner must understand, without treating every other defect as a language defect.
+
+In pairwise comparisons, choose a winner only for a meaningful difference in chess accuracy, current-task fit, available interaction, help for independent thinking, or child understanding. Use tie when both teach the same useful idea equally well and differences are mostly phrasing. Do not invent a small advantage just to avoid a tie. Evaluate the same underlying responses consistently when their presentation order is reversed.

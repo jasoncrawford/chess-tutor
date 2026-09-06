@@ -1,0 +1,20 @@
+{
+  "conversationReuse": false,
+  "id": "judge-astra-v3",
+  "maximumOutputTokens": 4096,
+  "minimumDimensionAgreement": 0.9,
+  "minimumPairwiseAgreement": 0.9,
+  "minimumSevereAgreement": 0.95,
+  "model": "gpt-6-astra",
+  "provider": "openai-responses-v1",
+  "qualificationRepetitions": 3,
+  "qualificationValidDays": 30,
+  "reasoningEffort": "low",
+  "referenceSetPath": "Tools/CoachingEval/benchmark/judge-reference-v2.json",
+  "referenceSetSHA256": "34dfd86cbae1bc69d811fa3ac9083c4a8af79e3eec8ab6a50979e55df81e93af",
+  "reviewSeed": 20260901,
+  "schemaVersion": "coaching-quality-judge.v2",
+  "systemPromptPath": "Tools/CoachingEval/benchmark/judge-v2.md",
+  "systemPromptSHA256": "35b6efb23fcdd7d1e6b501ad34946b9a0c5f79d5beaae17e607fb9b2571d0807",
+  "timeoutSeconds": 60
+}

@@ -21,7 +21,21 @@ The current hosted coach has a separate production-shaped benchmark for comparin
 ./scripts/run_coaching_quality_benchmark.sh quick
 ```
 
-The script reads `ChessTutor-CoachingEval-OpenAI` from Keychain, exports a fresh 70-turn corpus from Swift, runs the production configuration, calibrates the pinned automatic judge, and writes an ignored report beneath `.coaching-eval/benchmark/runs/<timestamp>/report/summary.md`. It never places the key in a command argument or artifact.
+The v2 judge reference contains 20 absolute judgments and 10 pairwise preferences. Its provenance may record either a named human review or a named delegated agent review with the actual review date. Delegated agent judgments are provisional references, not human scores or human approval; both reviewed states may qualify the judge, while `pending` always fails closed. Inspect the exact pinned set in the local study desk:
+
+```bash
+./scripts/review_judge_references.sh
+```
+
+The launcher uses the repository `.venv` when present and otherwise uses `python3`; Flask is pinned in the root `requirements.txt`. It binds only to `127.0.0.1` and makes no provider or model calls. The app reads the exact reference set pinned by `benchmark/configs/judge-v2.json`, while edits, decisions, and notes remain only in browser local storage under that reference file's SHA-256. Use **Copy review summary** after reviewing all 30 cases and paste the result into Codex. This does not modify `judge-reference-v2.json` or record provenance: those remain separate, explicit follow-up steps. The checked-in review was delegated to GPT-6 Astra by Jason Crawford and is rendered explicitly as agent-reviewed and provisional. For a validation-only launch with no browser or listening server, run `./scripts/review_judge_references.sh --no-open --check`.
+
+The dependency-free browser state logic is exercised directly with `node Tools/CoachingEval/tests/test_benchmark_review_core.js`, and the real DOM controller/filter integration with `node Tools/CoachingEval/tests/test_benchmark_review_controller.js`; `test_benchmark_review_app.py` runs both commands as part of the existing Python CI discovery path.
+
+The script reads `ChessTutor-CoachingEval-OpenAI` from Keychain, ensures the pinned automatic judge has a compatible qualification from the last 30 days, exports a fresh 70-turn corpus from Swift, runs the production configuration, and writes an ignored report beneath `.coaching-eval/benchmark/runs/<timestamp>/report/summary.md`. It never places the key in a command argument or artifact. Qualification happens before corpus export or candidate inference, so an unqualified judge cannot waste a candidate run.
+
+The benchmark defaults are `configs/judge-v4.json` (GPT-6 Astra at low reasoning with `judge-v3.md`), `pricing-v2.json` (dated 2026-09-06), and `configs/production-v2.json`. The production wrapper still pins the unchanged live Sol model configuration; only its benchmark identity and pricing version are updated. Every additional candidate wrapper must use the same `openai-2026-09-06` pricing version. Previous judge, prompt, pricing, and production-wrapper versions remain immutable for replaying earlier runs. The new judge uses the same provisional agent-reviewed references and unchanged qualification thresholds; publishing the configuration is not itself qualification or model-promotion approval.
+
+The judge distinguishes accurate words from a useful teaching step: an unnecessary danger scan in an obviously safe opening, or a capture hunt with no possible capture, scores poorly on coaching judgment even when a negative-answer button exists. This alone is not a severe chess error. Genuine danger questions and feedback on the child's newest move remain useful. This criterion was added after a live diagnostic showed that a reference-qualified judge was still too generous toward ritualized opening scans; qualification does not replace inspection of real outputs.
 
 Compare one or more candidate configuration files against production with three repetitions per case:
 
@@ -44,34 +58,40 @@ Before a paid matrix, use the five-turn diagnostic smoke. It is always marked in
 Each phase can also be run directly:
 
 ```bash
+python3 -m Tools.CoachingEval.benchmark.cli qualify \
+  --judge Tools/CoachingEval/benchmark/configs/judge-v4.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
+  --artifact-root .coaching-eval/benchmark/qualifications
+
 python3 -m Tools.CoachingEval.benchmark.cli run \
   --corpus .coaching-eval/benchmark/corpus/<export> --mode comparison \
-  --candidate Tools/CoachingEval/benchmark/configs/production-v1.json \
+  --candidate Tools/CoachingEval/benchmark/configs/production-v2.json \
   --candidate path/to/candidate.json \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --output .coaching-eval/benchmark/runs/<run>/candidates
 
 python3 -m Tools.CoachingEval.benchmark.cli grade \
   --run .coaching-eval/benchmark/runs/<run>/candidates \
   --corpus .coaching-eval/benchmark/corpus/<export> \
-  --judge Tools/CoachingEval/benchmark/configs/judge-v1.json \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --judge Tools/CoachingEval/benchmark/configs/judge-v4.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
+  --qualification .coaching-eval/benchmark/qualifications/<qualification>/qualification.json \
   --output .coaching-eval/benchmark/runs/<run>/grades
 
 python3 -m Tools.CoachingEval.benchmark.cli report \
   --run .coaching-eval/benchmark/runs/<run>/candidates \
   --grades .coaching-eval/benchmark/runs/<run>/grades \
-  --pricing Tools/CoachingEval/benchmark/pricing-v1.json \
+  --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --output .coaching-eval/benchmark/runs/<run>/report
 ```
 
-`report` is entirely offline and can regenerate a report from frozen responses and grades. Reports keep quality separate from operations: they show mechanical validity, provider failures grouped by category and bounded HTTP status, severe errors, each of the six rubric dimensions, strong-response rate, pairwise wins/losses/ties, p50/p90 latency, candidate token cost, and separately labeled judge overhead. The Pareto frontier includes configurations not dominated simultaneously on strong-response rate, severe errors, p90 latency, and candidate cost; there is deliberately no opaque combined score.
+`report` is entirely offline and can regenerate a report from frozen responses and grades. Reports keep quality separate from operations: they show mechanical validity, provider failures grouped by category and bounded HTTP status, severe errors, each of the six rubric dimensions, strong-response rate, pairwise wins/losses/ties, p50/p90 latency, candidate token cost, current-run judge overhead, and qualification cost as a separate historical expense. Ordinary grade runs do not repeat the 20-case qualification. The Pareto frontier includes configurations not dominated simultaneously on strong-response rate, severe errors, p90 latency, and candidate cost; there is deliberately no opaque combined score.
 
-To test a new prompt or model, copy `configs/production-v1.json`, change only the intended fields, and pin all referenced hashes. To test a new deterministic user-prompt generator, add a named entry to `PROMPT_GENERATORS` in `benchmark/configuration.py` plus compiler and benchmark tests; configuration files cannot load arbitrary code. Pricing is an immutable, dated estimate: add a new `pricing-v<number>.json` from an official source rather than rewriting an old table.
+To test a new prompt or model, copy `CoachingServer/configs/production-v1.json`, change only the intended fields, then copy the benchmark candidate wrapper and pin the new model-configuration SHA-256. To test a new deterministic user-prompt generator, add a named entry to `PROMPT_GENERATORS` in `benchmark/configuration.py` plus compiler and benchmark tests; configuration files cannot load arbitrary code. Pricing is an immutable, dated estimate: add a new `pricing-v<number>.json` from an official source rather than rewriting an old table.
 
 To promote an interesting production trace into the corpus, copy its game ID from the app's About sheet, filter the retained JSONL as described in `docs/hosted-coaching-server.md`, and reproduce the chosen turn mechanically in `CoachingQualityBenchmarkCorpus.swift`. Add the grader brief separately; never copy the model response into the candidate request or derive the oracle from it. A fixture or grader-brief change creates a new corpus version.
 
-Provider and judge calls are intentionally absent from pull-request CI because they require credentials, cost money, and have variable external latency. CI covers the corpus, contracts, fake providers, calibration gates, aggregation, and command workflow.
+Provider and judge calls are intentionally absent from pull-request CI because they require credentials, cost money, and have variable external latency. CI covers the corpus, contracts, fake providers, qualification gates, aggregation, and command workflow.
 
 ## Export the real corpus
 

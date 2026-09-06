@@ -1,8 +1,8 @@
 {
   "baseline": true,
-  "id": "production-sol-v1",
+  "id": "production-sol-v2",
   "modelConfigurationPath": "CoachingServer/configs/production-v1.json",
   "modelConfigurationSHA256": "35a881fa378cb52dfe1f070742ea2908626d280c9f77f0562b5d68a39ca79106",
-  "pricingVersion": "openai-2026-09-01",
+  "pricingVersion": "openai-2026-09-06",
   "schemaVersion": "coaching-quality-candidate.v2"
 }

@@ -2,8 +2,11 @@ import copy
 import json
 import socket
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
+from CoachingServer.model_configuration import HostedModelConfiguration
+from CoachingServer.provider_envelope import validate_provider_envelope
 from CoachingServer.service import (
     HostedCoachingCompletion,
     HostedCoachingService,
@@ -21,6 +24,10 @@ FIXTURE = json.loads(
 SYSTEM_PROMPT = (
     ROOT / "Tools/CoachingEval/prompts/tutor-v13.md"
 ).read_text(encoding="utf-8")
+PRODUCTION_CONFIGURATION = HostedModelConfiguration.load(
+    ROOT / "CoachingServer/configs/production-v1.json",
+    ROOT,
+)
 GAME_ID = "a1111111-1111-4111-8111-111111111111"
 EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
 
@@ -91,12 +98,45 @@ class RecordingProvider:
         return self.response
 
 
+class EmptyProvider:
+    def __init__(self):
+        self.calls = []
+
+    def complete(self, **kwargs):
+        self.calls.append(kwargs)
+        return None
+
+
 class HostedCoachingServiceTests(unittest.TestCase):
+    def test_shared_provider_envelope_requires_completed_output_and_continuation(self):
+        response = {
+            "id": "resp_valid-123",
+            "status": "completed",
+            "output_text": '{"message":"Valid body"}',
+        }
+
+        self.assertEqual(
+            ("resp_valid-123", '{"message":"Valid body"}'),
+            validate_provider_envelope(response),
+        )
+        invalid = (
+            None,
+            [],
+            {**response, "status": "in_progress"},
+            {key: value for key, value in response.items() if key != "output_text"},
+            {**response, "output_text": None},
+            {key: value for key, value in response.items() if key != "id"},
+            {**response, "id": "request_not-a-continuation"},
+        )
+        for candidate in invalid:
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                validate_provider_envelope(candidate)
+
     def test_returns_compact_safe_diagnostics_with_the_validated_turn(self):
         clock = iter((10.0, 10.123))
         service = HostedCoachingService(
             provider=RecordingProvider(),
-            system_prompt=SYSTEM_PROMPT,
+            configuration=PRODUCTION_CONFIGURATION,
             clock=lambda: next(clock),
         )
 
@@ -151,7 +191,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
     def test_provider_failure_carries_only_compiled_safe_diagnostics(self):
         service = HostedCoachingService(
             provider=RecordingProvider(error=RuntimeError("PRIVATE BODY SECRET")),
-            system_prompt=SYSTEM_PROMPT,
+            configuration=PRODUCTION_CONFIGURATION,
         )
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
@@ -162,6 +202,19 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertIsNone(raised.exception.diagnostics["response"])
         self.assertEqual("gpt-5.6-sol", raised.exception.diagnostics["provider"]["model"])
         self.assertNotIn("PRIVATE BODY SECRET", json.dumps(raised.exception.diagnostics))
+
+    def test_provider_failures_use_the_configured_attempt_limit(self):
+        provider = RecordingProvider(error=RuntimeError("PRIVATE BODY SECRET"))
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=replace(PRODUCTION_CONFIGURATION, maximum_attempts=2),
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("providerUnavailable", raised.exception.code)
+        self.assertEqual(2, len(provider.calls))
 
     def test_invalid_provider_output_never_appears_in_logs_or_diagnostics(self):
         provider = RecordingProvider(
@@ -178,7 +231,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         )
         service = HostedCoachingService(
             provider=provider,
-            system_prompt=SYSTEM_PROMPT,
+            configuration=PRODUCTION_CONFIGURATION,
         )
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
@@ -195,6 +248,17 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertEqual(["unavailableAction"], failure["reasons"])
         self.assertNotIn("resp_invalid-private-id", joined)
 
+    def test_empty_provider_response_is_an_invalid_response_not_unavailability(self):
+        service = HostedCoachingService(
+            provider=EmptyProvider(),
+            configuration=PRODUCTION_CONFIGURATION,
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("invalidProviderResponse", raised.exception.code)
+
     def test_rejects_provider_turn_without_a_meaningful_next_interaction(self):
         provider = RecordingProvider(
             response={
@@ -207,7 +271,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "usage": {},
             }
         )
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertRaises(HostedCoachingServiceError) as captured:
             service.complete(hosted_request())
@@ -223,7 +287,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "usage": {},
             }
         )
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
             with self.assertRaises(HostedCoachingServiceError):
@@ -256,7 +320,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "usage": {},
             }
         )
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
             with self.assertRaises(HostedCoachingServiceError):
@@ -276,7 +340,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         clock = iter((10.0, 10.123))
         service = HostedCoachingService(
             provider=provider,
-            system_prompt=SYSTEM_PROMPT,
+            configuration=PRODUCTION_CONFIGURATION,
             clock=lambda: next(clock),
         )
 
@@ -333,7 +397,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         clock = iter((20.0, 50.5))
         service = HostedCoachingService(
             provider=provider,
-            system_prompt=SYSTEM_PROMPT,
+            configuration=PRODUCTION_CONFIGURATION,
             clock=lambda: next(clock),
         )
 
@@ -384,7 +448,17 @@ class HostedCoachingServiceTests(unittest.TestCase):
         clock = iter((10.0, 10.123))
         service = HostedCoachingService(
             provider=provider,
-            system_prompt=SYSTEM_PROMPT,
+            configuration=replace(
+                PRODUCTION_CONFIGURATION,
+                model="configured-model",
+                initial_reasoning_effort="medium",
+                maximum_output_tokens=1024,
+                timeout_seconds=12.5,
+                prompt_version="tutor-v12",
+                system_prompt="Configured system prompt.",
+                conversation_reuse=False,
+                store=False,
+            ),
             clock=lambda: next(clock),
         )
 
@@ -392,17 +466,17 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
         self.assertEqual(1, len(provider.calls))
         call = provider.calls[0]
-        self.assertEqual("gpt-5.6-sol", call["model"])
-        self.assertEqual("high", call["reasoning_effort"])
-        self.assertEqual(2048, call["maximum_output_tokens"])
-        self.assertEqual(30.0, call["timeout"])
+        self.assertEqual("configured-model", call["model"])
+        self.assertEqual("medium", call["reasoning_effort"])
+        self.assertEqual(1024, call["maximum_output_tokens"])
+        self.assertEqual(12.5, call["timeout"])
         self.assertIsNone(call["previous_response_id"])
-        self.assertTrue(call["store"])
-        self.assertEqual(SYSTEM_PROMPT, call["system_prompt"])
+        self.assertFalse(call["store"])
+        self.assertEqual("Configured system prompt.", call["system_prompt"])
         self.assertNotIn(GAME_ID, call["system_prompt"])
         self.assertNotIn(EPISODE_ID, call["system_prompt"])
         self.assertEqual(
-            compile_context(FIXTURE["request"], "tutor-v13").markdown,
+            compile_context(FIXTURE["request"], "tutor-v12").markdown,
             call["user_prompt"],
         )
         self.assertNotIn(GAME_ID, call["user_prompt"])
@@ -410,6 +484,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         self.assertFalse(call["schema"]["additionalProperties"])
         self.assertEqual(
             [
+                "none",
                 "findEndangeredPiece",
                 "findSafeCapture",
                 "stageMove",
@@ -423,7 +498,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "schemaVersion": "hosted-coaching-turn.v3",
                 "requestID": "shared-selected-knight",
                 "positionRevision": 0,
-                "promptVersion": "tutor-v13",
+                "promptVersion": "tutor-v12",
                 "continuationID": "resp_provider-private-id",
                 "turn": {
                     "message": "Where could this knight help in the center?",
@@ -449,7 +524,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         provider = RecordingProvider()
         service = HostedCoachingService(
             provider=provider,
-            system_prompt=SYSTEM_PROMPT,
+            configuration=PRODUCTION_CONFIGURATION,
         )
 
         response = service.complete(
@@ -477,7 +552,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 provider = RecordingProvider()
                 service = HostedCoachingService(
                     provider=provider,
-                    system_prompt=SYSTEM_PROMPT,
+                    configuration=PRODUCTION_CONFIGURATION,
                 )
                 service.complete(
                     hosted_request(
@@ -487,26 +562,21 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 )
                 self.assertEqual("low", provider.calls[0]["reasoning_effort"])
 
-    def test_simple_follow_up_effort_can_be_configured_to_low_but_not_other_values(self):
+    def test_simple_follow_up_effort_comes_from_the_configuration(self):
         provider = RecordingProvider()
         service = HostedCoachingService(
             provider=provider,
-            system_prompt=SYSTEM_PROMPT,
-            follow_up_reasoning_effort="low",
+            configuration=replace(
+                PRODUCTION_CONFIGURATION,
+                simple_follow_up_reasoning_effort="low",
+            ),
         )
         service.complete(hosted_request(previous_response_id="resp_previous-123"))
         self.assertEqual("low", provider.calls[0]["reasoning_effort"])
 
-        with self.assertRaisesRegex(ValueError, "follow-up reasoning effort"):
-            HostedCoachingService(
-                provider=provider,
-                system_prompt=SYSTEM_PROMPT,
-                follow_up_reasoning_effort="medium",
-            )
-
     def test_rejects_invalid_request_before_provider_call(self):
         provider = RecordingProvider()
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
         request = dict(FIXTURE["request"], authoredAdvice="Play the knight.")
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
@@ -526,7 +596,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 "usage": {},
             }
         )
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
             service.complete(hosted_request())
@@ -536,7 +606,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
     def test_redacts_provider_exceptions(self):
         provider = RecordingProvider(error=RuntimeError("secret provider body"))
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
             service.complete(hosted_request())
@@ -546,7 +616,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
     def test_preserves_provider_timeout_as_a_stable_timeout_failure(self):
         provider = RecordingProvider(error=socket.timeout("private timeout detail"))
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
             service.complete(hosted_request())
@@ -559,7 +629,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
         error.category = "httpError"
         error.http_status = 504
         provider = RecordingProvider(error=error)
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
 
         with self.assertRaises(HostedCoachingServiceError) as raised:
             service.complete(hosted_request())
@@ -569,7 +639,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
 
     def test_rejects_invalid_or_extra_envelope_fields_before_provider_call(self):
         provider = RecordingProvider()
-        service = HostedCoachingService(provider=provider, system_prompt=SYSTEM_PROMPT)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
         invalid = hosted_request(previous_response_id="not-a-response-id")
         invalid["clientReasoningEffort"] = "max"
 
@@ -593,7 +663,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 provider = RecordingProvider()
                 service = HostedCoachingService(
                     provider=provider,
-                    system_prompt=SYSTEM_PROMPT,
+                    configuration=PRODUCTION_CONFIGURATION,
                 )
                 with self.assertRaises(HostedCoachingServiceError) as raised:
                     service.complete(invalid)

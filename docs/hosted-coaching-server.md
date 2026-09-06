@@ -47,10 +47,10 @@ for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 .venv/bin/python -m CoachingServer.local --host 127.0.0.1 --port 8787
 ```
 
-Simple follow-ups default to `none` reasoning. Set
-`CHESS_TUTOR_COACHING_FOLLOWUP_REASONING_EFFORT=low` to compare their quality
-and latency locally. Tactical follow-ups still use low. The server accepts only
-`low` or `none`; the app cannot choose the policy. No Fast service tier is used.
+The server loads `CoachingServer/configs/production-v1.json`. To compare a
+different pinned model policy locally, set `CHESS_TUTOR_COACHING_MODEL_CONFIG`
+to another repository-relative configuration path. The app cannot choose the
+model policy. No Fast service tier is used.
 
 Check readiness with `GET http://127.0.0.1:8787/health`. Coaching requests use
 `POST /v1/coaching-turn`, `Content-Type: application/json`, and

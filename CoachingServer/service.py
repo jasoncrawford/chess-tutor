@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import re
 import socket
 import time
 import uuid
@@ -15,6 +14,11 @@ from CoachingServer.chess_native_compiler import (
     compile_follow_up_context,
     parse_neutral_request,
 )
+from CoachingServer.model_configuration import HostedModelConfiguration
+from CoachingServer.provider_envelope import (
+    validate_continuation_id,
+    validate_provider_envelope,
+)
 from CoachingServer.structured_logging import emit_event
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
@@ -24,7 +28,6 @@ from Tools.CoachingEval.chess_native_response import (
 
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
 _MAXIMUM_LATENCY_MILLISECONDS = 120_000.0
-_CONTINUATION_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
 _ENVELOPE_FIELDS = {
     "schemaVersion",
     "gameID",
@@ -32,7 +35,6 @@ _ENVELOPE_FIELDS = {
     "request",
     "previousResponseID",
 }
-_TACTICAL_FOLLOW_UP_EVENTS = {"moveStaged", "moveReplaced", "squareInspected"}
 
 
 class HostedCoachingServiceError(RuntimeError):
@@ -64,25 +66,17 @@ class HostedCoachingService:
         self,
         *,
         provider,
-        system_prompt: str,
-        timeout: float = 30.0,
-        follow_up_reasoning_effort: str = "none",
+        configuration: HostedModelConfiguration,
         clock=time.monotonic,
     ):
         if not callable(getattr(provider, "complete", None)):
             raise ValueError("provider must implement complete")
-        if not isinstance(system_prompt, str) or not system_prompt.strip():
-            raise ValueError("system_prompt must be a nonempty string")
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
-            raise ValueError("timeout must be positive")
+        if not isinstance(configuration, HostedModelConfiguration):
+            raise ValueError("configuration must be a HostedModelConfiguration")
         if not callable(clock):
             raise ValueError("clock must be callable")
-        if follow_up_reasoning_effort not in {"low", "none"}:
-            raise ValueError("follow-up reasoning effort must be low or none")
         self._provider = provider
-        self._system_prompt = system_prompt
-        self._timeout = float(timeout)
-        self._follow_up_reasoning_effort = follow_up_reasoning_effort
+        self._configuration = configuration
         self._clock = clock
 
     def complete(
@@ -101,7 +95,10 @@ class HostedCoachingService:
             normalized_request = parse_neutral_request(neutral_request)
             is_follow_up = previous_response_id is not None
             compiler = compile_follow_up_context if is_follow_up else compile_context
-            compilation = compiler(neutral_request, "tutor-v13")
+            compilation = compiler(
+                neutral_request,
+                self._configuration.prompt_version,
+            )
         except (TypeError, ValueError):
             raise HostedCoachingServiceError("invalidRequest") from None
         request_kind = "follow_up" if is_follow_up else "initial"
@@ -115,10 +112,9 @@ class HostedCoachingService:
             compilation=compilation,
             request_kind=request_kind,
         )
-        reasoning_effort = _reasoning_effort(
+        reasoning_effort = self._configuration.reasoning_effort(
             normalized_request,
-            is_follow_up=is_follow_up,
-            simple_follow_up_effort=self._follow_up_reasoning_effort,
+            is_follow_up,
         )
         emit_event(
             "request_compiled",
@@ -136,28 +132,40 @@ class HostedCoachingService:
             "provider_request_started",
             **correlation,
             request_kind=request_kind,
-            model="gpt-5.6-sol",
+            model=self._configuration.model,
             reasoning_effort=reasoning_effort,
-            timeout_seconds=self._timeout,
+            timeout_seconds=self._configuration.timeout_seconds,
         )
-        try:
-            provider_response = self._provider.complete(
-                system_prompt=self._system_prompt,
-                user_prompt=compilation.markdown,
-                schema=contract.json_schema(),
-                model="gpt-5.6-sol",
-                reasoning_effort=reasoning_effort,
-                maximum_output_tokens=2048,
-                timeout=self._timeout,
-                previous_response_id=previous_response_id,
-                store=True,
-            )
-        except Exception as error:
+        provider_response = None
+        provider_error = None
+        provider_returned = False
+        for _attempt in range(self._configuration.maximum_attempts):
+            try:
+                provider_response = self._provider.complete(
+                    system_prompt=self._configuration.system_prompt,
+                    user_prompt=compilation.markdown,
+                    schema=contract.json_schema(),
+                    model=self._configuration.model,
+                    reasoning_effort=reasoning_effort,
+                    maximum_output_tokens=self._configuration.maximum_output_tokens,
+                    timeout=self._configuration.timeout_seconds,
+                    previous_response_id=(
+                        previous_response_id
+                        if self._configuration.conversation_reuse
+                        else None
+                    ),
+                    store=self._configuration.store,
+                )
+                provider_returned = True
+                break
+            except Exception as error:
+                provider_error = error
+        if not provider_returned:
             elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
             is_timeout = (
-                isinstance(error, (TimeoutError, socket.timeout))
-                or getattr(error, "category", None) == "timeout"
-                or getattr(error, "http_status", None) == 504
+                isinstance(provider_error, (TimeoutError, socket.timeout))
+                or getattr(provider_error, "category", None) == "timeout"
+                or getattr(provider_error, "http_status", None) == 504
             )
             emit_event(
                 "provider_request_failed",
@@ -172,6 +180,7 @@ class HostedCoachingService:
                     _diagnostics(
                         request=request_summary,
                         provider=_provider_summary(
+                            model=self._configuration.model,
                             reasoning_effort=reasoning_effort,
                             metrics=_metrics(None, elapsed_milliseconds),
                         ),
@@ -182,6 +191,7 @@ class HostedCoachingService:
                 _diagnostics(
                     request=request_summary,
                     provider=_provider_summary(
+                        model=self._configuration.model,
                         reasoning_effort=reasoning_effort,
                         metrics=_metrics(None, elapsed_milliseconds),
                     ),
@@ -190,15 +200,20 @@ class HostedCoachingService:
         elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
         provider_outcome = (
             "completed"
-            if isinstance(provider_response, dict)
+            if isinstance(provider_response, Mapping)
             and provider_response.get("status") == "completed"
             else "noncompleted"
         )
         metrics = _metrics(
-            provider_response.get("usage") if isinstance(provider_response, dict) else None,
+            (
+                provider_response.get("usage")
+                if isinstance(provider_response, Mapping)
+                else None
+            ),
             elapsed_milliseconds,
         )
         provider_summary = _provider_summary(
+            model=self._configuration.model,
             reasoning_effort=reasoning_effort,
             metrics=metrics,
         )
@@ -214,14 +229,9 @@ class HostedCoachingService:
         )
 
         try:
-            if not isinstance(provider_response, dict):
-                raise ValueError
-            if provider_response.get("status") != "completed":
-                raise ValueError
-            output_text = provider_response.get("output_text")
-            if not isinstance(output_text, str):
-                raise ValueError
-            continuation_id = _continuation_id(provider_response.get("id"))
+            continuation_id, output_text = validate_provider_envelope(
+                provider_response
+            )
             turn = contract.parse_and_validate(output_text)
         except ChessNativeResponseValidationError as error:
             emit_event(
@@ -317,11 +327,12 @@ def _request_summary(
 
 def _provider_summary(
     *,
+    model: str,
     reasoning_effort: str,
     metrics: Mapping[str, object],
 ) -> dict[str, object]:
     return {
-        "model": "gpt-5.6-sol",
+        "model": model,
         "reasoning_effort": reasoning_effort,
         "input_tokens": metrics["inputTokens"],
         "cached_input_tokens": metrics["cachedInputTokens"],
@@ -360,25 +371,6 @@ def _metrics(usage: object, elapsed_milliseconds: float) -> dict[str, object]:
     }
 
 
-def _reasoning_effort(
-    request: Mapping[str, object],
-    *,
-    is_follow_up: bool,
-    simple_follow_up_effort: str,
-) -> str:
-    if not is_follow_up:
-        return "high"
-    interaction = request["interaction"]
-    latest_event = interaction["latestEvent"]
-    kind = latest_event["kind"]
-    references = latest_event["referencedIDs"]
-    if kind in _TACTICAL_FOLLOW_UP_EVENTS:
-        return "low"
-    if kind == "actionChosen" and "action:hint" in references:
-        return "low"
-    return simple_follow_up_effort
-
-
 def _elapsed_milliseconds(finished: float, started: float) -> float:
     return round(max(0.0, (finished - started) * 1000.0), 3)
 
@@ -403,7 +395,7 @@ def _parse_envelope(
         raise ValueError("Hosted coaching request must be an object")
     previous_response_id = value["previousResponseID"]
     if previous_response_id is not None:
-        previous_response_id = _continuation_id(previous_response_id)
+        previous_response_id = validate_continuation_id(previous_response_id)
     return neutral_request, previous_response_id, game_id, episode_id
 
 
@@ -417,9 +409,3 @@ def _canonical_uuid(value: object) -> str:
     if value != canonical:
         raise ValueError("Correlation ID must use canonical lowercase UUID form")
     return canonical
-
-
-def _continuation_id(value: object) -> str:
-    if not isinstance(value, str) or not _CONTINUATION_ID.fullmatch(value):
-        raise ValueError("Invalid continuation ID")
-    return value
