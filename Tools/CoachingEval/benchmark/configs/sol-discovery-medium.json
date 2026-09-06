@@ -1,0 +1,8 @@
+{
+  "baseline": false,
+  "id": "sol-discovery-medium",
+  "modelConfigurationPath": "Tools/CoachingEval/benchmark/configs/models/sol-discovery-medium-model.json",
+  "modelConfigurationSHA256": "c63574ca1b766f6d58626dd215d5640babee3164224be661ca4d0d063cabd71a",
+  "pricingVersion": "openai-2026-09-06",
+  "schemaVersion": "coaching-quality-candidate.v2"
+}

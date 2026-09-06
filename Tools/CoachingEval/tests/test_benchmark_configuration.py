@@ -5,11 +5,14 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
+from Tools.CoachingEval.benchmark.cli import _select_cases
 from Tools.CoachingEval.benchmark.configuration import (
     load_candidate,
     load_judge,
     load_prices,
 )
+from Tools.CoachingEval.benchmark.runner import run_candidates
+from Tools.CoachingEval.tests import test_benchmark_runner as runner_fixtures
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -231,6 +234,49 @@ class BenchmarkConfigurationTests(unittest.TestCase):
         prices = dict(self.prices, extra=True)
         with self.assertRaises(ValueError):
             load_prices(self.dump("extra.json", prices))
+
+    def test_portable_discovery_challengers_execute_the_pinned_shared_policies(self):
+        benchmark = ROOT / "Tools/CoachingEval/benchmark"
+        prices = load_prices(benchmark / "pricing-v2.json")
+        baseline = load_candidate(benchmark / "configs/production-v2.json", ROOT)
+        fixture = runner_fixtures.BenchmarkRunnerTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        corpus = _select_cases(fixture.corpus, ["s-01-01", "s-01-02", "s-01-03"], False)
+        for identifier, model, efforts in (
+            ("astra-discovery-low", "gpt-6-astra", ("low", "low", "low")),
+            ("sol-discovery-medium", "gpt-5.6-sol", ("medium", "low", "none")),
+        ):
+            with self.subTest(identifier=identifier):
+                candidate = load_candidate(benchmark / f"configs/{identifier}.json", ROOT)
+                configuration = candidate.model_configuration
+                self.assertEqual(identifier, candidate.identifier)
+                self.assertFalse(candidate.baseline)
+                self.assertEqual(baseline.pricing_version, candidate.pricing_version)
+                self.assertEqual(prices.version, candidate.pricing_version)
+                self.assertEqual(benchmark / f"configs/models/{identifier}-model.json", configuration.path)
+                self.assertEqual(ROOT / "Tools/CoachingEval/prompts/tutor-v13-discovery.md", configuration.system_prompt_path)
+                self.assertEqual("88b95067d763ec020d2aa6f4e0ce37430cdf818591f8a76b6eaa3d9bf2d9fcc6", configuration.system_prompt_sha256)
+                self.assertEqual("chess-native-v13", configuration.user_prompt_generator)
+                self.assertEqual("chess-native-v13", configuration.response_contract)
+                self.assertEqual(1, configuration.maximum_attempts)
+                self.assertTrue(configuration.conversation_reuse)
+                client = runner_fixtures.FakeClient()
+                manifest = run_candidates(
+                    corpus=corpus, configurations=(candidate,), mode="quick",
+                    destination=self.root / identifier,
+                    provider_factory=lambda _configuration: client,
+                    price_table=prices, diagnostic_subset=True,
+                )
+                self.assertEqual(3, manifest["summary"]["validCount"])
+                self.assertEqual(list(efforts), [call["reasoning_effort"] for call in client.calls])
+                self.assertEqual([None, "resp_1", "resp_2"], [call["previous_response_id"] for call in client.calls])
+                for call in client.calls:
+                    self.assertEqual(model, call["model"])
+                    self.assertEqual(configuration.system_prompt, call["system_prompt"])
+                    self.assertTrue(call["store"])
+                    self.assertEqual(2048, call["maximum_output_tokens"])
+                    self.assertEqual(30, call["timeout"])
 
     def test_repository_astra_judge_and_current_baseline_pricing_load_together(self):
         benchmark = ROOT / "Tools/CoachingEval/benchmark"
