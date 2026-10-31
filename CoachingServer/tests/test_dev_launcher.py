@@ -81,6 +81,58 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 self.assertNotIn("local-token-secret", output + command_log)
                 self.assertIn("server-stopped", command_log)
 
+    def test_opens_legacy_simulator_without_trying_device_hub(self):
+        returncode, output, command_log = self._launch_and_stop()
+
+        self.assertEqual(returncode, 130, output)
+        self.assertIn("ChessTutor is ready", output)
+        self.assertEqual(
+            [line for line in command_log.splitlines() if line.startswith("open ")],
+            ["open -a Simulator"],
+        )
+
+    def test_opens_device_hub_when_legacy_simulator_is_unavailable(self):
+        self.env["FAKE_SIMULATOR_OPEN_FAILS"] = "1"
+
+        returncode, output, command_log = self._launch_and_stop()
+
+        self.assertEqual(returncode, 130, output)
+        self.assertIn("ChessTutor is ready", output)
+        self.assertEqual(
+            [line for line in command_log.splitlines() if line.startswith("open ")],
+            ["open -a Simulator", "open -b com.apple.dt.Devices"],
+        )
+        self.assertIn("simctl bootstatus AA821CF0 -b", command_log)
+        self.assertIn("simctl install AA821CF0", command_log)
+        self.assertIn("server-stopped", command_log)
+
+    def test_stops_before_server_or_build_when_neither_frontend_opens(self):
+        self.env["FAKE_SIMULATOR_OPEN_FAILS"] = "1"
+        self.env["FAKE_DEVICE_HUB_OPEN_FAILS"] = "1"
+
+        result = subprocess.run(
+            [str(LAUNCHER)],
+            cwd=REPOSITORY_ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        output = result.stdout + result.stderr
+        command_log = self.command_log.read_text()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Could not open Simulator or Device Hub", output)
+        self.assertNotIn("ChessTutor is ready", output)
+        self.assertEqual(
+            [line for line in command_log.splitlines() if line.startswith("open ")],
+            ["open -a Simulator", "open -b com.apple.dt.Devices"],
+        )
+        self.assertNotIn("server-start", command_log)
+        self.assertNotIn("xcodebuild", command_log)
+        self.assertNotIn("simctl install", command_log)
+        self.assertNotIn("simctl launch", command_log)
+
     def _launch_and_stop(self):
         process = subprocess.Popen(
             [str(LAUNCHER)],
@@ -300,6 +352,15 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
             """
             #!/bin/bash
             printf 'open %s\n' "$*" >> "$FAKE_COMMAND_LOG"
+            case "$*" in
+              "-a Simulator")
+                [ "${FAKE_SIMULATOR_OPEN_FAILS:-}" != "1" ]
+                ;;
+              "-b com.apple.dt.Devices")
+                [ "${FAKE_DEVICE_HUB_OPEN_FAILS:-}" != "1" ]
+                ;;
+              *) exit 1 ;;
+            esac
             """,
         )
 

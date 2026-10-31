@@ -52,8 +52,10 @@ CHESS_TUTOR_COACHING_MODEL_CONFIG=CoachingServer/configs/production-v1.json \
 ```
 
 The script creates an ignored `.venv` when needed, installs the pinned server
-dependency, chooses and boots `iPad (A16)`, starts the server, builds the app,
-and installs and launches it with hosted coaching configured. Leave the
+dependency, chooses and boots `iPad (A16)`, and opens Simulator (or Device Hub
+on current Xcode). It then starts the server, builds the app, and installs and
+launches it with hosted coaching configured. If neither simulator frontend
+opens, it stops before starting the server or build. Leave the
 terminal open while testing; Ctrl-C stops the server. To use another available
 Simulator, pass its name as the only argument:
 

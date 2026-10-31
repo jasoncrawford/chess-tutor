@@ -78,7 +78,10 @@ if [ "$simulator_state" != "Booted" ]; then
   xcrun simctl boot "$simulator_udid"
 fi
 xcrun simctl bootstatus "$simulator_udid" -b
-open -a Simulator
+if ! open -a Simulator && ! open -b com.apple.dt.Devices; then
+  echo "Could not open Simulator or Device Hub. Check the selected Xcode installation." >&2
+  exit 1
+fi
 
 if [ "${CHESS_TUTOR_COACHING_MODEL_CONFIG+set}" = set ]; then
   echo "Local coaching: explicit model configuration override."
