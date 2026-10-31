@@ -369,14 +369,29 @@ class BenchmarkLauncherTests(unittest.TestCase):
             text=True,
             start_new_session=True,
         )
-        for _ in range(100):
-            if (self.artifacts / "corpus/source-sha-20260901T120000Z/partial.jsonl").exists():
-                break
-            time.sleep(0.02)
-        os.killpg(process.pid, signal.SIGINT)
-        _, stderr = process.communicate(timeout=5)
-        self.assertEqual(130, process.returncode, stderr)
-        self.assertEqual("partial corpus\n", (self.artifacts / "corpus/source-sha-20260901T120000Z/partial.jsonl").read_text())
+        partial = self.artifacts / "corpus/source-sha-20260901T120000Z/partial.jsonl"
+        try:
+            # Apple's /usr/bin/python3 shim can spend >2s creating xcrun_db
+            # before the launcher reaches export, even with fake CLI commands.
+            deadline = time.monotonic() + 10
+            while not partial.exists():
+                if time.monotonic() >= deadline:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=5)
+                    output = (stdout + stderr).replace("sk-private-launcher-key", "[redacted]")
+                    commands = self.log.read_text() if self.log.exists() else "no commands"
+                    self.fail(f"Fake corpus export did not become ready; status={process.returncode}; "
+                              f"commands={commands}; output={output[-2000:]}")
+                time.sleep(0.02)
+            os.killpg(process.pid, signal.SIGINT)
+            _, stderr = process.communicate(timeout=5)
+            self.assertEqual(130, process.returncode, stderr)
+            self.assertEqual("partial corpus\n", partial.read_text())
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=5)
 
     def test_interrupt_preserves_paid_evidence_and_stops_owned_work(self):
         for stage in ("qualify", "run", "grade"):
@@ -385,7 +400,22 @@ class BenchmarkLauncherTests(unittest.TestCase):
                     with self.subTest(stage=stage, signal=signum, target_group=target_group):
                         self.interrupt_paid_stage(stage, signum, status, target_group)
 
-    def interrupt_paid_stage(self, stage, signum, status, target_group):
+    def test_signal_between_launch_and_pid_registration_stops_owned_work(self):
+        hook = self.root / "launch-boundary.bash"
+        hook.write_text("""
+unset BASH_ENV
+set -T
+trap 'if [[ "$BASH_COMMAND" == "owned_child=\\$!" ]]; then
+  while [ ! -f "$FAKE_READY" ] || [ ! -f "$FAKE_DESCENDANT" ]; do sleep 0.01; done
+  kill -"$FAKE_BOUNDARY_SIGNAL" "$$"
+  kill -"$FAKE_BOUNDARY_SECOND_SIGNAL" "$$"
+fi' DEBUG
+""")
+        for signum, status in ((signal.SIGINT, 130), (signal.SIGTERM, 143)):
+            with self.subTest(signal=signum):
+                self.interrupt_paid_stage("qualify", signum, status, False, boundary_hook=hook)
+
+    def interrupt_paid_stage(self, stage, signum, status, target_group, boundary_hook=None):
         # Use separate roots so a prior interrupted run cannot satisfy assertions.
         artifact_root = self.root / f"{stage}-{signum}-{target_group}"
         ready = artifact_root / "ready"
@@ -394,16 +424,26 @@ class BenchmarkLauncherTests(unittest.TestCase):
         environment = dict(self.env, FAKE_BLOCK_STAGE=stage, FAKE_READY=str(ready),
                            FAKE_STOPPED=str(stopped), FAKE_DESCENDANT=str(descendant),
                            CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT=str(artifact_root))
+        if boundary_hook is not None:
+            second = signal.SIGTERM if signum == signal.SIGINT else signal.SIGINT
+            environment.update(BASH_ENV=str(boundary_hook), FAKE_BOUNDARY_SIGNAL=str(int(signum)),
+                               FAKE_BOUNDARY_SECOND_SIGNAL=str(int(second)))
         process = subprocess.Popen([str(LAUNCHER), "quick"], cwd=ROOT, env=environment,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
         try:
             deadline = time.monotonic() + 5
             while not (ready.exists() and descendant.exists()):
-                if time.monotonic() >= deadline or process.poll() is not None:
-                    self.fail("Fake paid command did not become ready")
+                if time.monotonic() >= deadline:
+                    self.fail(f"Fake paid command did not become ready (status={process.poll()}, "
+                              f"files={list(artifact_root.rglob('*'))})")
                 time.sleep(0.01)
-            if target_group:
+            if boundary_hook is not None:
+                # DEBUG delivers at the exact boundary. Observe parent exit without
+                # waiting on pipes an orphaned child could otherwise keep open.
+                process.wait(timeout=3)
+                self.assertTrue(stopped.exists(), "New paid child outlived interrupted launcher")
+            elif target_group:
                 os.killpg(process.pid, signum)
             else:
                 process.send_signal(signum)
@@ -439,10 +479,11 @@ class BenchmarkLauncherTests(unittest.TestCase):
                         os.killpg(int(marker.read_text()), signal.SIGTERM)
                     except ProcessLookupError:
                         pass
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
             process.communicate(timeout=5)
 
     def test_failed_qualification_prevents_corpus_and_candidate_work(self):

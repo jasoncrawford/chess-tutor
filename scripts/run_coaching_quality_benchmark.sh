@@ -71,6 +71,8 @@ judge="$repository_root/Tools/CoachingEval/benchmark/configs/judge-v4.json"
 prices="$repository_root/Tools/CoachingEval/benchmark/pricing-v2.json"
 cli=(python3 -m Tools.CoachingEval.benchmark.cli)
 owned_child=''
+registering_child=false
+pending_interrupt=''
 qualification_summary=''
 
 cleanup() {
@@ -91,6 +93,11 @@ saved_evidence() {
 }
 
 interrupt() {
+  if [ "$registering_child" = true ]; then
+    # Retain the first signal until the new job's PID/group is registered.
+    [ -n "$pending_interrupt" ] || pending_interrupt="$1"
+    return
+  fi
   trap '' INT TERM
   if [ -n "$owned_child" ]; then
     # Each owned command has its own process group, including its descendants.
@@ -101,17 +108,22 @@ interrupt() {
   unset openai_api_key
   echo "Benchmark interrupted; existing evidence was preserved." >&2
   saved_evidence
-  exit "$1"
+  exit "${pending_interrupt:-$1}"
 }
 
 run_owned() {
   local status=0
   # Monitor mode gives this command a distinct process group on macOS Bash too.
   # Waiting asynchronously lets a signal sent only to the launcher run its trap.
+  registering_child=true
   set -m
   "$@" &
   owned_child=$!
   set +m
+  registering_child=false
+  if [ -n "$pending_interrupt" ]; then
+    interrupt "$pending_interrupt"
+  fi
   wait "$owned_child" || status=$?
   owned_child=''
   return "$status"
