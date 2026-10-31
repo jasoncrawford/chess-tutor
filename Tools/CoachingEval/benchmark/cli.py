@@ -142,6 +142,7 @@ def _grade(arguments):
         destination=Path(arguments.output),
         qualification_path=Path(arguments.qualification),
         price_table=prices,
+        checkpoint_path=Path(arguments.checkpoint) if arguments.checkpoint else None,
     )
     return {
         "status": "completed",
@@ -242,6 +243,7 @@ def _parser():
     grade.add_argument("--pricing", required=True)
     grade.add_argument("--output", required=True)
     grade.add_argument("--qualification", required=True)
+    grade.add_argument("--checkpoint", help="Durable opt-in grading progress; reuse this path to resume")
     grade.add_argument("--api-key-env", default="OPENAI_API_KEY")
 
     qualify = commands.add_parser("qualify")

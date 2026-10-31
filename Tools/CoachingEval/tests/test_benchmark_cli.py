@@ -115,11 +115,13 @@ class BenchmarkCLITests(unittest.TestCase):
                     "--judge", "judge.json", "--pricing", "prices.json",
                     "--output", str(grade_destination), "--api-key-env", "JUDGE_SECRET",
                     "--qualification", "qualification.json",
+                    "--checkpoint", "grading-progress.json",
                 ]
             )
         self.assertEqual(0, status)
         self.assertEqual([self.secret], client_values)
         self.assertEqual(1, grade.call_count)
+        self.assertEqual(Path("grading-progress.json"), grade.call_args.kwargs["checkpoint_path"])
         grade_summary = json.loads(output.getvalue())
         self.assertEqual("judge-v1", grade_summary["judgeID"])
         self.assertNotIn(self.secret, output.getvalue())

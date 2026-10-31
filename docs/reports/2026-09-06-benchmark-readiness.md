@@ -50,3 +50,31 @@ The actual A16 app was also launched with the Astra candidate. Opening Help offe
 - The scoped final reviews closed all four integration/accounting findings and the modern-Node test issue. Live use additionally exposed and fixed a quick-report validation mismatch: quick runs have no pairwise grades, while comparison runs still require every exact pair.
 
 Full finalist generation, grading, cost/latency analysis, and the separate production-promotion PR follow this benchmark release. No eligibility thresholds were relaxed.
+
+## Operational update — resumable grading (2026-10-31)
+
+The direct `benchmark.cli grade` command now accepts an optional `--checkpoint
+PATH`. Use a path alongside, not inside, the grade output directory. After a
+failure or interruption, explicitly rerun the same command with the same frozen
+candidate run, corpus, judge configuration/prompt/schema, pricing, qualification,
+checkpoint, and output path. The detailed commands remain in the
+[benchmark runbook](../../Tools/CoachingEval/README.md#hosted-coaching-quality-benchmark).
+Completed output directories are never overwritten. This repair does not
+change the qualification procedure, production configuration, rubric, thresholds,
+or the historical evidence above.
+
+Validated absolute and pairwise judgments are durable and never rerun, including
+low-scoring results. Never delete a checkpoint or use a new one to improve
+scores. Resume checks every cached judgment before any paid request and still
+requires the exact accepted, compatible, unexpired qualification. Changed inputs,
+invalid/corrupt checkpoints, symlinks, and concurrent use fail closed. A retained
+adjacent `.lock` file is normal: advisory locking releases on process death;
+do not remove it to bypass a running writer.
+
+Successful judgments retain their original measured latency, usage, and cost.
+Failed attempts remain in the checkpoint and are added to the eventual successful
+judgment's metrics. An unresolved in-flight request becomes one failed attempt
+with unknown accounting on explicit resume; it may already have cost money.
+Unknown accounting remains incomplete with null total cost, not a free attempt
+or a reconstructed estimate. No automatic retries, candidate regeneration, or
+qualification calls are added. Without `--checkpoint`, grading is unchanged.

@@ -1,23 +1,29 @@
 """Calibrated absolute and blinded pairwise grading for coaching benchmarks."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import os
 import uuid
-from dataclasses import dataclass
+from contextlib import nullcontext
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
 
 from CoachingServer.chess_native_compiler import parse_neutral_request
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
 from Tools.CoachingEval.benchmark.judge_contract import (
+    JudgeCallError,
     RUBRIC_DIMENSIONS,
     RUBRIC_FLAGS,
     absolute_schema as _absolute_schema,
     add_metrics as _add_metrics,
     canonical_json_bytes as _canonical_json_bytes,
     empty_metrics as _empty_metrics,
+    incomplete_metrics as _incomplete_metrics,
     judge_call as _judge_call,
     pairwise_schema as _pairwise_schema,
     preflight_price as _preflight_price,
@@ -27,6 +33,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     validate_pairwise as _validate_pairwise,
     validate_scores as _validate_scores,
 )
+from Tools.CoachingEval.benchmark.grade_checkpoint import JudgeCheckpoint
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 from Tools.CoachingEval.benchmark.reference_set import JudgeReferenceSet
 
@@ -114,6 +121,7 @@ def grade_run(
     qualification_path: Path,
     price_table=None,
     now=None,
+    checkpoint_path: Path | None = None,
 ):
     destination = Path(destination)
     if os.path.lexists(destination):
@@ -128,6 +136,52 @@ def grade_run(
     qualification_bytes = qualification.artifact_bytes
     run_manifest, records = _load_run(run_root, corpus)
     turns = corpus.by_id()
+    checkpoint = nullcontext(None)
+    jobs = None
+    if checkpoint_path is not None:
+        checkpoint_path = Path(os.path.abspath(checkpoint_path))
+        output_path = destination.resolve()
+        if checkpoint_path.resolve().is_relative_to(output_path):
+            raise ValueError("Judge checkpoint must be outside the grade output directory")
+        jobs = list(_pairwise_jobs(run_manifest, records, turns, judge_configuration))
+        judgments = {}
+        for record in records:
+            if record.get("caseID") not in turns:
+                raise ValueError("Candidate record points to an unknown benchmark case")
+            if _mechanically_valid(record):
+                judgments["absolute|" + record["cellID"]] = {
+                    "kind": "absolute",
+                    "payloadSHA256": _sha256(_canonical_json_bytes(_absolute_payload(turns[record["caseID"]], record))),
+                }
+        for metadata, payload in jobs:
+            if payload is not None:
+                key = "pairwise|" + metadata["pairID"]
+                if key in judgments:
+                    raise ValueError("Pairwise judgment IDs must be unique")
+                judgments[key] = {"kind": "pairwise", "payloadSHA256": _sha256(_canonical_json_bytes(payload))}
+
+        def validate_cached(key, output):
+            kind = judgments[key]["kind"]
+            _validate_judgment(output, kind, run_manifest.get("configurations", ()))
+
+        checkpoint = JudgeCheckpoint(
+            checkpoint_path,
+            _checkpoint_bindings(run_root, run_manifest, records, corpus,
+                                 judge_configuration, qualification_bytes, price_table, judgments),
+            validate_cached,
+        )
+    with checkpoint as ledger:
+        # A concurrent invocation using the same checkpoint may have published
+        # between our initial output check and acquisition of the advisory lock.
+        if os.path.lexists(destination):
+            raise ValueError(f"Refusing to overwrite benchmark grades: {destination}")
+        return _grade_loaded_run(run_manifest, records, turns, judge_configuration,
+                                 client, price_table, qualification_bytes,
+                                 destination, now, ledger, jobs)
+
+
+def _grade_loaded_run(run_manifest, records, turns, judge_configuration, client,
+                      price_table, qualification_bytes, destination, now, checkpoint, jobs):
     absolute = []
     for record in records:
         turn = turns.get(record.get("caseID"))
@@ -137,17 +191,10 @@ def grade_run(
             absolute.append(_automatic_unusable(record))
             continue
         payload = _absolute_payload(turn, record)
-        output, metrics = _judge_call(
-            judge_configuration,
-            client,
-            payload,
-            _absolute_schema(),
-            price_table,
-        )
-        grade = _validate_absolute(output)
-        _reject_identity_leakage(
-            grade,
-            run_manifest.get("configurations", ()),
+        grade, metrics = _grade_judgment(
+            "absolute|" + record["cellID"], "absolute", payload,
+            judge_configuration, client, price_table,
+            run_manifest.get("configurations", ()), checkpoint,
         )
         absolute.append(
             {
@@ -167,6 +214,8 @@ def grade_run(
         judge_configuration,
         client,
         price_table,
+        checkpoint,
+        jobs,
     )
     manifest = _grade_manifest(
         run_manifest,
@@ -187,14 +236,39 @@ def _pairwise_grades(
     configuration,
     client,
     price_table,
+    checkpoint=None,
+    jobs=None,
 ):
+    results = []
+    if jobs is None:
+        jobs = _pairwise_jobs(run_manifest, records, turns, configuration)
+    for metadata, payload in jobs:
+        if payload is None:
+            results.append(metadata)
+            continue
+        grade, metrics = _grade_judgment(
+            "pairwise|" + metadata["pairID"], "pairwise", payload,
+            configuration, client, price_table, run_manifest["configurations"], checkpoint,
+        )
+        if grade["winner"] == "tie":
+            outcome = "tie"
+        elif grade["winner"] == metadata["candidatePresentedAs"]:
+            outcome = "candidateWin"
+        else:
+            outcome = "candidateLoss"
+        results.append({**metadata, "outcome": outcome,
+                        "evidence": grade["evidence"], "judgeMetrics": metrics})
+    return results
+
+
+def _pairwise_jobs(run_manifest, records, turns, configuration):
     configurations = run_manifest.get("configurations")
     if not isinstance(configurations, list):
         raise ValueError("Run manifest configurations are invalid")
     baselines = [value.get("id") for value in configurations if value.get("baseline") is True]
     candidates = [value.get("id") for value in configurations if value.get("baseline") is False]
     if run_manifest.get("mode") != "comparison" or not candidates:
-        return []
+        return
     if len(baselines) != 1 or any(not isinstance(value, str) for value in candidates):
         raise ValueError("Comparison grading requires one baseline")
     baseline_id = baselines[0]
@@ -202,7 +276,6 @@ def _pairwise_grades(
         (record["configurationID"], record["caseID"], record["repetition"]): record
         for record in records
     }
-    results = []
     baseline_keys = [
         key for key in records_by_key if key[0] == baseline_id
     ]
@@ -216,13 +289,13 @@ def _pairwise_grades(
             baseline_valid = _mechanically_valid(baseline)
             candidate_valid = _mechanically_valid(candidate)
             if candidate_valid and not baseline_valid:
-                results.append(_automatic_pair(pair_id, "candidateWin"))
+                yield _automatic_pair(pair_id, "candidateWin"), None
                 continue
             if baseline_valid and not candidate_valid:
-                results.append(_automatic_pair(pair_id, "candidateLoss"))
+                yield _automatic_pair(pair_id, "candidateLoss"), None
                 continue
             if not baseline_valid and not candidate_valid:
-                results.append(_automatic_pair(pair_id, "unusableTie"))
+                yield _automatic_pair(pair_id, "unusableTie"), None
                 continue
             candidate_is_a = _candidate_is_a(
                 configuration.review_seed, candidate_id, case_id, repetition
@@ -238,32 +311,77 @@ def _pairwise_grades(
                 "responseA": response_a,
                 "responseB": response_b,
             }
-            output, metrics = _judge_call(
-                configuration,
-                client,
-                payload,
-                _pairwise_schema(),
-                price_table,
-            )
-            grade = _validate_pairwise(output)
-            _reject_identity_leakage(grade, configurations)
-            if grade["winner"] == "tie":
-                outcome = "tie"
-            elif (grade["winner"] == "A") == candidate_is_a:
-                outcome = "candidateWin"
-            else:
-                outcome = "candidateLoss"
-            results.append(
-                {
-                    "schemaVersion": "coaching-quality-pairwise-grade.v1",
-                    "pairID": pair_id,
-                    "outcome": outcome,
-                    "candidatePresentedAs": "A" if candidate_is_a else "B",
-                    "evidence": grade["evidence"],
-                    "judgeMetrics": metrics,
-                }
-            )
-    return results
+            yield {
+                "schemaVersion": "coaching-quality-pairwise-grade.v1",
+                "pairID": pair_id,
+                "candidatePresentedAs": "A" if candidate_is_a else "B",
+            }, payload
+
+
+def _validate_judgment(output, kind, configurations):
+    grade = _validate_absolute(output) if kind == "absolute" else _validate_pairwise(output)
+    _reject_identity_leakage(grade, configurations)
+    return grade
+
+
+def _grade_judgment(key, kind, payload, configuration, client, price_table,
+                    configurations, checkpoint):
+    if checkpoint is not None:
+        cached = checkpoint.completed(key)
+        if cached is not None:
+            return cached
+        checkpoint.started(key)
+    metrics = None
+    try:
+        output, metrics = _judge_call(
+            configuration, client, payload,
+            _absolute_schema() if kind == "absolute" else _pairwise_schema(), price_table,
+        )
+        grade = _validate_judgment(output, kind, configurations)
+    except Exception as error:
+        if checkpoint is not None:
+            failed_metrics = error.metrics if isinstance(error, JudgeCallError) else metrics
+            checkpoint.failed(key, failed_metrics if failed_metrics is not None else _incomplete_metrics())
+        raise
+    if checkpoint is not None:
+        return checkpoint.succeeded(key, grade, metrics)
+    return grade, metrics
+
+
+def _checkpoint_bindings(run_root, manifest, records, corpus, configuration,
+                         qualification_bytes, price_table, judgments):
+    manifest_path = getattr(corpus, "manifest_path", None)
+    return {
+        "runManifestSHA256": _sha256((Path(run_root) / "run-manifest.json").read_bytes()),
+        "runManifestValueSHA256": _sha256(_canonical_json_bytes(manifest)),
+        "recordsSHA256": manifest["recordsSHA256"],
+        "recordsValueSHA256": _sha256(_canonical_json_bytes(records)),
+        "corpusSHA256": corpus.sha256,
+        "corpusManifestSHA256": _sha256(Path(manifest_path).read_bytes()) if manifest_path else None,
+        "corpusSourceGitSHA": corpus.source_git_sha,
+        "corpusTurnsSHA256": _sha256(_canonical_json_bytes(_plain(corpus.turns))),
+        "corpusRawCasesSHA256": _sha256(_canonical_json_bytes(_plain(corpus.raw_cases))),
+        "judgeConfigurationSHA256": configuration.sha256,
+        "judgeCompleteConfigurationSHA256": _sha256(_canonical_json_bytes(_plain(configuration))),
+        "judgePromptSHA256": _sha256(configuration.system_prompt.encode("utf-8")),
+        "absoluteSchemaSHA256": _sha256(_canonical_json_bytes(_absolute_schema())),
+        "pairwiseSchemaSHA256": _sha256(_canonical_json_bytes(_pairwise_schema())),
+        "qualificationSHA256": _sha256(qualification_bytes),
+        "pricingSHA256": _sha256(_canonical_json_bytes(_plain(price_table))),
+        "judgments": judgments,
+    }
+
+
+def _plain(value):
+    if is_dataclass(value):
+        return {field.name: _plain(getattr(value, field.name)) for field in fields(value)}
+    if isinstance(value, Mapping):
+        return {key: _plain(child) for key, child in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain(child) for child in value]
+    if isinstance(value, (Path, Decimal)):
+        return str(value)
+    return value
 
 
 def _load_calibration(path):
