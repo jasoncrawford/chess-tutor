@@ -1,6 +1,6 @@
 # Coaching finalist comparison — 2026-10-31
 
-Status: paused by OpenAI's project spending limit. All individual responses are graded, but the blind comparison and formal report are incomplete. Astra/low is the provisional local-playtest recommendation, not a production promotion. This report must be finalized before the local-trial PR is merged.
+Status: the frozen comparison and formal report are complete. Select Astra/low with the discovery prompt for a reversible local adult playtest, not a production promotion. Release checks and the final app handoff are tracked separately below.
 
 ## Scope and evidence
 
@@ -9,7 +9,8 @@ The frozen comparison contains 70 turns, three repetitions, and two configuratio
 - Candidate records SHA-256: `3d4970467bd0d586903551257b8226d6f430c8dc31a64e74f6b7ee9c848f3c92`.
 - Corpus SHA-256: `d882d31605462b856266e6578ddfd2eec37dfbbd6d329150ae4b997398465afb`.
 - Candidate artifacts: `.coaching-eval/benchmark/runs/20260906-astra-finalist/candidates` in the retained `stabilize-benchmark-judge` worktree. Paid artifacts remain ignored; do not delete that worktree.
-- Grade/report artifacts will be siblings of `candidates`; they have not been published because grading did not finish. Grading uses an exact-bound durable checkpoint, retaining completed judgments and failed-attempt accounting across interruptions.
+- Grade/report artifacts are siblings of `candidates`: `grades/grade-manifest.json`, `grades/absolute-grades.jsonl`, `grades/pairwise-grades.jsonl`, `report/aggregate.json`, and `report/summary.md`. Grading used an exact-bound durable checkpoint, retaining completed judgments and failed-attempt accounting across interruptions.
+- Absolute grades SHA-256: `c8a35e8f39b5d8de1781081dd227e6f51eac2c4923ffae78155f371e5f580921`; pairwise grades SHA-256: `32bcbf729542c4f28d44a3867bf0e124bef180f1a38e6aba9ea5e30898b74ae3`. The completed matrix contains 420 absolute grades and 210 comparisons, including automatic handling of the two unusable baseline responses.
 
 ## Configurations
 
@@ -56,7 +57,7 @@ The Sol timeouts are `d06-apparent-danger/r1` and `d04-pinned-knight/r2`. Their 
 
 Costs above use the frozen September price table, not an invoice. Current [OpenAI caching documentation](https://developers.openai.com/api/docs/guides/prompt-caching) describes a cache-write premium that the historical transport did not separately retain. Counting every uncached input token at 1.25 times its standard rate gives a conservative Astra candidate bound of $2.703845 and a bound of $2.1667438 for Sol's known successful calls only; Sol's failed-call cost remains unknown. Historical latency is not a guarantee about today's service.
 
-About 68% of Astra's benchmark input tokens were reported as cached, versus zero cached tokens in the four fresh app calls below. Repeated benchmark cases and a cold real game have different caching behavior; the benchmark cost is not a per-game forecast.
+About 68% of Astra's benchmark input tokens were reported as cached, versus zero cached tokens in the first four fresh app calls below. The later Hint call did reuse 1,281 cached input tokens. Repeated benchmark cases and a cold real game have different caching behavior; the benchmark cost is not a per-game forecast.
 
 ## Independent output audit
 
@@ -68,9 +69,9 @@ All 210 Astra absolute grades are complete. The one severe flag is a teaching fa
 
 The same agent also checked all ten judged severe flags among Sol's 208 usable responses. Two concrete concerns are supported: an implied uncaught queen capture despite available recaptures, and calling a bishop a knight in a promotion reply. Several other severe labels are debatable. In particular, the judge incorrectly calls a question about White capturing Black a color reversal when the learner is Black; it is correctly framed danger, although unnecessary in that quiet opening. Other flags conflate a generic checklist reset with proven stale-move advice, or penalize precision following Hint. These caveats apply to Sol as fairly as to Astra; no stored scores were edited.
 
-## Completed absolute scores; incomplete blind comparison
+## Completed scores and blind comparison
 
-These numbers are read-only diagnostics from the durable checkpoint and frozen records, **not a completed benchmark verdict**. Scores are on the existing 1–5 scale. As the frozen rubric requires, the two unusable Sol responses count as 1 in each dimension and remain in the denominator.
+These numbers come from the completed formal grades and frozen records. Scores are on the existing 1–5 scale. As the frozen rubric requires, the two unusable Sol responses count as 1 in each dimension and remain in the denominator.
 
 | Measure | Astra | Production Sol |
 | --- | ---: | ---: |
@@ -88,15 +89,21 @@ These numbers are read-only diagnostics from the durable checkpoint and frozen r
 
 Do not read the raw severe counts as independently verified chess-error rates; the audits above explain real errors and judge false positives. Repetitions and reused positions are not independent games. The completed individual scores support Astra's quieter, more current-action-sensitive coaching, but not a guarantee of correctness.
 
-Only 66 of 208 paid pairwise judgments completed: Astra won 22, Sol won 9, and 35 tied. This is an ordered prefix, not a representative completed comparison. Two additional pairs will be decided automatically by Sol's timeouts; those are reliability differences, not wording victories. No full pairwise rate, confidence interval, automatic eligibility, or automatic recommendation is reported.
+All 210 comparisons are complete: **Astra won 79, Sol won 24, and 107 tied**. Two Astra wins are automatic consequences of Sol's timeouts; the 208 comparisons with usable responses on both sides therefore contain 77 Astra wins, 24 Sol wins, and 107 ties. The automatic wins are reliability differences, not wording victories.
 
-## Project-limit interruption and recovery
+The unchanged report's paired bootstrap (10,000 draws, seed 20260901) gives a 95% interval of +13.6 to +29.1 percentage points for the strong-response-rate difference. Its resampling groups include repetitions of the same position, so this is a within-benchmark diagnostic, not an independent-game population guarantee. Severe-rate intervals also inherit the judge-label caveats above.
 
-The 485th grading request returned HTTP 429, code `project_spend_limit_exceeded`, type `insufficient_quota`. The checkpoint retained all 484 completed judgments (418 individual plus 66 pairwise), the unsuccessful attempt, and its unknown-accounting status. No in-flight marker remains. The next unfinished pair is `astra-discovery-low|s10-close-and-reopen-01|r1|vs|production-sol-v2`; 142 paid judgments remain. No completed judgment or candidate response needs to be regenerated.
+The formal automatic verdict is **keepBaseline**; both trial and promotion eligibility are false. The only reported integrity issues are `candidate accounting is incomplete for production-sol-v2` and `judge accounting is incomplete`. No response/grade hashes failed validation. The report retains the failed provider attempt rather than declaring its cost zero. Its 627 grading calls comprise 626 successful paid judgments and the retained quota failure; qualification is reported separately.
 
-The retained budget journal's conservative ceiling is $16.5007035, including both qualification attempts, the diagnostic call, completed grading, and full reservations for failed calls. Together with the four app calls below it is $16.665291. This is a conservative token/reservation estimate, not the account invoice or remaining balance. The local $18 evaluation guard had not fired; the provider's project limit caused the stop.
+Manual decision: the complete quality comparison and independent audits support the exact Astra/low configuration for a reversible local adult playtest despite unknown complete cost accounting. This does not change the automated verdict, eligibility gates, rubric, stored scores, or deployed production default.
 
-OpenAI documents this as an enforced monthly project cap, separate from exhausted prepaid credits. A project owner can check Project settings → Limits → Spend → Edit spend limit. Raising the applicable limit permits requests after propagation; otherwise it resets with the next monthly cycle. No account setting was changed, no further paid requests were retried, and no additional credits were purchased. See [official spend-limit guidance](https://developers.openai.com/api/docs/guides/spend-limits).
+## Project-limit interruption, recovery, and spending
+
+The 485th grading request returned HTTP 429, code `project_spend_limit_exceeded`, type `insufficient_quota`. The checkpoint retained all 484 completed judgments (418 individual plus 66 pairwise), the unsuccessful attempt, and its unknown-accounting status. After the owner confirmed a limit increase, all 142 remaining requests completed successfully. No completed judgment or candidate response was regenerated, and no still-valid qualification was renewed.
+
+At interruption the journal's conservative ceiling was $16.5007035, including qualification attempts, the diagnostic call, completed grading, and full reservations for failed calls. The owner reported $13.26 on the billing dashboard and accepted an estimated $4–5 of additional work. The incremental guard allowed at most $4 of evaluation work, leaving $1 for final app checks. The remaining 142 judgments used $3.2950875 conservatively, within that allowance. Six app smoke calls add $0.2012685; the combined journal/smoke conservative estimate is $19.9970595, of which $3.3317685 is new work after the limit increase. These figures include reservations/premiums and are not an invoice or account balance; they need not equal the dashboard total.
+
+OpenAI documents this as an enforced monthly project cap, separate from exhausted prepaid credits. A project owner can check Project settings → Limits → Spend → Edit spend limit. The owner increased the limit; the agent neither changed account settings nor purchased credits. Paid work resumed only after that confirmation. See [official spend-limit guidance](https://developers.openai.com/api/docs/guides/spend-limits).
 
 ## Fresh playable smoke
 
@@ -106,7 +113,7 @@ Opening Help returned HTTP 200 in 11.73 seconds: “Let’s make room for your p
 
 Choosing the knight removed the tentative pawn move; feedback followed that change in 2.68 seconds. Staging the knight on f3 produced “Your knight is out and helping control the middle. Would you like to keep this move?” in 2.08 seconds, without stale pawn advice. All four requests returned HTTP 200. Their conservative cache-write-inclusive cost bound is $0.1645875. This is a small functional check, not a latency distribution.
 
-The native automation's coordinate-based activation misses the transformed coaching-button accessibility frames. Current Hint/Play taps therefore were not counted as successful tests; their real flows were exercised in the September smoke and are covered by the existing tests. Do not confuse tool-reported tap delivery with verified app interaction.
+Initial native automation activation missed the transformed coaching-button accessibility frames and was not counted as a passing test. After native screenshot-based interaction became available, clicking the actual Play button committed the knight move and displayed Black's turn. Black's Help returned HTTP 200 in 3.37 seconds: “Let’s bring a knight into the game. Can you move one toward the middle?” Clicking the visible Hint then returned HTTP 200 in 2.57 seconds: “Try moving your knight from g8 to the glowing square. It can help watch the middle!” The validated response highlights f6 and expects a staged move. Both calls used Astra/low and cost at most $0.036681 together. Thus fresh Help, Hint, staged-move feedback, and Play were observed working; no app code or accessibility behavior was changed to manufacture the result.
 
 ## Release boundary
 
@@ -116,4 +123,6 @@ The proposed change affects only the convenience development launcher. Direct/de
 CHESS_TUTOR_COACHING_MODEL_CONFIG=CoachingServer/configs/production-v1.json ./scripts/run_hosted_coaching_dev.sh
 ```
 
-No eligibility gate, unknown-cost handling, failed response, or stored judge score is weakened to make the finalist look better. Provisional recommendation: try the exact Astra/low discovery configuration locally with adult review, based on the completed individual assessments and independent audits. The partial comparison is not sufficient for a completed benchmark claim or production promotion. Final formal report, release merge, and a usable online handoff remain blocked by the project limit and pending completion checks.
+No eligibility gate, unknown-cost handling, failed response, or stored judge score is weakened to make the finalist look better. Recommendation: try the exact Astra/low discovery configuration locally with adult review, based on the completed comparison and independent audits. This is a manual local-trial choice, not an automatic production promotion.
+
+On the release branch after integrating the already-merged checkpoint recovery, all 54 server tests and 333 evaluator tests passed with the declared dependencies and required loopback access. Final report-delta review, PR checks, release merge, and the post-merge usable online handoff remain pending at this documentation checkpoint. The quota block is resolved; the initial native automation targeting limitation and subsequent successful real interactions are disclosed above.
