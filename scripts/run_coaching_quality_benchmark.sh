@@ -63,31 +63,71 @@ corpus_root="$artifact_root/corpus/$source_sha-$timestamp"
 session_root="$artifact_root/runs/$timestamp"
 run_root="$session_root/candidates"
 grade_root="$session_root/grades"
+checkpoint_path="$session_root/grading-checkpoint.json"
 report_root="$session_root/report"
 qualification_root="$artifact_root/qualifications"
 production="$repository_root/Tools/CoachingEval/benchmark/configs/production-v2.json"
 judge="$repository_root/Tools/CoachingEval/benchmark/configs/judge-v4.json"
 prices="$repository_root/Tools/CoachingEval/benchmark/pricing-v2.json"
 cli=(python3 -m Tools.CoachingEval.benchmark.cli)
-completed=false
-interrupted=false
+owned_child=''
+qualification_summary=''
 
 cleanup() {
-  if [ "$interrupted" = true ]; then
-    [ ! -e "$corpus_root" ] || rm -rf "$corpus_root"
-    [ ! -e "$session_root" ] || rm -rf "$session_root"
+  if [ -n "$qualification_summary" ]; then
+    rm -f -- "$qualification_summary"
   fi
 }
+
+saved_evidence() {
+  echo "Saved evidence (paths may be partial or not yet created):" >&2
+  echo "Corpus: $corpus_root" >&2
+  echo "Candidates: $run_root" >&2
+  echo "Grades: $grade_root" >&2
+  echo "Checkpoint: $checkpoint_path" >&2
+  echo "Qualification: ${qualification_path:-$qualification_root}" >&2
+  echo "See Tools/CoachingEval/README.md for explicit grade --checkpoint resume instructions." >&2
+  echo "Rerunning this convenience script creates a new run; it does not resume this run." >&2
+}
+
+interrupt() {
+  trap '' INT TERM
+  if [ -n "$owned_child" ]; then
+    # Each owned command has its own process group, including its descendants.
+    kill -TERM -- "-$owned_child" 2>/dev/null || :
+    wait "$owned_child" 2>/dev/null || :
+    owned_child=''
+  fi
+  unset openai_api_key
+  echo "Benchmark interrupted; existing evidence was preserved." >&2
+  saved_evidence
+  exit "$1"
+}
+
+run_owned() {
+  local status=0
+  # Monitor mode gives this command a distinct process group on macOS Bash too.
+  # Waiting asynchronously lets a signal sent only to the launcher run its trap.
+  set -m
+  "$@" &
+  owned_child=$!
+  set +m
+  wait "$owned_child" || status=$?
+  owned_child=''
+  return "$status"
+}
+
 trap cleanup EXIT
-trap 'interrupted=true; exit 130' INT
-trap 'interrupted=true; exit 143' TERM
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
 
 mkdir -p "$qualification_root" "$(dirname "$corpus_root")" "$(dirname "$session_root")"
 
 echo "Ensuring the automatic judge is qualified..."
+qualification_summary="$(mktemp "${TMPDIR:-/tmp}/chess-benchmark-qualification.XXXXXX")"
 set +e
-qualification_summary="$(OPENAI_API_KEY="$openai_api_key" "${cli[@]}" qualify \
-  --judge "$judge" --pricing "$prices" --artifact-root "$qualification_root")"
+OPENAI_API_KEY="$openai_api_key" run_owned "${cli[@]}" qualify \
+  --judge "$judge" --pricing "$prices" --artifact-root "$qualification_root" > "$qualification_summary"
 qualification_status=$?
 set -e
 if [ "$qualification_status" -ne 0 ]; then
@@ -95,13 +135,18 @@ if [ "$qualification_status" -ne 0 ]; then
   echo "Judge qualification failed; candidate work was not started." >&2
   exit "$qualification_status"
 fi
-qualification_path="$(printf '%s' "$qualification_summary" | /usr/bin/python3 -c \
-  'import json, sys; print(json.load(sys.stdin)["qualification"])')"
+qualification_path="$(/usr/bin/python3 -c '
+import json, sys
+summary = sys.stdin.read(65537)
+if len(summary) > 65536:
+    sys.exit("Qualification summary exceeds the size limit")
+print(json.loads(summary)["qualification"])
+' < "$qualification_summary")"
 
 echo "Exporting the deterministic coaching corpus..."
 COACHING_QUALITY_BENCHMARK_OUTPUT_DIR="$corpus_root" \
 COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$source_sha" \
-  xcodebuild test -quiet -scheme ChessTutor \
+  run_owned xcodebuild test -quiet -scheme ChessTutor \
     -destination 'platform=iOS Simulator,name=iPad (A16)' \
     -only-testing:ChessTutorTests/CoachingQualityBenchmarkCorpusTests/testOptInExport
 
@@ -128,29 +173,27 @@ if [ "$smoke" = true ]; then
 fi
 
 echo "Running candidate coaching configurations..."
-OPENAI_API_KEY="$openai_api_key" "${cli[@]}" "${run_arguments[@]}"
+OPENAI_API_KEY="$openai_api_key" run_owned "${cli[@]}" "${run_arguments[@]}"
 
 echo "Running the qualified automatic judge..."
 set +e
-OPENAI_API_KEY="$openai_api_key" "${cli[@]}" grade \
+OPENAI_API_KEY="$openai_api_key" run_owned "${cli[@]}" grade \
   --run "$run_root" --corpus "$corpus_root" --judge "$judge" \
-  --pricing "$prices" --output "$grade_root" \
+  --pricing "$prices" --output "$grade_root" --checkpoint "$checkpoint_path" \
   --qualification "$qualification_path"
 grade_status=$?
 set -e
 unset openai_api_key
 
-echo "Building the benchmark report..."
-"${cli[@]}" report --run "$run_root" --grades "$grade_root" \
-  --pricing "$prices" --output "$report_root"
-
 if [ "$grade_status" -ne 0 ]; then
-  completed=true
-  echo "Judge grading did not pass; a diagnostic report was preserved." >&2
-  echo "Report: $report_root/summary.md" >&2
+  echo "Judge grading failed; evidence was preserved and report generation was not attempted." >&2
+  saved_evidence
   exit "$grade_status"
 fi
 
-completed=true
+echo "Building the benchmark report..."
+run_owned "${cli[@]}" report --run "$run_root" --grades "$grade_root" \
+  --pricing "$prices" --output "$report_root"
+
 echo "Benchmark complete."
 echo "Report: $report_root/summary.md"

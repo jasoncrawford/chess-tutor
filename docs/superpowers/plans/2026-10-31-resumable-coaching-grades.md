@@ -59,3 +59,16 @@ not under `docs/`. Updated it and added an operational note to the existing
 ## Execution ruling
 
 This is an operational repair, not a change to the comparison or judge. The user has delegated implementation and model-selection judgment and explicitly waived further design review. The controller will review the change, run it against the frozen evidence, and merge only after all checks pass.
+
+### Task 2: Preserve evidence through the convenience launcher
+
+**Observed gap:** `scripts/run_coaching_quality_benchmark.sh` still deletes corpus and run artifacts on INT/TERM and does not pass the new checkpoint flag. The public benchmark workflow must not erase paid progress. This extends only the interruption/recovery repair, not the model evaluation.
+
+**Files:** launcher, focused launcher tests (existing fixtures in `Tools/CoachingEval/tests/test_benchmark_cli.py`, or a dedicated shell integration test file if clearer), `Tools/CoachingEval/README.md`.
+
+- [x] Add real-shell/fake-command regression tests proving an interrupted grading run preserves a sentinel candidate artifact and a sentinel checkpoint; the script passes a checkpoint path alongside its grade directory; an interrupted candidate run preserves whatever candidate/corpus evidence exists. Observe RED before fixing.
+- [x] Remove destructive interruption cleanup. Keep signal-specific nonzero exit codes and stop owned child work normally; do not leave paid child work running after script interruption. On interruption or grade failure print saved artifact/checkpoint paths and point to the existing explicit-resume CLI instructions. Do not claim that rerunning the convenience script resumes; it still creates a new run. No new general resume command, key persistence, hidden retries, qualification behavior change, or candidate-generation rewrite.
+- [x] Pass `--checkpoint "$session_root/grading-checkpoint.json"` to the existing grade invocation. If grading fails, exit before attempting a report whose grade directory doesn't exist; preserve artifacts and a clear recovery diagnostic. Successful runs still report normally.
+- [x] Run focused tests, shell syntax, then full evaluator and server tests once. Commit scoped files plus this plan, no push. Write report in this plan's ignored workspace as task-2-report.md.
+
+Ruling: This wrapper fix is part of recovery correctness, not optional polish: the main convenience entry point would otherwise delete the very paid evidence the new checkpoint protects. Existing qualifier, candidate generator, scoring, and default invocation semantics remain unchanged.
