@@ -33,6 +33,17 @@ The dependency-free browser state logic is exercised directly with `node Tools/C
 
 The script reads `ChessTutor-CoachingEval-OpenAI` from Keychain, ensures the pinned automatic judge has a compatible qualification from the last 30 days, exports a fresh 70-turn corpus from Swift, runs the production configuration, and writes an ignored report beneath `.coaching-eval/benchmark/runs/<timestamp>/report/summary.md`. It never places the key in a command argument or artifact. Qualification happens before corpus export or candidate inference, so an unqualified judge cannot waste a candidate run.
 
+The convenience benchmark script grades with
+`runs/<timestamp>/grading-checkpoint.json` alongside the `grades` directory.
+On INT/TERM it stops its owned work and preserves all existing corpus,
+candidate, and checkpoint evidence, including partial candidate/export files.
+Interruption or a grading failure prints the saved paths; a grading failure
+does not attempt a report without completed grades. Use the explicit
+`grade --checkpoint` instructions below to resume the same frozen grading run,
+then run `report` after grading succeeds. Rerunning the convenience script
+creates a **new run**, not a resume. An interrupted export or candidate run
+may be incomplete; grade checkpointing does not resume candidate generation.
+
 The benchmark defaults are `configs/judge-v4.json` (GPT-6 Astra at low reasoning with `judge-v3.md`), `pricing-v2.json` (dated 2026-09-06), and `configs/production-v2.json`. The production wrapper still pins the unchanged live Sol model configuration; only its benchmark identity and pricing version are updated. Every additional candidate wrapper must use the same `openai-2026-09-06` pricing version. Previous judge, prompt, pricing, and production-wrapper versions remain immutable for replaying earlier runs. The new judge uses the same provisional agent-reviewed references and unchanged qualification thresholds; publishing the configuration is not itself qualification or model-promotion approval.
 
 The judge distinguishes accurate words from a useful teaching step: an unnecessary danger scan in an obviously safe opening, or a capture hunt with no possible capture, scores poorly on coaching judgment even when a negative-answer button exists. This alone is not a severe chess error. Genuine danger questions and feedback on the child's newest move remain useful. This criterion was added after a live diagnostic showed that a reference-qualified judge was still too generous toward ritualized opening scans; qualification does not replace inspection of real outputs.
@@ -76,6 +87,7 @@ python3 -m Tools.CoachingEval.benchmark.cli grade \
   --judge Tools/CoachingEval/benchmark/configs/judge-v4.json \
   --pricing Tools/CoachingEval/benchmark/pricing-v2.json \
   --qualification .coaching-eval/benchmark/qualifications/<qualification>/qualification.json \
+  --checkpoint .coaching-eval/benchmark/runs/<run>/grading-checkpoint.json \
   --output .coaching-eval/benchmark/runs/<run>/grades
 
 python3 -m Tools.CoachingEval.benchmark.cli report \
@@ -86,6 +98,35 @@ python3 -m Tools.CoachingEval.benchmark.cli report \
 ```
 
 `report` is entirely offline and can regenerate a report from frozen responses and grades. Reports keep quality separate from operations: they show mechanical validity, provider failures grouped by category and bounded HTTP status, severe errors, each of the six rubric dimensions, strong-response rate, pairwise wins/losses/ties, p50/p90 latency, candidate token cost, current-run judge overhead, and qualification cost as a separate historical expense. Ordinary grade runs do not repeat the 20-case qualification. The Pareto frontier includes configurations not dominated simultaneously on strong-response rate, severe errors, p90 latency, and candidate cost; there is deliberately no opaque combined score.
+
+The optional `grade --checkpoint PATH` saves validated absolute and pairwise
+judgments after each paid call. If grading fails or is interrupted, explicitly
+run the **same grade command** again, with the same checkpoint path, frozen run,
+corpus, judge, pricing, qualification, and output path. The completed output
+directory must not already exist. Do not restart candidate generation, change
+inputs, delete the checkpoint, or select a new checkpoint to obtain better
+scores: completed judgments, including low scores, are final. Without this
+option grading retains its previous all-or-nothing behavior.
+
+Resume rechecks that the exact qualification is still accepted, compatible,
+and unexpired; an expired or changed certificate cannot resume this ledger.
+Changed bindings, corrupt or invalid cached grades, symlinked checkpoint paths,
+and a concurrent writer fail before any paid call. Keep the checkpoint outside
+the grade output directory, on a local macOS/Linux filesystem supporting
+advisory locks and atomic rename. The adjacent `.lock` file is intentionally
+retained; a process exit or crash releases its lock, so do not delete it to
+bypass an active writer.
+
+Original successful-call latency, usage, and cost are retained. Failed attempts
+are kept and added to the eventual successful judgment's metrics. A call left
+in flight by interruption may already have been billed: resume records one
+unknown-accounting failed attempt before issuing a new call. Its true latency,
+tokens, and cost cannot be reconstructed, so aggregate accounting remains
+incomplete and total cost stays null, never zero. There are no automatic
+retries or qualification calls during grading. Checkpoints contain sanitized
+attempt status/metrics and validated outputs, not credentials, provider errors,
+or response IDs. See the operational note in
+[`docs/reports/2026-09-06-benchmark-readiness.md`](../../docs/reports/2026-09-06-benchmark-readiness.md).
 
 To test a new prompt or model, copy `CoachingServer/configs/production-v1.json`, change only the intended fields, then copy the benchmark candidate wrapper and pin the new model-configuration SHA-256. To test a new deterministic user-prompt generator, add a named entry to `PROMPT_GENERATORS` in `benchmark/configuration.py` plus compiler and benchmark tests; configuration files cannot load arbitrary code. Pricing is an immutable, dated estimate: add a new `pricing-v<number>.json` from an official source rather than rewriting an old table.
 

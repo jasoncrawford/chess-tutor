@@ -115,11 +115,13 @@ class BenchmarkCLITests(unittest.TestCase):
                     "--judge", "judge.json", "--pricing", "prices.json",
                     "--output", str(grade_destination), "--api-key-env", "JUDGE_SECRET",
                     "--qualification", "qualification.json",
+                    "--checkpoint", "grading-progress.json",
                 ]
             )
         self.assertEqual(0, status)
         self.assertEqual([self.secret], client_values)
         self.assertEqual(1, grade.call_count)
+        self.assertEqual(Path("grading-progress.json"), grade.call_args.kwargs["checkpoint_path"])
         grade_summary = json.loads(output.getvalue())
         self.assertEqual("judge-v1", grade_summary["judgeID"])
         self.assertNotIn(self.secret, output.getvalue())
@@ -212,13 +214,16 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.bin.mkdir()
         self.log = self.root / "commands.log"
         self.artifacts = self.root / "artifacts"
+        self.summaries = self.root / "summaries"
+        self.summaries.mkdir()
         self.env = os.environ.copy()
         self.env.update(
             {
                 "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
                 "FAKE_COMMAND_LOG": str(self.log),
+                "TMPDIR": str(self.summaries),
                 "CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT": str(self.artifacts),
-            "CHESS_TUTOR_BENCHMARK_TIMESTAMP": "20260901T120000Z",
+                "CHESS_TUTOR_BENCHMARK_TIMESTAMP": "20260901T120000Z",
             }
         )
         self.write_fake("security", "printf '%s\\n' 'sk-private-launcher-key'")
@@ -244,7 +249,13 @@ class BenchmarkLauncherTests(unittest.TestCase):
             if [ "$previous" = '--output' ]; then destination="$value"; fi
               previous="$value"
             done
-            [ -n "$destination" ] && mkdir -p "$destination"
+            if [[ "$*" == *"benchmark.cli run"* ]]; then
+              mkdir -p "$destination"
+              printf 'candidate evidence\n' > "$destination/candidate-sentinel.jsonl"
+            fi
+            if [[ "$*" == *"benchmark.cli grade"* ]]; then
+              printf 'checkpoint evidence\n' > "$(dirname "$destination")/grading-checkpoint.json"
+            fi
             if [[ "$*" == *"benchmark.cli qualify"* ]]; then
               printf '{"status":"completed","qualification":"%s/qualifications/fake/qualification.json"}\n' "$CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT"
             else
@@ -256,6 +267,14 @@ class BenchmarkLauncherTests(unittest.TestCase):
             if [ "${FAKE_GRADE_FAIL:-}" = "1" ] && [[ "$*" == *"benchmark.cli grade"* ]]; then
               exit 7
             fi
+            if [ -n "${FAKE_BLOCK_STAGE:-}" ] && [[ "$*" == *"benchmark.cli $FAKE_BLOCK_STAGE"* ]]; then
+              trap 'wait "$descendant" || :; printf stopped > "$FAKE_STOPPED"; exit 143' TERM
+              /bin/bash -c 'trap "exit 143" TERM; echo $$ > "$FAKE_DESCENDANT"; while :; do sleep 0.05; done' &
+              descendant=$!
+              printf '%s\n' "$$" > "$FAKE_READY"
+              wait "$descendant"
+            fi
+            [ -z "$destination" ] || mkdir -p "$destination"
             """,
         )
 
@@ -282,6 +301,8 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.assertLess(commands.index("benchmark.cli qualify"), commands.index("xcodebuild"))
         self.assertLess(commands.index("benchmark.cli qualify"), commands.index("benchmark.cli run"))
         self.assertIn("--qualification", commands)
+        grade_command = next(line for line in commands.splitlines() if "benchmark.cli grade" in line)
+        self.assertIn("--checkpoint " + str(self.artifacts / "runs/20260901T120000Z/grading-checkpoint.json"), grade_command)
         self.assertIn("--candidate " + str(ROOT / "Tools/CoachingEval/benchmark/configs/production-v2.json"), commands)
         command_lines = commands.splitlines()
         for command in ("qualify", "run", "grade", "report"):
@@ -294,6 +315,7 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.assertNotIn("sk-private-launcher-key", commands)
         self.assertTrue((self.artifacts / "runs/20260901T120000Z/report").is_dir())
         self.assertIn("Development comparison evidence", combined)
+        self.assertEqual([], list(self.summaries.glob("chess-benchmark-qualification.*")))
 
     def test_quick_mode_needs_no_extra_candidate(self):
         result = subprocess.run(
@@ -313,7 +335,7 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.assertNotIn("candidate.json", commands)
         self.assertIn("Diagnostic subset evidence", combined)
 
-    def test_missing_key_is_actionable_and_interrupt_cleans_partial_artifacts(self):
+    def test_missing_key_is_actionable(self):
         self.write_fake("security", "exit 44")
         result = subprocess.run(
             [str(LAUNCHER), "quick"],
@@ -327,11 +349,13 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.assertIn("ChessTutor-CoachingEval-OpenAI", result.stderr)
         self.assertFalse(self.log.exists())
 
-        self.write_fake("security", "printf '%s\\n' 'sk-private-launcher-key'")
+    def test_interrupt_preserves_partial_corpus_export(self):
         self.write_fake(
             "xcodebuild",
             """
             printf '%s\n' xcodebuild >> "$FAKE_COMMAND_LOG"
+            mkdir -p "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR"
+            printf 'partial corpus\n' > "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR/partial.jsonl"
             trap 'exit 130' INT TERM
             sleep 20
             """,
@@ -345,14 +369,122 @@ class BenchmarkLauncherTests(unittest.TestCase):
             text=True,
             start_new_session=True,
         )
-        for _ in range(100):
-            if self.log.exists() and "xcodebuild" in self.log.read_text():
-                break
-            time.sleep(0.02)
-        os.killpg(process.pid, signal.SIGINT)
-        process.communicate(timeout=5)
-        self.assertFalse((self.artifacts / "corpus/source-sha-20260901T120000Z").exists())
-        self.assertFalse((self.artifacts / "runs/20260901T120000Z").exists())
+        partial = self.artifacts / "corpus/source-sha-20260901T120000Z/partial.jsonl"
+        try:
+            # Apple's /usr/bin/python3 shim can spend >2s creating xcrun_db
+            # before the launcher reaches export, even with fake CLI commands.
+            deadline = time.monotonic() + 10
+            while not partial.exists():
+                if time.monotonic() >= deadline:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=5)
+                    output = (stdout + stderr).replace("sk-private-launcher-key", "[redacted]")
+                    commands = self.log.read_text() if self.log.exists() else "no commands"
+                    self.fail(f"Fake corpus export did not become ready; status={process.returncode}; "
+                              f"commands={commands}; output={output[-2000:]}")
+                time.sleep(0.02)
+            os.killpg(process.pid, signal.SIGINT)
+            _, stderr = process.communicate(timeout=5)
+            self.assertEqual(130, process.returncode, stderr)
+            self.assertEqual("partial corpus\n", partial.read_text())
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=5)
+
+    def test_interrupt_preserves_paid_evidence_and_stops_owned_work(self):
+        for stage in ("qualify", "run", "grade"):
+            for signum, status in ((signal.SIGINT, 130), (signal.SIGTERM, 143)):
+                for target_group in (False, True):
+                    with self.subTest(stage=stage, signal=signum, target_group=target_group):
+                        self.interrupt_paid_stage(stage, signum, status, target_group)
+
+    def test_signal_between_launch_and_pid_registration_stops_owned_work(self):
+        hook = self.root / "launch-boundary.bash"
+        hook.write_text("""
+unset BASH_ENV
+set -T
+trap 'if [[ "$BASH_COMMAND" == "owned_child=\\$!" ]]; then
+  while [ ! -f "$FAKE_READY" ] || [ ! -f "$FAKE_DESCENDANT" ]; do sleep 0.01; done
+  kill -"$FAKE_BOUNDARY_SIGNAL" "$$"
+  kill -"$FAKE_BOUNDARY_SECOND_SIGNAL" "$$"
+fi' DEBUG
+""")
+        for signum, status in ((signal.SIGINT, 130), (signal.SIGTERM, 143)):
+            with self.subTest(signal=signum):
+                self.interrupt_paid_stage("qualify", signum, status, False, boundary_hook=hook)
+
+    def interrupt_paid_stage(self, stage, signum, status, target_group, boundary_hook=None):
+        # Use separate roots so a prior interrupted run cannot satisfy assertions.
+        artifact_root = self.root / f"{stage}-{signum}-{target_group}"
+        ready = artifact_root / "ready"
+        stopped = artifact_root / "stopped"
+        descendant = artifact_root / "descendant"
+        environment = dict(self.env, FAKE_BLOCK_STAGE=stage, FAKE_READY=str(ready),
+                           FAKE_STOPPED=str(stopped), FAKE_DESCENDANT=str(descendant),
+                           CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT=str(artifact_root))
+        if boundary_hook is not None:
+            second = signal.SIGTERM if signum == signal.SIGINT else signal.SIGINT
+            environment.update(BASH_ENV=str(boundary_hook), FAKE_BOUNDARY_SIGNAL=str(int(signum)),
+                               FAKE_BOUNDARY_SECOND_SIGNAL=str(int(second)))
+        process = subprocess.Popen([str(LAUNCHER), "quick"], cwd=ROOT, env=environment,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            deadline = time.monotonic() + 5
+            while not (ready.exists() and descendant.exists()):
+                if time.monotonic() >= deadline:
+                    self.fail(f"Fake paid command did not become ready (status={process.poll()}, "
+                              f"files={list(artifact_root.rglob('*'))})")
+                time.sleep(0.01)
+            if boundary_hook is not None:
+                # DEBUG delivers at the exact boundary. Observe parent exit without
+                # waiting on pipes an orphaned child could otherwise keep open.
+                process.wait(timeout=3)
+                self.assertTrue(stopped.exists(), "New paid child outlived interrupted launcher")
+            elif target_group:
+                os.killpg(process.pid, signum)
+            else:
+                process.send_signal(signum)
+            try:
+                stdout, stderr = process.communicate(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.fail("Launcher left owned work running after interruption")
+            combined = stdout + stderr
+            self.assertEqual(status, process.returncode, combined)
+            session = artifact_root / "runs/20260901T120000Z"
+            corpus = artifact_root / "corpus/source-sha-20260901T120000Z"
+            if stage != "qualify":
+                self.assertTrue((session / "candidates/candidate-sentinel.jsonl").exists())
+                self.assertEqual("candidate evidence\n", (session / "candidates/candidate-sentinel.jsonl").read_text())
+                self.assertTrue((corpus / "benchmark-manifest.json").exists())
+            if stage == "grade":
+                self.assertEqual("checkpoint evidence\n", (session / "grading-checkpoint.json").read_text())
+            self.assertTrue(stopped.exists(), "Owned paid command was not allowed to stop")
+            with self.assertRaises(ProcessLookupError):
+                os.kill(int(descendant.read_text()), 0)
+            for path in (corpus, session / "candidates", session / "grading-checkpoint.json"):
+                self.assertIn(str(path), combined)
+            self.assertIn("Tools/CoachingEval/README.md", combined)
+            self.assertIn("new run", combined)
+            self.assertNotIn("sk-private-launcher-key", combined)
+            self.assertFalse((session / "report").exists())
+            self.assertEqual([], list(self.summaries.glob("chess-benchmark-qualification.*")))
+        finally:
+            # Only terminate these fixture process groups, never another run.
+            for marker in (descendant, ready):
+                if marker.exists():
+                    try:
+                        os.killpg(int(marker.read_text()), signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            process.communicate(timeout=5)
 
     def test_failed_qualification_prevents_corpus_and_candidate_work(self):
         self.env["FAKE_QUALIFY_FAIL"] = "1"
@@ -371,8 +503,9 @@ class BenchmarkLauncherTests(unittest.TestCase):
         self.assertNotIn("xcodebuild", commands)
         self.assertNotIn("benchmark.cli run", commands)
         self.assertNotIn("benchmark.cli grade", commands)
+        self.assertEqual([], list(self.summaries.glob("chess-benchmark-qualification.*")))
 
-    def test_failed_grade_preserves_artifacts_and_still_builds_diagnostic_report(self):
+    def test_failed_grade_preserves_evidence_without_reporting_missing_grades(self):
         self.env["FAKE_GRADE_FAIL"] = "1"
         result = subprocess.run(
             [str(LAUNCHER), "quick", "--smoke"],
@@ -384,9 +517,17 @@ class BenchmarkLauncherTests(unittest.TestCase):
         )
         commands = self.log.read_text()
         self.assertEqual(7, result.returncode)
-        self.assertEqual(1, commands.count("benchmark.cli report"))
+        self.assertNotIn("benchmark.cli report", commands)
         self.assertTrue((self.artifacts / "corpus/source-sha-20260901T120000Z").is_dir())
-        self.assertTrue((self.artifacts / "runs/20260901T120000Z/report").is_dir())
+        session = self.artifacts / "runs/20260901T120000Z"
+        self.assertTrue((session / "candidates/candidate-sentinel.jsonl").exists())
+        self.assertTrue((session / "grading-checkpoint.json").exists())
+        self.assertFalse((session / "grades").exists())
+        self.assertFalse((session / "report").exists())
+        for path in (session / "candidates", session / "grading-checkpoint.json"):
+            self.assertIn(str(path), result.stderr)
+        self.assertIn("Tools/CoachingEval/README.md", result.stderr)
+        self.assertIn("new run", result.stderr)
 
     def write_fake(self, name, body):
         path = self.bin / name
