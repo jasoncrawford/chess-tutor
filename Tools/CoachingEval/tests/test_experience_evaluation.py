@@ -7,6 +7,8 @@ from Tools.CoachingEval.benchmark.experience import ExperienceEvaluation
 from Tools.CoachingEval.benchmark.budget import BudgetedClient, BudgetExceeded
 from Tools.CoachingEval.benchmark.configuration import load_prices
 from Tools.CoachingEval.tests import test_regression_workflow as fixtures
+from Tools.CoachingEval.tests.test_benchmark_runner import FakeClient
+from Tools.CoachingEval.openai_responses import OpenAIResponsesError
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -21,9 +23,10 @@ class ExperienceEvaluationTests(unittest.TestCase):
         self.controls = ROOT / "Tools/CoachingEval/benchmark/judge-experience-v1.json"
 
     def run_workflow(self, output, **kwargs):
+        client = kwargs.pop("client", mock.Mock())
         return ExperienceEvaluation.run(repository_root=ROOT, corpus_path=self.fixture.regression,
             candidate_paths=[ROOT / "Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json"],
-            controls_path=self.controls, output=output, client=mock.Mock(),
+            controls_path=self.controls, output=output, client=client,
             qualification_path=self.root / "qualification.json", journal=self.root / "budget.jsonl",
             **kwargs)
 
@@ -92,6 +95,28 @@ class ExperienceEvaluationTests(unittest.TestCase):
         no_reuse = ExperienceEvaluation.metrics(rows, {"candidate": False})["candidate"]
         self.assertEqual(4, no_reuse["fresh"]["count"])
         self.assertEqual(0, no_reuse["followUp"]["count"])
+
+    def test_actual_provider_failure_retains_case_timing_and_partial_metrics(self):
+        client = FakeClient(failures=[OpenAIResponsesError("secret", category="timeout")])
+        with mock.patch("Tools.CoachingEval.benchmark.experience.JudgeQualification.load_compatible"), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.JudgeSensitivity.run", return_value={"passed": True}):
+            with self.assertRaisesRegex(RuntimeError, "Provider failed"):
+                self.run_workflow(self.root / "timeout", client=client)
+        saved = json.loads((self.root / "timeout/evaluation.json").read_text())
+        self.assertEqual("stopped", saved["status"])
+        stats = saved["experienceMetrics"]["astra-discovery-v2-low"]
+        self.assertEqual(1, stats["failedOrInvalidCount"])
+        self.assertEqual(1, stats["fresh"]["count"])
+        self.assertEqual(1, saved["unknownAccountingCalls"])
+        self.assertEqual(1, len(client.calls))
+
+    def test_blocked_sequence_rows_are_not_zero_latency_requests(self):
+        rows = [dict(configurationID="candidate", stepIndex=2, latencyMilliseconds=0,
+                     generationStatus="blockedByPriorTurn", attemptCount=0,
+                     mechanicalValidation={"valid": False}, parsedTurn=None)]
+        stats = ExperienceEvaluation.metrics(rows, {"candidate": True})["candidate"]
+        self.assertEqual(0, stats["followUp"]["count"])
+        self.assertEqual(1, stats["blockedCount"])
 
 
 if __name__ == "__main__":

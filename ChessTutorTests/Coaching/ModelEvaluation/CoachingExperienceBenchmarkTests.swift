@@ -63,8 +63,8 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
             XCTAssertFalse(markdown.contains(turn.graderBrief.coachingPurpose))
             XCTAssertFalse(markdown.contains("at most 3"))
         }
-        let first = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true)
-        XCTAssertEqual(first, try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true))
+        let first = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true)
+        XCTAssertEqual(first, try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true))
     }
 
     func testKnightDefenseFactsMatchMovementRules() throws {
@@ -82,11 +82,26 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
         // verified snapshots covered by the playthrough and later-game tests.
     }
 
+    func testExportRetainsVerifiedCaseFactsOnlyInThePrivateBrief() throws {
+        let corpus = try CoachingExperienceBenchmark.corpus()
+        let artifacts = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true)
+        let rows = try artifacts.casesJSONL.split(separator: 0x0A).map {
+            try JSONDecoder().decode(CoachingQualityBenchmarkCaseRecord.self, from: Data($0))
+        }
+        for (turn, row) in zip(corpus.allTurns, rows) {
+            for fact in turn.graderBrief.verifiedFacts {
+                XCTAssertTrue(row.graderBrief.verifiedFacts.contains(fact), "Lost fact: \(fact)")
+            }
+            let markdown = ModelCoachingChessNativeContextCompiler.compile(row.request, promptVersion: "tutor-v13").markdown
+            XCTAssertFalse(markdown.contains(turn.graderBrief.coachingPurpose))
+        }
+    }
+
     func testOptInExport() throws {
         let env = ProcessInfo.processInfo.environment
         guard let path = env["COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR"], !path.isEmpty else { return }
         let source = try XCTUnwrap(env["COACHING_QUALITY_BENCHMARK_SOURCE_SHA"])
         try CoachingQualityBenchmarkExporter.write(to: URL(fileURLWithPath: path), sourceGitSHA: source,
-                                                  corpus: CoachingExperienceBenchmark.corpus(), regression: true)
+                                                  corpus: CoachingExperienceBenchmark.corpus(), regression: true, preserveVerifiedFacts: true)
     }
 }

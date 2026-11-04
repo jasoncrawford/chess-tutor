@@ -19,20 +19,7 @@ from Tools.CoachingEval.benchmark.regression import RegressionEvaluation
 from Tools.CoachingEval.benchmark.report import write_report
 from Tools.CoachingEval.benchmark.runner import run_candidates
 from Tools.CoachingEval.benchmark.sensitivity import JudgeSensitivity
-from Tools.CoachingEval.openai_responses import OpenAIResponsesClient, OpenAIResponsesError
-
-
-class _StopOnProviderFailure:
-    def __init__(self, client):
-        self.client = client
-
-    def complete(self, **arguments):
-        try:
-            return self.client.complete(**arguments)
-        except OpenAIResponsesError as error:
-            # The generic runner records errors and continues its matrix. Paid
-            # interactive experiments stop instead, retaining the reservation.
-            raise SystemExit(f"Provider stopped: {error.category}; evidence retained") from None
+from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 
 
 class ExperienceEvaluation:
@@ -60,7 +47,7 @@ class ExperienceEvaluation:
                     or any(sensitivity.get(k) != v for k, v in bindings.items())
                     or not sensitivity.get("rows") or not all(r.get("passed") is True for r in sensitivity["rows"])):
                 raise ValueError("Sensitivity evidence is failed or incompatible")
-        meter = BudgetedClient(_StopOnProviderFailure(client), prices, journal, max_cost)
+        meter = BudgetedClient(client, prices, journal, max_cost)
         result = dict(schemaVersion="coaching-experience-evaluation.v1", status="running",
                       createdAt=datetime.now(timezone.utc).isoformat(),
                       executionSource=RegressionEvaluation._execution_source(),
@@ -81,7 +68,7 @@ class ExperienceEvaluation:
                 return result
             run_candidates(corpus=corpus, configurations=candidates, mode="regression",
                            destination=output / "candidates", provider_factory=lambda _: meter,
-                           price_table=prices)
+                           price_table=prices, stop_on_provider_failure=True)
             grade_run(run_root=output / "candidates", corpus=corpus, judge_configuration=judge,
                       client=meter, destination=output / "grades", qualification_path=qualification_path,
                       price_table=prices, checkpoint_path=output / "grading-checkpoint.json")
@@ -100,6 +87,11 @@ class ExperienceEvaluation:
             result.update(status="stopped", failureCategory=type(error).__name__)
             raise
         finally:
+            progress = output / "candidates.progress.jsonl"
+            if progress.exists():
+                rows = [json.loads(line) for line in progress.read_text().splitlines()]
+                result["experienceMetrics"] = cls.metrics(rows, {
+                    c.identifier: c.model_configuration.conversation_reuse for c in candidates})
             RegressionEvaluation._save(output, result, meter)
 
     @staticmethod
@@ -116,7 +108,11 @@ class ExperienceEvaluation:
             timings = {"fresh": [], "followUp": []}
             endings, confirmation_count = [], 0
             failed = 0
+            blocked = 0
             for row in rows:
+                if row.get("generationStatus") == "blockedByPriorTurn":
+                    blocked += 1
+                    continue
                 bucket = "followUp" if reuse and row["stepIndex"] > 1 else "fresh"
                 latency = row.get("latencyMilliseconds")
                 if isinstance(latency, (int, float)) and math.isfinite(latency) and latency >= 0:
@@ -130,7 +126,7 @@ class ExperienceEvaluation:
                     closing = re.split(r"[.!]", message)[-1].strip()
                     if closing.endswith("?") and re.search(r"\b(keep|play|try another)\b", closing):
                         endings.append(closing)
-            stats = dict(failedOrInvalidCount=failed, confirmationTurnCount=confirmation_count,
+            stats = dict(failedOrInvalidCount=failed, blockedCount=blocked, confirmationTurnCount=confirmation_count,
                          confirmationQuestionCount=len(endings),
                          mostRepeatedConfirmationEndingCount=max((endings.count(s) for s in set(endings)), default=0))
             for bucket, values in timings.items():

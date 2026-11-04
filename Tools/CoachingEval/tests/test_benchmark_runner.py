@@ -61,6 +61,23 @@ class FakeClient:
 
 
 class BenchmarkRunnerTests(unittest.TestCase):
+    def test_stop_on_provider_failure_preserves_failed_case_status_and_timing(self):
+        client = FakeClient(failures=[OpenAIResponsesError("secret", category="http", http_status=502)])
+        destination = self.root / "provider-stopped"
+        with self.assertRaisesRegex(RuntimeError, "Provider failed"):
+            run_candidates(corpus=self.corpus, configurations=[self.configuration], mode="regression",
+                           destination=destination, provider_factory=lambda _: client, price_table=self.prices,
+                           stop_on_provider_failure=True)
+        rows = [json.loads(line) for line in (self.root / "provider-stopped.progress.jsonl").read_text().splitlines()]
+        self.assertEqual(1, len(client.calls))
+        self.assertEqual(1, len(rows))
+        self.assertEqual("d-01", rows[0]["caseID"])
+        self.assertEqual(502, rows[0]["providerHTTPStatus"])
+        self.assertGreaterEqual(rows[0]["latencyMilliseconds"], 0)
+        self.assertFalse(rows[0]["mechanicalValidation"]["valid"])
+        self.assertNotIn("secret", json.dumps(rows))
+        self.assertFalse(destination.exists())
+
     def test_regression_budget_stop_preserves_completed_cells_without_replaying(self):
         client = FakeClient(failures=[None, BudgetExceeded("local stop")])
         destination = self.root / "stopped"

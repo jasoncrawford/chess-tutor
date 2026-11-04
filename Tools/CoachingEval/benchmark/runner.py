@@ -43,6 +43,7 @@ def run_candidates(
     include_holdout: bool = False,
     price_table=None,
     diagnostic_subset: bool = False,
+    stop_on_provider_failure: bool = False,
 ):
     """Run one fully preflighted quick or comparison matrix and publish atomically."""
     destination = Path(destination)
@@ -59,6 +60,8 @@ def run_candidates(
         raise ValueError("Candidate configuration IDs must be unique")
     if mode not in ("quick", "comparison", "regression"):
         raise ValueError("Benchmark mode must be quick, comparison, or regression")
+    if stop_on_provider_failure and mode != "regression":
+        raise ValueError("Stopping on provider failure requires durable regression progress")
     if corpus.is_regression and (mode != "regression" or include_holdout):
         raise ValueError("Playthrough corpus requires development-only regression mode")
     if mode == "comparison" and sum(
@@ -120,6 +123,8 @@ def run_candidates(
         )
         records.append(record)
         _append_progress(progress_path, record)
+        if stop_on_provider_failure and record["generationStatus"] not in ("completed", "invalid"):
+            raise RuntimeError("Provider failed; failed case and timing retained in progress journal")
         if _is_sequence(turns, turn.group_id):
             prior_by_sequence[sequence_key] = {
                 "valid": record["mechanicalValidation"]["valid"],
