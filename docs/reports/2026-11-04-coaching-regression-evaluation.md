@@ -21,19 +21,49 @@ Started using source revision `c0f0bfe00421f66aeef82d2b4d3f230309f311e2`, with a
 - Conservative spending ceiling: $10, including judging. Frozen prices plus a 25% uncached-input premium are estimates, not an invoice.
 - Evidence: `.coaching-eval/regression/20261104T155542Z/` in the PR worktree. The evaluation manifest separately records corpus and executing-code provenance, configuration/prompt/judge hashes, and per-file Python hashes. Full outputs, grades, timings, token counts, and a durable spending journal are retained.
 
-## Live outcome: useful partial evidence, not a finished quality score
+## Live outcome: both suites completed
 
 The command successfully exported both real corpora and reused the existing qualification. All **18/18 judge sensitivity checks passed**: retained bad answers were penalized on the intended dimensions, and retained good answers remained acceptable. No expectations were weakened and no sensitivity check was rerolled.
 
-All **24/24 new-regression coaching responses** were generated and passed mechanical validation. Nine of 24 judgments completed; all nine received 5/5 in each dimension with no severe error flagged. This is an incomplete, ordered subset, **not a 100% benchmark result**. The original 56-turn development benchmark has not started; there is no updated broad quality score.
+After the user replenished API credits, resumed the saved grading checkpoint and completed both suites. No completed candidate output or judgment was regenerated. All 192 candidate responses were mechanically valid, and all 192 were graded.
 
-Generation latency for these fresh full-context requests: median **5.35s**, nearest-rank p90 **8.61s**, maximum **11.59s**. These are not conversational follow-up measurements. The 24 successful candidate calls cost **$0.330996** at the frozen unadjusted price table.
+| Suite | Distinct turns × repetitions | Strong responses | Severe errors | Candidate p50 / p90 | Candidate cost |
+| --- | --- | --- | --- | --- | --- |
+| New playthrough regressions | 8 × 3 | 24/24 (100%) | 0/24 | 5.29s / 8.61s | $0.330996 |
+| Original development benchmark | 56 × 3 | 143/168 (85.1%) | 3/168 (1.8%) | 3.18s / 6.99s | $2.219402 |
 
-The tenth judgment failed without usage data. An explicit checkpoint resume failed with HTTP429; one bounded diagnostic request then established the exact code: **`credit_balance_exhausted`**. All further API work stopped. [Official API guidance](https://developers.openai.com/api/docs/guides/error-codes) distinguishes this from a temporary rate limit: more prepaid credits are required before retrying.
+“Strong” means every rubric dimension scored at least 4/5 and no severe flag. Percentiles use the report's nearest-rank convention. Costs in the table use the frozen, unadjusted price table. The 14 holdout turns were not used. There is no baseline comparison or promotion recommendation in this diagnostic mode.
 
-Across this task's live execution, **51 successful calls** (18 sensitivity +24 candidate +9 grading) have a conservative estimated cost of **$0.9590645**. Three unsuccessful transmissions retain **$0.9931875** in conservative reservations because their actual charge is unknown. Total cost/reservation: **$1.9522520**, below the unchanged $10 cap. These figures are not provider invoice totals, and the exhausted account balance cannot be attributed solely to this run.
+The original benchmark's 120 initial requests had a median latency of **3.51s** and p90 **7.17s**; its 48 conversational follow-ups had median **2.91s** and p90 **4.07s**. Maximum candidate latency was 12.59s. The new regression cases use fresh full-context requests, not conversational continuations.
 
-The original failed evaluation manifest remains untouched. `evaluation/resume-1.json` records the explicit failed continuation, and `evaluation/provider-limit-diagnostic.json` records the allowlisted error code. The existing `playthrough/grading-checkpoint.json` retains all nine completed grades and every failed attempt. Once credits are available, resume unfinished grading rather than rerolling the 24 coaching responses, then start the untouched original development suite. Preserve unknown-accounting warnings in the report even after successful resumption.
+### Actual chess failures
+
+All three severe failures make the same false claim: a white knight on c3 protects the highlighted white pawn on d4. A knight cannot attack that square. Affected cells:
+
+- `i07-looks-safe`, repetition 1.
+- `s04-safe-move-confirm-02`, repetitions 1 and 2.
+
+For example: “Your knight now protects your middle pawn, helping it stay put. Would you like to keep this move?” The focus marks c3 and d4. In the first conversational repetition the next answer corrected the claim, but that does not erase the preceding error. The judge correctly flagged all three. This demonstrates that the broader benchmark exposes a recurring defect not revealed by the eight new positions.
+
+### Rubric limitations exposed by the run
+
+Of the 25 original-benchmark responses below the strong threshold, 22 have a discovery/independence score below 4; categories overlap with the three chess failures and seven coaching-judgment deductions. Some are debatable grading penalties rather than demonstrated product failures:
+
+- Accurate staged-move warnings sometimes receive discovery 3 merely because they explain the consequence instead of asking another discovery question. For example, `c02-poisoned-bishop-capture|r1` is accurate and answerable in every other dimension but gets discovery 3. The new suite's brief explicitly permits direct staged feedback; analogous `p05` responses receive 5. This is a **brief/rubric consistency issue**, not evidence that one suite is inherently easier for the model.
+- Requested Hint responses (`i04-opening-hint` and `s08-hint-then-act-02`) are penalized for suggesting a specific move, although a more explicit hint after the child asks for one is intentional.
+- Other deductions concern genuine coaching choices, such as emphasizing a minor knight-development consideration or missing an available mating-capture teaching opportunity. Do not assume all low discovery scores are false positives.
+
+The raw 85.1% score is retained unchanged. No prompt, judge, threshold, or grader brief was tuned during this run, and no low grade was rerolled. Before using the strong-response rate as a release gate, align the staged-feedback and requested-Hint policy across the judge and both suites, version that change, and regrade saved outputs. Separately fix the demonstrated knight-defense error using these already-repeatable cases.
+
+### Interruption, recovery, and cost
+
+The original attempt stopped after nine playthrough judgments. An explicit checkpoint resume failed with HTTP 429; one bounded diagnostic request established **`credit_balance_exhausted`**. Requests stopped until the user added credits, as required by [official API guidance](https://developers.openai.com/api/docs/guides/error-codes).
+
+The successful continuation was launched from `d9b626e690c221117928504e6ffa801b2b8e7a95` after verifying that every executing Python source hash still matched the original clean `c0f0bfe` run. Only documentation had changed. Corpus, model, prompt, judge, and pricing bindings were preserved.
+
+Final accounting: **402 successful calls** (18 sensitivity + 192 candidate + 192 grading), with **$8.5608620** in conservative estimated successful-call costs. Three earlier unsuccessful transmissions retain **$0.9931875** in reservations because their actual charge is unknown. Total conservative cost/reservation: **$9.5540495**, within the **original $10 cap**. A possible increase to $12 was asked about but neither needed nor applied. The unadjusted frozen-table estimate for known successful calls is $7.529152. None of these figures is an invoice total.
+
+`evaluation/resume-2.json` records final status `completedWithAccountingCaveat` and both report paths. The original failed `evaluation.json`, failed `resume-1.json`, diagnostic, journal, and checkpoints remain intact. The playthrough report correctly retains “judge accounting is incomplete” for the three failed calls; the original benchmark report has no integrity issues. Every completed grade was reused, including all low scores. Do not discard the accounting warning or relabel this as held-out promotion evidence.
 
 ## What is now covered
 
@@ -46,7 +76,7 @@ The original failed evaluation manifest remains untouched. `evaluation/resume-1.
 | Wrong-piece answer and changed tentative move | p07/p08: current learner event and actual current position |
 | Question intercepts a tap capture | Native session integration regressions; not asserted by an LLM score |
 
-The generated answers did not repeat the observed mutual-defense or forced-defense errors. One qualitative concern remains visible: all three p07 replies switch to a capture puzzle without explicitly explaining why the selected bishop is defended. The first such reply received full marks from the judge. That is a reason to retain and inspect the text, not to treat the provisional rubric as a complete measure of teaching quality. No prompt or rubric was changed to chase this run's results.
+The new-regression answers did not repeat the observed mutual-defense or forced-defense errors. One qualitative concern remains visible: all three p07 replies switch to a capture puzzle without explicitly explaining why the selected bishop is defended, and all receive full marks from the judge. That is another reason to retain and inspect the text, not to treat the provisional rubric as a complete measure of teaching quality.
 
 ## Verification
 
@@ -54,7 +84,9 @@ The generated answers did not repeat the observed mutual-defense or forced-defen
 
 One fresh independent review found three integration defects before paid execution: symlink-parent artifact paths, pre-transmission budget stops incorrectly counted as unknown paid judge failures, and missing executing-code provenance when replaying old exports. Reproduced all three, added regression tests, and fixed them in one pass. The reviewed candidate generation → qualified grading → checkpoint → report path also passes an offline 168-response integration test.
 
-PR#23 contains the implementation. GitHub's Python and iPad jobs were queued at handoff, not passed. The normal dev launcher restored the app/server on Coaching Smoke after export tests; A16 was untouched. Live coaching will also require restored API credit.
+The 354 evaluator and 55 server tests were rerun successfully during the continuation. GitHub's Python check passed. Its iPad job did not acquire a hosted runner: it had no test steps, runner ID 0, and an annotation reporting macOS runner-capacity constraints. This is not a failing XCTest result. The final documentation push triggers another CI attempt; do not claim the iPad CI gate is green until it runs successfully.
+
+PR #23 contains the implementation and results. The normal dev launcher restored the app/server on Coaching Smoke after export tests; A16 was untouched. API access was verified restored by the successful continuation.
 
 ## Interpretation
 

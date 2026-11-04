@@ -55,7 +55,7 @@
 
 - [x] Add failing workflow tests: selected config, failed sensitivity stops candidates, no overwrite, budget failure retains results, repeated suite reports and provenance, no key exposure.
 - [x] Implement documented command and resume-safe grading checkpoints, retaining incomplete candidate evidence and preventing automatic replay.
-- [ ] Run live sensitivity first, then current candidate on both suites three times within $10. Record quality/latency/cost and failures honestly; no tuning to the results.
-- [ ] Run full relevant suites, fresh branch review, fix important findings with tests, update PR #23; do not merge.
+- [x] Run live sensitivity first, then current candidate on both suites three times within $10. Record quality/latency/cost and failures honestly; no tuning to the results.
+- [x] Run full relevant suites, fresh branch review, fix important findings with tests, update PR #23; do not merge.
 
-Execution checkpoint: implementation/review/local verification are complete. Live sensitivity18/18 passed and all24 new-regression responses generated;9/24 judgments completed before provider credits ran out. Original development suite not started. See `docs/reports/2026-11-04-coaching-regression-evaluation.md`. Do not check the live-evaluation item complete until saved grading and the original suite finish. CI jobs remain queued at this checkpoint.
+Completed: sensitivity 18/18; new suite 24/24 strong and 0 severe; original development suite 143/168 strong and 3 severe. Both matrices and all grading completed after a credit top-up, using saved checkpoints without rerolls. Conservative total $9.5540495 includes three unknown-charge reservations and remains within the original $10 cap. Raw scores retained; rubric inconsistencies documented rather than tuned mid-run. See `docs/reports/2026-11-04-coaching-regression-evaluation.md`. Python CI passed; iPad CI was blocked before execution by hosted-runner capacity and requires a successful fresh attempt before merge.
