@@ -10,7 +10,7 @@ The user approved a **$13 total cap** for this same experiment. The continuation
 is blocked by the API's separate project spending limit
 (`HTTP 429`, `project_spend_limit_exceeded`, `insufficient_quota`). No V4
 sensitivity judgment or candidate response was saved. The shared conservative
-estimate/reservation is **$10.6339430**, including all failed-call reservations;
+estimate/reservation is **$10.9574555**, including all failed-call reservations;
 that is not an invoice or a claim that rejected requests were billed.
 
 ## What changed
@@ -153,6 +153,14 @@ remaining allowance, prioritize the later-game failures after the new gate
 and small-suite scoring. Any broader responses reviewed without automatic
 grading must be labeled as such, not included in an automatic score.
 
+After the user reported adding $10 in credits, one further attempt in
+`sweep-v4-funded/` returned the same project-limit error before any saved grade
+or candidate response. It stopped immediately, retaining another $0.3235125
+reservation. No further retries were made. OpenAI's
+[spend-limit guidance](https://developers.openai.com/api/docs/guides/spend-limits)
+distinguishes buying credits from raising the project's monthly hard limit;
+the latter is still the reported blocker.
+
 ## Latency remains a rough edge
 
 V3's experience-suite median and p90 improved in this sample, but its worst
@@ -209,7 +217,7 @@ All local evidence is under
   responses, grades, and reports.
 - `verify_exports.py`: executed equivalence check across all four exports.
 - `corpus-v3/`: V2 private mating evidence, with unchanged candidate requests.
-- `run-v4.py`, `sweep-v4/`, `sweep-v4-recovery/`, `sweep-v4-diagnostic/`:
+- `run-v4.py`, `sweep-v4/`, `sweep-v4-recovery/`, `sweep-v4-diagnostic/`, `sweep-v4-funded/`:
   continuation orchestration and stopped manifests. The retained script now
   prints only bounded provider error metadata; it refuses to overwrite the
   existing destination and must not simply be rerun.
@@ -230,10 +238,10 @@ System prompt SHA-256:
 The manifests retain full corpus, judge, pricing, and executing Python hashes.
 Pricing is the frozen September 6 estimate, not a current-price or invoice claim.
 
-The $10.6339430 cumulative estimate includes failed intermediate candidates,
+The $10.9574555 cumulative estimate includes failed intermediate candidates,
 all completed sensitivity/transfer grading, the original interrupted-call
-reservation, and three new full reservations for failed continuation calls.
-The continuation added $0.9705375 of reservations, not confirmed charges.
+reservation, and four new full reservations for failed continuation calls.
+The continuation added $1.29405 of reservations, not confirmed charges.
 It is not a provider invoice. No extra spending is authorized by creating a
 new output directory or journal; the user-approved cumulative ceiling is $13.
 
