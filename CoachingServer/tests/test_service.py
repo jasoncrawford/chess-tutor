@@ -13,6 +13,7 @@ from CoachingServer.service import (
     HostedCoachingServiceError,
 )
 from CoachingServer.chess_native_compiler import compile_context
+from Tools.CoachingEval.benchmark.configuration import PROMPT_GENERATORS
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +109,20 @@ class EmptyProvider:
 
 
 class HostedCoachingServiceTests(unittest.TestCase):
+    def test_grounded_generator_is_identical_in_live_service_and_benchmark(self):
+        configuration = HostedModelConfiguration.load(
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v2-low-model.json", ROOT,
+        )
+        for previous in (None, "resp_previous"):
+            with self.subTest(previous=previous):
+                provider = RecordingProvider()
+                service = HostedCoachingService(provider=provider, configuration=configuration)
+                service.complete(hosted_request(previous_response_id=previous))
+                compiler = PROMPT_GENERATORS[configuration.user_prompt_generator][int(previous is not None)]
+                expected = compiler(FIXTURE["request"], configuration.prompt_version)
+                self.assertEqual(expected.markdown, provider.calls[0]["user_prompt"])
+                self.assertIn("Selected-piece relationships", provider.calls[0]["user_prompt"])
+
     def test_shared_provider_envelope_requires_completed_output_and_continuation(self):
         response = {
             "id": "resp_valid-123",

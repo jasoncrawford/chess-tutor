@@ -3,7 +3,10 @@ import copy
 import unittest
 from pathlib import Path
 
-from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
+from CoachingServer.chess_native_compiler import (
+    compile_context, compile_follow_up_context,
+    compile_grounded_context, compile_grounded_follow_up_context,
+)
 
 
 FIXTURE_PATH = (
@@ -125,6 +128,31 @@ class ChessNativeCompilerTests(unittest.TestCase):
         request["authoredAdvice"] = "Tell the child what to do."
         with self.assertRaises(ValueError):
             compile_context(request, "tutor-v6")
+
+    def test_grounded_selection_renders_only_focal_native_relationships(self):
+        request = copy.deepcopy(self.fixture["request"])
+        pawn = dict(id="piece:white:pawn:d2", color="white", kind="pawn", square="d2")
+        request["pieces"].append(pawn)
+        request["occupiedSquareRelationships"] = [dict(
+            id="relationship:knight-defends-pawn", kind="defends",
+            sourcePieceReference="piece:white:knight:b1", targetPieceReference=pawn["id"],
+        )]
+        old = compile_context(request, "tutor-v13")
+        for compiler in (compile_grounded_context, compile_grounded_follow_up_context):
+            result = compiler(request, "tutor-v13")
+            self.assertIn("White knight on b1 defends White pawn on d2.", result.markdown)
+            self.assertIn("geometric control, not a guarantee of a legal or worthwhile recapture", result.markdown)
+            self.assertEqual(old.expected_responses, result.expected_responses)
+            self.assertEqual(old.allowable_moves, result.allowable_moves)
+        self.assertNotIn("defends White pawn", old.markdown)
+
+    def test_grounded_stage_does_not_misrepresent_committed_relationships(self):
+        request = copy.deepcopy(self.fixture["request"])
+        request["interaction"]["tentativeMove"] = request["legalMoves"][0]
+        for compiler in (compile_grounded_context, compile_grounded_follow_up_context):
+            result = compiler(request, "tutor-v13")
+            self.assertNotIn("Selected-piece relationships", result.markdown)
+            self.assertIn("not a complete list of the moved piece's attacks or defenses", result.markdown)
 
     def test_rejects_noncanonical_prompt_strings_before_rendering(self):
         mutations = (

@@ -74,11 +74,26 @@ def compile_follow_up_context(
     return _compile_context(request, prompt_version, is_follow_up=True)
 
 
+def compile_grounded_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=False, grounded=True)
+
+
+def compile_grounded_follow_up_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=True, grounded=True)
+
+
+PROMPT_GENERATORS = {
+    "chess-native-v13": (compile_context, compile_follow_up_context),
+    "chess-native-grounded-v1": (compile_grounded_context, compile_grounded_follow_up_context),
+}
+
+
 def _compile_context(
     request: Mapping[str, object],
     prompt_version: str,
     *,
     is_follow_up: bool,
+    grounded: bool = False,
 ) -> ChessNativeCompilation:
     parsed = _parse_neutral_request(request)
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
@@ -91,7 +106,8 @@ def _compile_context(
         ("Latest interaction", _latest_interaction_lines(parsed, pieces_by_id)),
         (
             "Relevant legal facts",
-            _relevant_legal_fact_lines(parsed, pieces_by_id, scoped_replies),
+            _relevant_legal_fact_lines(parsed, pieces_by_id, scoped_replies)
+            + (_focal_relationship_lines(parsed, pieces_by_id) if grounded else ()),
         ),
         (
             "Available UI response",
@@ -424,6 +440,31 @@ def _relevant_legal_fact_lines(request: dict[str, Any], pieces_by_id: dict[str, 
         selected = _piece_label(selected_id, pieces_by_id)
         moves = sorted((move for move in request["legalMoves"] if move["sourcePieceReference"] == selected_id), key=lambda move: move["id"])
         lines.extend((f"Selected piece: {selected}", f"Legal moves for {selected}: {_move_list(moves)}"))
+    return tuple(lines)
+
+
+def _focal_relationship_lines(request, pieces_by_id):
+    interaction = request["interaction"]
+    if interaction["tentativeMove"]:
+        return ("Immediate replies are not a complete list of the moved piece's attacks or defenses. Do not treat committed-position relationships as post-move facts.",)
+    selected_id = interaction["selectedPieceReference"]
+    event = interaction["latestEvent"]
+    if event["kind"] == "squareInspected":
+        selected_id = _first(event["referencedIDs"])
+    if selected_id not in pieces_by_id:
+        return ()
+    relationships = sorted((
+        relationship for relationship in request["occupiedSquareRelationships"]
+        if relationship["kind"] in {"attacks", "defends"}
+        and selected_id in (relationship["sourcePieceReference"], relationship["targetPieceReference"])
+    ), key=lambda relationship: relationship["id"])
+    lines = ["Selected-piece relationships on the committed board (geometric control, not a guarantee of a legal or worthwhile recapture):"]
+    lines.extend(
+        f"{_piece_label(relationship['sourcePieceReference'], pieces_by_id)} {relationship['kind']} {_piece_label(relationship['targetPieceReference'], pieces_by_id)}."
+        for relationship in relationships
+    )
+    if not relationships:
+        lines.append("No occupied-square attack or defense involves this piece.")
     return tuple(lines)
 
 
