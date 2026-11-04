@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Mapping
 
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
 from Tools.CoachingEval.benchmark.judge_contract import (
     JudgeCallError,
     RUBRIC_DIMENSIONS,
@@ -306,6 +307,8 @@ class JudgeQualification:
                     price_table,
                 )
                 grade = _validate_absolute(output)
+            except BudgetExceeded:
+                raise
             except Exception as error:
                 if isinstance(error, JudgeCallError):
                     failed_metrics = error.metrics
@@ -384,6 +387,8 @@ class JudgeQualification:
                         price_table,
                     )
                     grade = _validate_pairwise(output)
+                except BudgetExceeded:
+                    raise
                 except Exception as error:
                     if isinstance(error, JudgeCallError):
                         failed_metrics = error.metrics

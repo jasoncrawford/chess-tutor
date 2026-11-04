@@ -1,10 +1,14 @@
 import hashlib
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from Tools.CoachingEval.benchmark.regression import RegressionEvaluation
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
+from Tools.CoachingEval.benchmark.grade_checkpoint import JudgeCheckpoint
 from Tools.CoachingEval.tests import test_benchmark_runner as fixtures
 
 
@@ -28,10 +32,46 @@ class RegressionWorkflowTests(unittest.TestCase):
                         turnIDs=[r["id"] for r in raw], casesSHA256=hashlib.sha256(data).hexdigest())
         (self.regression / "benchmark-manifest.json").write_text(json.dumps(manifest))
 
-    def run_workflow(self, output):
+    def run_workflow(self, output, **updates):
         return RegressionEvaluation.run(repository_root=ROOT, corpus_path=self.fixture.corpus.root,
             regression_path=self.regression, output=output, client=mock.Mock(),
-            qualification_root=self.root / "qualifications", max_cost="10")
+            qualification_root=self.root / "qualifications", **dict({"max_cost": "10"}, **updates))
+
+    def test_local_budget_refusal_is_not_a_failed_paid_qualification(self):
+        output = self.root / "budget-stop"
+        with self.assertRaises(BudgetExceeded):
+            self.run_workflow(output, max_cost="0.000001")
+        result = json.loads((output / "evaluation.json").read_text())
+        self.assertEqual("budgetStopped", result["status"])
+        self.assertEqual("0", result["conservativeCostOrReservationUSD"])
+        self.assertEqual(0, result["unknownAccountingCalls"])
+        self.assertFalse((self.root / "qualifications").exists())
+
+    def test_saved_exports_record_separate_executing_source_provenance(self):
+        with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", return_value={"passed": False}):
+            result = self.run_workflow(self.root / "provenance")
+        self.assertEqual("source", result["sourceGitSHA"])
+        execution = result["executionSource"]
+        self.assertEqual(subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), execution["gitSHA"])
+        self.assertIsInstance(execution["dirty"], bool)
+        sources = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+                   for directory in ("CoachingServer", "Tools/CoachingEval")
+                   for path in sorted((ROOT / directory).rglob("*.py"))}
+        self.assertEqual(sources, execution["pythonFilesSHA256"])
+
+    def test_tmp_override_reaches_real_checkpoint_without_symlink_failure(self):
+        def grade(**arguments):
+            with JudgeCheckpoint(arguments["checkpoint_path"], {"judgments": {}}, lambda *_: None):
+                pass
+            raise KeyboardInterrupt
+        with tempfile.TemporaryDirectory(dir="/tmp") as temporary, \
+             mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", return_value={"passed": True}), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.run_candidates"), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.grade_run", side_effect=grade):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_workflow(Path(temporary) / "output")
 
     def test_failed_sensitivity_prevents_candidate_spending_and_retains_status(self):
         output = self.root / "output"

@@ -6,7 +6,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
 from Tools.CoachingEval.benchmark.configuration import load_judge
 from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS
 from Tools.CoachingEval.benchmark.qualification import (
@@ -160,6 +162,20 @@ class JudgeQualificationTests(unittest.TestCase):
         else:
             winner = "B" if response_one_presented_as == "A" else "A"
         return {"winner": winner, "evidence": ["One response better fits the current step."]}
+
+    def test_pairwise_budget_stop_is_not_published_as_rejected_qualification(self):
+        client = QueueJudge(self.passing_outputs())
+        complete = client.complete
+        def stop_at_pairwise(**arguments):
+            if json.loads(arguments["user_prompt"])["kind"] == "pairwise":
+                raise BudgetExceeded("Stopped before transmission")
+            return complete(**arguments)
+        destination = self.root / "stopped-qualification"
+        with mock.patch.object(client, "complete", side_effect=stop_at_pairwise):
+            with self.assertRaises(BudgetExceeded):
+                JudgeQualification.ensure(self.configuration, client, FixedPrice(), destination, self.now)
+        self.assertEqual(len(self.reference.cases), len(client.calls))
+        self.assertFalse(destination.exists())
 
     def test_three_complete_passing_repetitions_publish_accepted_artifact(self):
         client = QueueJudge(self.passing_outputs())

@@ -25,6 +25,30 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class BenchmarkReportTests(unittest.TestCase):
+    def test_regression_roundtrip_grades_and_reports_one_candidate_without_a_baseline(self):
+        runner = runner_fixtures.BenchmarkRunnerTests()
+        runner.setUp()
+        self.addCleanup(runner.tearDown)
+        grader = grader_fixtures.BenchmarkGraderTests()
+        grader.setUp()
+        self.addCleanup(grader.tearDown)
+        candidate = runner.make_configuration(identifier="current", baseline=False)
+        run = self.root / "regression-run"
+        run_candidates(corpus=runner.corpus, configurations=[candidate], mode="regression",
+                       destination=run, provider_factory=lambda _: runner_fixtures.FakeClient(),
+                       price_table=runner.prices)
+        grades = self.root / "regression-grades"
+        client = grader_fixtures.QueueJudge([grader.absolute(score=4) for _ in range(168)])
+        grade_run(run_root=run, corpus=runner.corpus, judge_configuration=grader.configuration,
+                  client=client, destination=grades, qualification_path=grader.qualification_path,
+                  price_table=runner.prices, now=grader.now, checkpoint_path=self.root.resolve() / "checkpoint.json")
+        report = build_report(run, grades, runner.prices)
+        self.assertEqual([], report["integrityIssues"])
+        self.assertTrue(report["evidence"]["completeMatrix"])
+        self.assertFalse(report["promotionEligible"])
+        self.assertEqual(168, report["configurations"]["current"]["responseCount"])
+        self.assertEqual(168, len(client.calls))
+
     def test_regression_evidence_requires_all_repetitions_and_never_promotes(self):
         for count, playthrough in ((56, False), (8, True)):
             records = [dict(cellID=f"current|c{i}|r{rep}", configurationID="current",

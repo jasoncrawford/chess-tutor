@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,7 +24,7 @@ class RegressionEvaluation:
     def run(cls, *, repository_root, corpus_path, regression_path, output, client,
             qualification_root, max_cost="10", candidate_path=None, include_holdout=False):
         root = Path(repository_root)
-        output = Path(output)
+        output = Path(output).resolve()
         if output.exists():
             raise FileExistsError("Refusing to overwrite or replay an evaluation; use saved grading checkpoints")
         config_root = root / "Tools/CoachingEval/benchmark"
@@ -40,6 +41,7 @@ class RegressionEvaluation:
         meter = BudgetedClient(client, prices, output / "budget.jsonl", max_cost)
         result = dict(schemaVersion="coaching-regression-evaluation.v1", status="running",
                       createdAt=datetime.now(timezone.utc).isoformat(), sourceGitSHA=corpus.source_git_sha,
+                      executionSource=cls._execution_source(),
                       candidateID=candidate.identifier, candidateSHA256=candidate.sha256,
                       modelConfigurationSHA256=candidate.model_configuration_sha256,
                       systemPromptSHA256=candidate.model_configuration.system_prompt_sha256,
@@ -86,6 +88,19 @@ class RegressionEvaluation:
             raise
         finally:
             cls._save(output, result, meter)
+
+    @staticmethod
+    def _execution_source():
+        # Saved board exports may be replayed by a newer prompt compiler. Bind
+        # actual executing Python sources separately, never relabel the corpus.
+        root = Path(__file__).resolve().parents[3]
+        return dict(
+            gitSHA=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
+            dirty=bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True).strip()),
+            pythonFilesSHA256={str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                              for directory in ("CoachingServer", "Tools/CoachingEval")
+                              for path in sorted((root / directory).rglob("*.py"))},
+        )
 
     @staticmethod
     def _save(output, result, meter):

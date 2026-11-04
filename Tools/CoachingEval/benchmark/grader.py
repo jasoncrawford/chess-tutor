@@ -34,6 +34,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     validate_scores as _validate_scores,
 )
 from Tools.CoachingEval.benchmark.grade_checkpoint import JudgeCheckpoint
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 from Tools.CoachingEval.benchmark.reference_set import JudgeReferenceSet
 
@@ -338,6 +339,10 @@ def _grade_judgment(key, kind, payload, configuration, client, price_table,
             _absolute_schema() if kind == "absolute" else _pairwise_schema(), price_table,
         )
         grade = _validate_judgment(output, kind, configurations)
+    except BudgetExceeded:
+        if checkpoint is not None:
+            checkpoint.not_transmitted(key)
+        raise
     except Exception as error:
         if checkpoint is not None:
             failed_metrics = error.metrics if isinstance(error, JudgeCallError) else metrics
