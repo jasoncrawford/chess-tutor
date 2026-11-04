@@ -25,14 +25,15 @@ This evaluates the exact default model/prompt configuration used by the local ap
 
 The command requires a clean committed checkout, exports inputs from the production Swift rules/request builder on **ChessTutor Coaching Smoke**, and reads the existing Keychain credential without displaying it. Override the simulator with `CHESS_TUTOR_REGRESSION_DESTINATION` if needed. It uses the repository `.venv`; `CHESS_TUTOR_EVAL_PYTHON` can select another installed Python.
 
-It first reuses or obtains the existing judge qualification, then checks six retained bad/good answers three times each. This sensitivity check uses the same grading payload and rubric as the benchmark; expected outcomes are not sent to the judge. Its narrow expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged.
+It first reuses or obtains the existing judge qualification, then runs two sensitivity gates: six retained playthrough controls and fourteen experience-v2 controls, each three times. These checks use the same grading payload and rubric as their suites; expected outcomes are not sent to the judge. The expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged.
 
-If sensitivity passes, the selected candidate runs three times on each of two separately reported suites:
+If both gates pass, the selected candidate runs three times on each of three separately reported suites, experience first:
 
-- **Frozen benchmark:** 56 development turns, including its existing three-step conversations. The 14 holdout turns remain excluded unless `--include-holdout` is explicitly provided.
+- **Experience regressions v2:** eight probes with stricter criteria for factual claims, acknowledging answers, useful achievable goals, and appropriate Help/Hint/staged feedback. Includes the complete rule-derived mate-in-one answer set in private grading evidence. See the experience section below for versioning and a smaller bounded comparison workflow.
 - **Playthrough regressions v1:** eight independent development positions covering pawn-defense direction, invented forced defense, concrete development feedback, losing versus favorable captures, a defended-piece answer, and changed-move precedence. These are tuned regression examples, never new holdout evidence. Fresh full-context requests contain the recorded learner events; these eight cases do not replay model conversation history.
+- **Frozen benchmark:** 56 development turns, including its existing three-step conversations. The 14 holdout turns remain excluded unless `--include-holdout` is explicitly provided.
 
-Reports retain individual outputs and grades, rubric dimensions, mechanical failures, p50/p90 latency, tokens and dated cost estimates. The top-level `evaluation.json` binds the corpus source revision and, separately, the executing checkout's revision, dirty status, and Python source-file hashes. It also binds suite/configuration/prompt/judge hashes, sensitivity results, and both report paths. This preserves prompt-generator provenance even when the Python entry point replays older exports. `regression` mode is diagnostic, not a production comparison or an automatic promotion claim. The previous quick/comparison commands below are unchanged.
+Reports retain individual outputs and grades, rubric dimensions, mechanical failures, latency, tokens and dated cost estimates. The top-level `evaluation.json` includes fresh/follow-up timing and repeated-confirmation diagnostics; it binds the corpus source revision and, separately, the executing checkout's revision, dirty status, and Python source-file hashes. It also binds suite/configuration/prompt/judge hashes, sensitivity results, and all report paths. This preserves prompt-generator provenance even when the Python entry point replays older exports. `regression` mode is diagnostic, not a production comparison or an automatic promotion claim. The previous quick/comparison commands below are unchanged.
 
 Default conservative spending cap: **$10**, adjustable with `--max-cost 5`. The durable budget journal reserves a conservative text/schema/context estimate plus the full output cap before each API call and retains reservations when usage is unknown. It adds a 25% premium on uncached input to the frozen price table; this is not an invoice or a guarantee against future provider pricing changes. Compatible qualifications can be reused from `CHESS_TUTOR_BENCHMARK_QUALIFICATION_ROOT`. A qualification renewal is included in this command's cap.
 
@@ -54,7 +55,7 @@ COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$(git rev-parse HEAD)" \
     -only-testing:ChessTutorTests/CoachingLaterGameBenchmarkTests
 ```
 
-The export uses the existing eight-case playthrough regression format. The `run`, `grade`, and `report` commands below accept this corpus with `--mode regression` and a pinned candidate such as `configs/astra-discovery-v2-low.json`; they run three repetitions and keep every response/grade. Unlike `run_coaching_regressions.sh`, those direct CLI commands have **no spending cap**: use `BudgetedClient` for a capped orchestration. The November 4 later-game run retains its exact bounded script, hashes, journal, and evidence under `.coaching-eval/later-game/20261104/`. The default two-suite launcher remains unchanged and does not silently add these calls or spend more.
+The export uses the existing eight-case playthrough regression format. The `run`, `grade`, and `report` commands below accept this corpus with `--mode regression` and a pinned candidate such as `configs/astra-discovery-v2-low.json`; they run three repetitions and keep every response/grade. Unlike `run_coaching_regressions.sh`, those direct CLI commands have **no spending cap**: use `BudgetedClient` for a capped orchestration. The November 4 later-game run retains its exact bounded script, hashes, journal, and evidence under `.coaching-eval/later-game/20261104/`. The current three-suite launcher does not also run this full later-game corpus; one mating-goal position is reused in the experience suite.
 
 ### Existing benchmark comparisons
 
@@ -473,21 +474,31 @@ After safely copying any evidence needed for the report, remove local evaluation
 ```bash
 rm -rf .coaching-eval
 ```
-# Coaching experience regression suite
+## Coaching experience regression suite
 
 `CoachingExperienceBenchmarkTests` exports eight development probes through
 `COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR` (with `COACHING_QUALITY_BENCHMARK_SOURCE_SHA`).
 They reuse real native snapshots, with stricter private briefs for false defenses,
 answer acknowledgment, useful goals, and appropriate Help/Hint/staged feedback.
 Existing corpora and past scores are unchanged. The paired controls in
-`benchmark/judge-experience-v1.json` are agent-authored expectations, not human ratings.
+`benchmark/judge-experience-v2.json` are agent-authored expectations, not human ratings.
+V2 adds a retained impossible mating question and an achievable contrast; its
+grading brief derives the complete mate-in-one answer set from native legal
+move flags. V1 exports, controls, and historical scores remain frozen. A fresh
+V2 sensitivity pass is required; a V1 pass cannot silently qualify the new gate.
+
+The normal `./scripts/run_coaching_regressions.sh` command now exports this suite
+and runs it first, after both the existing and experience sensitivity gates.
+It then runs the existing playthrough and original development suites under the
+same default $10 cap. A budget stop preserves evidence; it is not permission to
+start a fresh run and spend another $10. No paid evaluation is added to CI.
 
 After export, run the bounded workflow (API key supplied through the environment):
 
 ```sh
 .venv/bin/python -m Tools.CoachingEval.benchmark.experience \
   --corpus /absolute/path/to/experience-corpus \
-  --controls Tools/CoachingEval/benchmark/judge-experience-v1.json \
+  --controls Tools/CoachingEval/benchmark/judge-experience-v2.json \
   --candidate Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json \
   --qualification /absolute/path/to/compatible/qualification.json \
   --journal /absolute/path/to/experiment/budget.jsonl \
@@ -507,3 +518,20 @@ conversation follow-ups, counts above diagnostic 5s/3s UX targets, failures, and
 repeated verbal keep/play question endings. Repetition is a copy diagnostic, not
 a semantic quality grade. Score improvement must still be checked on separate
 unchanged development cases; it is not proof of untouched holdout performance.
+
+The `chess-native-grounded-v2` generator uses native optional `tentativePosition`
+evidence for staged-board pieces, occupied-square relationships, and moved-piece
+controlled squares. It does not infer these using another model or chess engine.
+Live coaching and evaluation use the same generator registry. Update the server
+and rebuild the iPad app together for this input; older clients remain accepted
+by the updated server, but older servers may reject the new field.
+
+The prepared `chess-native-grounded-v3` additionally renders which pieces have
+a legal mate in one, without revealing destinations, only on the committed
+board with no staged move. It also explicitly records when no mate in one is
+available. `astra-experience-v4-low` uses this generator but is **not selected**:
+paid sensitivity/quality verification is still pending. The local launcher
+and standard benchmark default remain `astra-discovery-v2-low`.
+
+See [the November 4 experience report](../../docs/reports/2026-11-04-coaching-experience.md)
+for retained comparisons, failed candidates, and latency limitations.

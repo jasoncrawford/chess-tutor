@@ -90,10 +90,19 @@ def compile_displayed_follow_up_context(request, prompt_version):
     return _compile_context(request, prompt_version, is_follow_up=True, grounded=True, displayed=True)
 
 
+def compile_goal_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=False, grounded=True, displayed=True, mating_goals=True)
+
+
+def compile_goal_follow_up_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=True, grounded=True, displayed=True, mating_goals=True)
+
+
 PROMPT_GENERATORS = {
     "chess-native-v13": (compile_context, compile_follow_up_context),
     "chess-native-grounded-v1": (compile_grounded_context, compile_grounded_follow_up_context),
     "chess-native-grounded-v2": (compile_displayed_context, compile_displayed_follow_up_context),
+    "chess-native-grounded-v3": (compile_goal_context, compile_goal_follow_up_context),
 }
 
 
@@ -104,6 +113,7 @@ def _compile_context(
     is_follow_up: bool,
     grounded: bool = False,
     displayed: bool = False,
+    mating_goals: bool = False,
 ) -> ChessNativeCompilation:
     parsed = _parse_neutral_request(request)
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
@@ -118,7 +128,8 @@ def _compile_context(
             "Relevant legal facts",
             _relevant_legal_fact_lines(parsed, pieces_by_id, scoped_replies)
             + (_focal_relationship_lines(parsed, pieces_by_id) if grounded else ())
-            + (_tentative_relationship_lines(parsed) if displayed else ()),
+            + (_tentative_relationship_lines(parsed) if displayed else ())
+            + (_mating_goal_lines(parsed, pieces_by_id) if mating_goals else ()),
         ),
         (
             "Available UI response",
@@ -146,6 +157,18 @@ def _compile_context(
         allowable_moves=allowable_moves,
         expected_responses=_expected_responses(prompt_version),
     )
+
+
+def _mating_goal_lines(request, pieces_by_id):
+    if request["interaction"]["tentativeMove"] is not None:
+        return ()
+    sources = sorted({move["sourcePieceReference"] for move in request["legalMoves"]
+                      if move["isLegal"] and move["givesCheckmate"]})
+    if not sources:
+        return ("No legal checkmate in one is available.",)
+    pieces = [pieces_by_id[source] for source in sources]
+    labels = [f"{piece['color'].capitalize()} {piece['kind']} on {piece['square']}" for piece in pieces]
+    return ("Pieces with a legal checkmate in one: " + "; ".join(labels) + ".",)
 
 
 def parse_neutral_request(request: Mapping[str, object]) -> dict[str, Any]:

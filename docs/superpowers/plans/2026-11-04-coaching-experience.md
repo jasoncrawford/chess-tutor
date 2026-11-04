@@ -23,7 +23,7 @@
 - Negative examples must fail for the intended dimension, while good direct staged feedback and requested Hint pass.
 - Case briefs and expected responses must never reach candidate prompts.
 - Slow/failed calls must remain visible; fresh versus conversation follow-up measurements must not be conflated.
-- Selection must reflect unseen transfer cases, not only tuned development probes.
+- Selection must reflect unchanged broader development checks, not only tuned probes; overlapping source positions are not an unseen holdout.
 
 ### Task 1: Freeze a sensitive experience suite
 
@@ -31,10 +31,10 @@
 
 **Interfaces:** Produces the existing eight-case regression export using `COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR`; controls consumed by `JudgeSensitivity.run`.
 
-- [ ] Add native tests for deterministic export, source-snapshot equivalence, no brief leakage, and independently checked knight/bishop/mate facts.
-- [ ] Implement eight cases with explicit score ceilings for ignored answers, premature exact moves, and vague goals; preserve existing corpora.
-- [ ] Build/export, validate all controls through the real response contract, run existing Python/native tests. Expected: zero failures/skips.
-- [ ] Commit the frozen evaluation before changing the tutor.
+- [x] Add native tests for deterministic export, source-snapshot equivalence, no brief leakage, and independently checked knight/bishop/mate facts.
+- [x] Implement eight cases with explicit score ceilings for ignored answers, premature exact moves, and vague goals; preserve existing corpora.
+- [x] Build/export, validate all controls through the real response contract, run existing Python/native tests. Expected: zero failures/skips.
+- [x] Commit the frozen evaluation before changing the tutor.
 
 ### Task 2: Bounded comparison and experience metrics
 
@@ -42,9 +42,9 @@
 
 **Interfaces:** Consumes exported corpus, pinned candidate paths and sensitivity controls; reuses `BudgetedClient`, `JudgeQualification`, `run_candidates`, `grade_run`, `write_report`. Produces immutable manifest, candidate/grade artifacts, quality summary, timing and repetitive-ending metrics.
 
-- [ ] Write failing tests for rejected controls preventing generation, shared spending cap, immutable output, latency separation, failure visibility, and confirmation-ending counting.
-- [ ] Implement the smallest CLI/workflow satisfying the tests; no alternate HTTP or grading implementation.
-- [ ] Run full evaluator/server suites. Expected: zero failures/skips. Commit.
+- [x] Write failing tests for rejected controls preventing generation, shared spending cap, immutable output, latency separation, failure visibility, and confirmation-ending counting.
+- [x] Implement the smallest CLI/workflow satisfying the tests; no alternate HTTP or grading implementation.
+- [x] Run full evaluator/server suites. Expected: zero failures/skips. Commit.
 
 ### Task 3: Measure, improve, verify, and deliver
 
@@ -52,8 +52,16 @@
 
 **Interfaces:** Uses frozen Task 1 criteria and Task 2 workflow, unchanged current coach as baseline, shared $10 budget journal for all paid work.
 
-- [ ] Run positive/negative sensitivity controls and baseline; inspect actual failures before editing prompt.
-- [ ] Revise general tutoring instructions, run three repetitions, keep all intermediate results. Expected: improved strong rate and no severe errors; otherwise iterate within budget or report honestly.
-- [ ] Verify finalist on unchanged playthrough/later-game suites and original development sequences; retain initial/follow-up latency and cost separately. Do not claim independent holdout success.
-- [ ] Run native/evaluator/server tests; independent review of code and outputs; address important findings with tests.
-- [ ] Record results, exact reproduction commands, shortcomings, cost and selected configuration. Update PR #23, leave open.
+- [x] Run positive/negative sensitivity controls and baseline; inspect actual failures before editing prompt.
+- [x] Revise general tutoring instructions, run three repetitions, keep all intermediate results. Expected: improved strong rate and no severe errors; otherwise iterate within budget or report honestly.
+- [x] Verify finalist on unchanged playthrough/later-game suites and original development sequences; retain initial/follow-up latency and cost separately. Do not claim independent holdout success. V3 failed this check and was rejected.
+- [x] Run native/evaluator/server tests; independent review of code and outputs; address important findings with tests. Final code: 983 native, 368 evaluator, 56 server passed, zero skips.
+- [x] Record results, reproduction commands, shortcomings, cost and unchanged default configuration. Checkpoint goes to PR #23, left open; V4 paid validation remains pending below.
+
+### Follow-up discovered during transfer
+
+- [x] Retain the V3 impossible queen-mate output and the judge's false-positive grade.
+- [x] Version complete rule-derived mate-in-one grading evidence and two new sensitivity controls; keep V1 artifacts unchanged.
+- [x] Prepare V4 using existing legal mate flags for piece-specific goals and cautious before/after control language; do not change the local default yet.
+- [ ] With spending approval, run the V2 sensitivity gate and V4 comparison, then unchanged broader checks within the shared cumulative budget. Current estimate/reservation: $9.6634055 against $10. Requested $13 cap is not yet approved.
+- [ ] Select a replacement only after its actual responses and evidence support doing so; otherwise retain the current trial and report the failures.

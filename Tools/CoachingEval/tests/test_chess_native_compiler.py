@@ -7,6 +7,7 @@ from CoachingServer.chess_native_compiler import (
     compile_context, compile_follow_up_context,
     compile_grounded_context, compile_grounded_follow_up_context,
     compile_displayed_context, compile_displayed_follow_up_context,
+    compile_goal_context, compile_goal_follow_up_context,
 )
 
 
@@ -178,6 +179,27 @@ class ChessNativeCompilerTests(unittest.TestCase):
         request["tentativePosition"]["occupiedSquareRelationships"][0]["sourcePieceReference"] = "piece:white:knight:b1"
         with self.assertRaises(ValueError):
             compile_displayed_context(request, "tutor-v13")
+
+    def test_mating_goal_uses_only_legal_native_flags_without_revealing_destination(self):
+        request = copy.deepcopy(self.fixture["request"])
+        request["interaction"]["selectedPieceReference"] = None
+        request["interaction"]["latestEvent"] = dict(request["interaction"]["latestEvent"], kind="helpOpened", referencedIDs=[])
+        request["interaction"]["episodeEvents"] = [request["interaction"]["latestEvent"]]
+        move = request["legalMoves"][0]
+        request["legalMoves"] = [dict(move, givesCheckmate=True),
+                                 dict(move, id="duplicate-source", givesCheckmate=True)]
+        for compiler in (compile_goal_context, compile_goal_follow_up_context):
+            text = compiler(request, "tutor-v13").markdown
+            self.assertEqual(1, text.count("Pieces with a legal checkmate in one: White knight on b1."))
+            self.assertNotIn(move["canonicalMove"], text)
+            self.assertNotIn("checkmate in one", compile_displayed_context(request, "tutor-v13").markdown)
+            request["legalMoves"] = [dict(move, givesCheckmate=False),
+                                     dict(move, id="illegal-mate", isLegal=False, givesCheckmate=True)]
+            self.assertIn("No legal checkmate in one is available.", compiler(request, "tutor-v13").markdown)
+            request["interaction"]["tentativeMove"] = move
+            self.assertNotIn("checkmate in one", compiler(request, "tutor-v13").markdown)
+            request["interaction"]["tentativeMove"] = None
+            request["legalMoves"] = [dict(move, givesCheckmate=True)]
 
     def test_rejects_noncanonical_prompt_strings_before_rendering(self):
         mutations = (

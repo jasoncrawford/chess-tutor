@@ -30,16 +30,24 @@ enum CoachingExperienceBenchmark {
         ]
         let turns = try definitions.map { id, sourceID, facts, purpose in
             let source = try XCTUnwrap(sources.first { $0.id == sourceID })
+            var verifiedFacts = source.graderBrief.verifiedFacts + facts
+            var severeFailures = ["Invented or reversed chess facts, approving a clearly losing move, stale-stage advice, unavailable UI, or revealing the answer while asking the child to find it."]
+            if id == "e06-mating-goal" {
+                let request = ModelCoachingNeutralRequestBuilder.build(snapshot: source.snapshot, requestID: "grader-facts")
+                let mates = request.legalMoves.filter { $0.isLegal && $0.givesCheckmate }.map(\.canonicalMove).sorted()
+                verifiedFacts.append("Complete legal checkmates in one from the committed board: \(mates.isEmpty ? "none" : mates.joined(separator: ", ")). No other legal move gives checkmate in one.")
+                severeFailures.append("An impossible piece-specific mating question is false advice and unanswerable, even when phrased as an invitation rather than a statement.")
+            }
             return CoachingQualityBenchmarkTurn(
                 id: id, groupID: id, stepIndex: 1, split: .development,
                 category: source.category, snapshot: source.snapshot,
                 graderBrief: .init(
-                    verifiedFacts: source.graderBrief.verifiedFacts + facts,
+                    verifiedFacts: verifiedFacts,
                     coachingPurpose: purpose,
                     acceptableAlternatives: ["Any natural wording meeting the purpose. Do not require a reference phrase or another discovery question after the child has already acted."],
                     successCriteria: [purpose, "Judge the next interaction as well as the explanation. A clear Play this move / Try another move UI can carry the decision without a formulaic verbal confirmation question."],
-                    severeFailureCriteria: ["Invented or reversed chess facts, approving a clearly losing move, stale-stage advice, unavailable UI, or revealing the answer while asking the child to find it."]
-                ), sourceTraceID: "experience-v1:\(sourceID)"
+                    severeFailureCriteria: severeFailures
+                ), sourceTraceID: "experience-v2:\(sourceID)"
             )
         }
         return .init(independent: turns, sequences: [])
@@ -47,6 +55,15 @@ enum CoachingExperienceBenchmark {
 }
 
 final class CoachingExperienceBenchmarkTests: XCTestCase {
+    func testMatingGoalBriefNamesTheCompleteLegalAnswerSet() throws {
+        let turn = try XCTUnwrap(CoachingExperienceBenchmark.corpus().allTurns.first { $0.id == "e06-mating-goal" })
+        let request = ModelCoachingNeutralRequestBuilder.build(snapshot: turn.snapshot, requestID: "mate-facts")
+        let mates = request.legalMoves.filter { $0.isLegal && $0.givesCheckmate }
+        XCTAssertEqual(mates.map(\.canonicalMove), ["h3d3"])
+        XCTAssertTrue(turn.graderBrief.verifiedFacts.contains("Complete legal checkmates in one from the committed board: h3d3. No other legal move gives checkmate in one."))
+        XCTAssertTrue(turn.graderBrief.severeFailureCriteria.contains { $0.contains("impossible") })
+    }
+
     func testTentativeFactsComeFromTheDisplayedBoardIncludingSpecialMoves() throws {
         let turns = CoachingQualityBenchmarkCorpus.v1.developmentTurns
             + (try CoachingExperienceBenchmark.corpus().allTurns)

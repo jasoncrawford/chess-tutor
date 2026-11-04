@@ -128,7 +128,7 @@ class RegressionWorkflowTests(unittest.TestCase):
             result = self.run_workflow(self.root / "experience-gate", experience_path=self.regression)
         self.assertEqual("judgeSensitivityFailed", result["status"])
         self.assertFalse(result["experienceSensitivityPassed"])
-        self.assertEqual("judge-experience-v1.json", gate.call_args_list[1].args[0].name)
+        self.assertEqual("judge-experience-v2.json", gate.call_args_list[1].args[0].name)
         self.assertIn("experience", result["corpora"])
         candidates.assert_not_called()
 

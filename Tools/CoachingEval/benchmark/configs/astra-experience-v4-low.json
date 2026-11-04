@@ -1,0 +1,8 @@
+{
+  "baseline": false,
+  "id": "astra-experience-v4-low",
+  "modelConfigurationPath": "Tools/CoachingEval/benchmark/configs/models/astra-experience-v4-low-model.json",
+  "modelConfigurationSHA256": "21b1e4eb621744141c260231bd224ae4d48f1483f85909f24e4f313bb3fa13d2",
+  "pricingVersion": "openai-2026-09-06",
+  "schemaVersion": "coaching-quality-candidate.v2"
+}

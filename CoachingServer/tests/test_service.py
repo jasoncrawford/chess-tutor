@@ -110,7 +110,7 @@ class EmptyProvider:
 class HostedCoachingServiceTests(unittest.TestCase):
     def test_grounded_generator_is_identical_in_live_service_and_benchmark(self):
         configuration = HostedModelConfiguration.load(
-            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v3-low-model.json", ROOT,
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v4-low-model.json", ROOT,
         )
         for previous in (None, "resp_previous"):
             with self.subTest(previous=previous):
@@ -121,6 +121,7 @@ class HostedCoachingServiceTests(unittest.TestCase):
                 expected = compiler(FIXTURE["request"], configuration.prompt_version)
                 self.assertEqual(expected.markdown, provider.calls[0]["user_prompt"])
                 self.assertIn("Selected-piece relationships", provider.calls[0]["user_prompt"])
+                self.assertIn("No legal checkmate in one is available.", provider.calls[0]["user_prompt"])
 
     def test_shared_provider_envelope_requires_completed_output_and_continuation(self):
         response = {
