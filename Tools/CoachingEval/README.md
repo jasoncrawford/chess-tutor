@@ -473,3 +473,37 @@ After safely copying any evidence needed for the report, remove local evaluation
 ```bash
 rm -rf .coaching-eval
 ```
+# Coaching experience regression suite
+
+`CoachingExperienceBenchmarkTests` exports eight development probes through
+`COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR` (with `COACHING_QUALITY_BENCHMARK_SOURCE_SHA`).
+They reuse real native snapshots, with stricter private briefs for false defenses,
+answer acknowledgment, useful goals, and appropriate Help/Hint/staged feedback.
+Existing corpora and past scores are unchanged. The paired controls in
+`benchmark/judge-experience-v1.json` are agent-authored expectations, not human ratings.
+
+After export, run the bounded workflow (API key supplied through the environment):
+
+```sh
+.venv/bin/python -m Tools.CoachingEval.benchmark.experience \
+  --corpus /absolute/path/to/experience-corpus \
+  --controls Tools/CoachingEval/benchmark/judge-experience-v1.json \
+  --candidate Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json \
+  --qualification /absolute/path/to/compatible/qualification.json \
+  --journal /absolute/path/to/experiment/budget.jsonl \
+  --output /absolute/path/to/experiment/baseline --max-cost 10
+```
+
+Use a new output directory for each prompt/configuration revision and the **same
+budget journal** for the whole iteration. Run sequentially; the budget meter is
+not a concurrent spending coordinator. `--candidate` may be repeated. Each case
+runs three times. `--sensitivity /path/to/baseline/sensitivity/result.json` reuses
+passing sensitivity evidence only when corpus, controls, and judge hashes match.
+No automatic paid CI, retry, or overwrite is enabled. A stopped grade run retains
+its checkpoint for the existing `grade --checkpoint` recovery workflow.
+
+The manifest includes all-call latency split into fresh requests and stored
+conversation follow-ups, counts above diagnostic 5s/3s UX targets, failures, and
+repeated verbal keep/play question endings. Repetition is a copy diagnostic, not
+a semantic quality grade. Score improvement must still be checked on separate
+unchanged development cases; it is not proof of untouched holdout performance.

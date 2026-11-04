@@ -29,7 +29,7 @@
     {
       "id": "premature-opening-answer", "caseID": "e04-opening-discovery", "source": {"kind": "authored negative contrast"},
       "position": {"id": "e04-opening-discovery", "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "move": null, "event": "helpOpened"},
-      "candidateTurn": {"message": "Move your pawn from e2 to e4 to control the middle.", "actions": ["hint"], "focus": [{"type": "move", "from": "e2", "to": "e4"}], "expects": "stageMove"},
+      "candidateTurn": {"message": "Move your pawn from e2 to e4 to control the middle.", "actions": ["hint"], "focus": [{"type": "square", "square": "e2"}, {"type": "square", "square": "e4"}], "expects": "stageMove"},
       "scores": {"discoveryAndIndependence": {"max": 3}}, "flags": {"factualOrIllegalAdvice": false}
     },
     {
@@ -47,7 +47,7 @@
     {
       "id": "useful-requested-hint", "caseID": "e05-requested-hint", "source": {"kind": "authored positive contrast; same precision is allowed only after Hint"},
       "position": {"id": "e05-requested-hint", "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "move": null, "event": "actionChosen"},
-      "candidateTurn": {"message": "Try moving this pawn two squares. It gives your bishop a way out.", "actions": [], "focus": [{"type": "move", "from": "e2", "to": "e4"}], "expects": "stageMove"},
+      "candidateTurn": {"message": "Try moving this pawn two squares. It gives your bishop a way out.", "actions": [], "focus": [{"type": "square", "square": "e2"}, {"type": "square", "square": "e4"}], "expects": "stageMove"},
       "scores": {"coachingJudgment": {"min": 4}, "discoveryAndIndependence": {"min": 4}}, "flags": {"severeError": false}
     },
     {
