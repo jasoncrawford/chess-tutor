@@ -98,8 +98,9 @@ enum CoachingQualityBenchmarkExportError: Error, Equatable {
 }
 
 enum CoachingQualityBenchmarkExporter {
-    static func artifacts(sourceGitSHA: String) throws -> CoachingQualityBenchmarkArtifacts {
-        let corpus = CoachingQualityBenchmarkCorpus.v1
+    static func artifacts(sourceGitSHA: String, corpus requestedCorpus: CoachingQualityBenchmarkCorpus = .v1,
+                          regression: Bool = false) throws -> CoachingQualityBenchmarkArtifacts {
+        let corpus = requestedCorpus
         let records = corpus.allTurns.map { turn in
             let request = ModelCoachingNeutralRequestBuilder.build(
                 snapshot: turn.snapshot,
@@ -119,7 +120,7 @@ enum CoachingQualityBenchmarkExporter {
         }
         let casesJSONL = try jsonl(records)
         let manifest = CoachingQualityBenchmarkManifest(
-            schemaVersion: "coaching-quality-benchmark-manifest.v1",
+            schemaVersion: regression ? "coaching-quality-playthrough-regression-manifest.v1" : "coaching-quality-benchmark-manifest.v1",
             sourceGitSHA: sourceGitSHA,
             independentGroupCount: corpus.independent.count,
             sequenceGroupCount: corpus.sequences.count,
@@ -137,7 +138,8 @@ enum CoachingQualityBenchmarkExporter {
         )
     }
 
-    static func write(to outputURL: URL, sourceGitSHA: String) throws {
+    static func write(to outputURL: URL, sourceGitSHA: String, corpus: CoachingQualityBenchmarkCorpus = .v1,
+                      regression: Bool = false) throws {
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
@@ -156,7 +158,7 @@ enum CoachingQualityBenchmarkExporter {
         )
         try fileManager.createDirectory(at: temporary, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: temporary) }
-        let artifacts = try artifacts(sourceGitSHA: sourceGitSHA)
+        let artifacts = try artifacts(sourceGitSHA: sourceGitSHA, corpus: corpus, regression: regression)
         try artifacts.casesJSONL.write(
             to: temporary.appendingPathComponent("cases.jsonl"),
             options: .atomic

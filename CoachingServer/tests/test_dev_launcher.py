@@ -6,6 +6,9 @@ import tempfile
 import textwrap
 import unittest
 
+from CoachingServer.model_configuration import HostedModelConfiguration
+from Tools.CoachingEval.benchmark.configuration import load_candidate
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER = REPOSITORY_ROOT / "scripts" / "run_hosted_coaching_dev.sh"
@@ -80,6 +83,19 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 self.assertNotIn("sk-private-key", output + command_log)
                 self.assertNotIn("local-token-secret", output + command_log)
                 self.assertIn("server-stopped", command_log)
+
+    def test_live_trial_matches_repeatable_benchmark_candidate(self):
+        candidate = load_candidate(
+            REPOSITORY_ROOT / "Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json",
+            REPOSITORY_ROOT,
+        )
+        status, output, commands = self._launch_and_stop()
+        self.assertEqual(130, status, output)
+        selected = next(line.split("=", 1)[1] for line in commands.splitlines()
+                        if line.startswith("server-model-config="))
+        live = HostedModelConfiguration.load(Path(selected), REPOSITORY_ROOT)
+        self.assertEqual(live.sha256, candidate.model_configuration.sha256)
+        self.assertEqual(live.system_prompt, candidate.model_configuration.system_prompt)
 
     def test_opens_legacy_simulator_without_trying_device_hub(self):
         returncode, output, command_log = self._launch_and_stop()
