@@ -12,8 +12,10 @@ API access is restored. The user approved **$14.50 total** for this same
 experiment, not a fresh budget. At the V4 transfer stop the conservative ledger
 was **$13.5613485**, including six unresolved reservations (four quota-rejected
 calls and two interrupted calls). This is not an invoice or a claim those
-requests were charged. The remaining allowance is for a focused diagnosis,
-not another complete comparison.
+requests were charged. The focused diagnosis subsequently stopped at
+**$14.1397950** before the final two grades: reserving another full call would
+exceed $14.50. No further paid calls were made. All nine responses and seven
+completed grades are saved. Full V5 validation remains outstanding.
 
 ## What changed
 
@@ -174,9 +176,32 @@ scores remain unchanged. The new nine-case export has an explicit versioned
 manifest. Individual true statements no longer suffice for a strong score if
 the response omits the decisive draw consequence.
 
-The planned budget-limited diagnostic tests only the two new controls, then
-three responses each for stalemate, checkmate, and non-mating promotion. That
-subset cannot qualify the full V3 gate or establish V5's broader reliability.
+The budget-limited diagnostic passed **6/6** checks of the two new controls.
+It generated three responses each for stalemate, checkmate, and non-mating
+promotion. All **9/9** were mechanically valid; independent inspection found
+no significant chess or interaction error. Every stalemate response explicitly
+warned of a draw. Example:
+
+> Your queen leaves the black king with no legal move, but it is not in check. That's stalemate—a draw, not a win.
+
+Automatic grading completed **7/9**, with **5 strong and zero severe** among
+those seven. All three stalemate responses and two checkmates scored strong.
+The two graded promotions scored below strong: the old brief/judge objected
+to describing the visible preview in past tense and to omitting a verbal
+keep/change invitation despite the available buttons. One was flagged factual
+for that tense, not for incorrect promotion/check geometry. These scores are
+retained, not rewritten. The wording “c-file” is also more technical than ideal
+for a five-year-old. The two remaining grades are checkpointed as unrun.
+
+This supports the narrow terminal-result correction, not a 9/9 automatic pass,
+full V3 sensitivity qualification, or V5's broader reliability. Before selecting
+V5, complete the saved grades and the full versioned experience/broader checks,
+and resolve the already-documented grading-policy inconsistency around direct
+staged feedback. Further paid work needs new budget authorization.
+
+Focused fresh-request latency was 2.91s median, 3.71s p90/maximum; none of the
+nine exceeded five seconds. No conversation follow-ups were measured. These
+small diagnostic samples do not establish general latency or quality gains.
 
 ### Historical continuation: provider quota blocker (now resolved)
 
@@ -276,8 +301,14 @@ Additional retained evidence:
 - `sweep-v4-limit-raised/`: V2 gate and V4 small-suite responses/grades/report;
   `completion.json` preserves the original budget-stopped `evaluation.json`.
 - `transfer-v4/`: rejected broader responses and stopped manifest, no grades.
-- `focus-v5.py`: bounded diagnostic orchestration, refuses replay/overwrite;
-  planned fresh inputs are `corpus-v4/` and `later-game-corpus-v3/`.
+- `focus-v5.py`, `focus-v5/`: bounded diagnostic orchestration, all nine responses,
+  six control judgments, three published stalemate grades/report, and four saved
+  contrast grades in `terminal-contrasts/grading-checkpoint.json`. Do not rerun
+  generation; resume only missing grades if further spending is authorized.
+- `corpus-v4/`, `later-game-corpus-v3/`, `verify-v5-exports.py`: native exports
+  from `590936d` and executed Python boundary/equivalence checks. All 16 controls
+  bind; old 14 controls and all prior private briefs, V4 prompts, and judge
+  contexts match. Only optional staged status changes the old requests.
 
 The V3 refreshed exports have identical old request fields, grading briefs,
 old-generator rendered prompts, and judge contexts. Only optional
@@ -301,6 +332,24 @@ confirmed charges. No extra spending is authorized by creating a new output
 directory or journal; the user-approved cumulative ceiling is $14.50.
 
 ## Verification and deployment
+
+V5 code verification: **985 native, 370 evaluator, 57 server tests passed**,
+zero failures/skips. After the reviewer caught the nine-case loader mismatch,
+the manifest assertion failed on the old native schema, then all **15**
+experience/original-corpus tests passed with the explicit versioned export.
+Fresh native export followed by real Python loading and control validation
+passed. Result bundles are `Test-ChessTutor-2026.11.04_16-12-18--0500.xcresult`
+and `Test-ChessTutor-2026.11.04_16-24-54--0500.xcresult` under
+`DerivedData/Logs/Test/`. Full native UI tests were not run locally.
+
+Code checkpoint: `590936d`. Python CI passed; iPad CI was queued at this
+checkpoint. Coaching Smoke was rebuilt/relaunched with the unchanged
+discovery-v2 coach, and its server health check passed. No paid Help request
+was needed for restoration. A16 was untouched. The independent review's
+Important export/loader finding was reproduced and fixed; no other Important
+code finding remained. Paid output review covered all nine focused responses.
+
+### Historical V4 verification
 
 Final V4-code verification: **983 native, 368 evaluator, and 56 server tests
 passed, zero failures/skips**. Native result bundle:

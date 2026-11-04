@@ -68,9 +68,10 @@
 
 ### Terminal-result correction
 
-- [ ] Native encoded-request regression: ongoing promotion, checkmate, stalemate, and no legal outcome for king-unsafe staging. Reuse GameState.apply; no new chess rules.
-- [ ] Versioned grounded-v4 fresh/follow-up renderer and V5 candidate with unchanged V4 system prompt. Keep old rendered prompts and default selection unchanged.
-- [ ] Experience-v3 adds the ninth stalemate-warning probe, retained negative/positive pair, explicit nine-case manifest, and strict matching loader. Normal regression includes the new gate; historical eight-case inventories remain frozen.
-- [ ] Run full local tests and fresh native export/load/control-binding integration; review important findings with regression tests.
-- [ ] Within the same $14.50 cap, run only focused terminal controls and three repetitions each of stalemate, checkmate, and non-mating promotion. Label this diagnostic evidence, not full V5 validation or rollout approval.
-- [ ] Report actual results and remaining validation; leave PR open and playable coach unchanged.
+- [x] Native encoded-request regression: ongoing promotion, checkmate, stalemate, and no legal outcome for king-unsafe staging. Reuse GameState.apply; no new chess rules.
+- [x] Versioned grounded-v4 fresh/follow-up renderer and V5 candidate with unchanged V4 system prompt. Keep old rendered prompts and default selection unchanged.
+- [x] Experience-v3 adds the ninth stalemate-warning probe, retained negative/positive pair, explicit nine-case manifest, and strict matching loader. Normal regression includes the new gate; historical eight-case inventories remain frozen.
+- [x] Run full local tests and fresh native export/load/control-binding integration; review important findings with regression tests. 985 native, 370 evaluator, 57 server; then 15 native benchmark tests after manifest fix, and actual export/load verification.
+- [x] Within the same $14.50 cap, run only focused terminal controls and three repetitions each of stalemate, checkmate, and non-mating promotion. Controls 6/6 passed; 9 responses reviewed, 7/9 grades completed (5 strong, 0 severe). Budget stopped at $14.1397950 before reserving the next call. Diagnostic only; no rollout.
+- [x] Report actual results and remaining validation; leave PR open and playable coach unchanged.
+- [ ] With further budget authorization, resume two missing grades without replay, address old direct-feedback grading inconsistency, and complete full V5 validation before selection. No extra spending is authorized now.
