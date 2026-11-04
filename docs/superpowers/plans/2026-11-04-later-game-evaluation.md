@@ -32,5 +32,5 @@
 - [x] Add `CoachingLaterGameBenchmarkTests.swift`: eight fixtures and legality, determinism, no-brief-leakage, promotion, and terminal-result assertions.
 - [x] Add opt-in export environment variable to `project.yml`; regenerate Xcode project. No paid call from a test.
 - [x] Run native and Python tests; commit exact evaluated source.
-- [ ] Export and preflight corpus; run 24 candidate requests and 24 judgments under one existing BudgetedClient.
-- [ ] Inspect all responses against board facts, document findings/cost/latency and reproduction commands, update PR without merging.
+- [x] Export and preflight corpus; run 24 candidate requests and 24 judgments under one existing BudgetedClient.
+- [x] Inspect all responses against board facts, document findings/cost/latency and reproduction commands, update PR without merging.
