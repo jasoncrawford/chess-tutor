@@ -5,7 +5,7 @@ set -euo pipefail
 readonly KEYCHAIN_SERVICE="ChessTutor-CoachingEval-OpenAI"
 readonly DEFAULT_SIMULATOR="iPad (A16)"
 readonly BUNDLE_IDENTIFIER="org.jasoncrawford.chesstutor"
-readonly DEFAULT_TRIAL_MODEL_CONFIG="Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json"
+readonly DEFAULT_TRIAL_MODEL_CONFIG="Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json"
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 simulator_name="${1:-$DEFAULT_SIMULATOR}"

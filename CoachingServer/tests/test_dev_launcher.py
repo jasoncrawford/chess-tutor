@@ -55,7 +55,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("server-stopped", command_log)
         self.assertIn("venv-create", command_log)
         self.assertIn("dependency-install requirements.txt", command_log)
-        selected = "Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json"
+        selected = "Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json"
         self.assertIn(f"server-model-config={selected}\n", command_log)
         self.assertIn("Local coaching: provisional Astra discovery trial; production default unchanged.", combined_output)
         self.assertIn(f"Model configuration: {selected}", combined_output)
