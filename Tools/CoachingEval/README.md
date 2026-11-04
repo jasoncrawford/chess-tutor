@@ -40,6 +40,22 @@ Artifacts are retained at `.coaching-eval/regression/<timestamp>/`. Each suite k
 
 Model names may be provider aliases; stored configuration hashes cannot prevent an alias changing upstream. Rerunning this command produces fresh dated evidence for detecting that drift. Do not transfer the older discovery prompt's quality score to discovery-v2.
 
+### Later-game development probes
+
+`CoachingLaterGameBenchmarkTests` extends the recorded game to move 46 and exports a **separate** eight-case corpus: a losing queen trade, a winning rook capture, king activity, a passed pawn, promotion with check, a mating-net Help request, staged mate, and staged stalemate. These are independent full-context requests, not an adaptive learner journey or held-out promotion evidence. Each request includes the actual complete move history and is built by the production Swift rules/request builder. Judge-only facts are not injected into the candidate prompt.
+
+To export on a clean committed checkout, choose a new empty output directory and run:
+
+```bash
+COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR="$PWD/.coaching-eval/later-game/my-run/corpus" \
+COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$(git rev-parse HEAD)" \
+  xcodebuild test -quiet -project ChessTutor.xcodeproj -scheme ChessTutor \
+    -destination 'platform=iOS Simulator,name=ChessTutor Coaching Smoke' \
+    -only-testing:ChessTutorTests/CoachingLaterGameBenchmarkTests
+```
+
+The export uses the existing eight-case playthrough regression format. The `run`, `grade`, and `report` commands below accept this corpus with `--mode regression` and a pinned candidate such as `configs/astra-discovery-v2-low.json`; they run three repetitions and keep every response/grade. Unlike `run_coaching_regressions.sh`, those direct CLI commands have **no spending cap**: use `BudgetedClient` for a capped orchestration. The November 4 later-game run retains its exact bounded script, hashes, journal, and evidence under `.coaching-eval/later-game/20261104/`. The default two-suite launcher remains unchanged and does not silently add these calls or spend more.
+
 ### Existing benchmark comparisons
 
 The current hosted coach has a separate production-shaped benchmark for comparing a model, reasoning settings, system prompt, or deterministic user-prompt compiler. The simplest development run is:
