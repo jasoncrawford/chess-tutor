@@ -32,9 +32,9 @@
 
 **Interfaces:** `CoachingQualityBenchmarkExporter.artifacts/write(..., corpus: ..., regression: Bool)` defaults preserve v1. Regression manifest schema `coaching-quality-playthrough-regression-manifest.v1`, eight independent development turns. `BenchmarkCorpus.is_regression` is true only for that validated schema.
 
-- [ ] Add failing corpus-loader and native tests: exact eight cases, deterministic export, no grader leakage, one-way defense, defended e5, Bxf7 king recapture, Bxe6 pawn recapture, actual wrong-piece/changed-move context.
-- [ ] Implement fixtures and exporter using existing production rules/builder; retain old export bytes and inventory. Add pinned current candidate; integration-test dev launch selection against its loaded model config.
-- [ ] Run focused Python/native tests, export both corpora, commit.
+- [x] Add failing corpus-loader and native tests: exact eight cases, deterministic export, no grader leakage, one-way defense, defended e5, Bxf7 king recapture, Bxe6 pawn recapture, actual wrong-piece/changed-move context.
+- [x] Implement fixtures and exporter using existing production rules/builder; retain old export bytes and inventory. Add pinned current candidate; integration-test dev launch selection against its loaded model config.
+- [x] Run focused Python/native tests, export both corpora, commit.
 
 ### Task 2: Repeated regression evidence through existing runner/report
 
@@ -42,10 +42,10 @@
 
 **Interfaces:** `run_candidates(mode="regression")` performs three repetitions, permits one candidate, never eligible for promotion. Regression corpus only runs in regression mode. Public grader payload helper used by both grading and sensitivity checks. Workflow invokes existing `grade_run` checkpoints and `write_report`.
 
-- [ ] Add failing tests for single-candidate three-repetition runs, original v1 guards, complete/incomplete regression reporting, and sensitivity rejection/positive controls using actual production payload construction.
-- [ ] Add strict retained-answer cases and sensitivity evaluation; no expectations or reference labels enter judge prompts. Preserve negative outputs and require all three repetitions to satisfy bounded dimension expectations.
-- [ ] Add budget wrapper tests (pre-call refusal, failed-call reservation, cumulative context, no secrets) and implement retained accounting.
-- [ ] Run evaluator suite; commit.
+- [x] Add failing tests for single-candidate three-repetition runs, original v1 guards, complete/incomplete regression reporting, and sensitivity rejection/positive controls using actual production payload construction.
+- [x] Add strict retained-answer cases and sensitivity evaluation; no expectations or reference labels enter judge prompts. Preserve negative outputs and require all three repetitions to satisfy bounded dimension expectations.
+- [x] Add budget wrapper tests (pre-call refusal, failed-call reservation, cumulative context, no secrets) and implement retained accounting.
+- [x] Run evaluator suite; commit.
 
 ### Task 3: One-command workflow, real evaluation, documentation
 
@@ -53,7 +53,9 @@
 
 **Interfaces:** script exports standard/regression corpora on Coaching Smoke (overridable simulator); `python -m ...regression` loads candidate/judge/prices, reuses qualification, sensitivity-checks, runs both suites, writes separate reports and top-level manifest. Default candidate pins the dev-launcher model; default ceiling $10.
 
-- [ ] Add failing workflow tests: selected config, failed sensitivity stops candidates, no overwrite, budget failure retains results, repeated suite reports and provenance, no key exposure.
-- [ ] Implement documented command and resume-safe grading checkpoints, retaining incomplete candidate evidence and preventing automatic replay.
+- [x] Add failing workflow tests: selected config, failed sensitivity stops candidates, no overwrite, budget failure retains results, repeated suite reports and provenance, no key exposure.
+- [x] Implement documented command and resume-safe grading checkpoints, retaining incomplete candidate evidence and preventing automatic replay.
 - [ ] Run live sensitivity first, then current candidate on both suites three times within $10. Record quality/latency/cost and failures honestly; no tuning to the results.
 - [ ] Run full relevant suites, fresh branch review, fix important findings with tests, update PR #23; do not merge.
+
+Execution checkpoint: implementation/review/local verification are complete. Live sensitivity18/18 passed and all24 new-regression responses generated;9/24 judgments completed before provider credits ran out. Original development suite not started. See `docs/reports/2026-11-04-coaching-regression-evaluation.md`. Do not check the live-evaluation item complete until saved grading and the original suite finish. CI jobs remain queued at this checkpoint.
