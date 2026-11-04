@@ -770,6 +770,15 @@ final class GameSession {
         intent: CoachingSquareInteractionIntent
     ) -> Bool {
         if var hostedSession = hostedCoachingSession {
+            // A destination tap is a move, even while the tutor asks the player
+            // to identify a piece. Use allowed moves, independent of visible
+            // hints and of whether the move will ultimately pass check rules.
+            if intent == .tap,
+               localCanActForCurrentTurn,
+               tentativeMove == nil,
+               actionableMovesForSelection.contains(where: { $0.to == square }) {
+                return false
+            }
             guard intent == .tap,
                   hostedSession.recordPieceSelectionAnswer(
                       at: square,
