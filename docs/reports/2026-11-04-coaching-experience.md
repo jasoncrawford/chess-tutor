@@ -5,10 +5,13 @@
 The new eight-case evaluation measured an improvement from **18/24 to 24/24
 strong responses**, but broader checks then found two factual errors in V3.
 **V3 is not selected. The playable development default remains unchanged.**
-V4 and stricter impossible-goal controls are prepared for evaluation, not yet
-validated with paid model calls. Spending so far is **$9.6634055 conservative
-estimate/reservation**, below the existing $10 cap; permission to raise this
-iteration's cap to $13 is pending.
+V4 and stricter impossible-goal controls are prepared but not quality-validated.
+The user approved a **$13 total cap** for this same experiment. The continuation
+is blocked by the API's separate project spending limit
+(`HTTP 429`, `project_spend_limit_exceeded`, `insufficient_quota`). No V4
+sensitivity judgment or candidate response was saved. The shared conservative
+estimate/reservation is **$10.6339430**, including all failed-call reservations;
+that is not an invoice or a claim that rejected requests were billed.
 
 ## What changed
 
@@ -128,6 +131,28 @@ the new corpus/control hashes require fresh sensitivity evidence. V1 artifacts
 remain frozen. V4 has no quality score yet, and must not be selected merely
 because these code changes look plausible.
 
+### Approved continuation: provider quota blocker
+
+The fresh `corpus-v3` export passed from clean source `740ffe9`. All eight
+candidate requests exactly match `corpus-v2`; only e06's private complete
+mating evidence/severe criterion and the source-trace version changed. The
+new 42-judgment sensitivity gate must pass before generating V4 responses.
+
+Three explicitly tracked attempts stopped on the first judge call, with no
+saved scores or candidate outputs. The initial wrapper discarded the provider
+detail; the first diagnostic recovery established HTTP 429, and the final
+diagnostic established `project_spend_limit_exceeded`. No automatic retries
+are enabled. A non-billable model-list check was denied by the key's restricted
+scope, and an empty invalid Responses request correctly returned HTTP 400;
+neither is evidence of a model-quality failure.
+
+All three attempts and their full conservative reservations are retained.
+Paid work is stopped until the project's limit is raised. Continue with the
+same journal and $13 cap; do not overwrite these directories. Within the
+remaining allowance, prioritize the later-game failures after the new gate
+and small-suite scoring. Any broader responses reviewed without automatic
+grading must be labeled as such, not included in an automatic score.
+
 ## Latency remains a rough edge
 
 V3's experience-suite median and p90 improved in this sample, but its worst
@@ -183,6 +208,11 @@ All local evidence is under
   `transfer.py`, `transfer-v3/`: exact broader-check inputs, orchestration,
   responses, grades, and reports.
 - `verify_exports.py`: executed equivalence check across all four exports.
+- `corpus-v3/`: V2 private mating evidence, with unchanged candidate requests.
+- `run-v4.py`, `sweep-v4/`, `sweep-v4-recovery/`, `sweep-v4-diagnostic/`:
+  continuation orchestration and stopped manifests. The retained script now
+  prints only bounded provider error metadata; it refuses to overwrite the
+  existing destination and must not simply be rerun.
 
 The refreshed exports have identical old request fields, grading briefs,
 old-generator rendered prompts, and judge contexts. Only optional
@@ -200,10 +230,12 @@ System prompt SHA-256:
 The manifests retain full corpus, judge, pricing, and executing Python hashes.
 Pricing is the frozen September 6 estimate, not a current-price or invoice claim.
 
-The $9.6634055 cumulative estimate includes failed intermediate candidates,
-all sensitivity/transfer grading, and one reservation for the interrupted
-diagnostic request. It is not a provider invoice. No extra spending is authorized
-by creating a new output directory or journal.
+The $10.6339430 cumulative estimate includes failed intermediate candidates,
+all completed sensitivity/transfer grading, the original interrupted-call
+reservation, and three new full reservations for failed continuation calls.
+The continuation added $0.9705375 of reservations, not confirmed charges.
+It is not a provider invoice. No extra spending is authorized by creating a
+new output directory or journal; the user-approved cumulative ceiling is $13.
 
 ## Verification and deployment
 
@@ -215,6 +247,11 @@ native post-move evidence and special moves, backward-compatible requests,
 shared live/eval compilation, private-fact preservation, sensitivity gates,
 budget persistence, failure records, and timing/repetition diagnostics.
 The full UI test suite was not run locally.
+
+After the quota-blocked continuation, the unchanged code again passed all
+368 evaluator and 56 server tests (zero failures/skips), and the normal
+Coaching Smoke app/server rebuilt, launched, and returned a healthy status.
+Python and iPad CI both passed on the V4 code commit `740ffe9`.
 
 Independent review found no remaining Important code issue in the V4 checkpoint;
 all 14 controls bind mechanically, V1 controls are preserved, the pinned config

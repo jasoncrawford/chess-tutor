@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Existing isolated PR #23; no main changes, merge, auto-merge, or destructive cleanup.
-- $10 conservative combined API cap; no paid CI, silent retries, holdout exposure, or case-specific advice in prompts.
+- $13 conservative combined API cap, explicitly increased from $10 by the user on November 4; same cumulative journal. No paid CI, silent retries, holdout exposure, or case-specific advice in prompts.
 - Freeze grader briefs and controls before candidate iteration; three repetitions, all results retained.
 - Exact model configuration must reach the local development launcher if selected.
 
@@ -50,7 +50,7 @@
 
 **Files:** Add a versioned tutor prompt and pinned model/candidate configs; update `scripts/run_hosted_coaching_dev.sh` only if evidence supports selection; add `docs/reports/2026-11-04-coaching-experience.md`.
 
-**Interfaces:** Uses frozen Task 1 criteria and Task 2 workflow, unchanged current coach as baseline, shared $10 budget journal for all paid work.
+**Interfaces:** Uses frozen Task 1 criteria and Task 2 workflow, unchanged current coach as baseline, one shared budget journal for all paid work (original $10 cap, now explicitly approved up to $13).
 
 - [x] Run positive/negative sensitivity controls and baseline; inspect actual failures before editing prompt.
 - [x] Revise general tutoring instructions, run three repetitions, keep all intermediate results. Expected: improved strong rate and no severe errors; otherwise iterate within budget or report honestly.
@@ -63,5 +63,5 @@
 - [x] Retain the V3 impossible queen-mate output and the judge's false-positive grade.
 - [x] Version complete rule-derived mate-in-one grading evidence and two new sensitivity controls; keep V1 artifacts unchanged.
 - [x] Prepare V4 using existing legal mate flags for piece-specific goals and cautious before/after control language; do not change the local default yet.
-- [ ] With spending approval, run the V2 sensitivity gate and V4 comparison, then unchanged broader checks within the shared cumulative budget. Current estimate/reservation: $9.6634055 against $10. Requested $13 cap is not yet approved.
+- [ ] Run the V2 sensitivity gate and V4 comparison, then unchanged broader checks within the approved cumulative $13 budget. Fresh corpus export/equivalence passed. API attempts stopped before any grades or candidates: `project_spend_limit_exceeded`. Current conservative estimate/reservation: $10.6339430, including all failed-call reservations. Waiting for the provider project limit, not further experiment-cap approval.
 - [ ] Select a replacement only after its actual responses and evidence support doing so; otherwise retain the current trial and report the failures.
