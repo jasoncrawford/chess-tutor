@@ -13,6 +13,7 @@ from Tools.CoachingEval.benchmark.report import (
     _pair_counts,
     build_report,
     write_report,
+    _run_evidence,
 )
 from Tools.CoachingEval.benchmark.runner import _execute_cell, _preflight, run_candidates
 from Tools.CoachingEval.openai_responses import OpenAIResponsesError
@@ -24,6 +25,24 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class BenchmarkReportTests(unittest.TestCase):
+    def test_regression_evidence_requires_all_repetitions_and_never_promotes(self):
+        for count, playthrough in ((56, False), (8, True)):
+            records = [dict(cellID=f"current|c{i}|r{rep}", configurationID="current",
+                            caseID=f"c{i}", repetition=rep, split="development")
+                       for i in range(count) for rep in range(1, 4)]
+            manifest = dict(mode="regression", diagnosticSubset=False, includeHoldout=False,
+                            regressionSuite=playthrough, evidence=dict(classification="regressionDevelopment",
+                            trialEligible=False, promotionEvidenceEligible=False))
+            issues = []
+            result = _run_evidence(manifest, records, {"current": {}}, issues)
+            self.assertTrue(result["completeMatrix"])
+            self.assertFalse(result["trialEligible"])
+            self.assertFalse(result["promotionEvidenceEligible"])
+            self.assertEqual([], issues)
+            result = _run_evidence(manifest, records[:-1], {"current": {}}, issues)
+            self.assertFalse(result["completeMatrix"])
+            self.assertTrue(issues)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)

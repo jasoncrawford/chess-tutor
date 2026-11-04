@@ -143,7 +143,7 @@ final class CoachingPlaythroughBenchmarkTests: XCTestCase {
 
     func testOptInExport() throws {
         let env = ProcessInfo.processInfo.environment
-        guard let path = env["COACHING_PLAYTHROUGH_BENCHMARK_OUTPUT_DIR"] else { return }
+        guard let path = env["COACHING_PLAYTHROUGH_BENCHMARK_OUTPUT_DIR"], !path.isEmpty else { return }
         let source = try XCTUnwrap(env["COACHING_QUALITY_BENCHMARK_SOURCE_SHA"])
         try CoachingQualityBenchmarkExporter.write(to: URL(fileURLWithPath: path), sourceGitSHA: source,
                                                   corpus: CoachingPlaythroughBenchmark.corpus(), regression: true)

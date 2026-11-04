@@ -228,7 +228,7 @@ def _parser():
 
     run = commands.add_parser("run")
     run.add_argument("--corpus", required=True)
-    run.add_argument("--mode", choices=("quick", "comparison"), required=True)
+    run.add_argument("--mode", choices=("quick", "comparison", "regression"), required=True)
     run.add_argument("--candidate", dest="candidates", action="append", required=True)
     run.add_argument("--pricing", required=True)
     run.add_argument("--output", required=True)

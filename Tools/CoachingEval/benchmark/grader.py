@@ -151,7 +151,7 @@ def grade_run(
             if _mechanically_valid(record):
                 judgments["absolute|" + record["cellID"]] = {
                     "kind": "absolute",
-                    "payloadSHA256": _sha256(_canonical_json_bytes(_absolute_payload(turns[record["caseID"]], record))),
+                    "payloadSHA256": _sha256(_canonical_json_bytes(absolute_payload(turns[record["caseID"]], record))),
                 }
         for metadata, payload in jobs:
             if payload is not None:
@@ -190,7 +190,7 @@ def _grade_loaded_run(run_manifest, records, turns, judge_configuration, client,
         if not _mechanically_valid(record):
             absolute.append(_automatic_unusable(record))
             continue
-        payload = _absolute_payload(turn, record)
+        payload = absolute_payload(turn, record)
         grade, metrics = _grade_judgment(
             "absolute|" + record["cellID"], "absolute", payload,
             judge_configuration, client, price_table,
@@ -418,7 +418,7 @@ def _load_calibration(path):
     return rows
 
 
-def _absolute_payload(turn, record):
+def absolute_payload(turn, record):
     return {
         "kind": "absolute",
         "graderBrief": _brief_payload(turn.grader_brief),

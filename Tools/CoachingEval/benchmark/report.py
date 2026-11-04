@@ -990,6 +990,8 @@ def _run_evidence(manifest, records, configurations, issues):
     include_holdout = manifest.get("includeHoldout") is True
     if diagnostic_subset:
         classification = "diagnosticSubset"
+    elif mode == "regression":
+        classification = "regressionDevelopment"
     elif mode == "comparison" and include_holdout:
         classification = "holdoutComparison"
     elif mode == "comparison":
@@ -1003,6 +1005,7 @@ def _run_evidence(manifest, records, configurations, issues):
         diagnostic_subset,
         records,
         configurations,
+        regression_suite=manifest.get("regressionSuite") is True,
     )
     if not diagnostic_subset and not complete_matrix:
         issues.append("candidate comparison matrix is incomplete")
@@ -1027,11 +1030,13 @@ def _run_evidence(manifest, records, configurations, issues):
     }
 
 
-def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configurations):
-    if diagnostic_subset or mode not in ("quick", "comparison"):
+def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configurations, *, regression_suite=False):
+    if diagnostic_subset or mode not in ("quick", "comparison", "regression"):
+        return False
+    if regression_suite and (mode != "regression" or include_holdout):
         return False
     repetitions = 1 if mode == "quick" else 3
-    expected_split_counts = {"development": 56}
+    expected_split_counts = {"development": 8 if regression_suite else 56}
     if include_holdout:
         expected_split_counts["holdout"] = 14
     expected_case_count = sum(expected_split_counts.values())

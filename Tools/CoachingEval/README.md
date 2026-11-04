@@ -15,6 +15,33 @@ The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 2
 
 ## Hosted coaching quality benchmark
 
+### Repeat the current local coach's regression evaluation
+
+```bash
+./scripts/run_coaching_regressions.sh
+```
+
+This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-discovery-v2-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
+
+The command requires a clean committed checkout, exports inputs from the production Swift rules/request builder on **ChessTutor Coaching Smoke**, and reads the existing Keychain credential without displaying it. Override the simulator with `CHESS_TUTOR_REGRESSION_DESTINATION` if needed. It uses the repository `.venv`; `CHESS_TUTOR_EVAL_PYTHON` can select another installed Python.
+
+It first reuses or obtains the existing judge qualification, then checks six retained bad/good answers three times each. This sensitivity check uses the same grading payload and rubric as the benchmark; expected outcomes are not sent to the judge. Its narrow expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged.
+
+If sensitivity passes, the selected candidate runs three times on each of two separately reported suites:
+
+- **Frozen benchmark:** 56 development turns, including its existing three-step conversations. The 14 holdout turns remain excluded unless `--include-holdout` is explicitly provided.
+- **Playthrough regressions v1:** eight independent development positions covering pawn-defense direction, invented forced defense, concrete development feedback, losing versus favorable captures, a defended-piece answer, and changed-move precedence. These are tuned regression examples, never new holdout evidence. Fresh full-context requests contain the recorded learner events; these eight cases do not replay model conversation history.
+
+Reports retain individual outputs and grades, rubric dimensions, mechanical failures, p50/p90 latency, tokens and dated cost estimates. The top-level `evaluation.json` binds source revision, suite/configuration/prompt/judge hashes, sensitivity results, and both report paths. `regression` mode is diagnostic, not a production comparison or an automatic promotion claim. The previous quick/comparison commands below are unchanged.
+
+Default conservative spending cap: **$10**, adjustable with `--max-cost 5`. The durable budget journal reserves a conservative text/schema/context estimate plus the full output cap before each API call and retains reservations when usage is unknown. It adds a 25% premium on uncached input to the frozen price table; this is not an invoice or a guarantee against future provider pricing changes. Compatible qualifications can be reused from `CHESS_TUTOR_BENCHMARK_QUALIFICATION_ROOT`. A qualification renewal is included in this command's cap.
+
+Artifacts are retained at `.coaching-eval/regression/<timestamp>/`. Each suite keeps candidate progress and the existing resumable grading checkpoint. An interrupted candidate run is **not automatically resumed or rerolled**. A completed candidate run with interrupted grading can use the existing `grade --checkpoint` command documented below, with that suite's corpus and paths; inspect the budget before authorizing more calls. Rerunning the launcher creates a new paid evaluation, not a resume. Nothing runs paid models in PR CI or on a schedule automatically.
+
+Model names may be provider aliases; stored configuration hashes cannot prevent an alias changing upstream. Rerunning this command produces fresh dated evidence for detecting that drift. Do not transfer the older discovery prompt's quality score to discovery-v2.
+
+### Existing benchmark comparisons
+
 The current hosted coach has a separate production-shaped benchmark for comparing a model, reasoning settings, system prompt, or deterministic user-prompt compiler. The simplest development run is:
 
 ```bash

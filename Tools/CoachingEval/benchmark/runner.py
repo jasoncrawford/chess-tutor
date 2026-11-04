@@ -21,6 +21,7 @@ from Tools.CoachingEval.benchmark.configuration import (
     validate_candidate_usage,
 )
 from Tools.CoachingEval.benchmark.corpus import load_corpus
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -47,14 +48,19 @@ def run_candidates(
     destination = Path(destination)
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite benchmark run: {destination}")
+    progress_path = destination.with_name(destination.name + ".progress.jsonl") if mode == "regression" else None
+    if progress_path is not None and os.path.lexists(progress_path):
+        raise ValueError("Existing regression progress must not be silently replayed")
     configurations = tuple(configurations)
     if not configurations:
         raise ValueError("At least one candidate configuration is required")
     identifiers = [configuration.identifier for configuration in configurations]
     if len(set(identifiers)) != len(identifiers):
         raise ValueError("Candidate configuration IDs must be unique")
-    if mode not in ("quick", "comparison"):
-        raise ValueError("Benchmark mode must be quick or comparison")
+    if mode not in ("quick", "comparison", "regression"):
+        raise ValueError("Benchmark mode must be quick, comparison, or regression")
+    if corpus.is_regression and (mode != "regression" or include_holdout):
+        raise ValueError("Playthrough corpus requires development-only regression mode")
     if mode == "comparison" and sum(
         configuration.baseline for configuration in configurations
     ) != 1:
@@ -63,9 +69,13 @@ def run_candidates(
     repetitions = 1 if mode == "quick" else 3
     turns = corpus.select(include_holdout=include_holdout)
     _validate_selected_groups(turns)
-    _validate_matrix(turns, include_holdout, diagnostic_subset)
+    _validate_matrix(turns, include_holdout, diagnostic_subset or corpus.is_regression)
 
     preflight = _preflight(configurations, turns, repetitions, price_table)
+    if progress_path is not None:
+        progress_path.parent.mkdir(parents=True, exist_ok=True)
+        with progress_path.open("x", encoding="utf-8"):
+            pass
     clients = {
         configuration.identifier: provider_factory(configuration)
         for configuration in configurations
@@ -91,6 +101,7 @@ def run_candidates(
                 "categories": ["blockedByPriorTurn"],
             }
             records.append(record)
+            _append_progress(progress_path, record)
             prior_by_sequence[sequence_key] = {"valid": False, "responseID": None}
             continue
 
@@ -108,6 +119,7 @@ def run_candidates(
             price_table=price_table,
         )
         records.append(record)
+        _append_progress(progress_path, record)
         if _is_sequence(turns, turn.group_id):
             prior_by_sequence[sequence_key] = {
                 "valid": record["mechanicalValidation"]["valid"],
@@ -263,6 +275,8 @@ def _execute_cell(cell, client, *, previous_response_id, price_table):
             )
             provider_returned = True
             break
+        except BudgetExceeded:
+            raise
         except OpenAIResponsesError as error:
             final_category = error.category
             final_http_status = _bounded_http_status(error.http_status)
@@ -425,6 +439,8 @@ def _manifest(
         )
     if diagnostic_subset:
         evidence_classification = "diagnosticSubset"
+    elif mode == "regression":
+        evidence_classification = "regressionDevelopment"
     elif mode == "comparison" and include_holdout:
         evidence_classification = "holdoutComparison"
     elif mode == "comparison":
@@ -434,6 +450,7 @@ def _manifest(
     return {
         "schemaVersion": "coaching-quality-candidate-run.v1",
         "mode": mode,
+        **({"regressionSuite": corpus.is_regression} if mode == "regression" else {}),
         "diagnosticSubset": diagnostic_subset,
         "includeHoldout": include_holdout,
         "evidence": {
@@ -458,6 +475,14 @@ def _manifest(
             "failedCount": sum(not record["mechanicalValidation"]["valid"] for record in records),
         },
     }
+
+
+def _append_progress(path, record):
+    if path is not None:
+        with path.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(record, sort_keys=True) + "\n")
+            file.flush()
+            os.fsync(file.fileno())
 
 
 def _publish(destination, manifest, records, transcripts):
