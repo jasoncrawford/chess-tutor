@@ -20,6 +20,9 @@ final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
         XCTAssertTrue(facts.pieces.contains { $0.id == "piece:white:rook:f2" })
         XCTAssertTrue(facts.occupiedSquareRelationships.contains { $0.kind == .checks && $0.sourcePieceReference == "piece:black:rook:e8" })
         XCTAssertTrue(request.tentativeReplies.isEmpty)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        let displayed = try XCTUnwrap(json["tentativePosition"] as? [String: Any])
+        XCTAssertNil(displayed["status"], "A king-unsafe staged board is not a legal game outcome")
     }
 
     func testStartingPositionBuildsOnlyRuleDerivedNeutralEvidence() {

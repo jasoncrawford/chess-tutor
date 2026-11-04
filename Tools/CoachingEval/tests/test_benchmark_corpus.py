@@ -109,6 +109,26 @@ class BenchmarkCorpusTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_corpus(self.root)
 
+    def test_nine_case_experience_has_its_own_strict_inventory(self):
+        self.cases = self.cases[:9]
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        corpus = load_corpus(self.root)
+        self.assertTrue(corpus.is_regression)
+        self.assertEqual(9, len(corpus.select()))
+        self.assertEqual(corpus.select(), corpus.select(include_holdout=True))
+        self.write("coaching-quality-playthrough-regression-manifest.v1")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "holdout"
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "development"
+        self.cases.pop()
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
     def test_accepts_swift_omission_of_nil_source_trace_id(self):
         for case in self.cases:
             case.pop("sourceTraceID")

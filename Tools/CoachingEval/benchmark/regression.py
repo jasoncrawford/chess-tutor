@@ -54,7 +54,7 @@ class RegressionEvaluation:
                       pricingSHA256=prices.sha256, maxConservativeCostUSD=str(meter.limit),
                       repetitions=3, includeHoldout=include_holdout,
                       corpora={"benchmark": corpus.sha256, "playthrough": regression.sha256}, suites={})
-        experience_controls = config_root / "judge-experience-v2.json"
+        experience_controls = config_root / "judge-experience-v3.json"
         if experience is not None:
             result["corpora"]["experience"] = experience.sha256
             result["experienceControlsSHA256"] = hashlib.sha256(experience_controls.read_bytes()).hexdigest()

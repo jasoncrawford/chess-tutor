@@ -99,7 +99,8 @@ enum CoachingQualityBenchmarkExportError: Error, Equatable {
 
 enum CoachingQualityBenchmarkExporter {
     static func artifacts(sourceGitSHA: String, corpus requestedCorpus: CoachingQualityBenchmarkCorpus = .v1,
-                          regression: Bool = false, preserveVerifiedFacts: Bool = false) throws -> CoachingQualityBenchmarkArtifacts {
+                          regression: Bool = false, preserveVerifiedFacts: Bool = false,
+                          regressionSchemaVersion: String = "coaching-quality-playthrough-regression-manifest.v1") throws -> CoachingQualityBenchmarkArtifacts {
         let corpus = requestedCorpus
         let records = corpus.allTurns.map { turn in
             let request = ModelCoachingNeutralRequestBuilder.build(
@@ -120,7 +121,7 @@ enum CoachingQualityBenchmarkExporter {
         }
         let casesJSONL = try jsonl(records)
         let manifest = CoachingQualityBenchmarkManifest(
-            schemaVersion: regression ? "coaching-quality-playthrough-regression-manifest.v1" : "coaching-quality-benchmark-manifest.v1",
+            schemaVersion: regression ? regressionSchemaVersion : "coaching-quality-benchmark-manifest.v1",
             sourceGitSHA: sourceGitSHA,
             independentGroupCount: corpus.independent.count,
             sequenceGroupCount: corpus.sequences.count,
@@ -139,7 +140,8 @@ enum CoachingQualityBenchmarkExporter {
     }
 
     static func write(to outputURL: URL, sourceGitSHA: String, corpus: CoachingQualityBenchmarkCorpus = .v1,
-                      regression: Bool = false, preserveVerifiedFacts: Bool = false) throws {
+                      regression: Bool = false, preserveVerifiedFacts: Bool = false,
+                      regressionSchemaVersion: String = "coaching-quality-playthrough-regression-manifest.v1") throws {
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
@@ -158,7 +160,8 @@ enum CoachingQualityBenchmarkExporter {
         )
         try fileManager.createDirectory(at: temporary, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: temporary) }
-        let artifacts = try artifacts(sourceGitSHA: sourceGitSHA, corpus: corpus, regression: regression, preserveVerifiedFacts: preserveVerifiedFacts)
+        let artifacts = try artifacts(sourceGitSHA: sourceGitSHA, corpus: corpus, regression: regression,
+                                      preserveVerifiedFacts: preserveVerifiedFacts, regressionSchemaVersion: regressionSchemaVersion)
         try artifacts.casesJSONL.write(
             to: temporary.appendingPathComponent("cases.jsonl"),
             options: .atomic

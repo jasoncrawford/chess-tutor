@@ -11,6 +11,10 @@ _SPLITS = frozenset(("development", "holdout"))
 _CATEGORIES = frozenset(
     ("quiet", "danger", "capture", "tentativeMove", "interaction", "specialRule")
 )
+_REGRESSION_INVENTORIES = {
+    "coaching-quality-playthrough-regression-manifest.v1": 8,
+    "coaching-quality-experience-regression-manifest.v3": 9,
+}
 _CASE_KEYS = frozenset(
     (
         "schemaVersion",
@@ -98,10 +102,7 @@ def load_corpus(root: Path) -> BenchmarkCorpus:
     cases_bytes = cases_path.read_bytes()
     manifest = _load_object(manifest_path)
     _require_exact_keys(manifest, _MANIFEST_KEYS, "Benchmark manifest")
-    if manifest["schemaVersion"] not in (
-        "coaching-quality-benchmark-manifest.v1",
-        "coaching-quality-playthrough-regression-manifest.v1",
-    ):
+    if manifest["schemaVersion"] not in {"coaching-quality-benchmark-manifest.v1", *_REGRESSION_INVENTORIES}:
         raise ValueError("Unsupported benchmark manifest schema")
     cases_sha = hashlib.sha256(cases_bytes).hexdigest()
     if manifest["casesSHA256"] != cases_sha:
@@ -118,7 +119,7 @@ def load_corpus(root: Path) -> BenchmarkCorpus:
         raw_cases=raw_cases,
         cases_path=cases_path.resolve(),
         manifest_path=manifest_path.resolve(),
-        is_regression=manifest["schemaVersion"] == "coaching-quality-playthrough-regression-manifest.v1",
+        is_regression=manifest["schemaVersion"] in _REGRESSION_INVENTORIES,
     )
 
 
@@ -185,11 +186,12 @@ def _validate_inventory(turns: Tuple[BenchmarkTurn, ...], manifest: Mapping[str,
         groups.setdefault(turn.group_id, []).append(turn)
     independent = [group for group in groups.values() if len(group) == 1]
     sequences = [group for group in groups.values() if len(group) == 3]
-    regression = manifest["schemaVersion"] == "coaching-quality-playthrough-regression-manifest.v1"
+    regression_count = _REGRESSION_INVENTORIES.get(manifest["schemaVersion"])
+    regression = regression_count is not None
     if not regression and (len(independent) != 40 or len(sequences) != 10 or len(groups) != 50):
         raise ValueError("Benchmark must contain exactly 40 independent and 10 sequence groups")
-    if regression and (len(independent) != 8 or len(groups) != 8):
-        raise ValueError("Playthrough regression v1 requires exactly eight independent groups")
+    if regression and (len(independent) != regression_count or len(groups) != regression_count):
+        raise ValueError(f"Regression schema requires exactly {regression_count} independent groups")
     for group in independent:
         if group[0].step_index != 1:
             raise ValueError("Independent benchmark turns must use step 1")
@@ -201,10 +203,10 @@ def _validate_inventory(turns: Tuple[BenchmarkTurn, ...], manifest: Mapping[str,
     development_count = sum(turn.split == "development" for turn in turns)
     holdout_count = sum(turn.split == "holdout" for turn in turns)
     expected = {
-        "independentGroupCount": 8 if regression else 40,
+        "independentGroupCount": regression_count if regression else 40,
         "sequenceGroupCount": 0 if regression else 10,
-        "turnCount": 8 if regression else 70,
-        "developmentTurnCount": 8 if regression else 56,
+        "turnCount": regression_count if regression else 70,
+        "developmentTurnCount": regression_count if regression else 56,
         "holdoutTurnCount": 0 if regression else 14,
     }
     actual = dict(expected)

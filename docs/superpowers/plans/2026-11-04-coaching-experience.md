@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Existing isolated PR #23; no main changes, merge, auto-merge, or destructive cleanup.
-- $13 conservative combined API cap, explicitly increased from $10 by the user on November 4; same cumulative journal. No paid CI, silent retries, holdout exposure, or case-specific advice in prompts.
+- $14.50 conservative combined API cap, explicitly increased from $10, then $13 by the user on November 4; same cumulative journal. No paid CI, silent retries, holdout exposure, or case-specific advice in prompts.
 - Freeze grader briefs and controls before candidate iteration; three repetitions, all results retained.
 - Exact model configuration must reach the local development launcher if selected.
 
@@ -63,5 +63,14 @@
 - [x] Retain the V3 impossible queen-mate output and the judge's false-positive grade.
 - [x] Version complete rule-derived mate-in-one grading evidence and two new sensitivity controls; keep V1 artifacts unchanged.
 - [x] Prepare V4 using existing legal mate flags for piece-specific goals and cautious before/after control language; do not change the local default yet.
-- [ ] Run the V2 sensitivity gate and V4 comparison, then unchanged broader checks within the approved cumulative $13 budget. Fresh corpus export/equivalence passed. API attempts stopped before any grades or candidates: `project_spend_limit_exceeded`, still present after the user added credits. Current conservative estimate/reservation: $10.9574555, including all failed-call reservations. Waiting for the provider project limit, not further experiment-cap approval.
-- [ ] Select a replacement only after its actual responses and evidence support doing so; otherwise retain the current trial and report the failures.
+- [x] V2 sensitivity 42/42 passed; V4 experience 24/24 strong, zero severe/invalid. Resumed only three missing grades after the original $13 meter stopped; generation and saved grades were not replayed.
+- [x] Broader V4 inspection found an omitted stalemate warning among 24 later-game and 13 playthrough responses. Stopped further generation; no automatic transfer grades or sequence outputs. V4 rejected, current trial unchanged.
+
+### Terminal-result correction
+
+- [ ] Native encoded-request regression: ongoing promotion, checkmate, stalemate, and no legal outcome for king-unsafe staging. Reuse GameState.apply; no new chess rules.
+- [ ] Versioned grounded-v4 fresh/follow-up renderer and V5 candidate with unchanged V4 system prompt. Keep old rendered prompts and default selection unchanged.
+- [ ] Experience-v3 adds the ninth stalemate-warning probe, retained negative/positive pair, explicit nine-case manifest, and strict matching loader. Normal regression includes the new gate; historical eight-case inventories remain frozen.
+- [ ] Run full local tests and fresh native export/load/control-binding integration; review important findings with regression tests.
+- [ ] Within the same $14.50 cap, run only focused terminal controls and three repetitions each of stalemate, checkmate, and non-mating promotion. Label this diagnostic evidence, not full V5 validation or rollout approval.
+- [ ] Report actual results and remaining validation; leave PR open and playable coach unchanged.

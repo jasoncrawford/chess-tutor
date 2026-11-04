@@ -4,6 +4,7 @@ import XCTest
 
 /// New grading policy; the original benchmark and its historical scores stay frozen.
 enum CoachingExperienceBenchmark {
+    static let manifestVersion = "coaching-quality-experience-regression-manifest.v3"
     static func corpus() throws -> CoachingQualityBenchmarkCorpus {
         let sources = CoachingQualityBenchmarkCorpus.v1.developmentTurns
             + (try CoachingPlaythroughBenchmark.corpus().allTurns)
@@ -27,6 +28,8 @@ enum CoachingExperienceBenchmark {
             ("e08-accept-safety-answer", "i07-looks-safe", [
                 "The child already chose Looks safe after staging b1-c3. The knight on c3 does not protect d4; it attacks d5 and defends e2.",
             ], "Accept or correct the child's safety answer with a short reason, and move to the keep/change decision. Asking safety again is at most 3 for responsiveness/coherence. Accurate direct confirmation may earn 5 for discovery; do not demand another puzzle."),
+            ("e09-stalemate-warning", "l08-staged-stalemate", [],
+             "Explain that the staged move causes stalemate, a draw, and allow reconsideration. Omitting the draw while praising confinement or control is at most 2 for coaching judgment, even when each stated geometric fact is true. The child needs the terminal consequence before deciding to play."),
         ]
         let turns = try definitions.map { id, sourceID, facts, purpose in
             let source = try XCTUnwrap(sources.first { $0.id == sourceID })
@@ -47,7 +50,7 @@ enum CoachingExperienceBenchmark {
                     acceptableAlternatives: ["Any natural wording meeting the purpose. Do not require a reference phrase or another discovery question after the child has already acted."],
                     successCriteria: [purpose, "Judge the next interaction as well as the explanation. A clear Play this move / Try another move UI can carry the decision without a formulaic verbal confirmation question."],
                     severeFailureCriteria: severeFailures
-                ), sourceTraceID: "experience-v2:\(sourceID)"
+                ), sourceTraceID: "experience-v3:\(sourceID)"
             )
         }
         return .init(independent: turns, sequences: [])
@@ -55,6 +58,16 @@ enum CoachingExperienceBenchmark {
 }
 
 final class CoachingExperienceBenchmarkTests: XCTestCase {
+    func testStalemateWarningIsARepeatableExperienceRegression() throws {
+        let turn = try XCTUnwrap(CoachingExperienceBenchmark.corpus().allTurns.first { $0.id == "e09-stalemate-warning" })
+        var after = turn.snapshot.committedState
+        after.apply(try XCTUnwrap(turn.snapshot.tentativeMove))
+        XCTAssertEqual(.stalemate, after.result)
+        XCTAssertFalse(LegalMoveGenerator.isKingInCheck(after.sideToMove, in: after.board))
+        XCTAssertTrue(turn.graderBrief.coachingPurpose.contains("Omitting"))
+        XCTAssertTrue(turn.graderBrief.verifiedFacts.contains { $0.contains("stalemate, a draw") })
+    }
+
     func testMatingGoalBriefNamesTheCompleteLegalAnswerSet() throws {
         let turn = try XCTUnwrap(CoachingExperienceBenchmark.corpus().allTurns.first { $0.id == "e06-mating-goal" })
         let request = ModelCoachingNeutralRequestBuilder.build(snapshot: turn.snapshot, requestID: "mate-facts")
@@ -94,7 +107,7 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
         let sources = CoachingQualityBenchmarkCorpus.v1.developmentTurns
             + (try CoachingPlaythroughBenchmark.corpus().allTurns)
             + (try CoachingLaterGameBenchmark.corpus().allTurns)
-        XCTAssertEqual(8, corpus.allTurns.count)
+        XCTAssertEqual(9, corpus.allTurns.count)
         for turn in corpus.allTurns {
             let sourceID = try XCTUnwrap(turn.sourceTraceID?.split(separator: ":").last).description
             let source = try XCTUnwrap(sources.first { $0.id == sourceID })
@@ -105,8 +118,8 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
             XCTAssertFalse(markdown.contains(turn.graderBrief.coachingPurpose))
             XCTAssertFalse(markdown.contains("at most 3"))
         }
-        let first = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true)
-        XCTAssertEqual(first, try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true))
+        let first = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true, regressionSchemaVersion: CoachingExperienceBenchmark.manifestVersion)
+        XCTAssertEqual(first, try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true, regressionSchemaVersion: CoachingExperienceBenchmark.manifestVersion))
     }
 
     func testKnightDefenseFactsMatchMovementRules() throws {
@@ -126,7 +139,9 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
 
     func testExportRetainsVerifiedCaseFactsOnlyInThePrivateBrief() throws {
         let corpus = try CoachingExperienceBenchmark.corpus()
-        let artifacts = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true)
+        let artifacts = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true, regressionSchemaVersion: CoachingExperienceBenchmark.manifestVersion)
+        let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: artifacts.manifestJSON) as? [String: Any])
+        XCTAssertEqual("coaching-quality-experience-regression-manifest.v3", manifest["schemaVersion"] as? String)
         let rows = try artifacts.casesJSONL.split(separator: 0x0A).map {
             try JSONDecoder().decode(CoachingQualityBenchmarkCaseRecord.self, from: Data($0))
         }
@@ -144,6 +159,7 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
         guard let path = env["COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR"], !path.isEmpty else { return }
         let source = try XCTUnwrap(env["COACHING_QUALITY_BENCHMARK_SOURCE_SHA"])
         try CoachingQualityBenchmarkExporter.write(to: URL(fileURLWithPath: path), sourceGitSHA: source,
-                                                  corpus: CoachingExperienceBenchmark.corpus(), regression: true, preserveVerifiedFacts: true)
+                                                  corpus: CoachingExperienceBenchmark.corpus(), regression: true, preserveVerifiedFacts: true,
+                                                  regressionSchemaVersion: CoachingExperienceBenchmark.manifestVersion)
     }
 }

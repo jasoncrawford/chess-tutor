@@ -25,11 +25,11 @@ This evaluates the exact default model/prompt configuration used by the local ap
 
 The command requires a clean committed checkout, exports inputs from the production Swift rules/request builder on **ChessTutor Coaching Smoke**, and reads the existing Keychain credential without displaying it. Override the simulator with `CHESS_TUTOR_REGRESSION_DESTINATION` if needed. It uses the repository `.venv`; `CHESS_TUTOR_EVAL_PYTHON` can select another installed Python.
 
-It first reuses or obtains the existing judge qualification, then runs two sensitivity gates: six retained playthrough controls and fourteen experience-v2 controls, each three times. These checks use the same grading payload and rubric as their suites; expected outcomes are not sent to the judge. The expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged.
+It first reuses or obtains the existing judge qualification, then runs two sensitivity gates: six retained playthrough controls and sixteen experience-v3 controls, each three times. These checks use the same grading payload and rubric as their suites; expected outcomes are not sent to the judge. The expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged.
 
 If both gates pass, the selected candidate runs three times on each of three separately reported suites, experience first:
 
-- **Experience regressions v2:** eight probes with stricter criteria for factual claims, acknowledging answers, useful achievable goals, and appropriate Help/Hint/staged feedback. Includes the complete rule-derived mate-in-one answer set in private grading evidence. See the experience section below for versioning and a smaller bounded comparison workflow.
+- **Experience regressions v3:** nine probes with stricter criteria for factual claims, acknowledging answers, useful achievable goals, appropriate Help/Hint/staged feedback, and explaining a terminal draw. Includes the complete rule-derived mate-in-one answer set in private grading evidence. See the experience section below for versioning and a smaller bounded comparison workflow.
 - **Playthrough regressions v1:** eight independent development positions covering pawn-defense direction, invented forced defense, concrete development feedback, losing versus favorable captures, a defended-piece answer, and changed-move precedence. These are tuned regression examples, never new holdout evidence. Fresh full-context requests contain the recorded learner events; these eight cases do not replay model conversation history.
 - **Frozen benchmark:** 56 development turns, including its existing three-step conversations. The 14 holdout turns remain excluded unless `--include-holdout` is explicitly provided.
 
@@ -55,7 +55,7 @@ COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$(git rev-parse HEAD)" \
     -only-testing:ChessTutorTests/CoachingLaterGameBenchmarkTests
 ```
 
-The export uses the existing eight-case playthrough regression format. The `run`, `grade`, and `report` commands below accept this corpus with `--mode regression` and a pinned candidate such as `configs/astra-discovery-v2-low.json`; they run three repetitions and keep every response/grade. Unlike `run_coaching_regressions.sh`, those direct CLI commands have **no spending cap**: use `BudgetedClient` for a capped orchestration. The November 4 later-game run retains its exact bounded script, hashes, journal, and evidence under `.coaching-eval/later-game/20261104/`. The current three-suite launcher does not also run this full later-game corpus; one mating-goal position is reused in the experience suite.
+The export uses the existing eight-case playthrough regression format. The `run`, `grade`, and `report` commands below accept this corpus with `--mode regression` and a pinned candidate such as `configs/astra-discovery-v2-low.json`; they run three repetitions and keep every response/grade. Unlike `run_coaching_regressions.sh`, those direct CLI commands have **no spending cap**: use `BudgetedClient` for a capped orchestration. The November 4 later-game run retains its exact bounded script, hashes, journal, and evidence under `.coaching-eval/later-game/20261104/`. The current three-suite launcher does not also run this full later-game corpus; the mating-goal and staged-stalemate positions are reused in the experience suite.
 
 ### Existing benchmark comparisons
 
@@ -476,16 +476,21 @@ rm -rf .coaching-eval
 ```
 ## Coaching experience regression suite
 
-`CoachingExperienceBenchmarkTests` exports eight development probes through
+`CoachingExperienceBenchmarkTests` exports nine development probes through
 `COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR` (with `COACHING_QUALITY_BENCHMARK_SOURCE_SHA`).
 They reuse real native snapshots, with stricter private briefs for false defenses,
 answer acknowledgment, useful goals, and appropriate Help/Hint/staged feedback.
 Existing corpora and past scores are unchanged. The paired controls in
-`benchmark/judge-experience-v2.json` are agent-authored expectations, not human ratings.
+`benchmark/judge-experience-v3.json` are agent-authored expectations, not human ratings.
 V2 adds a retained impossible mating question and an achievable contrast; its
 grading brief derives the complete mate-in-one answer set from native legal
-move flags. V1 exports, controls, and historical scores remain frozen. A fresh
-V2 sensitivity pass is required; a V1 pass cannot silently qualify the new gate.
+move flags. V3 adds a retained response that praises confinement while omitting
+stalemate, plus a correct warning. Its ninth private brief requires explaining
+the draw even if every stated control-square fact is true. The explicit
+`coaching-quality-experience-regression-manifest.v3` inventory distinguishes
+these nine cases from historical eight-case exports. V1/V2 exports, controls,
+and scores remain frozen. A full V3 gate is 48 judgments; older or focused-subset
+sensitivity evidence cannot silently qualify it.
 
 The normal `./scripts/run_coaching_regressions.sh` command now exports this suite
 and runs it first, after both the existing and experience sensitivity gates.
@@ -498,7 +503,7 @@ After export, run the bounded workflow (API key supplied through the environment
 ```sh
 .venv/bin/python -m Tools.CoachingEval.benchmark.experience \
   --corpus /absolute/path/to/experience-corpus \
-  --controls Tools/CoachingEval/benchmark/judge-experience-v2.json \
+  --controls Tools/CoachingEval/benchmark/judge-experience-v3.json \
   --candidate Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json \
   --qualification /absolute/path/to/compatible/qualification.json \
   --journal /absolute/path/to/experiment/budget.jsonl \
@@ -522,15 +527,20 @@ unchanged development cases; it is not proof of untouched holdout performance.
 The `chess-native-grounded-v2` generator uses native optional `tentativePosition`
 evidence for staged-board pieces, occupied-square relationships, and moved-piece
 controlled squares. It does not infer these using another model or chess engine.
+The versioned `chess-native-grounded-v4` additionally renders optional
+`tentativePosition.status`, computed by the native game's existing rules.
+Stalemate and checkmate are explicit; ongoing does not mean safe. King-unsafe
+staging has no valid outcome field, and old clients may omit it. Candidate V5
+uses this generator with the unchanged V4 system prompt. It is not the default.
 Live coaching and evaluation use the same generator registry. Update the server
 and rebuild the iPad app together for this input; older clients remain accepted
 by the updated server, but older servers may reject the new field.
 
-The prepared `chess-native-grounded-v3` additionally renders which pieces have
+The `chess-native-grounded-v3` generator additionally renders which pieces have
 a legal mate in one, without revealing destinations, only on the committed
 board with no staged move. It also explicitly records when no mate in one is
 available. `astra-experience-v4-low` uses this generator but is **not selected**:
-paid sensitivity/quality verification is still pending. The local launcher
+it passed the small suite but omitted a stalemate warning during broader checks. The local launcher
 and standard benchmark default remain `astra-discovery-v2-low`.
 
 See [the November 4 experience report](../../docs/reports/2026-11-04-coaching-experience.md)

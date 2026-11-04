@@ -98,11 +98,20 @@ def compile_goal_follow_up_context(request, prompt_version):
     return _compile_context(request, prompt_version, is_follow_up=True, grounded=True, displayed=True, mating_goals=True)
 
 
+def compile_outcome_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=False, grounded=True, displayed=True, mating_goals=True, outcome=True)
+
+
+def compile_outcome_follow_up_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=True, grounded=True, displayed=True, mating_goals=True, outcome=True)
+
+
 PROMPT_GENERATORS = {
     "chess-native-v13": (compile_context, compile_follow_up_context),
     "chess-native-grounded-v1": (compile_grounded_context, compile_grounded_follow_up_context),
     "chess-native-grounded-v2": (compile_displayed_context, compile_displayed_follow_up_context),
     "chess-native-grounded-v3": (compile_goal_context, compile_goal_follow_up_context),
+    "chess-native-grounded-v4": (compile_outcome_context, compile_outcome_follow_up_context),
 }
 
 
@@ -114,6 +123,7 @@ def _compile_context(
     grounded: bool = False,
     displayed: bool = False,
     mating_goals: bool = False,
+    outcome: bool = False,
 ) -> ChessNativeCompilation:
     parsed = _parse_neutral_request(request)
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
@@ -127,6 +137,7 @@ def _compile_context(
         (
             "Relevant legal facts",
             _relevant_legal_fact_lines(parsed, pieces_by_id, scoped_replies)
+            + (_tentative_outcome_lines(parsed) if outcome else ())
             + (_focal_relationship_lines(parsed, pieces_by_id) if grounded else ())
             + (_tentative_relationship_lines(parsed) if displayed else ())
             + (_mating_goal_lines(parsed, pieces_by_id) if mating_goals else ()),
@@ -244,7 +255,10 @@ def _parse_tentative_position(value, tentative):
     if tentative is None:
         raise ValueError("Tentative position requires a tentative move")
     item = _object(value, path)
-    _exact_fields(item, {"pieces", "occupiedSquareRelationships", "movedPieceControlledSquares"}, path)
+    _fields(item, required={"pieces", "occupiedSquareRelationships", "movedPieceControlledSquares"}, optional={"status"}, path=path)
+    status = _status(item["status"], f"{path}.status") if item.get("status") is not None else None
+    if status is not None and not tentative["isLegal"]:
+        raise ValueError("A king-unsafe tentative move cannot have a legal game result")
     pieces = tuple(_parse_embedded_piece(piece, f"{path}.pieces[{i}]") for i, piece in enumerate(_array(item["pieces"], path)))
     _unique((piece["id"] for piece in pieces), "tentative piece IDs")
     _unique((piece["square"] for piece in pieces), "tentative occupied squares")
@@ -255,7 +269,7 @@ def _parse_tentative_position(value, tentative):
     _unique((relation["id"] for relation in relationships), "tentative relationship IDs")
     squares = tuple(_square(square, f"{path}.movedPieceControlledSquares") for square in _array(item["movedPieceControlledSquares"], path))
     _unique(squares, "moved piece controlled squares")
-    return dict(pieces=pieces, occupiedSquareRelationships=relationships, movedPieceControlledSquares=squares)
+    return dict(pieces=pieces, occupiedSquareRelationships=relationships, movedPieceControlledSquares=squares, status=status)
 
 
 def _parse_position(value: object) -> dict[str, Any]:
@@ -523,6 +537,20 @@ def _focal_relationship_lines(request, pieces_by_id):
     if not relationships:
         lines.append("No occupied-square attack or defense involves this piece.")
     return tuple(lines)
+
+
+def _tentative_outcome_lines(request):
+    facts = request["tentativePosition"]
+    if not facts or facts["status"] is None:
+        return ()
+    status = facts["status"]
+    if status == "stalemate":
+        description = "stalemate — a draw, not a win. The opponent is not in check and has no legal move."
+    elif status.startswith("checkmate:"):
+        description = f"checkmate — {status.split(':')[1].capitalize()} wins. The opponent is in check and has no legal move."
+    else:
+        description = "the game continues; this does not establish that the move is safe."
+    return ("Result if this move is played: " + description,)
 
 
 def _tentative_relationship_lines(request):

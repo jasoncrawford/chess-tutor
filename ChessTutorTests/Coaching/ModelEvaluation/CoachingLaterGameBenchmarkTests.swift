@@ -142,6 +142,18 @@ final class CoachingLaterGameBenchmarkTests: XCTestCase {
         XCTAssertFalse(LegalMoveGenerator.isKingInCheck(.black, in: draw.board))
     }
 
+    func testStagedTerminalResultReachesTheCoachingRequest() throws {
+        let turns = try CoachingLaterGameBenchmark.corpus().allTurns
+        for (index, expected) in [(4, "ongoing"), (6, "checkmate:white"), (7, "stalemate")] {
+            let request = ModelCoachingNeutralRequestBuilder.build(snapshot: turns[index].snapshot, requestID: turns[index].id)
+            let encoded = try JSONEncoder().encode(request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+            let displayed = try XCTUnwrap(json["tentativePosition"] as? [String: Any])
+            XCTAssertEqual(expected, displayed["status"] as? String, turns[index].id)
+            XCTAssertEqual("ongoing", request.position.status, "Committed and staged results must stay distinct")
+        }
+    }
+
     func testOptInExport() throws {
         let env = ProcessInfo.processInfo.environment
         guard let path = env["COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR"], !path.isEmpty else { return }

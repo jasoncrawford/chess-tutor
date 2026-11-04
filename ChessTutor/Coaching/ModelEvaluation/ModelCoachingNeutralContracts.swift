@@ -34,6 +34,8 @@ struct ModelCoachingNeutralTentativePosition: Codable, Equatable, Sendable {
     let pieces: [ModelCoachingNeutralPiece]
     let occupiedSquareRelationships: [ModelCoachingNeutralRelationship]
     let movedPieceControlledSquares: [String]
+    /// Absent in older clients and for a staged move that leaves its king in check.
+    let status: String?
 }
 
 struct ModelCoachingNeutralInteraction: Codable, Equatable, Sendable {

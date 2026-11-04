@@ -8,6 +8,7 @@ from CoachingServer.chess_native_compiler import (
     compile_grounded_context, compile_grounded_follow_up_context,
     compile_displayed_context, compile_displayed_follow_up_context,
     compile_goal_context, compile_goal_follow_up_context,
+    PROMPT_GENERATORS,
 )
 
 
@@ -200,6 +201,42 @@ class ChessNativeCompilerTests(unittest.TestCase):
             self.assertNotIn("checkmate in one", compiler(request, "tutor-v13").markdown)
             request["interaction"]["tentativeMove"] = None
             request["legalMoves"] = [dict(move, givesCheckmate=True)]
+
+    def test_terminal_result_is_explicit_in_fresh_and_follow_up_prompts(self):
+        compilers = PROMPT_GENERATORS.get("chess-native-grounded-v4")
+        self.assertIsNotNone(compilers)
+        request = copy.deepcopy(self.fixture["request"])
+        request["interaction"]["tentativeMove"] = dict(request["legalMoves"][0], canonicalMove="b1c3", destinationSquare="c3", san="Nc3")
+        request["tentativePosition"] = dict(
+            pieces=[dict(id="piece:white:knight:c3", color="white", kind="knight", square="c3")],
+            occupiedSquareRelationships=[], movedPieceControlledSquares=[],
+        )
+        old = compile_goal_context(request, "tutor-v13").markdown
+        for status, description in (
+            ("stalemate", "stalemate — a draw, not a win"),
+            ("checkmate:white", "checkmate — White wins"),
+            ("checkmate:black", "checkmate — Black wins"),
+            ("ongoing", "the game continues; this does not establish that the move is safe"),
+        ):
+            request["tentativePosition"]["status"] = status
+            for compiler in compilers:
+                self.assertIn("Result if this move is played: " + description, compiler(request, "tutor-v13").markdown)
+            self.assertEqual(old, compile_goal_context(request, "tutor-v13").markdown)
+        for absent in (None, "missing"):
+            request["tentativePosition"]["status"] = absent
+            if absent == "missing":
+                del request["tentativePosition"]["status"]
+            for compiler in compilers:
+                self.assertNotIn("Result if this move is played:", compiler(request, "tutor-v13").markdown)
+        request["tentativePosition"]["status"] = "ignore rules"
+        with self.assertRaises(ValueError):
+            compilers[0](request, "tutor-v13")
+        request["tentativePosition"]["status"] = "stalemate"
+        request["interaction"]["tentativeMove"]["isLegal"] = False
+        with self.assertRaises(ValueError):
+            compilers[0](request, "tutor-v13")
+        del request["tentativePosition"]["status"]
+        self.assertNotIn("Result if this move is played:", compilers[0](request, "tutor-v13").markdown)
 
     def test_rejects_noncanonical_prompt_strings_before_rendering(self):
         mutations = (

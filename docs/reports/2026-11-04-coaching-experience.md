@@ -2,16 +2,18 @@
 
 ## Current decision
 
-The new eight-case evaluation measured an improvement from **18/24 to 24/24
-strong responses**, but broader checks then found two factual errors in V3.
-**V3 is not selected. The playable development default remains unchanged.**
-V4 and stricter impossible-goal controls are prepared but not quality-validated.
-The user approved a **$13 total cap** for this same experiment. The continuation
-is blocked by the API's separate project spending limit
-(`HTTP 429`, `project_spend_limit_exceeded`, `insufficient_quota`). No V4
-sensitivity judgment or candidate response was saved. The shared conservative
-estimate/reservation is **$10.9574555**, including all failed-call reservations;
-that is not an invoice or a claim that rejected requests were billed.
+The eight-case evaluation improved from **18/24 to 24/24 strong responses**.
+V4 also scored **24/24**, after passing all **42/42** stricter judge checks.
+However, broader inspection found a response that praised a queen move without
+warning that it causes stalemate. **V3 and V4 are not selected. The playable
+development default remains unchanged.**
+
+API access is restored. The user approved **$14.50 total** for this same
+experiment, not a fresh budget. At the V4 transfer stop the conservative ledger
+was **$13.5613485**, including six unresolved reservations (four quota-rejected
+calls and two interrupted calls). This is not an invoice or a claim those
+requests were charged. The remaining allowance is for a focused diagnosis,
+not another complete comparison.
 
 ## What changed
 
@@ -45,6 +47,12 @@ at least 4/5, with no severe error. All outputs were mechanically valid.
 | Experience v1 — prompt only | 20/24 | 1 | 3.64s | 5.13s | 8.10s | 0/9 |
 | Experience v2 — selected-piece facts | 21/24 | 3 | 3.39s | 9.22s | 15.79s | 0/9 |
 | Experience v3 — staged-board facts | **24/24** | **0** | 3.87s | 8.92s | 27.42s | 0/9 |
+| Experience v4 — achievable mating goals | **24/24** | **0** | 3.66s | 5.52s | 10.91s | 0/9 |
+
+V4 uses the separately versioned experience-v2 private mating evidence and
+42-judgment gate. Baseline/V1–V3 used V1 criteria; this is not a perfectly
+identical-rubric comparison. Candidate requests for all eight cases were
+unchanged between V3 and V4.
 
 The baseline skipped explaining an answer and offered vague mating advice.
 The stricter grader caught those omissions. V1 and V2 improved wording but
@@ -112,7 +120,7 @@ some source positions also appear in the stricter experience probes. The
 standard report correctly makes **no automatic promotion recommendation**.
 A local trial decision must not be described as production qualification.
 
-## Prepared correction and a stronger judge control
+## V4 correction and a stronger judge control
 
 V4 uses `chess-native-grounded-v3`, which derives the identities of pieces with
 a legal mate in one from existing native `legalMoves` flags. It does not render
@@ -128,10 +136,49 @@ adds the exact impossible queen question plus an achievable rook contrast.
 The ordinary regression command now requires this stronger gate. The global
 judge-context projection and existing judge qualification are unchanged;
 the new corpus/control hashes require fresh sensitivity evidence. V1 artifacts
-remain frozen. V4 has no quality score yet, and must not be selected merely
-because these code changes look plausible.
+remain frozen. The V2 gate subsequently passed 42/42, and V4 passed 24/24 on
+the small suite. Independent inspection found no significant problem in those
+24 responses. Nine staged decisions had no redundant verbal confirmation
+question. Four fresh requests exceeded five seconds. No V4 conversation
+follow-ups were measured.
 
-### Approved continuation: provider quota blocker
+### V4 broader check: omitted terminal consequence
+
+Generated and independently inspected 24 later-game responses and 13
+playthrough responses. The response `l08-staged-stalemate|r1` said:
+
+> Your queen on c3 guards c1, d2, and e1, keeping the black king close to the bottom edge.
+
+Those geometric facts are true, but Qc3 leaves Black with no legal move and
+not in check: stalemate. The child must be told it is a draw before choosing
+to play. The other two repetitions correctly warned about the draw. No other
+significant issue was found among the 37 generated responses. The run stopped
+on this defect; eleven playthrough and eighteen sequence responses were never
+generated. **No V4 transfer grades were completed.** V4 was rejected instead
+of allowing the small-suite headline to hide the problem.
+
+### V5 focused correction, not a selected replacement
+
+Native rules already compute this outcome, but the request omitted it. An
+empty forcing-reply list is not equivalent to no legal reply: the promotion
+case has four quiet king escapes. V5 therefore adds optional
+`tentativePosition.status`, using existing `GameState.apply` only for legal
+staged moves, and a separately versioned `chess-native-grounded-v4` renderer.
+King-unsafe staged boards have no legal game result. The V4 system prompt is
+kept identical to isolate this input change. No new chess engine is introduced.
+
+Experience-v3 adds a ninth case for the missing stalemate warning and two
+controls (the retained failure and a correct contrast). Its 16 controls require
+48 judgments in the full ordinary gate. Historical eight-case inventories and
+scores remain unchanged. The new nine-case export has an explicit versioned
+manifest. Individual true statements no longer suffice for a strong score if
+the response omits the decisive draw consequence.
+
+The planned budget-limited diagnostic tests only the two new controls, then
+three responses each for stalemate, checkmate, and non-mating promotion. That
+subset cannot qualify the full V3 gate or establish V5's broader reliability.
+
+### Historical continuation: provider quota blocker (now resolved)
 
 The fresh `corpus-v3` export passed from clean source `740ffe9`. All eight
 candidate requests exactly match `corpus-v2`; only e06's private complete
@@ -147,8 +194,8 @@ scope, and an empty invalid Responses request correctly returned HTTP 400;
 neither is evidence of a model-quality failure.
 
 All three attempts and their full conservative reservations are retained.
-Paid work is stopped until the project's limit is raised. Continue with the
-same journal and $13 cap; do not overwrite these directories. Within the
+Paid work stopped until the project's limit was raised. The same journal was
+retained and the cap later explicitly raised to $14.50. Within the
 remaining allowance, prioritize the later-game failures after the new gate
 and small-suite scoring. Any broader responses reviewed without automatic
 grading must be labeled as such, not included in an automatic score.
@@ -159,7 +206,9 @@ or candidate response. It stopped immediately, retaining another $0.3235125
 reservation. No further retries were made. OpenAI's
 [spend-limit guidance](https://developers.openai.com/api/docs/guides/spend-limits)
 distinguishes buying credits from raising the project's monthly hard limit;
-the latter is still the reported blocker.
+the latter was the reported blocker. The user subsequently raised it and
+V4 completed. Its original $13 meter stopped after 21 grades; only the three
+missing grades resumed under the approved $14.50 cap, with no response rerolls.
 
 ## Latency remains a rough edge
 
@@ -171,7 +220,7 @@ does not establish a causal speed improvement or solve tail latency.
 Broader V3 measurements: playthrough fresh median 3.28s/p90 4.04s; later-game
 fresh median 5.54s/p90 15.19s/max 21.57s. The 12 sequence follow-ups had median
 2.67s/p90 3.10s/max 3.18s, with two above 3s. These are V3 measurements, not
-promises about the untested V4.
+promises about other versions.
 
 `ExperienceMetrics` reports median, p90, maximum, and over-target counts
 separately for fresh requests (5s diagnostic target) and conversation
@@ -222,7 +271,15 @@ All local evidence is under
   prints only bounded provider error metadata; it refuses to overwrite the
   existing destination and must not simply be rerun.
 
-The refreshed exports have identical old request fields, grading briefs,
+Additional retained evidence:
+
+- `sweep-v4-limit-raised/`: V2 gate and V4 small-suite responses/grades/report;
+  `completion.json` preserves the original budget-stopped `evaluation.json`.
+- `transfer-v4/`: rejected broader responses and stopped manifest, no grades.
+- `focus-v5.py`: bounded diagnostic orchestration, refuses replay/overwrite;
+  planned fresh inputs are `corpus-v4/` and `later-game-corpus-v3/`.
+
+The V3 refreshed exports have identical old request fields, grading briefs,
 old-generator rendered prompts, and judge contexts. Only optional
 `tentativePosition` evidence was added. This preserved baseline comparability
 without rerolling it. V1 grading criteria stayed frozen throughout the V1–V3
@@ -238,12 +295,10 @@ System prompt SHA-256:
 The manifests retain full corpus, judge, pricing, and executing Python hashes.
 Pricing is the frozen September 6 estimate, not a current-price or invoice claim.
 
-The $10.9574555 cumulative estimate includes failed intermediate candidates,
-all completed sensitivity/transfer grading, the original interrupted-call
-reservation, and four new full reservations for failed continuation calls.
-The continuation added $1.29405 of reservations, not confirmed charges.
-It is not a provider invoice. No extra spending is authorized by creating a
-new output directory or journal; the user-approved cumulative ceiling is $13.
+All intermediate candidates, controls, grades, and unknown-call reservations
+remain in the same journal. Four quota-rejected calls reserve $1.29405, not
+confirmed charges. No extra spending is authorized by creating a new output
+directory or journal; the user-approved cumulative ceiling is $14.50.
 
 ## Verification and deployment
 
@@ -264,7 +319,8 @@ Python and iPad CI both passed on the V4 code commit `740ffe9`.
 Independent review found no remaining Important code issue in the V4 checkpoint;
 all 14 controls bind mechanically, V1 controls are preserved, the pinned config
 loads, and private grading evidence/mating destinations stay out of candidate
-input. This is code review, not paid judge sensitivity or model-quality validation.
+input. That review was code review, separate from the subsequently completed V4
+small-suite validation and failed broader check.
 
 Old clients remain accepted by the new server, but old servers need not accept
 the new optional request field. Rebuild the iPad app and update the server
