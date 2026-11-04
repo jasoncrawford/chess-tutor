@@ -9,7 +9,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
-from CoachingServer.chess_native_compiler import PROMPT_GENERATORS
 from CoachingServer.model_configuration import HostedModelConfiguration
 
 

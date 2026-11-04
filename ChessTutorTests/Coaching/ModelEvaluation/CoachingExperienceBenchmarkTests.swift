@@ -47,6 +47,31 @@ enum CoachingExperienceBenchmark {
 }
 
 final class CoachingExperienceBenchmarkTests: XCTestCase {
+    func testTentativeFactsComeFromTheDisplayedBoardIncludingSpecialMoves() throws {
+        let turns = CoachingQualityBenchmarkCorpus.v1.developmentTurns
+            + (try CoachingExperienceBenchmark.corpus().allTurns)
+        var specialCases: Set<String> = []
+        for turn in turns {
+            let request = ModelCoachingNeutralRequestBuilder.build(snapshot: turn.snapshot, requestID: "facts")
+            guard let move = turn.snapshot.tentativeMove else {
+                XCTAssertNil(request.tentativePosition)
+                continue
+            }
+            let after = turn.snapshot.committedState.applyingUnchecked(move)
+            let facts = try XCTUnwrap(request.tentativePosition, turn.id)
+            let expectedIDs = after.board.pieces.map { ModelCoachingPositionEncoder.pieceID($0.value, at: $0.key) }.sorted()
+            XCTAssertEqual(facts.pieces.map(\.id), expectedIDs, turn.id)
+            XCTAssertEqual(facts.movedPieceControlledSquares, LegalMoveGenerator.controlledSquares(from: move.to, in: after).map(ModelCoachingPositionEncoder.squareName).sorted(), turn.id)
+            if ["c06-en-passant", "m06-promotion", "m07-castling"].contains(turn.id) { specialCases.insert(turn.id) }
+            if turn.id == "e01-knight-defense" {
+                XCTAssertFalse(facts.movedPieceControlledSquares.contains("d4"))
+                XCTAssertTrue(facts.occupiedSquareRelationships.contains { $0.sourcePieceReference == "piece:white:knight:c3" && $0.targetPieceReference == "piece:black:pawn:d5" && $0.kind == .attacks })
+                XCTAssertFalse(facts.occupiedSquareRelationships.contains { $0.sourcePieceReference == "piece:white:knight:c3" && $0.targetPieceReference == "piece:white:pawn:d4" })
+            }
+        }
+        XCTAssertEqual(specialCases, ["c06-en-passant", "m06-promotion", "m07-castling"])
+    }
+
     func testRequestsUseUnchangedSourceSnapshotsAndPrivateBriefs() throws {
         let corpus = try CoachingExperienceBenchmark.corpus()
         let sources = CoachingQualityBenchmarkCorpus.v1.developmentTurns

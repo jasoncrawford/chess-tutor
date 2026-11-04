@@ -1,4 +1,4 @@
-"""One bounded evaluation of the exact local coach against two separate suites."""
+"""One bounded evaluation of the exact local coach against separate regression suites."""
 
 import argparse
 import hashlib
@@ -12,6 +12,7 @@ from Tools.CoachingEval.benchmark.budget import BudgetedClient, BudgetExceeded
 from Tools.CoachingEval.benchmark.configuration import load_candidate, load_judge, load_prices
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.benchmark.grader import grade_run
+from Tools.CoachingEval.benchmark.experience_metrics import ExperienceMetrics
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 from Tools.CoachingEval.benchmark.report import write_report
 from Tools.CoachingEval.benchmark.runner import run_candidates
@@ -22,7 +23,8 @@ from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 class RegressionEvaluation:
     @classmethod
     def run(cls, *, repository_root, corpus_path, regression_path, output, client,
-            qualification_root, max_cost="10", candidate_path=None, include_holdout=False):
+            qualification_root, max_cost="10", candidate_path=None, include_holdout=False,
+            experience_path=None):
         root = Path(repository_root)
         output = Path(output).resolve()
         if output.exists():
@@ -33,10 +35,13 @@ class RegressionEvaluation:
         prices = load_prices(config_root / "pricing-v2.json")
         corpus = load_corpus(corpus_path)
         regression = load_corpus(regression_path)
+        experience = load_corpus(experience_path) if experience_path is not None else None
         if corpus.is_regression or not regression.is_regression:
             raise ValueError("Expected the frozen benchmark and a separate playthrough suite")
         if corpus.source_git_sha != regression.source_git_sha:
             raise ValueError("Both suites must be exported from the same source revision")
+        if experience is not None and (not experience.is_regression or experience.source_git_sha != corpus.source_git_sha):
+            raise ValueError("Experience suite must be a regression exported from the same source revision")
         controls = config_root / "judge-sensitivity-v1.json"
         meter = BudgetedClient(client, prices, output / "budget.jsonl", max_cost)
         result = dict(schemaVersion="coaching-regression-evaluation.v1", status="running",
@@ -49,6 +54,10 @@ class RegressionEvaluation:
                       pricingSHA256=prices.sha256, maxConservativeCostUSD=str(meter.limit),
                       repetitions=3, includeHoldout=include_holdout,
                       corpora={"benchmark": corpus.sha256, "playthrough": regression.sha256}, suites={})
+        experience_controls = config_root / "judge-experience-v1.json"
+        if experience is not None:
+            result["corpora"]["experience"] = experience.sha256
+            result["experienceControlsSHA256"] = hashlib.sha256(experience_controls.read_bytes()).hexdigest()
         output.mkdir(parents=True)
         cls._save(output, result, meter)
         try:
@@ -59,7 +68,15 @@ class RegressionEvaluation:
             if not sensitivity["passed"]:
                 result["status"] = "judgeSensitivityFailed"
                 return result
-            for name, suite in (("playthrough", regression), ("benchmark", corpus)):
+            suites = [("playthrough", regression), ("benchmark", corpus)]
+            if experience is not None:
+                gate = JudgeSensitivity.run(experience_controls, experience, judge, meter, prices, output / "experience-sensitivity")
+                result["experienceSensitivityPassed"] = gate["passed"]
+                if not gate["passed"]:
+                    result["status"] = "judgeSensitivityFailed"
+                    return result
+                suites.insert(0, ("experience", experience))
+            for name, suite in suites:
                 suite_root = output / name
                 run_root = suite_root / "candidates"
                 grades = suite_root / "grades"
@@ -87,6 +104,12 @@ class RegressionEvaluation:
             result["failureCategory"] = type(error).__name__
             raise
         finally:
+            for name in ("experience", "playthrough", "benchmark"):
+                progress = output / name / "candidates.progress.jsonl"
+                if progress.exists():
+                    rows = [json.loads(line) for line in progress.read_text().splitlines()]
+                    result.setdefault("experienceMetrics", {})[name] = ExperienceMetrics.summarize(
+                        rows, {candidate.identifier: candidate.model_configuration.conversation_reuse})
             cls._save(output, result, meter)
 
     @staticmethod
@@ -115,6 +138,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", required=True, type=Path)
     parser.add_argument("--regressions", required=True, type=Path)
+    parser.add_argument("--experience", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--qualification-root", required=True, type=Path)
     parser.add_argument("--candidate", type=Path)
@@ -128,7 +152,8 @@ def main(argv=None):
         result = RegressionEvaluation.run(repository_root=Path(__file__).resolve().parents[3],
             corpus_path=args.corpus, regression_path=args.regressions, output=args.output,
             qualification_root=args.qualification_root, max_cost=args.max_cost, candidate_path=args.candidate,
-            include_holdout=args.include_holdout, client=OpenAIResponsesClient(api_key=key))
+            include_holdout=args.include_holdout, experience_path=args.experience,
+            client=OpenAIResponsesClient(api_key=key))
     except (Exception, KeyboardInterrupt) as error:
         print(json.dumps(dict(status="stopped", category=type(error).__name__, evidence=str(args.output))))
         return 1

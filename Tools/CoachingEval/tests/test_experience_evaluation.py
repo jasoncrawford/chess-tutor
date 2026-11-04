@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from Tools.CoachingEval.benchmark.experience import ExperienceEvaluation
+from Tools.CoachingEval.benchmark.experience_metrics import ExperienceMetrics
 from Tools.CoachingEval.benchmark.budget import BudgetedClient, BudgetExceeded
 from Tools.CoachingEval.benchmark.configuration import load_prices
 from Tools.CoachingEval.tests import test_regression_workflow as fixtures
@@ -84,7 +85,7 @@ class ExperienceEvaluationTests(unittest.TestCase):
                 record(2000, 2, "Another fact. Keep this move?"),
                 record(4000, 3, "You can play this or try another."),
                 record(30000, 1, "", False)]
-        stats = ExperienceEvaluation.metrics(rows, {"candidate": True})["candidate"]
+        stats = ExperienceMetrics.summarize(rows, {"candidate": True})["candidate"]
         self.assertEqual(2, stats["fresh"]["count"])
         self.assertEqual(1, stats["followUp"]["overTargetCount"])
         self.assertEqual(3000, stats["followUp"]["medianMilliseconds"])
@@ -92,7 +93,7 @@ class ExperienceEvaluationTests(unittest.TestCase):
         self.assertEqual(2, stats["confirmationQuestionCount"])
         self.assertEqual(2, stats["mostRepeatedConfirmationEndingCount"])
         self.assertEqual(3, stats["confirmationTurnCount"])
-        no_reuse = ExperienceEvaluation.metrics(rows, {"candidate": False})["candidate"]
+        no_reuse = ExperienceMetrics.summarize(rows, {"candidate": False})["candidate"]
         self.assertEqual(4, no_reuse["fresh"]["count"])
         self.assertEqual(0, no_reuse["followUp"]["count"])
 
@@ -114,7 +115,7 @@ class ExperienceEvaluationTests(unittest.TestCase):
         rows = [dict(configurationID="candidate", stepIndex=2, latencyMilliseconds=0,
                      generationStatus="blockedByPriorTurn", attemptCount=0,
                      mechanicalValidation={"valid": False}, parsedTurn=None)]
-        stats = ExperienceEvaluation.metrics(rows, {"candidate": True})["candidate"]
+        stats = ExperienceMetrics.summarize(rows, {"candidate": True})["candidate"]
         self.assertEqual(0, stats["followUp"]["count"])
         self.assertEqual(1, stats["blockedCount"])
 

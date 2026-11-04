@@ -11,10 +11,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from CoachingServer.chess_native_compiler import parse_neutral_request
+from CoachingServer.chess_native_compiler import PROMPT_GENERATORS, parse_neutral_request
 from CoachingServer.provider_envelope import validate_provider_envelope
 from Tools.CoachingEval.benchmark.configuration import (
-    PROMPT_GENERATORS,
     PROVIDERS,
     RESPONSE_CONTRACTS,
     load_candidate,

@@ -12,8 +12,7 @@ from CoachingServer.service import (
     HostedCoachingService,
     HostedCoachingServiceError,
 )
-from CoachingServer.chess_native_compiler import compile_context
-from Tools.CoachingEval.benchmark.configuration import PROMPT_GENERATORS
+from CoachingServer.chess_native_compiler import PROMPT_GENERATORS, compile_context
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -111,7 +110,7 @@ class EmptyProvider:
 class HostedCoachingServiceTests(unittest.TestCase):
     def test_grounded_generator_is_identical_in_live_service_and_benchmark(self):
         configuration = HostedModelConfiguration.load(
-            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v2-low-model.json", ROOT,
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v3-low-model.json", ROOT,
         )
         for previous in (None, "resp_previous"):
             with self.subTest(previous=previous):

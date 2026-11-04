@@ -430,7 +430,8 @@ final class ModelCoachingChessNativeContextCompilerTests: XCTestCase {
             legalMoves: request.legalMoves,
             occupiedSquareRelationships: request.occupiedSquareRelationships,
             tentativeReplies: request.tentativeReplies,
-            capabilities: request.capabilities
+            capabilities: request.capabilities,
+            tentativePosition: request.tentativePosition
         )
     }
 

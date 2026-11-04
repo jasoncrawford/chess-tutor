@@ -42,6 +42,8 @@ class RegressionLauncherTests(unittest.TestCase):
         self.assertIn("name=ChessTutor Coaching Smoke", commands)
         self.assertIn("CoachingPlaythroughBenchmarkTests/testOptInExport", commands)
         self.assertIn("CoachingQualityBenchmarkCorpusTests/testOptInExport", commands)
+        self.assertIn("CoachingExperienceBenchmarkTests/testOptInExport", commands)
+        self.assertIn("--experience", commands)
         self.assertIn("--max-cost 4", commands)
         self.assertIn("--regressions", commands)
         self.assertIn("key-present", commands)

@@ -94,6 +94,11 @@ class RegressionWorkflowTests(unittest.TestCase):
             aggregate.write_text(json.dumps({"integrityIssues": [], "configurations": {}}))
             summary = destination / "summary.md"
             summary.write_text("report")
+            (destination.parent / "candidates.progress.jsonl").write_text(json.dumps(dict(
+                configurationID="astra-discovery-v2-low", stepIndex=2, latencyMilliseconds=2100,
+                mechanicalValidation={"valid": True},
+                parsedTurn={"expects": "chooseWhetherToPlay", "message": "Keep this move?"},
+            )) + "\n")
             reports.append(destination)
             return aggregate, summary
         with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
@@ -112,6 +117,29 @@ class RegressionWorkflowTests(unittest.TestCase):
         self.assertEqual({"benchmark", "playthrough"}, {p.parent.name for p in reports})
         self.assertEqual(3, result["repetitions"])
         self.assertEqual(2, len(result["suites"]))
+        metrics = result["experienceMetrics"]["benchmark"]["astra-discovery-v2-low"]
+        self.assertEqual(1, metrics["followUp"]["count"])
+        self.assertEqual(1, metrics["confirmationQuestionCount"])
+
+    def test_experience_gate_is_required_before_any_candidate_calls(self):
+        with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", side_effect=[{"passed": True}, {"passed": False}]) as gate, \
+             mock.patch("Tools.CoachingEval.benchmark.regression.run_candidates") as candidates:
+            result = self.run_workflow(self.root / "experience-gate", experience_path=self.regression)
+        self.assertEqual("judgeSensitivityFailed", result["status"])
+        self.assertFalse(result["experienceSensitivityPassed"])
+        self.assertEqual("judge-experience-v1.json", gate.call_args_list[1].args[0].name)
+        self.assertIn("experience", result["corpora"])
+        candidates.assert_not_called()
+
+    def test_experience_suite_runs_first_after_both_gates(self):
+        with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", return_value={"passed": True}) as gate, \
+             mock.patch("Tools.CoachingEval.benchmark.regression.run_candidates", side_effect=KeyboardInterrupt) as candidates:
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_workflow(self.root / "experience-first", experience_path=self.regression)
+        self.assertEqual(2, gate.call_count)
+        self.assertEqual("experience", candidates.call_args.kwargs["destination"].parent.name)
 
     def test_interruption_keeps_manifest_and_no_false_completed_claim(self):
         output = self.root / "interrupted"

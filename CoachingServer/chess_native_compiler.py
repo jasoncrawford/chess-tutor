@@ -82,9 +82,18 @@ def compile_grounded_follow_up_context(request, prompt_version):
     return _compile_context(request, prompt_version, is_follow_up=True, grounded=True)
 
 
+def compile_displayed_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=False, grounded=True, displayed=True)
+
+
+def compile_displayed_follow_up_context(request, prompt_version):
+    return _compile_context(request, prompt_version, is_follow_up=True, grounded=True, displayed=True)
+
+
 PROMPT_GENERATORS = {
     "chess-native-v13": (compile_context, compile_follow_up_context),
     "chess-native-grounded-v1": (compile_grounded_context, compile_grounded_follow_up_context),
+    "chess-native-grounded-v2": (compile_displayed_context, compile_displayed_follow_up_context),
 }
 
 
@@ -94,6 +103,7 @@ def _compile_context(
     *,
     is_follow_up: bool,
     grounded: bool = False,
+    displayed: bool = False,
 ) -> ChessNativeCompilation:
     parsed = _parse_neutral_request(request)
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
@@ -107,7 +117,8 @@ def _compile_context(
         (
             "Relevant legal facts",
             _relevant_legal_fact_lines(parsed, pieces_by_id, scoped_replies)
-            + (_focal_relationship_lines(parsed, pieces_by_id) if grounded else ()),
+            + (_focal_relationship_lines(parsed, pieces_by_id) if grounded else ())
+            + (_tentative_relationship_lines(parsed) if displayed else ()),
         ),
         (
             "Available UI response",
@@ -144,7 +155,7 @@ def parse_neutral_request(request: Mapping[str, object]) -> dict[str, Any]:
 
 def _parse_neutral_request(request: Mapping[str, object]) -> dict[str, Any]:
     root = _object(request, "request")
-    _exact_fields(root, _REQUEST_FIELDS, "request")
+    _fields(root, required=_REQUEST_FIELDS, optional={"tentativePosition"}, path="request")
     if root["schemaVersion"] != "model-coaching-neutral-request.v1":
         raise ValueError("Unsupported neutral request schema version")
 
@@ -186,6 +197,7 @@ def _parse_neutral_request(request: Mapping[str, object]) -> dict[str, Any]:
         tentative = _parse_move(tentative, "request.interaction.tentativeMove", piece_ids)
         interaction = dict(interaction, tentativeMove=tentative)
 
+    tentative_position = _parse_tentative_position(root.get("tentativePosition"), tentative)
     return {
         "schemaVersion": root["schemaVersion"],
         "requestID": request_id,
@@ -198,7 +210,29 @@ def _parse_neutral_request(request: Mapping[str, object]) -> dict[str, Any]:
         "occupiedSquareRelationships": relationships,
         "tentativeReplies": replies,
         "capabilities": capabilities,
+        "tentativePosition": tentative_position,
     }
+
+
+def _parse_tentative_position(value, tentative):
+    if value is None:
+        return None
+    path = "request.tentativePosition"
+    if tentative is None:
+        raise ValueError("Tentative position requires a tentative move")
+    item = _object(value, path)
+    _exact_fields(item, {"pieces", "occupiedSquareRelationships", "movedPieceControlledSquares"}, path)
+    pieces = tuple(_parse_embedded_piece(piece, f"{path}.pieces[{i}]") for i, piece in enumerate(_array(item["pieces"], path)))
+    _unique((piece["id"] for piece in pieces), "tentative piece IDs")
+    _unique((piece["square"] for piece in pieces), "tentative occupied squares")
+    if not any(piece["square"] == tentative["destinationSquare"] for piece in pieces):
+        raise ValueError("Tentative position is missing the moved piece")
+    piece_ids = {piece["id"] for piece in pieces}
+    relationships = tuple(_parse_relationship(relation, i, piece_ids) for i, relation in enumerate(_array(item["occupiedSquareRelationships"], path)))
+    _unique((relation["id"] for relation in relationships), "tentative relationship IDs")
+    squares = tuple(_square(square, f"{path}.movedPieceControlledSquares") for square in _array(item["movedPieceControlledSquares"], path))
+    _unique(squares, "moved piece controlled squares")
+    return dict(pieces=pieces, occupiedSquareRelationships=relationships, movedPieceControlledSquares=squares)
 
 
 def _parse_position(value: object) -> dict[str, Any]:
@@ -465,6 +499,29 @@ def _focal_relationship_lines(request, pieces_by_id):
     )
     if not relationships:
         lines.append("No occupied-square attack or defense involves this piece.")
+    return tuple(lines)
+
+
+def _tentative_relationship_lines(request):
+    tentative = request["interaction"]["tentativeMove"]
+    if not tentative:
+        return ()
+    facts = request["tentativePosition"]
+    if facts is None:
+        return ("Post-move controls were not supplied by this client. Do not guess a specific attack or defense to praise the move.",)
+    pieces = {piece["id"]: piece for piece in facts["pieces"]}
+    moved = next(piece for piece in facts["pieces"] if piece["square"] == tentative["destinationSquare"])
+    relationships = sorted((relation for relation in facts["occupiedSquareRelationships"]
+                            if relation["kind"] in {"attacks", "defends"}
+                            and moved["id"] in (relation["sourcePieceReference"], relation["targetPieceReference"])),
+                           key=lambda relation: relation["id"])
+    lines = ["After the tentative move, on the displayed board (geometric control, not guaranteed legal or favorable captures):",
+             f"{_piece_label(moved['id'], pieces)} controls: " + (", ".join(sorted(facts["movedPieceControlledSquares"])) or "none") + ".",
+             "Complete occupied-square attack/defense relationships involving the moved piece:"]
+    lines.extend(f"{_piece_label(relation['sourcePieceReference'], pieces)} {relation['kind']} {_piece_label(relation['targetPieceReference'], pieces)}."
+                 for relation in relationships)
+    if not relationships:
+        lines.append("None.")
     return tuple(lines)
 
 
