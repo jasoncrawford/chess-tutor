@@ -37,7 +37,7 @@ Each quoted explanation above is followed by a keep/change choice in the actual 
 
 No claim of perfect coaching or an improved 87% benchmark score is made. The October score applies to the original prompt. The seven final fresh checks took roughly 3–9 seconds, so explanation quality may cost latency; the normal conversation follow-up path must be checked separately.
 
-Conservative API estimate through the focused checks: **$2.13**, including the original live walkthrough and both replay iterations. The round's ceiling is $2.50. Estimates use $12.50/M uncached input (including the conservative cache-write premium), $1/M cached input, and $50/M output; they are not an invoice. No judge qualification or paid automatic grading was run.
+Conservative API estimate including the final live check: **$2.22** ($2.218631), across 69 successful calls including the original walkthrough and both replay iterations. The round's ceiling is $2.50. Estimates use $12.50/M uncached input (including the conservative cache-write premium), $1/M cached input, and $50/M output; they are not an invoice. No judge qualification or paid automatic grading was run.
 
 ## Reproduction and retained artifacts
 
@@ -47,4 +47,16 @@ For a fresh export, run the named XCTest with test-runner environment variable `
 
 The convenience launcher selects `Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json`. The previous trial remains available via `CHESS_TUTOR_COACHING_MODEL_CONFIG=Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json`. Direct/deployed startup remains on Sol.
 
-At this checkpoint the 333 evaluator tests passed; the complete native/server runs and final live revised-prompt check are being completed. Final handoff results will be appended below.
+## Final live verification and handoff
+
+Relaunched the local script with its new default in Coaching Smoke and replayed `1. e4 e5 2. Bc4 Nf6` without Help. Then opened Help, tapped the endangered e4 pawn, and staged d3. All three responses validated and returned HTTP 200:
+
+1. “The black knight is attacking one of your pawns. Can you tap that pawn?” — 5.35 seconds, no answer focus.
+2. “Yes! Your pawn needs a defender. Can you try a move that protects it?” — 2.64 seconds, focus e4.
+3. “Your moved pawn now protects your pawn on e4 from the knight. Would you like to keep this move?” — 2.81 seconds, focus d3/e4, `chooseWhetherToPlay`.
+
+The actual UI displayed Play this move / Try another move / Close help. Play this move successfully committed d3 and returned to the board controls. Game `85f87bd1-44e9-4b07-953e-6d096e7bd8db`; final response trace `b36d504c43bb`. Retained in `revision-2-live-turns.jsonl`. This verifies a normal final-revision conversation follow-up, not every wrong-answer/reconsideration branch from the original walkthrough.
+
+Verification: **967 native unit tests, 54 server tests, and 333 evaluator tests passed**, zero failures. The native UI test suite was not run locally. The native tool timed out waiting, but the completed xcresult and xcodebuild log independently confirmed successful execution. Bash syntax and `git diff --check` passed. A separate Astra reviewer found no actionable critical, important, or minor issues; independently verified pinned hashes, configuration loading, and four targeted tests. The reviewer did not rerun the paid diagnostics or the native suite.
+
+The new local server is left running for Coaching Smoke. The A16 game and direct/deployed server default remain untouched. Submit this bounded local trial as a PR against the existing coaching integration branch; leave it open for review. Historical benchmark scores remain attached to the old prompt.

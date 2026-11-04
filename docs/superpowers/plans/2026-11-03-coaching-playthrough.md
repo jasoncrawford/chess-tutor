@@ -31,15 +31,15 @@
 
 **Interfaces:** Export neutral request arrays via `ModelCoachingNeutralRequestBuilder.build`; consume them with the existing compiler and OpenAI transport. Keep oracle/audit commentary out of candidate prompts.
 
-- [ ] Preserve the observed failing output and trace.
-- [ ] Add replay tests verifying legal histories, the d3→e4 defense and absence of its reverse, and relevant capture replies. Export deterministic requests.
-- [ ] Run the diagnostic cases with the old prompt, then the revised prompt; inspect every output and record the evidence, including failures.
-- [ ] Retain the revision only if it improves useful feedback without new factual/interaction errors in the bounded test.
+- [x] Preserve the observed failing output and trace.
+- [x] Add replay tests verifying legal histories, the d3→e4 defense and absence of its reverse, and relevant capture replies. Export deterministic requests.
+- [x] Run the diagnostic cases with the old prompt, then the revised prompt; inspect every output and record the evidence, including failures.
+- [x] Retain the revision only if it improves useful feedback without new factual/interaction errors in the bounded test.
 
 ### Task 2: Local trial handoff
 
 **Files:** `scripts/run_hosted_coaching_dev.sh`, launcher tests, `docs/hosted-coaching-server.md`, and a playthrough report.
 
-- [ ] Point the local launcher at the newly pinned policy if Task 1 supports it; leave direct/deployed Sol default intact.
-- [ ] Run server/evaluator tests and native regression tests; verify the actual revised response in Coaching Smoke.
+- [x] Point the local launcher at the newly pinned policy if Task 1 supports it; leave direct/deployed Sol default intact.
+- [x] Run server/evaluator tests and native regression tests; verify the actual revised response in Coaching Smoke.
 - [ ] Obtain one fresh-context branch review; address substantive findings; create a PR with findings, limits, and reproduction instructions. Leave it open for review.
