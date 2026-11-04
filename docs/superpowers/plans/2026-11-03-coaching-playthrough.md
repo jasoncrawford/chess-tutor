@@ -42,4 +42,4 @@
 
 - [x] Point the local launcher at the newly pinned policy if Task 1 supports it; leave direct/deployed Sol default intact.
 - [x] Run server/evaluator tests and native regression tests; verify the actual revised response in Coaching Smoke.
-- [ ] Obtain one fresh-context branch review; address substantive findings; create a PR with findings, limits, and reproduction instructions. Leave it open for review.
+- [x] Obtain one fresh-context branch review; address substantive findings; create a PR with findings, limits, and reproduction instructions. Leave it open for review: [PR #23](https://github.com/jasoncrawford/chess-tutor/pull/23).
