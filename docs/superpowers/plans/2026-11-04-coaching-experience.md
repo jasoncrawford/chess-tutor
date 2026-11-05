@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Existing isolated PR #23; no main changes, merge, auto-merge, or destructive cleanup.
-- $14.50 conservative combined API cap, explicitly increased from $10, then $13 by the user on November 4; same cumulative journal. No paid CI, silent retries, holdout exposure, or case-specific advice in prompts.
+- $20 conservative combined API cap, explicitly increased from $10, $13, and $14.50 by the user on November 4; same cumulative journal. No paid CI, silent retries, holdout exposure, or case-specific advice in prompts.
 - Freeze grader briefs and controls before candidate iteration; three repetitions, all results retained.
 - Exact model configuration must reach the local development launcher if selected.
 
@@ -74,4 +74,4 @@
 - [x] Run full local tests and fresh native export/load/control-binding integration; review important findings with regression tests. 985 native, 370 evaluator, 57 server; then 15 native benchmark tests after manifest fix, and actual export/load verification.
 - [x] Within the same $14.50 cap, run only focused terminal controls and three repetitions each of stalemate, checkmate, and non-mating promotion. Controls 6/6 passed; 9 responses reviewed, 7/9 grades completed (5 strong, 0 severe). Budget stopped at $14.1397950 before reserving the next call. Diagnostic only; no rollout.
 - [x] Report actual results and remaining validation; leave PR open and playable coach unchanged.
-- [ ] With further budget authorization, resume two missing grades without replay, address old direct-feedback grading inconsistency, and complete full V5 validation before selection. No extra spending is authorized now.
+- [ ] User approved $20 cumulative: resume two missing grades without replay and complete full V5 validation before selection. Preserve old direct-feedback grades rather than rewrite their criteria after seeing results; use the explicitly contextual experience rubric and independent review to interpret those disagreements.
