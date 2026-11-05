@@ -30,7 +30,7 @@ class RegressionEvaluation:
         if output.exists():
             raise FileExistsError("Refusing to overwrite or replay an evaluation; use saved grading checkpoints")
         config_root = root / "Tools/CoachingEval/benchmark"
-        candidate = load_candidate(Path(candidate_path) if candidate_path else config_root / "configs/astra-discovery-v2-low.json", root)
+        candidate = load_candidate(Path(candidate_path) if candidate_path else config_root / "configs/astra-experience-v5-low.json", root)
         judge = load_judge(config_root / "configs/judge-v4.json", root)
         prices = load_prices(config_root / "pricing-v2.json")
         corpus = load_corpus(corpus_path)

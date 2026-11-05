@@ -58,9 +58,9 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("server-stopped", command_log)
         self.assertIn("venv-create", command_log)
         self.assertIn("dependency-install requirements.txt", command_log)
-        selected = "Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json"
+        selected = "Tools/CoachingEval/benchmark/configs/models/astra-experience-v5-low-model.json"
         self.assertIn(f"server-model-config={selected}\n", command_log)
-        self.assertIn("Local coaching: provisional Astra discovery trial; production default unchanged.", combined_output)
+        self.assertIn("Local coaching: provisional Astra experience trial; production default unchanged.", combined_output)
         self.assertIn(f"Model configuration: {selected}", combined_output)
         self.assertNotIn("explicit model configuration override", combined_output)
 
@@ -78,7 +78,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 self.assertEqual(returncode, 130, output)
                 self.assertIn(f"server-model-config={selected}\n", command_log)
                 self.assertIn("Local coaching: explicit model configuration override.", output)
-                self.assertNotIn("provisional Astra discovery trial", output)
+                self.assertNotIn("provisional Astra experience trial", output)
                 self.assertIn(f"Model configuration: {selected}\n", output)
                 self.assertNotIn("sk-private-key", output + command_log)
                 self.assertNotIn("local-token-secret", output + command_log)
@@ -86,7 +86,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
 
     def test_live_trial_matches_repeatable_benchmark_candidate(self):
         candidate = load_candidate(
-            REPOSITORY_ROOT / "Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json",
+            REPOSITORY_ROOT / "Tools/CoachingEval/benchmark/configs/astra-experience-v5-low.json",
             REPOSITORY_ROOT,
         )
         status, output, commands = self._launch_and_stop()

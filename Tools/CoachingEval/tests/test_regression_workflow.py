@@ -95,7 +95,7 @@ class RegressionWorkflowTests(unittest.TestCase):
             summary = destination / "summary.md"
             summary.write_text("report")
             (destination.parent / "candidates.progress.jsonl").write_text(json.dumps(dict(
-                configurationID="astra-discovery-v2-low", stepIndex=2, latencyMilliseconds=2100,
+                configurationID="astra-experience-v5-low", stepIndex=2, latencyMilliseconds=2100,
                 mechanicalValidation={"valid": True},
                 parsedTurn={"expects": "chooseWhetherToPlay", "message": "Keep this move?"},
             )) + "\n")
@@ -112,12 +112,12 @@ class RegressionWorkflowTests(unittest.TestCase):
         self.assertEqual(2, grades.call_count)
         for call in candidates.call_args_list:
             self.assertEqual("regression", call.kwargs["mode"])
-            self.assertEqual("astra-discovery-v2-low", call.kwargs["configurations"][0].identifier)
+            self.assertEqual("astra-experience-v5-low", call.kwargs["configurations"][0].identifier)
             self.assertFalse(call.kwargs["include_holdout"])
         self.assertEqual({"benchmark", "playthrough"}, {p.parent.name for p in reports})
         self.assertEqual(3, result["repetitions"])
         self.assertEqual(2, len(result["suites"]))
-        metrics = result["experienceMetrics"]["benchmark"]["astra-discovery-v2-low"]
+        metrics = result["experienceMetrics"]["benchmark"]["astra-experience-v5-low"]
         self.assertEqual(1, metrics["followUp"]["count"])
         self.assertEqual(1, metrics["confirmationQuestionCount"])
 

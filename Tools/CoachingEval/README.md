@@ -21,7 +21,7 @@ The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 2
 ./scripts/run_coaching_regressions.sh
 ```
 
-This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-discovery-v2-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
+This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-experience-v5-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
 
 The command requires a clean committed checkout, exports inputs from the production Swift rules/request builder on **ChessTutor Coaching Smoke**, and reads the existing Keychain credential without displaying it. Override the simulator with `CHESS_TUTOR_REGRESSION_DESTINATION` if needed. It uses the repository `.venv`; `CHESS_TUTOR_EVAL_PYTHON` can select another installed Python.
 
@@ -39,7 +39,7 @@ Default conservative spending cap: **$10**, adjustable with `--max-cost 5`. The 
 
 Artifacts are retained at `.coaching-eval/regression/<timestamp>/`. Each suite keeps candidate progress and the existing resumable grading checkpoint. An interrupted candidate run is **not automatically resumed or rerolled**. A completed candidate run with interrupted grading can use the existing `grade --checkpoint` command documented below, with that suite's corpus and paths; inspect the budget before authorizing more calls. Rerunning the launcher creates a new paid evaluation, not a resume. Nothing runs paid models in PR CI or on a schedule automatically.
 
-Model names may be provider aliases; stored configuration hashes cannot prevent an alias changing upstream. Rerunning this command produces fresh dated evidence for detecting that drift. Do not transfer the older discovery prompt's quality score to discovery-v2.
+Model names may be provider aliases; stored configuration hashes cannot prevent an alias changing upstream. Rerunning this command produces fresh dated evidence for detecting that drift. Do not transfer a prior prompt's quality score to a new configuration.
 
 ### Later-game development probes
 
@@ -504,10 +504,10 @@ After export, run the bounded workflow (API key supplied through the environment
 .venv/bin/python -m Tools.CoachingEval.benchmark.experience \
   --corpus /absolute/path/to/experience-corpus \
   --controls Tools/CoachingEval/benchmark/judge-experience-v3.json \
-  --candidate Tools/CoachingEval/benchmark/configs/astra-discovery-v2-low.json \
+  --candidate Tools/CoachingEval/benchmark/configs/astra-experience-v5-low.json \
   --qualification /absolute/path/to/compatible/qualification.json \
   --journal /absolute/path/to/experiment/budget.jsonl \
-  --output /absolute/path/to/experiment/baseline --max-cost 10
+  --output /absolute/path/to/experiment/local-trial --max-cost 10
 ```
 
 Use a new output directory for each prompt/configuration revision and the **same
@@ -531,7 +531,12 @@ The versioned `chess-native-grounded-v4` additionally renders optional
 `tentativePosition.status`, computed by the native game's existing rules.
 Stalemate and checkmate are explicit; ongoing does not mean safe. King-unsafe
 staging has no valid outcome field, and old clients may omit it. Candidate V5
-uses this generator with the unchanged V4 system prompt. It is not the default.
+uses this generator with the unchanged V4 system prompt. After the full V3 gate,
+27 experience grades, and 66 broader development grades plus independent output
+inspection, V5 is the provisional local trial and standard regression default.
+This is not production promotion or untouched holdout qualification. Production
+configuration and explicit launcher overrides remain unchanged; prior candidates
+remain available. See the report below for grading-policy and cost-accounting caveats.
 Live coaching and evaluation use the same generator registry. Update the server
 and rebuild the iPad app together for this input; older clients remain accepted
 by the updated server, but older servers may reject the new field.
@@ -540,8 +545,8 @@ The `chess-native-grounded-v3` generator additionally renders which pieces have
 a legal mate in one, without revealing destinations, only on the committed
 board with no staged move. It also explicitly records when no mate in one is
 available. `astra-experience-v4-low` uses this generator but is **not selected**:
-it passed the small suite but omitted a stalemate warning during broader checks. The local launcher
-and standard benchmark default remain `astra-discovery-v2-low`.
+it passed the small suite but omitted a stalemate warning during broader checks.
+V5's terminal-outcome evidence addresses that retained failure.
 
 See [the November 4 experience report](../../docs/reports/2026-11-04-coaching-experience.md)
 for retained comparisons, failed candidates, and latency limitations.

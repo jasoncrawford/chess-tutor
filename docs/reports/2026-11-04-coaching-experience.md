@@ -2,20 +2,89 @@
 
 ## Current decision
 
-The eight-case evaluation improved from **18/24 to 24/24 strong responses**.
-V4 also scored **24/24**, after passing all **42/42** stricter judge checks.
-However, broader inspection found a response that praised a queen move without
-warning that it causes stalemate. **V3 and V4 are not selected. The playable
-development default remains unchanged.**
+**Select `astra-experience-v5-low` for the provisional local trial and matching
+regression default.** Production configuration remains unchanged. V3 and V4
+were rejected after broader checks exposed factual or terminal-outcome errors.
 
-API access is restored. The user approved **$14.50 total** for this same
-experiment, not a fresh budget. At the V4 transfer stop the conservative ledger
-was **$13.5613485**, including six unresolved reservations (four quota-rejected
-calls and two interrupted calls). This is not an invoice or a claim those
-requests were charged. The focused diagnosis subsequently stopped at
-**$14.1397950** before the final two grades: reserving another full call would
-exceed $14.50. No further paid calls were made. All nine responses and seven
-completed grades are saved. Full V5 validation remains outstanding.
+V5 passed the full **48/48** experience sensitivity gate and **27/27** experience
+grades. All **93/93** candidate responses across the four checks below are valid,
+graded, and independently inspected; no severe grade or significant independent
+review finding remains. This is development evidence, not untouched holdout
+qualification, human calibration, or proof that the coach cannot make mistakes.
+
+Final cumulative conservative cost/reservation: **$19.7484595**, below the final
+user-approved **$21 cap**. This includes **$17.2201220** in completed-call estimates
+and **$2.5283375** reserved for eight unresolved calls. It is not an invoice.
+The $20 guard stopped before a final full-call reservation; after approval, only
+missing grades resumed. No successful response or grade was rerolled.
+
+## Completed V5 validation
+
+| Development check | Strong | Severe | Independent inspection |
+| --- | ---: | ---: | --- |
+| Experience, 9 cases × 3 | **27/27** | 0 | No significant issue found |
+| Later game, 8 cases × 3 | **22/24** | 0 | No significant issue found |
+| Playthrough, 8 cases × 3 | **24/24** | 0 | No significant issue found |
+| Two fixed 3-turn sequences × 3 | **12/18** | 0 | No significant issue found |
+
+For the seven cases whose private briefs are exactly unchanged from the baseline,
+strong responses improved **17/21 → 21/21**. The full expanded result is not a
+same-rubric 27-versus-24 comparison: the mating brief gained complete rule evidence,
+and stalemate is new. Cases overlap source positions; these are repeated samples,
+not 93 independent chess situations. All grading uses the unchanged qualified judge.
+
+The eight below-strong grades are retained: two promotion answers receive old
+preview-tense/verbal-invitation penalties, and six sequence answers receive old
+penalties for direct staged feedback or an explicitly requested Hint. The new
+experience criteria deliberately distinguish those from prescribing an unrequested
+move. We did not rewrite old criteria or scores after seeing the outputs. Terms
+like “c-file” and “legal move” can still be more technical than ideal for a child.
+
+Two judge transmissions failed, after 34.6s and 37.2s. Their causes were not
+retained by the judge wrapper; do not call them proven provider latency. Explicit
+checkpoint resumption retained the attempts and completed only missing grades.
+The experience and playthrough reports correctly retain **incomplete judge
+accounting** warnings. Other V5 reports have no integrity issues. The conservative
+budget includes both full failed-call reservations. Automatic promotion remains
+ineligible; selecting a reversible local trial is a separate, documented decision.
+
+All 60 staged-choice responses omit a redundant verbal keep/play question.
+Latency is still a rough edge: 81 fresh requests had **3.31s median / 6.04s p90**,
+with nine over five seconds and a 9.13s maximum. Twelve stored-conversation
+follow-ups had **3.49s median / 4.67s p90**, nine over three seconds, maximum5.38s.
+This does not establish two-second follow-ups. Sequence events are fixed scripts:
+one injects Looks safe after the generated previous response already offers
+Play this move. It tests stored-context handling, not a response-conditioned
+learner journey or actual button routing.
+
+V5 input/configuration hashes are preserved in the manifests. The focused nine
+responses were generated at `590936d`; later validation and grade resumption used
+`d8e01ab359accd15de90ed181ba093752b7dfd9b`, with unchanged native/renderer code.
+The selected model configuration SHA-256 is
+`92b417e1f23059868a4586b291c359c4781eaccf74e6257586f0434b324b6e8b`.
+The V4 system prompt is unchanged; V5 isolates the new native terminal outcome.
+
+The ordinary `./scripts/run_coaching_regressions.sh` command now uses this exact
+local-trial candidate, including the nine experience cases and their 48-judgment
+gate. Prior configurations and explicit overrides remain available. No paid CI
+or production model change was added.
+
+### Decisions and limits
+
+- Kept the old grading-policy disagreements visible, rather than tuning the
+  measurement after seeing answers. Risk: a real wording weakness may be
+  underestimated; exact responses, scores, and the clarity caveat remain available.
+- Allowed broader development checks to continue after isolated failed judge
+  transmissions, with every reservation and accounting warning retained. Risk:
+  precise billed cost remains unknown; the cumulative cap was not bypassed.
+- Used existing native rule outcomes, not a second chess engine, to correct the
+  missing stalemate warning. Focused evidence alone did not trigger rollout;
+  the complete experience and broader checks were finished first.
+- Earlier budget-limited transfer inspection was explicitly ungraded. Those
+  intermediate runs remain historical evidence, not automatic pass claims.
+
+No deferred minor code-review findings. Latency and child-friendly wording remain
+product limitations, and human playtesting is still needed.
 
 ## What changed
 
@@ -159,7 +228,7 @@ on this defect; eleven playthrough and eighteen sequence responses were never
 generated. **No V4 transfer grades were completed.** V4 was rejected instead
 of allowing the small-suite headline to hide the problem.
 
-### V5 focused correction, not a selected replacement
+### Historical V5 focused correction (before full validation)
 
 Native rules already compute this outcome, but the request omitted it. An
 empty forcing-reply list is not equivalent to no legal reply: the promotion
@@ -186,18 +255,17 @@ warned of a draw. Example:
 
 Automatic grading completed **7/9**, with **5 strong and zero severe** among
 those seven. All three stalemate responses and two checkmates scored strong.
-The two graded promotions scored below strong: the old brief/judge objected
+The two promotions graded at that checkpoint scored below strong: the old brief/judge objected
 to describing the visible preview in past tense and to omitting a verbal
 keep/change invitation despite the available buttons. One was flagged factual
 for that tense, not for incorrect promotion/check geometry. These scores are
 retained, not rewritten. The wording “c-file” is also more technical than ideal
-for a five-year-old. The two remaining grades are checkpointed as unrun.
+for a five-year-old. The two remaining grades were checkpointed as unrun, then
+completed without replay in the continuation reported above.
 
-This supports the narrow terminal-result correction, not a 9/9 automatic pass,
-full V3 sensitivity qualification, or V5's broader reliability. Before selecting
-V5, complete the saved grades and the full versioned experience/broader checks,
-and resolve the already-documented grading-policy inconsistency around direct
-staged feedback. Further paid work needs new budget authorization.
+This focused checkpoint supported only the narrow terminal-result correction,
+not a 9/9 automatic pass or broader reliability. Subsequent budget authorization
+allowed full validation; the current decision and grading-policy caveat are above.
 
 Focused fresh-request latency was 2.91s median, 3.71s p90/maximum; none of the
 nine exceeded five seconds. No conversation follow-ups were measured. These
@@ -302,13 +370,25 @@ Additional retained evidence:
   `completion.json` preserves the original budget-stopped `evaluation.json`.
 - `transfer-v4/`: rejected broader responses and stopped manifest, no grades.
 - `focus-v5.py`, `focus-v5/`: bounded diagnostic orchestration, all nine responses,
-  six control judgments, three published stalemate grades/report, and four saved
-  contrast grades in `terminal-contrasts/grading-checkpoint.json`. Do not rerun
-  generation; resume only missing grades if further spending is authorized.
+  six control judgments, and all nine completed grades. `completion.json` preserves
+  the original stopped manifest; the missing grades resumed without regeneration.
 - `corpus-v4/`, `later-game-corpus-v3/`, `verify-v5-exports.py`: native exports
   from `590936d` and executed Python boundary/equivalence checks. All 16 controls
   bind; old 14 controls and all prior private briefs, V4 prompts, and judge
   contexts match. Only optional staged status changes the old requests.
+- `validation-v5-experience/`: full48 sensitivity checks and24 disjoint remaining
+  experience responses/grades. Original stopped manifest plus `completion.json`;
+  the recovered judge-accounting warning remains in the report.
+- `validation-v5-transfer/`:18 disjoint later-game,24 playthrough,18 sequence
+  responses and grades. `recovery.json` retains the20-cap stop; `completion.json`
+  documents final missing-grade resumption under21. Reports never forge a single
+  full-run manifest from the separate focused and continuation runs.
+- `validate-v5.py`, `resume-v5-grades.py`, `resume-v5-experience.py`,
+  `resume-v5-transfer.py`, `finish-v5-grades.py`: exact bounded orchestration.
+  These refuse overwriting evidence; do not rerun completed paid work.
+- `playthrough-corpus-v3/`, `benchmark-corpus-v3/`: fresh native exports from
+  `d8e01ab`, checked identical to prior inputs/briefs/judge evidence except optional
+  staged status. Only the two fixed development sequence groups were sent; no holdout.
 
 The V3 refreshed exports have identical old request fields, grading briefs,
 old-generator rendered prompts, and judge contexts. Only optional
@@ -329,7 +409,7 @@ Pricing is the frozen September 6 estimate, not a current-price or invoice claim
 All intermediate candidates, controls, grades, and unknown-call reservations
 remain in the same journal. Four quota-rejected calls reserve $1.29405, not
 confirmed charges. No extra spending is authorized by creating a new output
-directory or journal; the user-approved cumulative ceiling is $14.50.
+directory or journal; the final user-approved cumulative ceiling is $21.
 
 ## Verification and deployment
 
@@ -342,12 +422,17 @@ passed. Result bundles are `Test-ChessTutor-2026.11.04_16-12-18--0500.xcresult`
 and `Test-ChessTutor-2026.11.04_16-24-54--0500.xcresult` under
 `DerivedData/Logs/Test/`. Full native UI tests were not run locally.
 
-Code checkpoint: `590936d`. Python CI passed; iPad CI was queued at this
-checkpoint. Coaching Smoke was rebuilt/relaunched with the unchanged
-discovery-v2 coach, and its server health check passed. No paid Help request
-was needed for restoration. A16 was untouched. The independent review's
+Code checkpoint: `590936d`. Python and iPad CI subsequently passed on the
+previous pushed checkpoint `5379531`. The independent review's
 Important export/loader finding was reproduced and fixed; no other Important
-code finding remained. Paid output review covered all nine focused responses.
+code finding remained. Paid output review now covers all93 V5 responses.
+The final selection changes only local launcher/regression defaults and their
+integration expectations, not the native/renderer code used in the paid run.
+Selection tests demonstrated three expected failures with the old default, then
+all18 integration tests passed. Final full suites passed370 evaluator and57 server
+tests with zero skips, plus shell syntax and diff checks. The normal launcher
+successfully rebuilt/installed/launched V5 on Coaching Smoke; server health passed
+and a screenshot confirmed the playable board. No paid Help request was made.
 
 ### Historical V4 verification
 
@@ -378,6 +463,7 @@ is unchanged. An explicit `CHESS_TUTOR_COACHING_MODEL_CONFIG` override is
 preserved; the previous trial is
 `Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json`.
 
-PR #23 remains open. The normal development app/server is restored on
-**ChessTutor Coaching Smoke**, with the existing discovery-v2 trial selected;
-A16 was not changed. No paid V4 model request was made during restoration.
+PR #23 remains open, without auto-merge. The V5 local app/server has been restored
+through the normal launcher on **ChessTutor Coaching Smoke**.
+A16 and production configuration are not changed. Restoration uses health checks,
+not extra paid Help requests.
