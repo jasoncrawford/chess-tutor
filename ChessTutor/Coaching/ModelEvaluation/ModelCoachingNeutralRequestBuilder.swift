@@ -43,7 +43,38 @@ enum ModelCoachingNeutralRequestBuilder {
                 selectedPiece: selectedPiece,
                 learner: snapshot.learner,
                 hasTentativeMove: tentativeMove != nil
-            )
+            ),
+            tentativePosition: tentativePosition(for: snapshot, in: state, isLegal: tentativeMove?.isLegal == true)
+        )
+    }
+
+    private static func tentativePosition(
+        for snapshot: ModelCoachingNeutralSnapshot,
+        in state: GameState,
+        isLegal: Bool
+    ) -> ModelCoachingNeutralTentativePosition? {
+        guard let move = snapshot.tentativeMove,
+              LegalMoveGenerator.allowedMoves(for: move.from, by: snapshot.learner, in: state).contains(move) else {
+            return nil
+        }
+        // Match the displayed board, including a staged move that exposes its own king.
+        var after = state
+        if isLegal {
+            // Reuse the game's terminal-result rules, not the forcing-reply subset.
+            after.apply(move)
+        } else {
+            after = state.applyingUnchecked(move)
+        }
+        let pieces = pieceReferences(in: after)
+        return ModelCoachingNeutralTentativePosition(
+            pieces: pieces,
+            occupiedSquareRelationships: relationshipReferences(
+                in: after,
+                pieceIDsBySquare: Dictionary(uniqueKeysWithValues: pieces.map { ($0.square, $0.id) })
+            ),
+            movedPieceControlledSquares: LegalMoveGenerator.controlledSquares(from: move.to, in: after)
+                .map(ModelCoachingPositionEncoder.squareName).sorted(),
+            status: isLegal ? status(for: after.result) : nil
         )
     }
 

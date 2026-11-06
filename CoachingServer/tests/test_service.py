@@ -12,7 +12,7 @@ from CoachingServer.service import (
     HostedCoachingService,
     HostedCoachingServiceError,
 )
-from CoachingServer.chess_native_compiler import compile_context
+from CoachingServer.chess_native_compiler import PROMPT_GENERATORS, compile_context
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +108,41 @@ class EmptyProvider:
 
 
 class HostedCoachingServiceTests(unittest.TestCase):
+    def test_staged_result_reaches_the_live_and_benchmark_compiler(self):
+        configuration = HostedModelConfiguration.load(
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v5-low-model.json", ROOT,
+        )
+        request = copy.deepcopy(FIXTURE["request"])
+        request["interaction"]["tentativeMove"] = dict(request["legalMoves"][0], canonicalMove="b1c3", destinationSquare="c3", san="Nc3")
+        request["tentativePosition"] = dict(status="stalemate", pieces=[dict(
+            id="piece:white:knight:c3", color="white", kind="knight", square="c3")],
+            occupiedSquareRelationships=[], movedPieceControlledSquares=[])
+        for previous in (None, "resp_previous"):
+            provider = RecordingProvider(response={
+                "id": "resp_valid", "status": "completed", "output_text": json.dumps(dict(
+                    message="That would be a draw.", actions=[], focus=[], expects="chooseWhetherToPlay")),
+            })
+            service = HostedCoachingService(provider=provider, configuration=configuration)
+            service.complete(hosted_request(previous_response_id=previous, request=request))
+            compiler = PROMPT_GENERATORS[configuration.user_prompt_generator][int(previous is not None)]
+            self.assertEqual(compiler(request, configuration.prompt_version).markdown, provider.calls[0]["user_prompt"])
+            self.assertIn("stalemate — a draw, not a win", provider.calls[0]["user_prompt"])
+
+    def test_grounded_generator_is_identical_in_live_service_and_benchmark(self):
+        configuration = HostedModelConfiguration.load(
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v4-low-model.json", ROOT,
+        )
+        for previous in (None, "resp_previous"):
+            with self.subTest(previous=previous):
+                provider = RecordingProvider()
+                service = HostedCoachingService(provider=provider, configuration=configuration)
+                service.complete(hosted_request(previous_response_id=previous))
+                compiler = PROMPT_GENERATORS[configuration.user_prompt_generator][int(previous is not None)]
+                expected = compiler(FIXTURE["request"], configuration.prompt_version)
+                self.assertEqual(expected.markdown, provider.calls[0]["user_prompt"])
+                self.assertIn("Selected-piece relationships", provider.calls[0]["user_prompt"])
+                self.assertIn("No legal checkmate in one is available.", provider.calls[0]["user_prompt"])
+
     def test_shared_provider_envelope_requires_completed_output_and_continuation(self):
         response = {
             "id": "resp_valid-123",

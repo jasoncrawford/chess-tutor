@@ -3,6 +3,28 @@ import XCTest
 @testable import ChessTutor
 
 final class ModelCoachingNeutralRequestBuilderTests: XCTestCase {
+    func testTentativeFactsIncludeAnAllowedMoveThatExposesTheKing() throws {
+        let state = state(sideToMove: .white, pieces: [
+            square("e1"): Piece(kind: .king, color: .white),
+            square("e2"): Piece(kind: .rook, color: .white),
+            square("e8"): Piece(kind: .rook, color: .black),
+            square("h8"): Piece(kind: .king, color: .black),
+        ])
+        let move = Move(from: square("e2"), to: square("f2"))
+        let snapshot = ModelCoachingNeutralSnapshot(committedState: state, learner: .white,
+            positionRevision: 1, selectedSquare: move.to, tentativeMove: move,
+            latestEvent: event(1, .moveStaged), episodeEvents: [event(1, .moveStaged)])
+        let request = ModelCoachingNeutralRequestBuilder.build(snapshot: snapshot, requestID: "pinned")
+        XCTAssertEqual(false, request.interaction.tentativeMove?.isLegal)
+        let facts = try XCTUnwrap(request.tentativePosition)
+        XCTAssertTrue(facts.pieces.contains { $0.id == "piece:white:rook:f2" })
+        XCTAssertTrue(facts.occupiedSquareRelationships.contains { $0.kind == .checks && $0.sourcePieceReference == "piece:black:rook:e8" })
+        XCTAssertTrue(request.tentativeReplies.isEmpty)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        let displayed = try XCTUnwrap(json["tentativePosition"] as? [String: Any])
+        XCTAssertNil(displayed["status"], "A king-unsafe staged board is not a legal game outcome")
+    }
+
     func testStartingPositionBuildsOnlyRuleDerivedNeutralEvidence() {
         let snapshot = ModelCoachingNeutralSnapshot(
             committedState: .startingPosition(),

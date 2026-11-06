@@ -1,7 +1,85 @@
+import SwiftUI
 import XCTest
 @testable import ChessTutor
 
 final class CoachingPanelLayoutTests: XCTestCase {
+    @MainActor
+    func testCoachingFeedbackRendersAtBodySizeAndStillScalesWithDynamicType() throws {
+        let standard = try renderedTextLineHeights(dynamicTypeSize: .large)
+        let accessible = try renderedTextLineHeights(dynamicTypeSize: .accessibility3)
+
+        // Use identical copy in the feedback and instruction so their actual
+        // rendered glyph heights reveal an accidental headline-sized response.
+        XCTAssertEqual(standard.count, 2)
+        XCTAssertEqual(accessible.count, 2)
+        guard standard.count == 2, accessible.count == 2 else { return }
+        XCTAssertEqual(standard[0], standard[1], accuracy: 1)
+        XCTAssertEqual(accessible[0], accessible[1], accuracy: 1)
+        XCTAssertGreaterThan(accessible[0], standard[0])
+    }
+
+    @MainActor
+    private func renderedTextLineHeights(dynamicTypeSize: DynamicTypeSize) throws -> [Double] {
+        let presentation = CoachingPresentation(
+            primaryMessage: "A safe pawn.",
+            instruction: "A safe pawn.",
+            hint: nil,
+            routine: [],
+            actions: [],
+            boardTask: .none,
+            focus: .empty
+        )
+        let panel = CoachingPanelView(
+            session: GameSession(),
+            presentation: presentation,
+            layout: CoachingPanelLayout(
+                tabletopRegionSize: CGSize(width: 260, height: 446),
+                physicalRegionSize: CGSize(width: 260, height: 446),
+                physicalAxis: .vertical
+            ),
+            readableRotationDegrees: 0,
+            onCommittedMove: { _ in }
+        )
+        .environment(\.dynamicTypeSize, dynamicTypeSize)
+        .environment(\.colorScheme, .light)
+        .background(Color.white)
+        let renderer = ImageRenderer(content: panel)
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.uiImage?.cgImage)
+        let width = image.width
+        let height = image.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+
+        // Only inspect the conversation at the top, excluding the divider below.
+        var lineHeights: [Double] = []
+        var inLine = false
+        for y in 0..<min(height, 160) {
+            let hasInk = (0..<width).contains { x in
+                let offset = (y * width + x) * 4
+                return bytes[offset] < 150 && bytes[offset + 1] < 150
+                    && bytes[offset + 2] < 150
+            }
+            if hasInk {
+                if !inLine { lineHeights.append(0) }
+                lineHeights[lineHeights.count - 1] += 1
+            }
+            inLine = hasInk
+        }
+        return lineHeights
+    }
+
     func testVerticalCoachingRegionSpansMessageAndSelectedSlots() {
         let sidebar = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
         let layout = CoachingPanelLayout.make(sidebar: sidebar)

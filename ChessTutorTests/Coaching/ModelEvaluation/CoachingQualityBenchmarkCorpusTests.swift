@@ -3,6 +3,119 @@ import Foundation
 import XCTest
 @testable import ChessTutor
 
+/// A diagnostic replay of a real playthrough, separate from the frozen benchmark.
+final class CoachingPlaythroughRegressionTests: XCTestCase {
+    private struct Turn: Encodable {
+        let id: String
+        let group: String
+        let step: Int
+        let request: ModelCoachingNeutralRequest
+    }
+
+    func testPlaythroughFactsAndOptInExport() throws {
+        let history = ["e2e4", "e7e5", "f1c4", "g8f6", "d2d3", "b8c6", "g1f3", "d7d6"]
+        typealias Step = (ModelCoachingLearnerEventKind, [String], String?, String?)
+        let episodes: [(String, Int, [Step])] = [
+            ("opening", 0, [
+                (.helpOpened, [], nil, nil),
+                (.moveStaged, ["move:h2-h3"], "h3", "h2h3"),
+                (.moveRemoved, ["move:h2-h3"], "e2", nil),
+                (.moveStaged, ["move:e2-e4"], "e4", "e2e4"),
+            ]),
+            ("bishop", 2, [
+                (.helpOpened, [], nil, nil),
+                (.moveStaged, ["move:f1-c4"], "c4", "f1c4"),
+            ]),
+            ("danger", 4, [
+                (.helpOpened, [], nil, nil),
+                (.pieceSelected, ["piece:white:pawn:d2"], "d2", nil),
+                (.pieceSelected, ["piece:white:pawn:e4"], "e4", nil),
+                (.moveStaged, ["move:c4-f7"], "f7", "c4f7"),
+                (.actionChosen, ["action:looksSafe"], "f7", "c4f7"),
+                (.moveRemoved, ["move:c4-f7"], nil, nil),
+                (.actionChosen, ["action:hint"], nil, nil),
+                (.moveStaged, ["move:d2-d3"], "d3", "d2d3"),
+            ]),
+            ("black-knight", 5, [
+                (.helpOpened, [], nil, nil),
+                (.moveStaged, ["move:b8-c6"], "c6", "b8c6"),
+            ]),
+            ("white-knight", 6, [
+                (.helpOpened, [], nil, nil),
+                (.moveStaged, ["move:g1-f3"], "f3", "g1f3"),
+            ]),
+            ("castling", 8, [
+                (.helpOpened, [], nil, nil),
+                (.moveStaged, ["move:e1-g1:castle-kingside"], "g1", "e1g1"),
+            ]),
+        ]
+        var turns: [Turn] = []
+        for (group, plies, steps) in episodes {
+            var state = GameState.startingPosition()
+            for canonical in history.prefix(plies) {
+                state.apply(try legalMove(canonical, in: state))
+            }
+            var events: [ModelCoachingNeutralEpisodeEvent] = []
+            for (index, step) in steps.enumerated() {
+                let event = ModelCoachingNeutralEpisodeEvent(
+                    sequence: index + 1, kind: step.0, referencedIDs: step.1
+                )
+                events.append(event)
+                let id = "\(group)-\(index + 1)"
+                let snapshot = ModelCoachingNeutralSnapshot(
+                    committedState: state,
+                    learner: state.sideToMove,
+                    positionRevision: plies,
+                    selectedSquare: step.2.map(square),
+                    tentativeMove: try step.3.map { try legalMove($0, in: state) },
+                    latestEvent: event,
+                    episodeEvents: events
+                )
+                let request = ModelCoachingNeutralRequestBuilder.build(
+                    snapshot: snapshot, requestID: "playthrough:\(id)"
+                )
+                XCTAssertEqual(request.gameHistory.map(\.canonicalMove), Array(history.prefix(plies)))
+                XCTAssertEqual(request.interaction.latestEvent, event)
+                turns.append(Turn(id: id, group: group, step: index + 1, request: request))
+            }
+        }
+
+        // Independent chess oracles: do not grade a model against its own explanation.
+        var protected = GameState.startingPosition()
+        for canonical in history.prefix(5) {
+            protected.apply(try legalMove(canonical, in: protected))
+        }
+        XCTAssertTrue(LegalMoveGenerator.controlledSquares(from: square("d3"), in: protected).contains(square("e4")))
+        XCTAssertFalse(LegalMoveGenerator.controlledSquares(from: square("e4"), in: protected).contains(square("d3")))
+        let losingCapture = try XCTUnwrap(turns.first { $0.id == "danger-4" })
+        XCTAssertTrue(losingCapture.request.tentativeReplies.contains { $0.canonicalMove == "e8f7" })
+        XCTAssertEqual(turns.first { $0.id == "danger-8" }?.request.interaction.tentativeMove?.canonicalMove, "d2d3")
+        XCTAssertEqual(turns.first { $0.id == "castling-2" }?.request.interaction.tentativeMove?.san, "O-O")
+        XCTAssertEqual(turns.count, 20)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        let data = try encoder.encode(turns)
+        if let directory = ProcessInfo.processInfo.environment["COACHING_PLAYTHROUGH_OUTPUT_DIR"] {
+            let destination = URL(fileURLWithPath: directory, isDirectory: true)
+                .appendingPathComponent("requests.json")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path), "Do not overwrite retained evidence")
+            try data.write(to: destination, options: .withoutOverwriting)
+        }
+    }
+
+    private func legalMove(_ canonical: String, in state: GameState) throws -> Move {
+        try XCTUnwrap(LegalMoveGenerator.allLegalMoves(in: state).first {
+            ModelCoachingPositionEncoder.canonicalMove($0) == canonical
+        }, "History and staged moves must be legal: \(canonical)")
+    }
+
+    private func square(_ name: String) -> Square {
+        let bytes = Array(name.utf8)
+        return Square(file: Square.File(rawValue: Int(bytes[0]) - 96)!, rank: Int(bytes[1]) - 48)
+    }
+}
+
 final class CoachingQualityBenchmarkCorpusTests: XCTestCase {
     func testOptInExport() throws {
         let environment = ProcessInfo.processInfo.environment

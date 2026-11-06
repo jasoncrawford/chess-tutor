@@ -202,6 +202,137 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         )
     }
 
+    func testHostedIdentificationAllowsTapCaptureAfterSelectingMover() async throws {
+        let state = try middlegamePlaythroughState()
+        let from = Square(file: .c, rank: 4)
+        let to = Square(file: .e, rank: 6)
+        for expects in [ModelCoachingChessNativeExpectedResponse.findEndangeredPiece, .findSafeCapture] {
+            for showsMoves in [true, false] {
+                let provider = ControlledHostedCoachingProvider()
+                let session = GameSession(state: state, hostedCoachingProvider: provider)
+                session.assistSettings.showLegalMovesOnSelection = showsMoves
+                session.startCoaching()
+                await answerPending(session, using: provider, expects: expects)
+
+                XCTAssertTrue(session.handleCoachingSquareTap(from))
+                await answerPending(session, using: provider, expects: expects)
+
+                // Follow the board's real routing: only attempt movement if coaching
+                // did not consume the tap as an identification answer.
+                if !session.handleCoachingSquareTap(to) {
+                    XCTAssertEqual(.moved, session.moveSelectedPiece(to: to))
+                }
+                XCTAssertTrue(session.canFinishTurn)
+                XCTAssertEqual(Piece(kind: .bishop, color: .white), session.state.board[to])
+                let task = Task { await session.resolvePendingCoachingAdvice() }
+                let request = await provider.waitForOnlyRequest()
+                XCTAssertEqual(.moveStaged, request.interaction.latestEvent.kind)
+                XCTAssertEqual("c4e6", request.interaction.tentativeMove?.canonicalMove)
+                XCTAssertEqual(["move:c4-e6"], request.interaction.latestEvent.referencedIDs)
+                // The real request carries the possible pawn recapture, not an
+                // invented claim that winning the queen also saves the bishop.
+                XCTAssertTrue(request.tentativeReplies.contains { $0.canonicalMove == "f7e6" })
+                await provider.succeed(
+                    requestID: request.requestID,
+                    message: "Keep this trade?",
+                    expects: .chooseWhetherToPlay
+                )
+                await task.value
+                XCTAssertEqual([.done, .keepLooking, .stop], session.coachingPresentation?.actions.map(\.action))
+            }
+        }
+    }
+
+    func testHostedIdentificationStillAcceptsTapsWithoutAnActionableDestination() async throws {
+        let state = try middlegamePlaythroughState()
+        let bishop = Square(file: .c, rank: 4)
+        let whiteQueen = Square(file: .g, rank: 4)
+        let blackQueen = Square(file: .e, rank: 6)
+        let blackKnight = Square(file: .c, rank: 6)
+        let selections: [(Square?, Square, String)] = [
+            (nil, blackQueen, "piece:black:queen:e6"),
+            (bishop, whiteQueen, "piece:white:queen:g4"),
+            (bishop, blackKnight, "piece:black:knight:c6"),
+            (blackQueen, bishop, "piece:white:bishop:c4"),
+        ]
+        for (selected, tapped, reference) in selections {
+            let provider = ControlledHostedCoachingProvider()
+            let session = GameSession(state: state, hostedCoachingProvider: provider)
+            if let selected { session.select(selected) }
+            session.startCoaching()
+            await answerPending(session, using: provider, expects: .findEndangeredPiece)
+            XCTAssertTrue(session.handleCoachingSquareTap(tapped))
+            XCTAssertEqual(state.board, session.state.board)
+            let task = Task { await session.resolvePendingCoachingAdvice() }
+            let request = await provider.waitForOnlyRequest()
+            XCTAssertEqual(.pieceSelected, request.interaction.latestEvent.kind)
+            XCTAssertEqual([reference], request.interaction.latestEvent.referencedIDs)
+            XCTAssertNil(request.interaction.tentativeMove)
+            await provider.succeed(requestID: request.requestID, message: "Try a move.", expects: .stageMove)
+            await task.value
+        }
+    }
+
+    func testHostedIdentificationAllowsPinnedCaptureToStageButNotCommit() async throws {
+        let from = Square(file: .e, rank: 2)
+        let to = Square(file: .d, rank: 2)
+        let state = GameState(board: Board(pieces: [
+            Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+            from: Piece(kind: .rook, color: .white),
+            Square(file: .a, rank: 8): Piece(kind: .king, color: .black),
+            Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+            to: Piece(kind: .knight, color: .black),
+        ]), sideToMove: .white)
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(state: state, hostedCoachingProvider: provider)
+        session.select(from)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .findSafeCapture)
+        if !session.handleCoachingSquareTap(to) {
+            XCTAssertEqual(.moved, session.moveSelectedPiece(to: to))
+        }
+        XCTAssertEqual(Piece(kind: .rook, color: .white), session.state.board[to])
+        XCTAssertFalse(session.canFinishTurn)
+        XCTAssertNil(session.finishTurn())
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        XCTAssertEqual(.moveStaged, request.interaction.latestEvent.kind)
+        XCTAssertEqual(false, request.interaction.tentativeMove?.isLegal)
+        await provider.succeed(requestID: request.requestID, message: "Your king needs help.", expects: .judgeMoveSafety)
+        await task.value
+    }
+
+    private func middlegamePlaythroughState() throws -> GameState {
+        let history = [
+            "e4", "e5", "Bc4", "Nf6", "d3", "Nc6", "Nf3", "d6", "O-O", "Be7", "Nc3", "O-O",
+            "Bg5", "h6", "Bxf6", "Bxf6", "Nd5", "Qd7", "Nxf6+", "gxf6", "Nh4", "Kh7",
+            "Qh5", "f5", "exf5", "Qe7", "f6", "Qxf6", "Nf3", "Bg4", "Qxg4", "Qe6",
+        ]
+        var state = GameState.startingPosition()
+        for san in history {
+            let move = try XCTUnwrap(LegalMoveGenerator.allLegalMoves(in: state).first {
+                MoveHistoryFormatter.notation(for: $0, in: state) == san
+            }, "Every recorded playthrough move must be legal: \(san)")
+            state.apply(move)
+        }
+        XCTAssertEqual(
+            "r4r2/ppp2p1k/2npq2p/4p3/2B3Q1/3P1N2/PPP2PPP/R4RK1 w - - 1 17",
+            ModelCoachingPositionEncoder.fen(for: state)
+        )
+        return state
+    }
+
+    private func answerPending(
+        _ session: GameSession,
+        using provider: ControlledHostedCoachingProvider,
+        expects: ModelCoachingChessNativeExpectedResponse
+    ) async {
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        await provider.succeed(requestID: request.requestID, message: "Which piece?", expects: expects)
+        await task.value
+    }
+
     func testHostedEpisodeRecalculatesAfterMoveFailureRetryAndRemovalWithoutLocalFallback() async throws {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)
@@ -323,51 +454,56 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
     }
 
     func waitForOnlyRequest() async -> ModelCoachingNeutralRequest {
-        for _ in 0..<1_000 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
             if let request = pending.values.first?.request {
                 return request
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         fatalError("Hosted provider did not receive a request")
     }
 
     func waitForRequest(id: String) async -> ModelCoachingNeutralRequest {
-        for _ in 0..<1_000 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
             if let request = pending[id]?.request {
                 return request
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         fatalError("Hosted provider did not receive request \(id)")
     }
 
     func waitForContinuation(id: String) async -> String? {
-        for _ in 0..<1_000 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
             if let call = pending[id] {
                 return call.continuationID
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         fatalError("Hosted provider did not receive request \(id)")
     }
 
     func waitForOnlyCorrelation() async -> HostedCoachingCorrelation {
-        for _ in 0..<1_000 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
             if let correlation = pending.values.first?.correlation {
                 return correlation
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         fatalError("Hosted provider did not receive a correlation")
     }
 
     func waitForCorrelation(id: String) async -> HostedCoachingCorrelation {
-        for _ in 0..<1_000 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
             if let correlation = pending[id]?.correlation {
                 return correlation
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         fatalError("Hosted provider did not receive correlation for \(id)")
     }

@@ -1061,7 +1061,10 @@ class RunEvalConfigurationTests(unittest.TestCase):
             },
             {
                 path.name: run_eval._file_sha256(path)
-                for path in sorted((TOOLS_DIR / "prompts").glob("*v[1-3].*"))
+                for path in sorted(
+                    list((TOOLS_DIR / "prompts").glob("tutor-v[1-3].md"))
+                    + list((TOOLS_DIR / "prompts").glob("examples-v[1-3].json"))
+                )
             },
         )
 

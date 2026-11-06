@@ -34,6 +34,7 @@ from Tools.CoachingEval.benchmark.judge_contract import (
     validate_scores as _validate_scores,
 )
 from Tools.CoachingEval.benchmark.grade_checkpoint import JudgeCheckpoint
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 from Tools.CoachingEval.benchmark.reference_set import JudgeReferenceSet
 
@@ -151,7 +152,7 @@ def grade_run(
             if _mechanically_valid(record):
                 judgments["absolute|" + record["cellID"]] = {
                     "kind": "absolute",
-                    "payloadSHA256": _sha256(_canonical_json_bytes(_absolute_payload(turns[record["caseID"]], record))),
+                    "payloadSHA256": _sha256(_canonical_json_bytes(absolute_payload(turns[record["caseID"]], record))),
                 }
         for metadata, payload in jobs:
             if payload is not None:
@@ -190,7 +191,7 @@ def _grade_loaded_run(run_manifest, records, turns, judge_configuration, client,
         if not _mechanically_valid(record):
             absolute.append(_automatic_unusable(record))
             continue
-        payload = _absolute_payload(turn, record)
+        payload = absolute_payload(turn, record)
         grade, metrics = _grade_judgment(
             "absolute|" + record["cellID"], "absolute", payload,
             judge_configuration, client, price_table,
@@ -338,6 +339,10 @@ def _grade_judgment(key, kind, payload, configuration, client, price_table,
             _absolute_schema() if kind == "absolute" else _pairwise_schema(), price_table,
         )
         grade = _validate_judgment(output, kind, configurations)
+    except BudgetExceeded:
+        if checkpoint is not None:
+            checkpoint.not_transmitted(key)
+        raise
     except Exception as error:
         if checkpoint is not None:
             failed_metrics = error.metrics if isinstance(error, JudgeCallError) else metrics
@@ -418,7 +423,7 @@ def _load_calibration(path):
     return rows
 
 
-def _absolute_payload(turn, record):
+def absolute_payload(turn, record):
     return {
         "kind": "absolute",
         "graderBrief": _brief_payload(turn.grader_brief),

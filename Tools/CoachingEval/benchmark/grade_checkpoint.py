@@ -90,6 +90,15 @@ class JudgeCheckpoint:
     def failed(self, key, metrics):
         self._finish(key, "failed", metrics)
 
+    def not_transmitted(self, key):
+        """Undo only a locally refused attempt; preserve any earlier paid tries."""
+        if self._state["inFlight"] != key:
+            raise ValueError("Judge checkpoint has no matching in-flight attempt")
+        self._state["inFlight"] = None
+        if not self._state["cells"][key]["attempts"]:
+            del self._state["cells"][key]
+        self._save()
+
     def succeeded(self, key, output, metrics):
         self._validate_output(key, output)
         self._finish(key, "completed", metrics, output)

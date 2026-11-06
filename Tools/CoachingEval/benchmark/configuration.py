@@ -9,13 +9,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
-from CoachingServer.chess_native_compiler import compile_context, compile_follow_up_context
 from CoachingServer.model_configuration import HostedModelConfiguration
 
 
-PROMPT_GENERATORS = {
-    "chess-native-v13": (compile_context, compile_follow_up_context),
-}
 PROVIDERS = frozenset(("openai-responses-v1",))
 RESPONSE_CONTRACTS = frozenset(("chess-native-v13",))
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
