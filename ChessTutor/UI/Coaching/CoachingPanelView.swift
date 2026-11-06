@@ -139,7 +139,6 @@ enum CoachingActionRouting {
 
 struct CoachingPanelView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .title2) private var coachingTitleSize: CGFloat = 24
     @ScaledMetric(relativeTo: .body) private var coachingBodySize: CGFloat = 18
     @ScaledMetric(relativeTo: .body) private var coachingActionSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var actionMinimumHeight: CGFloat = 44
@@ -249,7 +248,7 @@ struct CoachingPanelView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let presentation {
                 Text(presentation.primaryMessage)
-                    .font(titleFont)
+                    .font(bodyFont)
                     .lineLimit(1)
                     .accessibilitySortPriority(
                         CoachingConversationAccessibilityElement.primaryMessage.sortPriority
@@ -287,7 +286,7 @@ struct CoachingPanelView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let presentation {
                 Text(presentation.primaryMessage)
-                    .font(titleFont)
+                    .font(bodyFont)
                     .foregroundStyle(AppTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
@@ -396,10 +395,6 @@ struct CoachingPanelView: View {
         }
 
         _ = session.chooseCoachingAction(action)
-    }
-
-    private var titleFont: Font {
-        AppTheme.coachingTitleFont(size: min(coachingTitleSize, 34))
     }
 
     private var bodyFont: Font {
