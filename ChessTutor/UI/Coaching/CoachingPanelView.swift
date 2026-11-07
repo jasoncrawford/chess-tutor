@@ -142,6 +142,7 @@ enum CoachingActionRouting {
 
 struct CoachingPanelView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var coachingBodySize: CGFloat = 18
     @ScaledMetric(relativeTo: .body) private var coachingActionSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var actionMinimumHeight: CGFloat = 44
@@ -265,7 +266,14 @@ struct CoachingPanelView: View {
 
     private var accessibilityConversationCopy: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let presentation {
+            if presentation?.isThinking == true {
+                // A stable semantic counterpart to the animated visual below.
+                Color.clear
+                    .frame(width: 64, height: 40)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Thinking")
+                    .accessibilityIdentifier("coaching-thinking-indicator")
+            } else if let presentation {
                 Text(presentation.primaryMessage)
                     .font(bodyFont)
                     .lineLimit(1)
@@ -303,7 +311,9 @@ struct CoachingPanelView: View {
 
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let presentation {
+            if presentation?.isThinking == true {
+                CoachingThinkingIndicator(reduceMotion: reduceMotion)
+            } else if let presentation {
                 Text(presentation.primaryMessage)
                     .font(bodyFont)
                     .foregroundStyle(AppTheme.ink)
@@ -441,32 +451,61 @@ struct CoachingPanelView: View {
 }
 
 private struct CoachingPanelIdentity: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .title2) private var titleSize: CGFloat = 24
     let isThinking: Bool
     let showsTitle: Bool
 
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "lightbulb")
-                .font(.system(size: 13, weight: .semibold))
-                .symbolEffect(
-                    .pulse,
-                    options: .repeating.speed(0.4),
-                    isActive: isThinking && !reduceMotion
-                )
+        HStack(spacing: 10) {
+            VStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    AppTheme.captureBoxFelt
+                    AppTheme.lightSquare
+                }
+                HStack(spacing: 2) {
+                    AppTheme.lightSquare
+                    AppTheme.captureBoxFelt
+                }
+            }
+            .frame(width: 26, height: 26)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             if showsTitle {
                 Text("Coach")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: min(titleSize, 32), weight: .semibold, design: .serif))
+                    .foregroundStyle(AppTheme.ink)
             }
         }
-        .foregroundStyle(AppTheme.mutedInk)
-        .padding(.horizontal, showsTitle ? 8 : 6)
-        .frame(height: 26)
-        .background(AppTheme.coverageControlFill.opacity(0.65), in: Capsule())
+        .padding(.bottom, 6)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Coach")
         .accessibilityValue(isThinking ? "Thinking" : "")
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Motion belongs to this presentation-only view; request state still comes
+/// exclusively from the session's `isThinking` flag.
+struct CoachingThinkingIndicator: View {
+    let reduceMotion: Bool
+    @State private var startedAt = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            let elapsed = context.date.timeIntervalSince(startedAt)
+            HStack(spacing: 8) {
+                ForEach(0..<3) { index in
+                    let lift = reduceMotion ? 0 : max(0, sin(elapsed * .pi * 2 / 1.4 - Double(index) * 0.8))
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(AppTheme.captureBoxFelt.opacity(0.65 + lift * 0.35))
+                        .frame(width: 14, height: 14)
+                        .offset(y: -8 * lift)
+                }
+            }
+            .frame(width: 64, height: 40, alignment: .leading)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Thinking")
+        .accessibilityIdentifier("coaching-thinking-indicator")
     }
 }
 

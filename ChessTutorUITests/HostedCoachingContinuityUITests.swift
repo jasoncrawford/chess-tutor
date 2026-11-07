@@ -49,6 +49,10 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         let shell = app.buttons["Close coaching help"]
         XCTAssertTrue(shell.waitForExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts["Choose a piece"].exists)
+        let thinking = app.descendants(matching: .any)["coaching-thinking-indicator"]
+        XCTAssertTrue(thinking.exists)
+        XCTAssertEqual(thinking.label, "Thinking")
+        XCTAssertFalse(app.staticTexts["Thinking…"].exists)
 
         let thinkingSnapshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         thinkingSnapshot.name = "Coach thinking"
@@ -66,6 +70,7 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Play this move"].exists)
         XCTAssertTrue(app.buttons["Try another move"].exists)
         XCTAssertFalse(app.staticTexts["Thinking…"].exists)
+        XCTAssertFalse(thinking.exists)
         let identity = app.descendants(matching: .any)["coaching-panel-identity"]
         XCTAssertEqual(identity.label, "Coach")
         XCTAssertEqual(identity.value as? String, "")
@@ -86,7 +91,7 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         let deadline = Date().addingTimeInterval(duration)
         while Date() < deadline {
             XCTAssertTrue(shell.exists)
-            XCTAssertTrue(app.staticTexts["Thinking…"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["coaching-thinking-indicator"].exists)
             let identity = app.descendants(matching: .any)["coaching-panel-identity"]
             XCTAssertTrue(identity.exists)
             XCTAssertEqual(identity.label, "Coach")
