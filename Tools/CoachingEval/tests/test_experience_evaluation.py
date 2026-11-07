@@ -111,6 +111,18 @@ class ExperienceEvaluationTests(unittest.TestCase):
         self.assertEqual(1, saved["unknownAccountingCalls"])
         self.assertEqual(1, len(client.calls))
 
+    def test_tone_diagnostics_count_exclamations_only_in_valid_visible_messages(self):
+        rows = [dict(configurationID="candidate", stepIndex=1,
+                     generationStatus="completed", mechanicalValidation={"valid": valid},
+                     parsedTurn={"message": text, "expects": "chooseWhetherToPlay"})
+                for text, valid in [("Great! Your bishop can come out!", True),
+                                    ("Your pawn opens a path for your bishop.", True),
+                                    ("Invalid!", False)]]
+        stats = ExperienceMetrics.summarize(rows, {"candidate": True})["candidate"]
+        self.assertEqual(2, stats["validMessageCount"])
+        self.assertEqual(1, stats["exclamatoryMessageCount"])
+        self.assertEqual(2, stats["exclamationMarkCount"])
+
     def test_blocked_sequence_rows_are_not_zero_latency_requests(self):
         rows = [dict(configurationID="candidate", stepIndex=2, latencyMilliseconds=0,
                      generationStatus="blockedByPriorTurn", attemptCount=0,

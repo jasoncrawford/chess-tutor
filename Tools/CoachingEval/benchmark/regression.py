@@ -30,7 +30,7 @@ class RegressionEvaluation:
         if output.exists():
             raise FileExistsError("Refusing to overwrite or replay an evaluation; use saved grading checkpoints")
         config_root = root / "Tools/CoachingEval/benchmark"
-        candidate = load_candidate(Path(candidate_path) if candidate_path else config_root / "configs/astra-experience-v5-low.json", root)
+        candidate = load_candidate(Path(candidate_path) if candidate_path else config_root / "configs/astra-experience-v6-low.json", root)
         judge = load_judge(config_root / "configs/judge-v4.json", root)
         prices = load_prices(config_root / "pricing-v2.json")
         corpus = load_corpus(corpus_path)
@@ -54,8 +54,16 @@ class RegressionEvaluation:
                       pricingSHA256=prices.sha256, maxConservativeCostUSD=str(meter.limit),
                       repetitions=3, includeHoldout=include_holdout,
                       corpora={"benchmark": corpus.sha256, "playthrough": regression.sha256}, suites={})
-        experience_controls = config_root / "judge-experience-v3.json"
         if experience is not None:
+            # Saved exports keep their original private briefs and case inventory.
+            # New controls cannot be applied to old corpora missing those cases.
+            schema = json.loads(experience.manifest_path.read_text())["schemaVersion"]
+            control_versions = {
+                "coaching-quality-playthrough-regression-manifest.v1": "judge-experience-v2.json",
+                "coaching-quality-experience-regression-manifest.v3": "judge-experience-v3.json",
+                "coaching-quality-experience-regression-manifest.v4": "judge-experience-v4.json",
+            }
+            experience_controls = config_root / control_versions[schema]
             result["corpora"]["experience"] = experience.sha256
             result["experienceControlsSHA256"] = hashlib.sha256(experience_controls.read_bytes()).hexdigest()
         output.mkdir(parents=True)

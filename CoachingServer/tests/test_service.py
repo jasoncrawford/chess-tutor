@@ -110,7 +110,7 @@ class EmptyProvider:
 class HostedCoachingServiceTests(unittest.TestCase):
     def test_staged_result_reaches_the_live_and_benchmark_compiler(self):
         configuration = HostedModelConfiguration.load(
-            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v5-low-model.json", ROOT,
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v6-low-model.json", ROOT,
         )
         request = copy.deepcopy(FIXTURE["request"])
         request["interaction"]["tentativeMove"] = dict(request["legalMoves"][0], canonicalMove="b1c3", destinationSquare="c3", san="Nc3")

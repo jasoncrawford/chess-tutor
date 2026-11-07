@@ -21,15 +21,15 @@ The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 2
 ./scripts/run_coaching_regressions.sh
 ```
 
-This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-experience-v5-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
+This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-experience-v6-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
 
 The command requires a clean committed checkout, exports inputs from the production Swift rules/request builder on **ChessTutor Coaching Smoke**, and reads the existing Keychain credential without displaying it. Override the simulator with `CHESS_TUTOR_REGRESSION_DESTINATION` if needed. It uses the repository `.venv`; `CHESS_TUTOR_EVAL_PYTHON` can select another installed Python.
 
-It first reuses or obtains the existing judge qualification, then runs two sensitivity gates: six retained playthrough controls and sixteen experience-v3 controls, each three times. These checks use the same grading payload and rubric as their suites; expected outcomes are not sent to the judge. The expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged.
+It first reuses or obtains the existing judge qualification, then runs two sensitivity gates: six retained playthrough controls and twenty-two experience-v4 controls, each three times. These checks use the same grading payload and rubric as their suites; expected outcomes are not sent to the judge. The expectations are agent-authored, not human calibration. A failure stops candidate spending and is retained for inspection. Broad qualification and historical scores are unchanged. Saved older experience exports select their compatible older controls.
 
 If both gates pass, the selected candidate runs three times on each of three separately reported suites, experience first:
 
-- **Experience regressions v3:** nine probes with stricter criteria for factual claims, acknowledging answers, useful achievable goals, appropriate Help/Hint/staged feedback, and explaining a terminal draw. Includes the complete rule-derived mate-in-one answer set in private grading evidence. See the experience section below for versioning and a smaller bounded comparison workflow.
+- **Experience regressions v4:** thirteen probes covering factual claims, acknowledging answers, useful achievable goals, appropriate Help/Hint/staged feedback, explaining a terminal draw, quiet-opening tradeoffs, purposeful flank pawns, and calm tone. Includes rule-derived mate-in-one evidence. See below for versioning and the smaller bounded comparison workflow.
 - **Playthrough regressions v1:** eight independent development positions covering pawn-defense direction, invented forced defense, concrete development feedback, losing versus favorable captures, a defended-piece answer, and changed-move precedence. These are tuned regression examples, never new holdout evidence. Fresh full-context requests contain the recorded learner events; these eight cases do not replay model conversation history.
 - **Frozen benchmark:** 56 development turns, including its existing three-step conversations. The 14 holdout turns remain excluded unless `--include-holdout` is explicitly provided.
 
@@ -476,12 +476,12 @@ rm -rf .coaching-eval
 ```
 ## Coaching experience regression suite
 
-`CoachingExperienceBenchmarkTests` exports nine development probes through
+`CoachingExperienceBenchmarkTests` exports thirteen development probes through
 `COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR` (with `COACHING_QUALITY_BENCHMARK_SOURCE_SHA`).
 They reuse real native snapshots, with stricter private briefs for false defenses,
 answer acknowledgment, useful goals, and appropriate Help/Hint/staged feedback.
 Existing corpora and past scores are unchanged. The paired controls in
-`benchmark/judge-experience-v3.json` are agent-authored expectations, not human ratings.
+`benchmark/judge-experience-v4.json` are agent-authored expectations, not human ratings.
 V2 adds a retained impossible mating question and an achievable contrast; its
 grading brief derives the complete mate-in-one answer set from native legal
 move flags. V3 adds a retained response that praises confinement while omitting
@@ -491,6 +491,16 @@ the draw even if every stated control-square fact is true. The explicit
 these nine cases from historical eight-case exports. V1/V2 exports, controls,
 and scores remain frozen. A full V3 gate is 48 judgments; older or focused-subset
 sensitivity evidence cannot silently qualify it.
+
+V4 preserves the original nine rows exactly and adds four independent, legally
+replayed staged-move probes: Black h6 after White e3, White a3, h3 attacking a
+bishop, and a central e4 move. Their private briefs distinguish a relevant
+opening tradeoff from incidental-square trivia, preserve learner agency, and
+prefer calm specific feedback over cheerleading. The six new paired controls
+test those distinctions, bringing the full gate to 66 judgments. The manifest
+is `coaching-quality-experience-regression-manifest.v4`; V3 exports still load
+with their original sixteen controls. These independent probes do not simulate
+a prior coach utterance or establish conversation-level reliability.
 
 The normal `./scripts/run_coaching_regressions.sh` command now exports this suite
 and runs it first, after both the existing and experience sensitivity gates.
@@ -503,8 +513,8 @@ After export, run the bounded workflow (API key supplied through the environment
 ```sh
 .venv/bin/python -m Tools.CoachingEval.benchmark.experience \
   --corpus /absolute/path/to/experience-corpus \
-  --controls Tools/CoachingEval/benchmark/judge-experience-v3.json \
-  --candidate Tools/CoachingEval/benchmark/configs/astra-experience-v5-low.json \
+  --controls Tools/CoachingEval/benchmark/judge-experience-v4.json \
+  --candidate Tools/CoachingEval/benchmark/configs/astra-experience-v6-low.json \
   --qualification /absolute/path/to/compatible/qualification.json \
   --journal /absolute/path/to/experiment/budget.jsonl \
   --output /absolute/path/to/experiment/local-trial --max-cost 10
@@ -520,7 +530,8 @@ its checkpoint for the existing `grade --checkpoint` recovery workflow.
 
 The manifest includes all-call latency split into fresh requests and stored
 conversation follow-ups, counts above diagnostic 5s/3s UX targets, failures, and
-repeated verbal keep/play question endings. Repetition is a copy diagnostic, not
+repeated verbal keep/play question endings, valid-message and exclamation counts.
+Punctuation and repetition are copy diagnostics, not
 a semantic quality grade. Score improvement must still be checked on separate
 unchanged development cases; it is not proof of untouched holdout performance.
 
@@ -533,10 +544,17 @@ Stalemate and checkmate are explicit; ongoing does not mean safe. King-unsafe
 staging has no valid outcome field, and old clients may omit it. Candidate V5
 uses this generator with the unchanged V4 system prompt. After the full V3 gate,
 27 experience grades, and 66 broader development grades plus independent output
-inspection, V5 is the provisional local trial and standard regression default.
+inspection, V5 was selected for the provisional local trial.
 This is not production promotion or untouched holdout qualification. Production
 configuration and explicit launcher overrides remain unchanged; prior candidates
 remain available. See the report below for grading-policy and cost-accounting caveats.
+
+V6 is now the local-trial and standard regression default. It keeps the same
+model, generator, reasoning settings, and response contract, changing only the
+versioned system prompt to prioritize useful tradeoffs and calm tone. Its
+November 7 check is a small development diagnostic, not a repeat of the full V5
+scored evaluation. See [the polish report](../../docs/reports/2026-11-07-coaching-polish.md)
+for scope and limitations; do not attribute historical V5 scores to V6.
 Live coaching and evaluation use the same generator registry. Update the server
 and rebuild the iPad app together for this input; older clients remain accepted
 by the updated server, but older servers may reject the new field.

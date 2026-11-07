@@ -8,7 +8,8 @@ struct HostedCoachingPresentationProjector: Sendable {
             return makePresentation(
                 message: "Thinking…",
                 actions: [closeAction],
-                focus: .empty
+                focus: .empty,
+                isThinking: true
             )
         case .failed:
             return makePresentation(
@@ -40,7 +41,8 @@ struct HostedCoachingPresentationProjector: Sendable {
         message: String,
         actions: [CoachingActionPresentation],
         focus: CoachFocusPresentation,
-        boardTask: CoachingBoardTask = .none
+        boardTask: CoachingBoardTask = .none,
+        isThinking: Bool = false
     ) -> CoachingPresentation {
         CoachingPresentation(
             primaryMessage: message,
@@ -50,7 +52,8 @@ struct HostedCoachingPresentationProjector: Sendable {
             routine: [],
             actions: actions,
             boardTask: boardTask,
-            focus: focus
+            focus: focus,
+            isThinking: isThinking
         )
     }
 

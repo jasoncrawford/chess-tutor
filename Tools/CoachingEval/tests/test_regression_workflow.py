@@ -95,7 +95,7 @@ class RegressionWorkflowTests(unittest.TestCase):
             summary = destination / "summary.md"
             summary.write_text("report")
             (destination.parent / "candidates.progress.jsonl").write_text(json.dumps(dict(
-                configurationID="astra-experience-v5-low", stepIndex=2, latencyMilliseconds=2100,
+                configurationID="astra-experience-v6-low", stepIndex=2, latencyMilliseconds=2100,
                 mechanicalValidation={"valid": True},
                 parsedTurn={"expects": "chooseWhetherToPlay", "message": "Keep this move?"},
             )) + "\n")
@@ -112,26 +112,53 @@ class RegressionWorkflowTests(unittest.TestCase):
         self.assertEqual(2, grades.call_count)
         for call in candidates.call_args_list:
             self.assertEqual("regression", call.kwargs["mode"])
-            self.assertEqual("astra-experience-v5-low", call.kwargs["configurations"][0].identifier)
+            self.assertEqual("astra-experience-v6-low", call.kwargs["configurations"][0].identifier)
             self.assertFalse(call.kwargs["include_holdout"])
         self.assertEqual({"benchmark", "playthrough"}, {p.parent.name for p in reports})
         self.assertEqual(3, result["repetitions"])
         self.assertEqual(2, len(result["suites"]))
-        metrics = result["experienceMetrics"]["benchmark"]["astra-experience-v5-low"]
+        metrics = result["experienceMetrics"]["benchmark"]["astra-experience-v6-low"]
         self.assertEqual(1, metrics["followUp"]["count"])
         self.assertEqual(1, metrics["confirmationQuestionCount"])
 
     def test_experience_gate_is_required_before_any_candidate_calls(self):
+        experience = self.experience_fixture(4, 13)
         with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
              mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", side_effect=[{"passed": True}, {"passed": False}]) as gate, \
              mock.patch("Tools.CoachingEval.benchmark.regression.run_candidates") as candidates:
-            result = self.run_workflow(self.root / "experience-gate", experience_path=self.regression)
+            result = self.run_workflow(self.root / "experience-gate", experience_path=experience)
         self.assertEqual("judgeSensitivityFailed", result["status"])
         self.assertFalse(result["experienceSensitivityPassed"])
         gated_controls = json.loads(gate.call_args_list[1].args[0].read_text())
         self.assertTrue(any(row["id"] == "omitted-stalemate-warning" for row in gated_controls["cases"]))
+        self.assertTrue(any(row["id"] == "incidental-flank-fact" for row in gated_controls["cases"]))
+        self.assertTrue(any(row["id"] == "perky-center-feedback" for row in gated_controls["cases"]))
         self.assertIn("experience", result["corpora"])
         candidates.assert_not_called()
+
+    def experience_fixture(self, version, count):
+        directory = self.root / f"experience-v{version}"
+        directory.mkdir()
+        rows = self.fixture.corpus.raw_cases[:count]
+        data = b"".join(json.dumps(row).encode() + b"\n" for row in rows)
+        (directory / "cases.jsonl").write_bytes(data)
+        manifest = dict(schemaVersion=f"coaching-quality-experience-regression-manifest.v{version}",
+                        sourceGitSHA="source", independentGroupCount=count, sequenceGroupCount=0,
+                        turnCount=count, developmentTurnCount=count, holdoutTurnCount=0,
+                        turnIDs=[r["id"] for r in rows], casesSHA256=hashlib.sha256(data).hexdigest())
+        (directory / "benchmark-manifest.json").write_text(json.dumps(manifest))
+        return directory
+
+    def test_saved_v3_experience_uses_compatible_controls_not_new_polish_cases(self):
+        experience = self.experience_fixture(3, 9)
+        with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
+             mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", side_effect=[{"passed": True}, {"passed": False}]) as gate:
+            result = self.run_workflow(self.root / "old-experience-gate", experience_path=experience)
+        self.assertEqual("judgeSensitivityFailed", result["status"])
+        controls = json.loads(gate.call_args_list[1].args[0].read_text())
+        self.assertEqual(16, len(controls["cases"]))
+        self.assertTrue(all(row["caseID"] not in {"e10-black-flank-pawn", "e12-purposeful-flank-pawn", "e13-calm-center-pawn"}
+                            for row in controls["cases"]))
 
     def test_experience_suite_runs_first_after_both_gates(self):
         with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \

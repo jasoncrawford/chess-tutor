@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import ChessTutor
 
@@ -43,9 +44,25 @@ final class CoachingPanelLayoutTests: XCTestCase {
         .environment(\.dynamicTypeSize, dynamicTypeSize)
         .environment(\.colorScheme, .light)
         .background(Color.white)
-        let renderer = ImageRenderer(content: panel)
-        renderer.scale = 1
-        let image = try XCTUnwrap(renderer.uiImage?.cgImage)
+        // ImageRenderer omits UIKit-backed content such as this ScrollView.
+        // Host the real panel in a window so the test measures the visible text.
+        let host = UIHostingController(rootView: panel)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 228, height: 414))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true }
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderedImage = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+            XCTAssertTrue(host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true))
+        }
+        let attachment = XCTAttachment(image: renderedImage)
+        attachment.name = "Coaching typography \(dynamicTypeSize)"
+        add(attachment)
+        let image = try XCTUnwrap(renderedImage.cgImage)
         let width = image.width
         let height = image.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
@@ -64,18 +81,23 @@ final class CoachingPanelLayoutTests: XCTestCase {
 
         // Only inspect the conversation at the top, excluding the divider below.
         var lineHeights: [Double] = []
-        var inLine = false
+        var previousInkRow: Int?
         for y in 0..<min(height, 160) {
             let hasInk = (0..<width).contains { x in
                 let offset = (y * width + x) * 4
-                return bytes[offset] < 150 && bytes[offset + 1] < 150
-                    && bytes[offset + 2] < 150
+                // Exclude the lighter Coach marker and decorative divider.
+                return bytes[offset] < 100 && bytes[offset + 1] < 100
+                    && bytes[offset + 2] < 100
             }
-            if hasInk {
-                if !inLine { lineHeights.append(0) }
-                lineHeights[lineHeights.count - 1] += 1
+            guard hasInk else { continue }
+            if let previousInkRow, y - previousInkRow <= 2 {
+                // Antialiasing can leave a single faint row within a glyph.
+                // Include it in the glyph bounds, not as a separate text line.
+                lineHeights[lineHeights.count - 1] += Double(y - previousInkRow)
+            } else {
+                lineHeights.append(1)
             }
-            inLine = hasInk
+            previousInkRow = y
         }
         return lineHeights
     }

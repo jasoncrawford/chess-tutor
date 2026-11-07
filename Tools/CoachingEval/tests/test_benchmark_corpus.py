@@ -138,6 +138,20 @@ class BenchmarkCorpusTests(unittest.TestCase):
 
         self.assertTrue(all(turn.source_trace_id is None for turn in corpus.turns))
 
+    def test_polish_experience_inventory_is_versioned_without_relabeling_old_exports(self):
+        self.cases = self.cases[:13]
+        self.write("coaching-quality-experience-regression-manifest.v4")
+        corpus = load_corpus(self.root)
+        self.assertTrue(corpus.is_regression)
+        self.assertEqual(13, len(corpus.select()))
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases.pop()
+        self.write("coaching-quality-experience-regression-manifest.v4")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
     def test_rejects_hash_duplicate_count_split_category_and_missing_brief(self):
         original = json.loads(json.dumps(self.cases))
         mutations = (

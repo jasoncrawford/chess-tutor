@@ -269,7 +269,9 @@ private struct DelayedHostedCoachingProvider: HostedCoachingTurning {
         correlation: HostedCoachingCorrelation
     ) async throws -> HostedCoachingResponse {
         _ = correlation
-        try await Task.sleep(for: .milliseconds(850))
+        let capturesThinkingState = ProcessInfo.processInfo.arguments
+            .contains("-ui-test-hosted-coaching-snapshots")
+        try await Task.sleep(for: capturesThinkingState ? .seconds(3) : .milliseconds(850))
         let turn: ModelCoachingChessNativeTurn
         switch request.interaction.latestEvent.kind {
         case .moveStaged:

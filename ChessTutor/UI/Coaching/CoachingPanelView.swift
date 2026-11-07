@@ -19,6 +19,7 @@ enum CoachingPanelComposition: Equatable {
 }
 
 private enum CoachingPanelAccessibilitySection: String {
+    case identity
     case conversation
     case routine
     case actions
@@ -29,6 +30,8 @@ private enum CoachingPanelAccessibilitySection: String {
 
     var sortPriority: Double {
         switch self {
+        case .identity:
+            4
         case .conversation:
             3
         case .routine:
@@ -172,9 +175,7 @@ struct CoachingPanelView: View {
         switch layout.composition {
         case .tall:
             VStack(spacing: 10) {
-                if !routine.isEmpty {
-                    routineHeader(axis: .horizontal)
-                }
+                panelHeader
 
                 scrollableConversation
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -183,10 +184,8 @@ struct CoachingPanelView: View {
             }
         case .wide:
             VStack(spacing: 10) {
-                if !routine.isEmpty {
-                    routineHeader(axis: .horizontal)
-                    panelDivider
-                }
+                panelHeader
+                panelDivider
 
                 HStack(spacing: 10) {
                     scrollableConversation
@@ -201,6 +200,7 @@ struct CoachingPanelView: View {
     @ViewBuilder
     private var accessibilityPanelContent: some View {
         VStack(alignment: .leading, spacing: 10) {
+            coachIdentity
             accessibleConversation
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
@@ -215,6 +215,25 @@ struct CoachingPanelView: View {
             height: layout.tabletopContentSize.height,
             alignment: .topLeading
         )
+    }
+
+    private var panelHeader: some View {
+        HStack(spacing: 8) {
+            coachIdentity
+            if !routine.isEmpty {
+                routineHeader(axis: .horizontal)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var coachIdentity: some View {
+        CoachingPanelIdentity(
+            isThinking: presentation?.isThinking == true,
+            showsTitle: routine.isEmpty
+        )
+        .accessibilityIdentifier(CoachingPanelAccessibilitySection.identity.identifier)
+        .accessibilitySortPriority(CoachingPanelAccessibilitySection.identity.sortPriority)
     }
 
     private var panelDivider: some View {
@@ -418,6 +437,36 @@ struct CoachingPanelView: View {
                 prominence: .quiet
             )
         ]
+    }
+}
+
+private struct CoachingPanelIdentity: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isThinking: Bool
+    let showsTitle: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "lightbulb")
+                .font(.system(size: 13, weight: .semibold))
+                .symbolEffect(
+                    .pulse,
+                    options: .repeating.speed(0.4),
+                    isActive: isThinking && !reduceMotion
+                )
+            if showsTitle {
+                Text("Coach")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+        }
+        .foregroundStyle(AppTheme.mutedInk)
+        .padding(.horizontal, showsTitle ? 8 : 6)
+        .frame(height: 26)
+        .background(AppTheme.coverageControlFill.opacity(0.65), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Coach")
+        .accessibilityValue(isThinking ? "Thinking" : "")
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

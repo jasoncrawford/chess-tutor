@@ -559,28 +559,28 @@ struct CoachingPresentation: Equatable, Sendable {
     let actions: [CoachingActionPresentation]
     let boardTask: CoachingBoardTask
     let focus: CoachFocusPresentation
-}
+    let isThinking: Bool
 
-extension CoachingPresentation {
     init(
         primaryMessage: String,
         instruction: String?,
+        observation: String? = nil,
         hint: CoachingHint?,
         routine: [CoachingRoutineState],
         actions: [CoachingActionPresentation],
         boardTask: CoachingBoardTask,
-        focus: CoachFocusPresentation
+        focus: CoachFocusPresentation,
+        isThinking: Bool = false
     ) {
-        self.init(
-            primaryMessage: primaryMessage,
-            instruction: instruction,
-            observation: nil,
-            hint: hint,
-            routine: routine,
-            actions: actions,
-            boardTask: boardTask,
-            focus: focus
-        )
+        self.primaryMessage = primaryMessage
+        self.instruction = instruction
+        self.observation = observation
+        self.hint = hint
+        self.routine = routine
+        self.actions = actions
+        self.boardTask = boardTask
+        self.focus = focus
+        self.isThinking = isThinking
     }
 }
 
