@@ -86,26 +86,32 @@ After play-testing, the small, light heading and subtle icon pulse did not give
 the panel enough hierarchy or make waiting apparent. This revision changes only
 presentation, not coaching content, prompts, evaluation configuration or flow.
 
-Design: a dark 24-point semibold serif Coach heading, paired with a simple
-two-by-two board inlay, above the existing 18-point rounded body text. Both text
+Design: a dark 24-point semibold serif Coach heading, paired with a prominent
+felt-green lightbulb, above the existing 18-point rounded body text. Both text
 sizes scale with Dynamic Type. The existing palette stays intact: paper
 `#F2EDE0`, ink `#21211C`, walnut `#594733`, felt `#426E59`, and sand `#E8D6AD`.
-The board mark replaces the generic lightbulb without introducing another
-container, border, or accent color. Content stays left aligned.
+The initial board mark was replaced with a lightbulb at the user's preference,
+without returning to the small, faint badge. No extra container, border, or
+accent color was introduced. Advice stays left aligned.
 
 Waiting replaces the visible “Thinking…” sentence with three felt-green tiles
-that rise in sequence. A bounded 30-fps SwiftUI timeline runs only while that
+that rise in sequence, centered in the open reply area between the heading and
+buttons. A bounded 30-fps SwiftUI timeline runs only while that
 view exists. Reduce Motion pauses the timeline and leaves a static, visible
 indicator; VoiceOver still reads “Thinking.” Existing routine chips remain
 available in local coaching, and actions are unchanged.
 
 Regression checks measure real rendered heading/body glyphs, compare successive
 frames in the reply area, exercise both motion preferences, and check the
-thinking-to-response transition. The previous design failed the heading and
-reply-area motion checks before the implementation changed. Screenshots verify
+thinking-to-response transition. They also measure the visible tiles' center in
+the reply area and the matching accessible indicator's position. The previous
+design failed the heading, motion, and centering checks before their respective
+implementation changes. Screenshots verify
 the visual result; no paid model requests are needed for this visual-only work.
 
-Final verification: all **1,003 native tests passed**, with zero failures or
-skips, including the rendered motion and Reduce Motion checks. The focused
-rotation/accessibility/continuity run also passed. Independent read-only review
-found no remaining actionable issues.
+Final verification after the lightbulb and centering refinement: all **1,004
+native tests passed**, with zero failures, skips, or runtime warnings, including
+the rendered motion, centering, and Reduce Motion checks. The focused panel and
+hosted-continuity run also passed (19 tests). Thinking and ready screenshots were
+visually checked. The preceding visual revision had an independent read-only
+review with no remaining actionable issues.

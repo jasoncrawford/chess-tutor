@@ -5,6 +5,28 @@ import XCTest
 
 final class CoachingPanelLayoutTests: XCTestCase {
     @MainActor
+    func testThinkingTilesAreCenteredInTheOpenReplyArea() throws {
+        for frame in try thinkingFrames() {
+            let greenPixels = (0..<(228 * 310)).filter { pixel in
+                let offset = pixel * 4
+                let red = Double(frame[offset])
+                let green = Double(frame[offset + 1])
+                let blue = Double(frame[offset + 2])
+                return green > red * 1.15 && green > blue * 1.05
+            }
+            let xs = greenPixels.map { $0 % 228 }
+            let ys = greenPixels.map { $0 / 228 }
+            let minX = try XCTUnwrap(xs.min())
+            let maxX = try XCTUnwrap(xs.max())
+            let minY = try XCTUnwrap(ys.min())
+            let maxY = try XCTUnwrap(ys.max())
+            XCTAssertEqual(Double(minX + maxX) / 2, 114, accuracy: 5)
+            // Allow the small vertical lift of the bouncing tiles.
+            XCTAssertEqual(Double(minY + maxY) / 2, 155, accuracy: 14)
+        }
+    }
+
+    @MainActor
     func testThinkingPanelHonorsSystemMotionPreference() throws {
         let frames = try thinkingFrames()
         if UIAccessibility.isReduceMotionEnabled {
@@ -85,7 +107,7 @@ final class CoachingPanelLayoutTests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
             // Inspect the reply area, excluding the heading and action buttons.
-            let crop = try XCTUnwrap(image.cgImage?.cropping(to: CGRect(x: 0, y: 50, width: 90, height: 72)))
+            let crop = try XCTUnwrap(image.cgImage?.cropping(to: CGRect(x: 0, y: 50, width: 228, height: 310)))
             // A cropped CGImage can share its original backing provider. Copy
             // just the visible crop into owned pixels before comparing frames.
             var pixels = [UInt8](repeating: 0, count: crop.width * crop.height * 4)
@@ -185,9 +207,11 @@ final class CoachingPanelLayoutTests: XCTestCase {
         for y in 0..<min(height, 160) {
             let hasInk = (0..<width).contains { x in
                 let offset = (y * width + x) * 4
-                // Exclude the green mark and decorative divider.
+                // Measure neutral text ink, not the green icon. Some bulb
+                // pixels are dark enough to pass the brightness test alone.
                 return bytes[offset] < 100 && bytes[offset + 1] < 100
                     && bytes[offset + 2] < 100
+                    && abs(Int(bytes[offset]) - Int(bytes[offset + 1])) < 12
             }
             guard hasInk else { continue }
             if let previousInkRow, y - previousInkRow <= 2 {

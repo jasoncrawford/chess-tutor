@@ -53,6 +53,9 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         XCTAssertTrue(thinking.exists)
         XCTAssertEqual(thinking.label, "Thinking")
         XCTAssertFalse(app.staticTexts["Thinking…"].exists)
+        let replyArea = app.descendants(matching: .any)["coaching-panel-conversation"].frame
+        XCTAssertEqual(thinking.frame.midX, replyArea.midX, accuracy: 1)
+        XCTAssertEqual(thinking.frame.midY, replyArea.midY, accuracy: 1)
 
         let thinkingSnapshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         thinkingSnapshot.name = "Coach thinking"

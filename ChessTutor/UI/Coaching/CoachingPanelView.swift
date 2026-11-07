@@ -178,7 +178,7 @@ struct CoachingPanelView: View {
             VStack(spacing: 10) {
                 panelHeader
 
-                scrollableConversation
+                conversationRegion
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 panelDivider
                 readableActions(axis: .vertical)
@@ -189,7 +189,7 @@ struct CoachingPanelView: View {
                 panelDivider
 
                 HStack(spacing: 10) {
-                    scrollableConversation
+                    conversationRegion
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     panelDivider
                     readableActions(axis: .vertical)
@@ -243,12 +243,19 @@ struct CoachingPanelView: View {
             .accessibilityHidden(true)
     }
 
-    private var scrollableConversation: some View {
-        ScrollView(.vertical) {
-            conversation
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+    private var conversationRegion: some View {
+        Group {
+            if presentation?.isThinking == true {
+                CoachingThinkingIndicator(reduceMotion: reduceMotion)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView(.vertical) {
+                    conversation
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
+            }
         }
-        .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
         .clipped()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
@@ -273,6 +280,7 @@ struct CoachingPanelView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Thinking")
                     .accessibilityIdentifier("coaching-thinking-indicator")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let presentation {
                 Text(presentation.primaryMessage)
                     .font(bodyFont)
@@ -311,9 +319,7 @@ struct CoachingPanelView: View {
 
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if presentation?.isThinking == true {
-                CoachingThinkingIndicator(reduceMotion: reduceMotion)
-            } else if let presentation {
+            if let presentation {
                 Text(presentation.primaryMessage)
                     .font(bodyFont)
                     .foregroundStyle(AppTheme.ink)
@@ -457,18 +463,10 @@ private struct CoachingPanelIdentity: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            VStack(spacing: 2) {
-                HStack(spacing: 2) {
-                    AppTheme.captureBoxFelt
-                    AppTheme.lightSquare
-                }
-                HStack(spacing: 2) {
-                    AppTheme.lightSquare
-                    AppTheme.captureBoxFelt
-                }
-            }
-            .frame(width: 26, height: 26)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            Image(systemName: "lightbulb")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(AppTheme.captureBoxFelt)
+                .frame(width: 26, height: 26)
             if showsTitle {
                 Text("Coach")
                     .font(.system(size: min(titleSize, 32), weight: .semibold, design: .serif))
@@ -501,7 +499,7 @@ struct CoachingThinkingIndicator: View {
                         .offset(y: -8 * lift)
                 }
             }
-            .frame(width: 64, height: 40, alignment: .leading)
+            .frame(width: 64, height: 40)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Thinking")
