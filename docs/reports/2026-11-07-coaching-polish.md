@@ -1,6 +1,6 @@
 # Coaching polish for the next family playtest
 
-The local launcher and repeatable regression runner now select
+The initial polish selected, in the local launcher and repeatable regression runner,
 `astra-experience-v6-low`. Model, low reasoning, conversation reuse, native
 prompt generator, and UI response contract are unchanged. The new versioned
 system prompt prioritizes the useful consequence or tradeoff of a staged move
@@ -115,3 +115,50 @@ the rendered motion, centering, and Reduce Motion checks. The focused panel and
 hosted-continuity run also passed (19 tests). Thinking and ready screenshots were
 visually checked. The preceding visual revision had an independent read-only
 review with no remaining actionable issues.
+
+## Direct revision follow-up
+
+The playtest trace `4bddda7766e5` showed a requested Hint directing the child to
+choose "Try another move" before replacing a staged knight move. That button
+clears the draft and causes another coaching request, but is not required:
+the child can drag the displayed knight to the new destination directly.
+
+The local launcher and regression runner now select `astra-experience-v7-low`.
+Its versioned system prompt adds only the missing interaction context: the
+board is an editable draft until committed, revisions can happen directly,
+and drag instructions must locate the piece on the displayed board. The button,
+client flow, model, reasoning settings, and production defaults are unchanged.
+
+Experience manifest V5 appends `e14-revise-staged-knight` to the unchanged
+thirteen cases. The native builder mechanically constructs a starting position,
+staged g1-h3, and requested Hint. The private grading brief penalizes the button
+detour and distinguishes draft revision from a second chess move. Two new judge
+controls retain the actual problematic reply and a direct-drag contrast; old
+exports keep their original controls. Normal repeatable evaluations include
+this case and the full 72-judgment V5 sensitivity gate.
+
+Focused diagnostics used three fresh requests per candidate, not a replay of
+the stored conversation. V6 did not repeat the button instruction in this small
+sample, although one of its three replies incorrectly located the displayed
+knight on g1. All three V7 replies explicitly suggested dragging from h3 to f3,
+with a correct center-control reason, and passed mechanical validation.
+The judge accepted both new controls on their first repetition: the retained
+detour scored 3 for judgment/coherence, versus 5 for direct revision. A subsequent
+judge call failed with unknown accounting, so the remaining repetitions were
+not completed. This is focused evidence, not a full V5 gate or broad candidate
+qualification; historical scores have not been relabeled.
+
+Evidence is retained in `.coaching-eval/revise-staged/20261107/` (`corpus`,
+`baseline`, `revised`, `controls`, and `check.py`), with source/configuration
+hashes and the native fixture hash. The export identifies `9d67c06-dirty`, not
+an immutable clean revision. Conservative spend/reservations increased by
+**$0.458442**, to **$20.9168895** against the existing $21 cumulative cap;
+the failed call retains its reservation. No further paid checks were attempted.
+
+Verification: **1,005 native tests**, **375 evaluation-tool tests**, and **57
+server tests** passed, with no skips. The native result has no runtime warnings.
+All 24 controls bind successfully to the native export; the earlier 13 cases
+and 22 controls are unchanged. The new corpus test failed before the case was
+added, and the inventory/control-routing tests failed before V5 support was
+added. Python HTTP integration tests were rerun with localhost socket permission
+after sandbox denials; launcher tests were updated to the new pinned candidate.

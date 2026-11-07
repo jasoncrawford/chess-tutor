@@ -4,7 +4,7 @@ import XCTest
 
 /// New grading policy; the original benchmark and its historical scores stay frozen.
 enum CoachingExperienceBenchmark {
-    static let manifestVersion = "coaching-quality-experience-regression-manifest.v4"
+    static let manifestVersion = "coaching-quality-experience-regression-manifest.v5"
     static func corpus() throws -> CoachingQualityBenchmarkCorpus {
         let sources = CoachingQualityBenchmarkCorpus.v1.developmentTurns
             + (try CoachingPlaythroughBenchmark.corpus().allTurns)
@@ -53,7 +53,35 @@ enum CoachingExperienceBenchmark {
                 ), sourceTraceID: "experience-v3:\(sourceID)"
             )
         }
-        return .init(independent: turns + (try polishTurns()), sequences: [])
+        return .init(independent: turns + (try polishTurns()) + [try stagedRevisionHint()], sequences: [])
+    }
+
+    private static func stagedRevisionHint() throws -> CoachingQualityBenchmarkTurn {
+        let state = GameState.startingPosition()
+        let move = try CoachingLaterGameBenchmark.legalMove("g1h3", in: state)
+        let events: [ModelCoachingNeutralEpisodeEvent] = [
+            .init(sequence: 1, kind: .helpOpened, referencedIDs: []),
+            .init(sequence: 2, kind: .moveStaged, referencedIDs: ["move:g1-h3"]),
+            .init(sequence: 3, kind: .actionChosen, referencedIDs: ["action:hint"]),
+        ]
+        return .init(
+            id: "e14-revise-staged-knight", groupID: "e14-revise-staged-knight", stepIndex: 1,
+            split: .development, category: .interaction,
+            snapshot: .init(committedState: state, learner: .white, positionRevision: 0,
+                            selectedSquare: move.to, tentativeMove: move,
+                            latestEvent: events[2], episodeEvents: events),
+            graderBrief: .init(
+                verifiedFacts: [
+                    "White has staged g1-h3 but has not committed it. The knight is displayed on h3; g1 is empty on the displayed board.",
+                    "The child requested Hint. Revising the tentative move to g1-f3 is legal; a knight on f3 controls d4 and e5.",
+                    "The app lets the child drag the displayed knight directly from h3 to f3 to replace the tentative move. This is not a chess move from h3 to f3. No reset or Try another move button is required; that button removes the draft and triggers an extra coaching request.",
+                ],
+                coachingPurpose: "Give an actionable hint with a simple reason, without requiring a reset or another coaching turn before revising the draft. An unnecessary instruction to choose Try another move first is at most 3 for interaction coherence and coaching judgment. When describing a drag, locate the knight on its displayed h3 square, not its committed g1 origin.",
+                acceptableAlternatives: ["A useful destination hint or direct revision invitation with a correct reason. The precise alternative is not required, and an explicit statement that no button is needed is optional."],
+                successCriteria: ["Permit direct board interaction without a mandatory button detour. Distinguish revising a draft from making a second chess move. Preserve the existing keep/change choice; exact guidance is allowed because Hint was requested."],
+                severeFailureCriteria: ["Invented chess facts, treating the staged move as committed, or describing h3-f3 as a legal knight move."]
+            ), sourceTraceID: "4bddda7766e5"
+        )
     }
 
     /// Independent staged-move probes, not a scripted prior coach conversation.
@@ -104,22 +132,35 @@ enum CoachingExperienceBenchmark {
 }
 
 final class CoachingExperienceBenchmarkTests: XCTestCase {
-    func testPolishRegressionInventoryExportsThirteenIndependentDevelopmentCases() throws {
+    func testStagedKnightHintKeepsDisplayedSquareAndPrivateRevisionCriteria() throws {
+        let turn = try XCTUnwrap(CoachingExperienceBenchmark.corpus().allTurns.first { $0.id == "e14-revise-staged-knight" })
+        let request = ModelCoachingNeutralRequestBuilder.build(snapshot: turn.snapshot, requestID: turn.id)
+        XCTAssertEqual("g1h3", request.interaction.tentativeMove?.canonicalMove)
+        XCTAssertEqual("h3", request.interaction.selectedSquare)
+        XCTAssertEqual(.actionChosen, request.interaction.latestEvent.kind)
+        XCTAssertEqual(["action:hint"], request.interaction.latestEvent.referencedIDs)
+        XCTAssertEqual([], request.gameHistory)
+        XCTAssertTrue(request.legalMoves.contains { $0.canonicalMove == "g1f3" && $0.isLegal })
+        let markdown = ModelCoachingChessNativeContextCompiler.compile(request, promptVersion: "tutor-v13").markdown
+        XCTAssertFalse(markdown.contains(turn.graderBrief.coachingPurpose))
+    }
+
+    func testExperienceInventoryExportsFourteenIndependentDevelopmentCases() throws {
         let corpus = try CoachingExperienceBenchmark.corpus()
         let artifacts = try CoachingQualityBenchmarkExporter.artifacts(
             sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true,
             regressionSchemaVersion: CoachingExperienceBenchmark.manifestVersion
         )
         let manifest = try JSONDecoder().decode(CoachingQualityBenchmarkManifest.self, from: artifacts.manifestJSON)
-        XCTAssertEqual("coaching-quality-experience-regression-manifest.v4", manifest.schemaVersion)
-        XCTAssertEqual(13, manifest.turnCount)
-        XCTAssertEqual(13, manifest.independentGroupCount)
-        XCTAssertEqual(13, manifest.developmentTurnCount)
+        XCTAssertEqual("coaching-quality-experience-regression-manifest.v5", manifest.schemaVersion)
+        XCTAssertEqual(14, manifest.turnCount)
+        XCTAssertEqual(14, manifest.independentGroupCount)
+        XCTAssertEqual(14, manifest.developmentTurnCount)
         XCTAssertEqual(0, manifest.holdoutTurnCount)
         XCTAssertEqual(0, manifest.sequenceGroupCount)
         XCTAssertEqual([
-            "e10-black-flank-pawn", "e11-white-flank-pawn", "e12-purposeful-flank-pawn", "e13-calm-center-pawn",
-        ], Array(manifest.turnIDs.suffix(4)))
+            "e10-black-flank-pawn", "e11-white-flank-pawn", "e12-purposeful-flank-pawn", "e13-calm-center-pawn", "e14-revise-staged-knight",
+        ], Array(manifest.turnIDs.suffix(5)))
     }
 
     func testPolishCasesReplayFullLegalHistoryAndKeepStagingSeparate() throws {
@@ -189,7 +230,7 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
         let rows = try artifacts.casesJSONL.split(separator: 0x0A).map {
             try JSONDecoder().decode(CoachingQualityBenchmarkCaseRecord.self, from: Data($0))
         }
-        let polishTurns = Array(corpus.allTurns.suffix(4))
+        let polishTurns = Array(corpus.allTurns.suffix(5))
         XCTAssertEqual("e10-black-flank-pawn", polishTurns.first?.id)
         for turn in polishTurns {
             let row = try XCTUnwrap(rows.first { $0.id == turn.id })
@@ -255,7 +296,7 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
         let sources = CoachingQualityBenchmarkCorpus.v1.developmentTurns
             + (try CoachingPlaythroughBenchmark.corpus().allTurns)
             + (try CoachingLaterGameBenchmark.corpus().allTurns)
-        XCTAssertEqual(13, corpus.allTurns.count)
+        XCTAssertEqual(14, corpus.allTurns.count)
         for turn in corpus.allTurns.prefix(9) {
             let sourceID = try XCTUnwrap(turn.sourceTraceID?.split(separator: ":").last).description
             let source = try XCTUnwrap(sources.first { $0.id == sourceID })
@@ -289,7 +330,7 @@ final class CoachingExperienceBenchmarkTests: XCTestCase {
         let corpus = try CoachingExperienceBenchmark.corpus()
         let artifacts = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true, preserveVerifiedFacts: true, regressionSchemaVersion: CoachingExperienceBenchmark.manifestVersion)
         let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: artifacts.manifestJSON) as? [String: Any])
-        XCTAssertEqual("coaching-quality-experience-regression-manifest.v4", manifest["schemaVersion"] as? String)
+        XCTAssertEqual("coaching-quality-experience-regression-manifest.v5", manifest["schemaVersion"] as? String)
         let rows = try artifacts.casesJSONL.split(separator: 0x0A).map {
             try JSONDecoder().decode(CoachingQualityBenchmarkCaseRecord.self, from: Data($0))
         }

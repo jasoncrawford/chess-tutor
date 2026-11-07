@@ -21,7 +21,7 @@ The runtime settings are fixed in `runtime.json`: 8192 context tokens, at most 2
 ./scripts/run_coaching_regressions.sh
 ```
 
-This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-experience-v6-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
+This evaluates the exact default model/prompt configuration used by the local app launcher, pinned by `benchmark/configs/astra-experience-v7-low.json`. A PR integration test launches the dev script with fake external commands and checks its actual server configuration against this candidate. Explicit app configuration overrides are not silently followed: use `--candidate path/to/pinned-candidate.json` to evaluate a different configuration.
 
 The command requires a clean committed checkout, exports inputs from the production Swift rules/request builder on **ChessTutor Coaching Smoke**, and reads the existing Keychain credential without displaying it. Override the simulator with `CHESS_TUTOR_REGRESSION_DESTINATION` if needed. It uses the repository `.venv`; `CHESS_TUTOR_EVAL_PYTHON` can select another installed Python.
 
@@ -476,12 +476,12 @@ rm -rf .coaching-eval
 ```
 ## Coaching experience regression suite
 
-`CoachingExperienceBenchmarkTests` exports thirteen development probes through
+`CoachingExperienceBenchmarkTests` exports fourteen development probes through
 `COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR` (with `COACHING_QUALITY_BENCHMARK_SOURCE_SHA`).
 They reuse real native snapshots, with stricter private briefs for false defenses,
 answer acknowledgment, useful goals, and appropriate Help/Hint/staged feedback.
 Existing corpora and past scores are unchanged. The paired controls in
-`benchmark/judge-experience-v4.json` are agent-authored expectations, not human ratings.
+`benchmark/judge-experience-v5.json` are agent-authored expectations, not human ratings.
 V2 adds a retained impossible mating question and an achievable contrast; its
 grading brief derives the complete mate-in-one answer set from native legal
 move flags. V3 adds a retained response that praises confinement while omitting
@@ -502,6 +502,14 @@ is `coaching-quality-experience-regression-manifest.v4`; V3 exports still load
 with their original sixteen controls. These independent probes do not simulate
 a prior coach utterance or establish conversation-level reliability.
 
+V5 preserves those thirteen rows and adds a requested Hint after staging the
+opening knight on h3. Its private brief checks that guidance allows revising the
+draft directly, without requiring "Try another move" first, and locates the
+piece on the displayed board. Two new controls contrast the retained playtest
+response with direct drag guidance. The full V5 gate is 72 judgments; saved V4
+exports retain their original 22 controls. This is a fresh-request probe, not a
+stored-conversation replay.
+
 The normal `./scripts/run_coaching_regressions.sh` command now exports this suite
 and runs it first, after both the existing and experience sensitivity gates.
 It then runs the existing playthrough and original development suites under the
@@ -513,8 +521,8 @@ After export, run the bounded workflow (API key supplied through the environment
 ```sh
 .venv/bin/python -m Tools.CoachingEval.benchmark.experience \
   --corpus /absolute/path/to/experience-corpus \
-  --controls Tools/CoachingEval/benchmark/judge-experience-v4.json \
-  --candidate Tools/CoachingEval/benchmark/configs/astra-experience-v6-low.json \
+  --controls Tools/CoachingEval/benchmark/judge-experience-v5.json \
+  --candidate Tools/CoachingEval/benchmark/configs/astra-experience-v7-low.json \
   --qualification /absolute/path/to/compatible/qualification.json \
   --journal /absolute/path/to/experiment/budget.jsonl \
   --output /absolute/path/to/experiment/local-trial --max-cost 10

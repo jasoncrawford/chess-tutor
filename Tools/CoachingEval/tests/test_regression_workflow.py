@@ -95,7 +95,7 @@ class RegressionWorkflowTests(unittest.TestCase):
             summary = destination / "summary.md"
             summary.write_text("report")
             (destination.parent / "candidates.progress.jsonl").write_text(json.dumps(dict(
-                configurationID="astra-experience-v6-low", stepIndex=2, latencyMilliseconds=2100,
+                configurationID="astra-experience-v7-low", stepIndex=2, latencyMilliseconds=2100,
                 mechanicalValidation={"valid": True},
                 parsedTurn={"expects": "chooseWhetherToPlay", "message": "Keep this move?"},
             )) + "\n")
@@ -112,12 +112,12 @@ class RegressionWorkflowTests(unittest.TestCase):
         self.assertEqual(2, grades.call_count)
         for call in candidates.call_args_list:
             self.assertEqual("regression", call.kwargs["mode"])
-            self.assertEqual("astra-experience-v6-low", call.kwargs["configurations"][0].identifier)
+            self.assertEqual("astra-experience-v7-low", call.kwargs["configurations"][0].identifier)
             self.assertFalse(call.kwargs["include_holdout"])
         self.assertEqual({"benchmark", "playthrough"}, {p.parent.name for p in reports})
         self.assertEqual(3, result["repetitions"])
         self.assertEqual(2, len(result["suites"]))
-        metrics = result["experienceMetrics"]["benchmark"]["astra-experience-v6-low"]
+        metrics = result["experienceMetrics"]["benchmark"]["astra-experience-v7-low"]
         self.assertEqual(1, metrics["followUp"]["count"])
         self.assertEqual(1, metrics["confirmationQuestionCount"])
 
@@ -148,6 +148,17 @@ class RegressionWorkflowTests(unittest.TestCase):
                         turnIDs=[r["id"] for r in rows], casesSHA256=hashlib.sha256(data).hexdigest())
         (directory / "benchmark-manifest.json").write_text(json.dumps(manifest))
         return directory
+
+    def test_revision_hint_inventory_uses_new_controls_and_saved_v4_keeps_old_controls(self):
+        for version, count, expected_count in [(4, 13, 22), (5, 14, 24)]:
+            experience = self.experience_fixture(version, count)
+            with mock.patch("Tools.CoachingEval.benchmark.regression.JudgeQualification.ensure", return_value=self.root / "qualification.json"), \
+                 mock.patch("Tools.CoachingEval.benchmark.regression.JudgeSensitivity.run", side_effect=[{"passed": True}, {"passed": False}]) as gate:
+                self.run_workflow(self.root / f"revision-gate-v{version}", experience_path=experience)
+            controls = json.loads(gate.call_args_list[1].args[0].read_text())
+            self.assertEqual(expected_count, len(controls["cases"]))
+            has_revision = any(row["caseID"] == "e14-revise-staged-knight" for row in controls["cases"])
+            self.assertEqual(version == 5, has_revision)
 
     def test_saved_v3_experience_uses_compatible_controls_not_new_polish_cases(self):
         experience = self.experience_fixture(3, 9)

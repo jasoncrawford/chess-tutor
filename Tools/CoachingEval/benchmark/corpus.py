@@ -15,6 +15,7 @@ _REGRESSION_INVENTORIES = {
     "coaching-quality-playthrough-regression-manifest.v1": 8,
     "coaching-quality-experience-regression-manifest.v3": 9,
     "coaching-quality-experience-regression-manifest.v4": 13,
+    "coaching-quality-experience-regression-manifest.v5": 14,
 }
 _CASE_KEYS = frozenset(
     (

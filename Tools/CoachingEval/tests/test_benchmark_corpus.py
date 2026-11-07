@@ -152,6 +152,15 @@ class BenchmarkCorpusTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_corpus(self.root)
 
+    def test_staged_revision_experience_requires_all_fourteen_cases(self):
+        self.cases = self.cases[:14]
+        self.write("coaching-quality-experience-regression-manifest.v5")
+        self.assertEqual(14, len(load_corpus(self.root).select()))
+        self.cases.pop()
+        self.write("coaching-quality-experience-regression-manifest.v5")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
     def test_rejects_hash_duplicate_count_split_category_and_missing_brief(self):
         original = json.loads(json.dumps(self.cases))
         mutations = (
