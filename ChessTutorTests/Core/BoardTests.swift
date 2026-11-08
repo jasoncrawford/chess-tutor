@@ -87,6 +87,7 @@ final class BoardTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testInitialViewingAnglePrefersDeviceOrientationForLandscapeLaunch() {
         XCTAssertEqual(
             ContentView.resolvedInitialViewingAngle(

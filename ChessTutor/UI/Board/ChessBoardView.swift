@@ -203,6 +203,7 @@ struct ChessBoardView: View {
     @State private var dragState: DragState?
     @State private var visualPieces: [VisualPiece] = []
     @State private var settlingPieceID: UUID?
+    @State private var coachingConsumedDrag = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -230,6 +231,16 @@ struct ChessBoardView: View {
                     origin: origin,
                     viewingAngle: viewingAngle
                 )
+
+                if let coaching = session.coachingPresentation {
+                    CoachFocusOverlay(
+                        focus: coaching.focus,
+                        side: side,
+                        origin: origin,
+                        viewingAngle: viewingAngle,
+                        reducesMotion: accessibilityReduceMotion
+                    )
+                }
 
                 piecesOverlay(
                     side: side,
@@ -291,6 +302,11 @@ struct ChessBoardView: View {
         let accessibleContent = content
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel(for: square, guidance: guidance))
+            .accessibilityHint(
+                CoachBoardAccessibilityContext.instruction(
+                    for: session.coachingPresentation
+                ) ?? ""
+            )
 
         #if DEBUG
         if isCaptureTestModeEnabled {
@@ -501,6 +517,10 @@ struct ChessBoardView: View {
                 }
                 #endif
 
+                guard !coachingConsumedDrag else {
+                    return
+                }
+
                 if var dragState {
                     dragState.location = value.location
                     if !dragState.isPrepared,
@@ -523,6 +543,17 @@ struct ChessBoardView: View {
                     return
                 }
 
+                let distance = hypot(value.translation.width, value.translation.height)
+                if case .identify = session.authoritativeCoachingBoardTask {
+                    guard distance > 8 else {
+                        return
+                    }
+                    if session.handleCoachingSquareDragStart(from) {
+                        coachingConsumedDrag = true
+                        return
+                    }
+                }
+
                 session.select(from)
                 let visualPieceID = visualPieces.first {
                     $0.square == from && $0.piece == piece
@@ -534,7 +565,7 @@ struct ChessBoardView: View {
                     location: value.location,
                     isPrepared: false
                 )
-                if hypot(value.translation.width, value.translation.height) > 8,
+                if distance > 8,
                    let preparedSource = session.prepareDrag(from: from),
                    let preparedPiece = session.state.board[preparedSource] {
                     newDragState.from = preparedSource
@@ -545,6 +576,11 @@ struct ChessBoardView: View {
                 reportLocalInteractionIfCurrentPiece(newDragState.from)
             }
             .onEnded { value in
+                if coachingConsumedDrag {
+                    coachingConsumedDrag = false
+                    return
+                }
+
                 guard let dragState else {
                     #if DEBUG
                     if isCaptureTestModeEnabled {
@@ -685,6 +721,10 @@ struct ChessBoardView: View {
             return
         }
         #endif
+
+        if session.handleCoachingSquareTap(square) {
+            return
+        }
 
         if session.state.board[square] == nil {
             if let result = session.tapEmptySquare(at: square) {

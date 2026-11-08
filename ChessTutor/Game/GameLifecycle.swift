@@ -423,6 +423,20 @@ final class GameLibrary {
         remoteGames.insert(updated, at: 0)
     }
 
+    func recordRemoteGameEnded(_ snapshot: ActiveRemoteGameSnapshot) {
+        let descriptor = snapshot.descriptor
+        guard let game = remoteGames.first(where: { $0.snapshot.descriptor.id == descriptor.id }) else { return }
+        let ended = RemoteGameDescriptor(
+            id: descriptor.id, protocolVersion: descriptor.protocolVersion, status: .ended,
+            whitePlayer: descriptor.whitePlayer, blackPlayer: descriptor.blackPlayer,
+            localPlayerID: descriptor.localPlayerID
+        )
+        updateRemoteGame(ActiveRemoteGameSnapshot(
+            descriptor: ended, acceptedEvents: snapshot.acceptedEvents,
+            outbox: snapshot.outbox, lastAppliedSequence: snapshot.lastAppliedSequence
+        ), in: game.id)
+    }
+
     func removePendingRemoteBoard(inviteID: RemoteInviteID) {
         pendingRemoteBoards.removeAll(where: { $0.invite.id == inviteID })
         if case let .board(id) = route,
@@ -463,6 +477,51 @@ final class GameLibrary {
 
 @MainActor
 enum GameLifecycle {
+    /// Restores the playable session without persisting transient selection or advice.
+    static func session(
+        for game: ManagedLocalGame,
+        hostedCoachingProvider: (any HostedCoachingTurning)?
+    ) -> GameSession {
+        GameSession(
+            replayingCommittedMoves: game.moves,
+            hostedCoachingProvider: hostedCoachingProvider,
+            coachingGameID: game.id.rawValue
+        )
+    }
+
+    static func session(
+        for board: ManagedPendingRemoteBoard,
+        hostedCoachingProvider: (any HostedCoachingTurning)?
+    ) -> GameSession {
+        let session = GameSession(hostedCoachingProvider: hostedCoachingProvider, coachingGameID: board.id.rawValue)
+        session.lockBoard(message: "Waiting for this invitation to be accepted.", statusText: "Invitation pending")
+        return session
+    }
+
+    static func session(
+        for game: ManagedRemoteGame,
+        hostedCoachingProvider: (any HostedCoachingTurning)?
+    ) throws -> GameSession {
+        let snapshot = game.snapshot
+        let projectedState = try RemoteGameSessionController.projectedState(from: snapshot)
+        let moves = try snapshot.acceptedEvents
+            .sorted { $0.sequenceNumber < $1.sequenceNumber }
+            .map { try RemoteMoveCodec.decode($0.move) }
+        let session = GameSession(
+            replayingCommittedMoves: moves,
+            hostedCoachingProvider: hostedCoachingProvider,
+            coachingGameID: game.id.rawValue
+        )
+        guard session.state == projectedState else {
+            throw RemoteGameSessionController.Error.invalidSnapshot
+        }
+        RemoteGameLifecycleController.applyRemoteSeats(from: snapshot.descriptor, to: session)
+        if snapshot.descriptor.status == .ended {
+            session.endRemoteGame(message: "This game has ended.")
+        }
+        return session
+    }
+
     static func startNewGame(
         session: GameSession,
         remotePlayFlow: RemotePlayFlow

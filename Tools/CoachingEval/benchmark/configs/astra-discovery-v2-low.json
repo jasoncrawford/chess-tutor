@@ -1,0 +1,8 @@
+{
+  "baseline": false,
+  "id": "astra-discovery-v2-low",
+  "modelConfigurationPath": "Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json",
+  "modelConfigurationSHA256": "72cac5018cee47681fba19ca725fa5b243332d70a9e4abd9fa156bc4baacc43e",
+  "pricingVersion": "openai-2026-09-06",
+  "schemaVersion": "coaching-quality-candidate.v2"
+}

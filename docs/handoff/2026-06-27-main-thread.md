@@ -1,5 +1,12 @@
 # Main Thread Handoff - 2026-06-27
 
+## Latest integration checkpoint — 2026-11-08
+
+The coaching branch is being integrated with main's multiple-game library on
+`codex/integrate-coaching`. See [the integration report](../reports/2026-11-08-coaching-integration.md)
+for the current architecture, tests, and Coaching Smoke launch instructions.
+The original MVP notes below are historical, not a description of current scope.
+
 ## Product Direction
 
 Build a native iPad chess app for children learning through play. The MVP should feel like a physical chessboard with gentle guardrails, not a lesson product. Coaching mode, lessons, computer play, game review, accounts, sync, and online play are later layers.

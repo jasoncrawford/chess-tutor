@@ -79,4 +79,24 @@ final class MoveHistoryFormatterTests: XCTestCase {
 
         XCTAssertEqual(rows.last, MoveHistoryRow(number: 3, whiteMove: "exd6", blackMove: nil))
     }
+
+    func testFormatsMoveFromCommittedMidgameStateWithoutReplayingStartingHistory() {
+        let state = GameState(
+            board: Board(pieces: [
+                Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+                Square(file: .f, rank: 1): Piece(kind: .bishop, color: .white),
+                Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+                Square(file: .e, rank: 8): Piece(kind: .rook, color: .black),
+            ]),
+            sideToMove: .white
+        )
+
+        XCTAssertEqual(
+            MoveHistoryFormatter.notation(
+                for: Move(from: Square(file: .f, rank: 1), to: Square(file: .e, rank: 2)),
+                in: state
+            ),
+            "Be2"
+        )
+    }
 }

@@ -58,6 +58,17 @@ final class CaptureTrayLayoutTests: XCTestCase {
         XCTAssertEqual(layout.capturedPanelUtilityFooterHeight, 36)
     }
 
+    func testCoachingRegionDoesNotChangeCapturedPanelOrUtilityDimensions() {
+        let vertical = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
+        let horizontal = SidebarColumnLayout.make(for: 760, presentation: .horizontalSegments)
+
+        XCTAssertEqual(vertical.size(for: .capturedPieces).height, 255.36, accuracy: 0.01)
+        XCTAssertEqual(vertical.utilityStripHeight, 40, accuracy: 0.01)
+        XCTAssertEqual(horizontal.size(for: .capturedPieces).width, 246.67, accuracy: 0.01)
+        XCTAssertEqual(horizontal.size(for: .capturedPieces).height, 246.67, accuracy: 0.01)
+        XCTAssertEqual(horizontal.capturedPanelUtilityFooterHeight, 36, accuracy: 0.01)
+    }
+
     func testSelectedPiecePanelKeepsTwoLineSummariesWithinLandscapeSquare() {
         let columnLayout = SidebarColumnLayout.make(for: 760, presentation: .verticalColumn)
         let layout = SelectedPiecePanelLayout.current

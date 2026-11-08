@@ -19,7 +19,59 @@ final class GameControlsPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.primaryAction, .done)
+        XCTAssertEqual(presentation.supplementalActions, [])
         XCTAssertEqual(presentation.secondaryActions, [.newGame, .about])
+    }
+
+    func testPresentationOffersHelpAsSupplementalActionWhenSessionAllowsIt() {
+        let presentation = GameControlsPresentation(
+            result: .ongoing,
+            canRequestCoaching: true
+        )
+
+        XCTAssertEqual(presentation.primaryAction, .done)
+        XCTAssertEqual(presentation.supplementalActions, [.help])
+        XCTAssertEqual(presentation.secondaryActions, [.newGame, .about])
+    }
+
+    func testPresentationHidesHelpWheneverSessionPolicyDisallowsIt() {
+        let unavailableCases: [(name: String, presentation: GameControlsPresentation)] = [
+            (
+                "active coaching",
+                GameControlsPresentation(result: .ongoing, canRequestCoaching: false)
+            ),
+            (
+                "remote turn",
+                GameControlsPresentation(result: .ongoing, canRequestCoaching: false)
+            ),
+            (
+                "remote lock",
+                GameControlsPresentation(
+                    result: .ongoing,
+                    isRemoteGameEnded: true,
+                    canRequestCoaching: false
+                )
+            ),
+            (
+                "promotion choice",
+                GameControlsPresentation(result: .ongoing, canRequestCoaching: false)
+            ),
+            (
+                "terminal result",
+                GameControlsPresentation(
+                    result: .checkmate(winner: .black),
+                    canRequestCoaching: false
+                )
+            ),
+        ]
+
+        for unavailableCase in unavailableCases {
+            XCTAssertEqual(
+                unavailableCase.presentation.supplementalActions,
+                [],
+                "Unexpected Help action for \(unavailableCase.name)"
+            )
+        }
     }
 
     func testPresentationPromotesNewGameAfterCheckmate() {

@@ -1,0 +1,309 @@
+# Chess coaching consistency comparison
+
+Date: 2026-08-30
+
+## Result
+
+The comparison answered the local-versus-hosted question and the later hosted
+model/effort question clearly:
+
+- GPT-5.6 Sol remained strong. The two new samples for each of the four hard cases were all mechanically valid and useful. Combined with the first funded pilot, the model produced 12/12 good hard-case responses across three samples per case.
+- Qwen3 1.7B followed the strict JSON grammar on all eight frozen cases, but it did not provide usable coaching. It ignored urgent facts, confused selections with moves, echoed action identifiers as child-facing copy, and made factual chess errors.
+- Gemma 4 E2B also produced 8/8 mechanically valid responses, but only one was plausibly useful without editing. It missed urgent danger, lost track of staged moves and taps, approved a losing move, confused Black's bishop with the child's bishop, and suggested moving a knight to the square it already occupied.
+- Among the hosted configurations, GPT-5.6 Sol was the most dependable family. Sol at both medium and low produced 12/12 mechanically valid turns; each setting made one questionable tactical judgment in twelve calls, while the rest were clear and current.
+- GPT-5.6 Luna at high produced 12/12 mechanically valid turns at roughly $0.00064 per call. Its coaching was useful, but it was less decisive than Sol when the child inspected an opponent reply. Dropping Luna to medium caused three contract failures in twelve calls and more chess-stage confusion.
+- GPT-5.6 Terra did not establish a useful middle ground: high had one contract failure and similar tactical ambiguity; medium was very fast but immediately missed the attacked-knight teaching purpose.
+
+This strengthens the hosted-first product direction. Neither Qwen3 1.7B nor Gemma 4 E2B is a plausible offline fallback for the current prompt and quality bar. Because tutoring quality is the current priority, Sol at high remains the best default tested here; Luna at high is worth retaining as the low-cost comparison configuration. The next evaluation should broaden positions, not add more model/effort combinations.
+
+## Frozen comparison
+
+All runs used the exact same deterministic prompt packet:
+
+- Prompt version: `tutor-v6`
+- Source manifest SHA-256: `80eb1b8f5b57ea9fc04609909922ed1377e4dd702feb0e178a070aba4d3e15c7`
+- Examples inventory SHA-256: `8d9d28d904d060da791747083222c74a3ae29c87ec594792916f1dced757c75f`
+- System prompt SHA-256: `0f434c5a7b4889442fc74f5846037d96a2332e479809e68790ee6dcebc1a6051`
+- No examples, prompt mutation, retry, repair, or hidden data
+- Exact request-specific `message`, `actions`, and `focus` validation
+
+### Hosted consistency settings
+
+- Model: `gpt-5.6-sol`
+- Reasoning effort: `high`
+- Maximum output tokens: 2,048
+- Cases: 02, 05, 06, and 07
+- New samples: 2 per case; 8 serial calls total
+- Storage: disabled (`store: false`)
+
+Artifact directory:
+
+`.coaching-eval/runs/gpt-5.6-sol/hosted-tutor-v6-consistency-20260830`
+
+- Run manifest SHA-256: `b8d8579f98cd635a7bbd7623ffe3d8dd732db28e9b32de8777c5f9d5ddc0c0ef`
+- Review SHA-256: `ca108295488d50ba161f9ea6bcc8ce7603c75b393b1b4194e7ce25f973da602a`
+- Valid responses: 8/8
+- Provider errors: 0
+- Input tokens: 6,614 total
+- Output tokens: 4,108 total, including 3,585 reasoning tokens
+- Total tokens: 10,722
+- Latency: 3.60–19.25 seconds; median 6.90 seconds
+
+### Local Qwen settings
+
+- Model: `qwen3-1.7b-q4_k_m`
+- Quantization: Q4_K_M
+- Model bytes: 1,282,439,264
+- Model SHA-256: `d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5`
+- Resolved revision: `daeb8e2d528a760970442092f6bf1e55c3b659eb`
+- Runtime: llama.cpp b10516, commit `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9`
+- Mode: bounded thinking
+- Seed: 1103
+- Temperature: 0.2
+- Top-p: 0.95
+- Maximum output tokens: 512
+
+Artifact directory:
+
+`.coaching-eval/chess-native-pilot/qwen3-1.7b-seed-1103-tutor-v6-v1`
+
+- Run manifest SHA-256: `d34f0f7a7703b431a97b856b5c256fed33986876d6e6426f93ed32fd70d49715`
+- Review SHA-256: `92bc2e86b1c574a132fd45c9a8171803fb3231f8558f0efdde4528c59ba5de07`
+- Valid responses: 8/8 mechanically
+- Provider errors: 0
+- Rendered prompt size: 607–695 tokens
+- Output tokens: 656 total
+- Latency: 1.84–3.68 seconds; median 2.00 seconds
+
+### Local Gemma settings
+
+- Model: `gemma4-e2b-it-qat-q4_0`
+- Official artifact: `google/gemma-4-E2B-it-qat-q4_0-gguf`
+- Quantization: QAT Q4_0
+- Model bytes: 3,349,516,256
+- Model SHA-256: `fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634`
+- Resolved revision: `675cff42a74c774d6cb76f76d8eacb49b48c9b93`
+- Runtime: llama.cpp b10516, commit `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9`
+- Mode: thinking off
+- Seed: 1103
+- Temperature: 0.2
+- Top-p: 0.95
+- Maximum output tokens: 512
+
+Artifact directory:
+
+`.coaching-eval/chess-native-pilot/gemma4-e2b-seed-1103-tutor-v6-v1`
+
+- Run manifest SHA-256: `d5dfd497197e3e79555f04f5b9119fae66876b25040df9ad3b788f366f138908`
+- Review SHA-256: `b7f0318bc9e56316a79f9362918b2427dcfe15fbf11e5de66726d429bfffd709`
+- Valid responses: 8/8 mechanically
+- Provider errors: 0
+- Rendered prompt size: 603–689 tokens
+- Output tokens: 331 total
+- Latency: 1.44–4.25 seconds; median 1.70 seconds
+
+## Hosted hard-case consistency
+
+All twelve hosted samples—the original funded response plus the two new responses below—were factually sound, stage-aware, single-purpose, and usable without editing.
+
+### Case 02: attacked piece
+
+Sample 2:
+
+```json
+{"message":"The black pawn is attacking your knight. Can you move the knight somewhere safe?","actions":[],"focus":[{"type":"square","square":"e4"},{"type":"square","square":"f3"}]}
+```
+
+Sample 3:
+
+```json
+{"message":"The black pawn is attacking your knight. Find a safe square where the knight can jump.","actions":[],"focus":[{"type":"square","square":"e4"},{"type":"square","square":"f3"}]}
+```
+
+Both infer the pawn attack from the FEN and leave the destination for the child to discover.
+
+### Case 05: tactical reply
+
+Sample 2:
+
+```json
+{"message":"Careful—the black pawn can capture your bishop there. Can you find a safer move?","actions":["tryAnotherMove"],"focus":[{"type":"move","from":"c4","to":"b5"},{"type":"move","from":"a6","to":"b5"}]}
+```
+
+Sample 3:
+
+```json
+{"message":"Careful! The pawn can capture your bishop there. Try another move.","actions":["tryAnotherMove"],"focus":[{"type":"move","from":"a6","to":"b5"}]}
+```
+
+Both identify the exact immediate reply and stay on the tentative-move decision.
+
+### Case 06: inspected opponent reply
+
+Sample 2:
+
+```json
+{"message":"The black queen is eyeing your center pawn. Your knight move would protect it. Shall we play it?","actions":["playMove","tryAnotherMove"],"focus":[{"type":"move","from":"h4","to":"e4"},{"type":"move","from":"b1","to":"c3"}]}
+```
+
+Sample 3:
+
+```json
+{"message":"Good spotting! Your knight move guards the center pawn from that queen. Ready to play it?","actions":["playMove","tryAnotherMove"],"focus":[{"type":"move","from":"b1","to":"c3"},{"type":"move","from":"h4","to":"e4"}]}
+```
+
+Both follow the child's queen tap, connect the inspected `Qxe4+` reply to the tentative knight move, and return to the current move decision. The original sample instead explored `Qxf2+`; all three are legitimate readings of the supplied immediate replies.
+
+### Case 07: answering check
+
+Sample 2:
+
+```json
+{"message":"That blocks the check. Before choosing, can the black bishop capture your bishop there?","actions":["tryAnotherMove"],"focus":[{"type":"move","from":"b4","to":"d2"}]}
+```
+
+Sample 3:
+
+```json
+{"message":"Before deciding, notice: the black bishop can capture your bishop and give check again.","actions":["tryAnotherMove"],"focus":[{"type":"move","from":"b4","to":"d2"}]}
+```
+
+Both correctly distinguish a legal block from a good move and identify `Bxd2+` without mixing in another coaching stage.
+
+## Qwen3 1.7B responses
+
+The grammar made every response parseable, but none met the full tutoring bar.
+
+### 01 — Quiet help
+
+```json
+{"message":"help me find a move","actions":["hint"],"focus":[{"type":"square","square":"e5"}]}
+```
+
+Generic and backwards: the tutor asks the child to help it, with an unexplained square.
+
+### 02 — Attacked piece
+
+```json
+{"message":"help me find a move","actions":["hint"],"focus":[{"type":"square","square":"e5"}] }
+```
+
+Severe stage failure. It ignores the attacked knight and repeats the generic opening response.
+
+### 03 — Selected piece
+
+```json
+{
+  "message": "Great move! Your knight is ready to support the queen. Let's see if it can help control the中心.",
+  "actions": ["hint"],
+  "focus": [{"type": "square", "square": "d4"}, {"type": "square", "square": "e5"}, {"type": "move", "from": "f3", "to": "d4"}]
+}
+```
+
+It treats a selection as a completed move, supplies a dubious reason, and emits a non-English fragment.
+
+### 04 — Replaced tentative move
+
+```json
+{"message":"tryAnotherMove","actions":["playMove","tryAnotherMove"],"focus":[{"type":"move","from":"g1","to":"f3"}]}
+```
+
+The focus follows the replacement, but the child-facing message is merely an internal action identifier.
+
+### 05 — Tactical reply
+
+```json
+{"message":"a6 is a good square to protect.","actions":["hint"],"focus":[{"type":"square","square":"a6"}]}
+```
+
+Severe chess/perspective error. The black pawn on a6 is the piece that can capture the child's bishop; it is not a safe square or a protective idea for White.
+
+### 06 — Inspected opponent reply
+
+```json
+{"message":"tryAnotherMove","actions":["tryAnotherMove"],"focus":[{"type":"move","from":"b1","to":"c3"}]}
+```
+
+It ignores the queen tap and supplies no reason for rejecting the tentative move.
+
+### 07 — Answering check
+
+```json
+{"message":"Try another move to avoid immediate checkmate.","actions":["tryAnotherMove"],"focus":[{"type":"move","from":"b4","to":"d2"}]}
+```
+
+Severe factual error. The position contains check and a poor legal block, not immediate checkmate.
+
+### 08 — Longer history
+
+```json
+{"message":"help me find a good move","actions":["hint"],"focus":[{"type":"square","square":"d5"},{"type":"square","square":"e5"}]}
+```
+
+Generic and unrelated to the available castling opportunity that the move history establishes.
+
+## Hosted model and reasoning-effort screen
+
+The follow-up held the prompt, four hard cases, response schema, 2,048-token
+output cap, and one-shot/no-repair policy fixed. It first screened one response
+per case, then generated two more responses per case for each passing
+configuration. Sol/high below is the earlier three-sample baseline over the
+same cases. Costs are estimates from recorded token usage and the official
+[OpenAI model list prices](https://developers.openai.com/api/docs/models) on
+2026-08-30; reasoning tokens are included in output tokens.
+
+| Configuration | Calls | Strict-valid | Input / output tokens | Estimated cost | Median / p90 latency | Finding |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Sol, high | 12 | 12 | 9,921 / 5,907 | $0.15782 ($0.01315/call) | 6.56s / 17.73s | Best quality baseline; all twelve were previously accepted without editing. |
+| Sol, medium | 12 | 12 | 9,921 / 5,596 | $0.15160 ($0.01263/call) | 5.17s / 16.18s | Strong, but one queen-reply sample treated an unsafe queen capture as a real threat. |
+| Sol, low | 12 | 12 | 9,921 / 3,863 | $0.11694 ($0.00975/call) | 3.93s / 17.82s | Strong and cheaper, with the same one-in-twelve tactical lapse. |
+| Terra, high | 12 | 11 | 9,921 / 3,464 | $0.06141 ($0.00512/call) | 2.90s / 7.78s | One child-message contract failure; several replies overreacted to the queen's legal-but-losing captures. |
+| Terra, medium | 4 | 4 | 3,307 / 259 | $0.00972 ($0.00243/call) | 1.61s / 1.88s | Very fast, but missed the urgent attacked-knight purpose in the first screen. It did not advance. |
+| Luna, high | 12 | 12 | 9,921 / 4,699 | $0.00762 ($0.00064/call) | 5.05s / 6.89s | Best budget result. Useful overall, but less decisive than Sol when evaluating the inspected queen replies. |
+| Luna, medium | 12 | 9 | 9,921 / 3,779 | $0.00652 ($0.00054/call) | 3.34s / 6.56s | Three contract failures and repeated loss of the current tentative-move context. |
+
+The most revealing case was `06-inspected-reply`. After White tentatively
+plays `Nc3`, Black's queen has three legal pawn captures, but all three lose
+the queen: `Qxe4+` is met by `Nxe4`, `Qxf2+` by `Kxf2`, and `Qxh2` by
+`Rxh2`. The best responses recognized that the knight move protects the
+center pawn and returned to the current move decision. Some otherwise strong
+configurations saw a legal capture in the supplied facts and treated it as a
+real danger without finishing the exchange. This is exactly the kind of
+chess judgment the hosted model must supply rather than merely echoing the
+mechanical facts.
+
+Artifacts:
+
+- Initial Sol/medium, Terra/high, Luna/high screen: `.coaching-eval/runs/hosted-tutor-v6-tier-effort-screen-20260830` (manifest `8a5f9d657661997cd49bcbd304923b42ccf141cf96d699e7b0a8d1cf1a94206f`)
+- Sol/medium consistency: `.coaching-eval/runs/gpt-5.6-sol/hosted-tutor-v6-consistency-medium-20260830` (manifest `1e88d67546697392c716ca4dfacd1dac2a8bec140cccd72f531f8bf01042f460`)
+- Terra/high consistency: `.coaching-eval/runs/gpt-5.6-terra/hosted-tutor-v6-consistency-high-20260830` (manifest `9983aec8bb3f2d364b336f9360e454230b7e196a628ee9bd4cbc2960e1e03ac8`)
+- Luna/high consistency: `.coaching-eval/runs/gpt-5.6-luna/hosted-tutor-v6-consistency-high-20260830` (manifest `a2bd6ed2932548bcea6e3c09d6554b8a224eabd8c7dd2f8facff32109047b8d1`)
+- Lower-effort screen: `.coaching-eval/runs/hosted-tutor-v6-lower-effort-screen-20260830` (manifest `46ce5f6898ed8aee3820b0582c6a30ba1f1addab26cd4922d372c0449cc77e64`)
+- Sol/low consistency: `.coaching-eval/runs/gpt-5.6-sol/hosted-tutor-v6-consistency-low-20260830` (manifest `606b922d48860c34c6d3b9cd0966f7c32c5120d1af43d6df5cf9844c02f9acec`)
+- Luna/medium consistency: `.coaching-eval/runs/gpt-5.6-luna/hosted-tutor-v6-consistency-medium-20260830` (manifest `591d3333f7560941b88a805ff9b27e137ff482f950436b43fe8e097a4b085405`)
+
+## Decision
+
+GPT-5.6 Sol/high remains the quality winner of this small experiment. Lowering
+Sol to medium or low reduced cost and typical latency, but each lower setting
+introduced a tactical misread that did not appear in the high baseline. The
+dollar difference is less than half a cent per coaching turn, so it is not a
+useful trade while quality is the primary goal.
+
+Luna/high is the notable alternative. It was mechanically reliable and about
+twenty times cheaper than Sol/high in this sample, with a much tighter latency
+range. Its weaker handling of the inspected-reply case makes it a comparison
+or possible future routing model rather than the initial default. Terra and
+the lower Luna setting do not merit more calls on this prompt.
+
+Qwen3 1.7B and Gemma 4 E2B demonstrate why mechanical validity is not enough. The concise prompt solved the earlier context-overflow and malformed-output problems, and local latency is attractive, but both models still lack the chess and interaction judgment needed for unsupervised coaching. Gemma's larger 3.35 GB artifact did not close that gap: its most serious errors were approving `Bb5` despite `axb5`, presenting Black's `Bxd2+` as the child's move, and suggesting `Nf3` when the knight was already on f3.
+
+Recommended next step: run Sol/high and Luna/high over a broader, more varied
+visible position set, including exchanges, defended captures, pins, checks,
+and harmless legal replies. If Sol/high keeps its quality advantage, design a
+stateless hosted coaching endpoint around it, with the app retaining
+deterministic prompt compilation and strict response validation. The app
+should show the already-approved thinking state after a short delay and offer
+a calm retry/close path for network or validation failure. Offline coaching
+should remain a future research track rather than a requirement for the first
+hosted iteration.

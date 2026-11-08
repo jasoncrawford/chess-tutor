@@ -1,0 +1,58 @@
+[
+  {
+    "sourceCaseID": "t1Entry",
+    "permittedTeachingIntents": ["orient", "chooseMove"],
+    "requiredActionReferences": [],
+    "forbiddenActionReferences": ["action:noPieceNeedsHelp"],
+    "prohibitedPhrases": ["anything in danger", "looks safe"]
+  },
+  {
+    "sourceCaseID": "t3Entry",
+    "permittedTeachingIntents": ["scanDanger"],
+    "requiredActionReferences": [],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": []
+  },
+  {
+    "sourceCaseID": "t7NoSafeCapture",
+    "permittedTeachingIntents": ["evaluateMove"],
+    "requiredActionReferences": ["action:looksSafe", "action:tryAnotherMove"],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": ["you moved ahead"]
+  },
+  {
+    "sourceCaseID": "t11BenignCaptureTap",
+    "permittedTeachingIntents": ["evaluateMove"],
+    "requiredActionReferences": ["action:looksSafe", "action:tryAnotherMove"],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": []
+  },
+  {
+    "sourceCaseID": "t11Safe",
+    "permittedTeachingIntents": ["confirmMove"],
+    "requiredActionReferences": ["action:playMove", "action:tryAnotherMove"],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": []
+  },
+  {
+    "sourceCaseID": "t12Block",
+    "permittedTeachingIntents": ["resolveCheck", "confirmMove"],
+    "requiredActionReferences": ["action:playMove", "action:tryAnotherMove"],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": []
+  },
+  {
+    "sourceCaseID": "t9Hint",
+    "permittedTeachingIntents": ["findMate"],
+    "requiredActionReferences": [],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": []
+  },
+  {
+    "sourceCaseID": "t12UnsupportedEntry",
+    "permittedTeachingIntents": ["chooseMove"],
+    "requiredActionReferences": [],
+    "forbiddenActionReferences": [],
+    "prohibitedPhrases": ["cannot name a verified purpose", "not part of this problem"]
+  }
+]

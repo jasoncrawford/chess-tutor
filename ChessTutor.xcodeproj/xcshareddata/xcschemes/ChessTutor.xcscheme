@@ -50,6 +50,17 @@
                ReferencedContainer = "container:ChessTutor.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B527DF7B2CC7BD0C365952FC"
+               BuildableName = "ChessTutorUITests.xctest"
+               BlueprintName = "ChessTutorUITests"
+               ReferencedContainer = "container:ChessTutor.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
@@ -80,6 +91,56 @@
          <EnvironmentVariable
             key = "CHESSTUTOR_REMOTE_INVITES"
             value = "cloudkit"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_CHESS_NATIVE_BROAD_PREVIEW_DIR"
+            value = "$(COACHING_CHESS_NATIVE_BROAD_PREVIEW_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_CHESS_NATIVE_PREVIEW_DIR"
+            value = "$(COACHING_CHESS_NATIVE_PREVIEW_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_EVAL_OUTPUT_DIR"
+            value = "$(COACHING_EVAL_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_EVAL_SOURCE_SHA"
+            value = "$(COACHING_EVAL_SOURCE_SHA)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR"
+            value = "$(COACHING_EXPERIENCE_BENCHMARK_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR"
+            value = "$(COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_NEUTRAL_PREVIEW_DIR"
+            value = "$(COACHING_NEUTRAL_PREVIEW_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_PLAYTHROUGH_BENCHMARK_OUTPUT_DIR"
+            value = "$(COACHING_PLAYTHROUGH_BENCHMARK_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_QUALITY_BENCHMARK_OUTPUT_DIR"
+            value = "$(COACHING_QUALITY_BENCHMARK_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "COACHING_QUALITY_BENCHMARK_SOURCE_SHA"
+            value = "$(COACHING_QUALITY_BENCHMARK_SOURCE_SHA)"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

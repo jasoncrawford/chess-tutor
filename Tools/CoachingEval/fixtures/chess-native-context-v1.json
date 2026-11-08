@@ -1,0 +1,104 @@
+{
+  "version": "chess-native-context-fixture.v1",
+  "request": {
+    "schemaVersion": "model-coaching-neutral-request.v1",
+    "requestID": "shared-selected-knight",
+    "positionRevision": 0,
+    "position": {
+      "fen": "4k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+      "sideToMove": "white",
+      "status": "ongoing"
+    },
+    "gameHistory": [],
+    "interaction": {
+      "selectedSquare": "b1",
+      "selectedPieceReference": "piece:white:knight:b1",
+      "tentativeMove": null,
+      "latestEvent": {
+        "sequence": 1,
+        "kind": "pieceSelected",
+        "referencedIDs": [
+          "piece:white:knight:b1"
+        ]
+      },
+      "episodeEvents": [
+        {
+          "sequence": 1,
+          "kind": "pieceSelected",
+          "referencedIDs": [
+            "piece:white:knight:b1"
+          ]
+        }
+      ]
+    },
+    "pieces": [
+      {
+        "id": "piece:black:king:e8",
+        "color": "black",
+        "kind": "king",
+        "square": "e8"
+      },
+      {
+        "id": "piece:white:king:e1",
+        "color": "white",
+        "kind": "king",
+        "square": "e1"
+      },
+      {
+        "id": "piece:white:knight:b1",
+        "color": "white",
+        "kind": "knight",
+        "square": "b1"
+      }
+    ],
+    "legalMoves": [
+      {
+        "id": "move:b1-a3",
+        "san": "Na3",
+        "canonicalMove": "b1a3",
+        "sourcePieceReference": "piece:white:knight:b1",
+        "destinationSquare": "a3",
+        "capturePieceReference": null,
+        "special": "none",
+        "isLegal": true,
+        "givesCheck": false,
+        "givesCheckmate": false
+      },
+      {
+        "id": "move:b1-c3",
+        "san": "Nc3",
+        "canonicalMove": "b1c3",
+        "sourcePieceReference": "piece:white:knight:b1",
+        "destinationSquare": "c3",
+        "capturePieceReference": null,
+        "special": "none",
+        "isLegal": true,
+        "givesCheck": false,
+        "givesCheckmate": false
+      }
+    ],
+    "occupiedSquareRelationships": [],
+    "tentativeReplies": [],
+    "capabilities": {
+      "canSelectBoardPiece": true,
+      "canInspectSquare": true,
+      "canStageMove": true,
+      "canReplaceMove": false,
+      "canRemoveMove": false
+    }
+  },
+  "expectedMarkdown": "# Chess coaching situation\n\n## Position\n\nSide to move: White\nStatus: ongoing\nFEN: 4k3/8/8/8/8/8/8/1N2K3 w - - 0 1\nMoves: none\nTentative move: none\n\n## Latest interaction\n\nWhite selected the knight on b1.\n\n## Relevant legal facts\n\nWhite is not in check.\nSelected piece: White knight on b1\nLegal moves for White knight on b1: Na3, Nc3\n\n## Available UI response\n\nActions: hint\nSquare focus: any board square\nAllowable move focus: b1-a3, b1-c3",
+  "expectedActions": [
+    "hint"
+  ],
+  "expectedMoveFocus": [
+    [
+      "b1",
+      "a3"
+    ],
+    [
+      "b1",
+      "c3"
+    ]
+  ]
+}

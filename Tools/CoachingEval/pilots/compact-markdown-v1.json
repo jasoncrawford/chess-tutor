@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "coaching-eval-pilot.v1",
+  "id": "compact-markdown-v1",
+  "caseIDs": [
+    "t1Entry",
+    "t3Entry",
+    "t7NoSafeCapture",
+    "t1PreferredKnight",
+    "t11UnsafeBishopFound",
+    "t11Safe",
+    "t11BenignCaptureTap",
+    "t12Block",
+    "t9Hint",
+    "t12UnsupportedEntry"
+  ]
+}

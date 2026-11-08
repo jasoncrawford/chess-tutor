@@ -1,0 +1,13 @@
+{
+  "effectiveDate": "2026-09-01",
+  "models": {
+    "gpt-5.6-sol": {
+      "cachedInputPerMillion": "0.40",
+      "outputPerMillion": "20.00",
+      "uncachedInputPerMillion": "4.00"
+    }
+  },
+  "schemaVersion": "coaching-quality-pricing.v1",
+  "sourceURL": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+  "version": "openai-2026-09-01"
+}

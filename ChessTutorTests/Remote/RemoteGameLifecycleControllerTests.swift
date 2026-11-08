@@ -118,7 +118,7 @@ final class RemoteGameLifecycleControllerTests: XCTestCase {
         let context = Self.startContext(localPlayerColor: .white)
         _ = controller.startRemoteGame(context: context, role: .joiner)
 
-        controller.endRemoteGameAfterOpponentEnded(descriptor: context.descriptor)
+        controller.endRemoteGameAfterOpponentEnded(descriptor: context.descriptor, gameLibrary: GameLibrary())
 
         XCTAssertNil(controller.activeRemoteGameController)
         XCTAssertFalse(session.localCanActForCurrentTurn)

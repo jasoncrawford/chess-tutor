@@ -1,0 +1,539 @@
+import io
+import json
+import os
+import signal
+import subprocess
+import tempfile
+import time
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+from Tools.CoachingEval.benchmark import cli
+
+
+ROOT = Path(__file__).resolve().parents[3]
+LAUNCHER = ROOT / "scripts/run_coaching_quality_benchmark.sh"
+
+
+class BenchmarkCLITests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.secret = "sk-test-private-benchmark-key"
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_run_loads_exact_candidates_and_keeps_key_out_of_output(self):
+        candidates = []
+        clients = []
+        prices = SimpleNamespace(version="test")
+
+        def load_candidate(path, _root):
+            value = SimpleNamespace(identifier=Path(path).stem)
+            candidates.append(value)
+            return value
+
+        class Client:
+            def __init__(self, *, api_key):
+                self.api_key = api_key
+                clients.append(self)
+
+        def run_candidates(**arguments):
+            self.assertEqual(candidates, list(arguments["configurations"]))
+            self.assertIs(prices, arguments["price_table"])
+            for configuration in candidates:
+                self.assertIsInstance(arguments["provider_factory"](configuration), Client)
+            self.assertTrue(arguments["include_holdout"])
+            return {
+                "summary": {"recordCount": 12, "validCount": 11, "failedCount": 1},
+                "evidence": {
+                    "classification": "holdoutComparison",
+                    "trialEligible": True,
+                    "promotionEvidenceEligible": True,
+                },
+            }
+
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"PRIVATE_BENCHMARK_KEY": self.secret}, clear=True),
+            mock.patch.object(cli, "load_corpus", return_value=SimpleNamespace()),
+            mock.patch.object(cli, "load_candidate", side_effect=load_candidate),
+            mock.patch.object(cli, "load_prices", return_value=prices),
+            mock.patch.object(cli, "run_candidates", side_effect=run_candidates),
+            mock.patch.object(cli, "OpenAIResponsesClient", Client),
+            redirect_stdout(output),
+        ):
+            status = cli.main(
+                [
+                    "run",
+                    "--corpus", str(self.root / "corpus"),
+                    "--mode", "comparison",
+                    "--candidate", "baseline.json",
+                    "--candidate", "candidate.json",
+                    "--pricing", "prices.json",
+                    "--output", str(self.root / "run"),
+                    "--api-key-env", "PRIVATE_BENCHMARK_KEY",
+                    "--include-holdout",
+                ]
+            )
+        result = json.loads(output.getvalue())
+        self.assertEqual(0, status)
+        self.assertEqual(["baseline", "candidate"], result["configurationIDs"])
+        self.assertEqual(12, result["recordCount"])
+        self.assertEqual("holdoutComparison", result["evidenceClassification"])
+        self.assertTrue(result["trialEligible"])
+        self.assertTrue(result["promotionEvidenceEligible"])
+        self.assertEqual([self.secret, self.secret], [client.api_key for client in clients])
+        self.assertNotIn(self.secret, output.getvalue())
+
+    def test_grade_and_report_print_only_bounded_summaries(self):
+        output = io.StringIO()
+        grade_destination = self.root / "grades"
+        report_destination = self.root / "report"
+        client_values = []
+
+        class Client:
+            def __init__(self, *, api_key):
+                client_values.append(api_key)
+
+        with (
+            mock.patch.dict(os.environ, {"JUDGE_SECRET": self.secret}, clear=True),
+            mock.patch.object(cli, "load_corpus", return_value=SimpleNamespace()),
+            mock.patch.object(cli, "load_judge", return_value=SimpleNamespace(identifier="judge-v1")),
+            mock.patch.object(cli, "load_prices", return_value=SimpleNamespace()),
+            mock.patch.object(cli, "grade_run", return_value=grade_destination) as grade,
+            mock.patch.object(cli, "OpenAIResponsesClient", Client),
+            redirect_stdout(output),
+        ):
+            status = cli.main(
+                [
+                    "grade", "--run", "run", "--corpus", "corpus",
+                    "--judge", "judge.json", "--pricing", "prices.json",
+                    "--output", str(grade_destination), "--api-key-env", "JUDGE_SECRET",
+                    "--qualification", "qualification.json",
+                    "--checkpoint", "grading-progress.json",
+                ]
+            )
+        self.assertEqual(0, status)
+        self.assertEqual([self.secret], client_values)
+        self.assertEqual(1, grade.call_count)
+        self.assertEqual(Path("grading-progress.json"), grade.call_args.kwargs["checkpoint_path"])
+        grade_summary = json.loads(output.getvalue())
+        self.assertEqual("judge-v1", grade_summary["judgeID"])
+        self.assertNotIn(self.secret, output.getvalue())
+
+        output = io.StringIO()
+        aggregate_path = report_destination / "aggregate.json"
+        summary_path = report_destination / "summary.md"
+        with (
+            mock.patch.object(cli, "load_prices", return_value=SimpleNamespace()),
+            mock.patch.object(cli, "write_report", return_value=(aggregate_path, summary_path)),
+            redirect_stdout(output),
+        ):
+            status = cli.main(
+                [
+                    "report", "--run", "run", "--grades", "grades",
+                    "--pricing", "prices.json", "--output", str(report_destination),
+                ]
+            )
+        self.assertEqual(0, status)
+        report_summary = json.loads(output.getvalue())
+        self.assertEqual(str(summary_path), report_summary["summary"])
+        self.assertNotIn(self.secret, output.getvalue())
+
+    def test_qualify_prints_only_selected_artifact_and_keeps_key_private(self):
+        output = io.StringIO()
+        selected = self.root / "qualifications/accepted/qualification.json"
+        clients = []
+
+        class Client:
+            def __init__(self, *, api_key):
+                clients.append(api_key)
+
+        with (
+            mock.patch.dict(os.environ, {"JUDGE_SECRET": self.secret}, clear=True),
+            mock.patch.object(
+                cli, "load_judge", return_value=SimpleNamespace(identifier="judge-v2")
+            ),
+            mock.patch.object(cli, "load_prices", return_value=SimpleNamespace()),
+            mock.patch.object(
+                cli.JudgeQualification, "ensure", return_value=selected
+            ) as ensure,
+            mock.patch.object(cli, "OpenAIResponsesClient", Client),
+            redirect_stdout(output),
+        ):
+            status = cli.main(
+                [
+                    "qualify",
+                    "--judge", "judge.json",
+                    "--pricing", "prices.json",
+                    "--artifact-root", str(self.root / "qualifications"),
+                    "--api-key-env", "JUDGE_SECRET",
+                ]
+            )
+
+        self.assertEqual(0, status)
+        self.assertEqual([self.secret], clients)
+        self.assertEqual(1, ensure.call_count)
+        result = json.loads(output.getvalue())
+        self.assertEqual(str(selected), result["qualification"])
+        self.assertEqual("judge-v2", result["judgeID"])
+        self.assertNotIn(self.secret, output.getvalue())
+
+    def test_missing_named_credential_fails_before_provider_work(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(cli, "run_candidates") as run,
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = cli.main(
+                [
+                    "run", "--corpus", "corpus", "--mode", "quick",
+                    "--candidate", "baseline.json", "--pricing", "prices.json",
+                    "--output", "output", "--api-key-env", "MISSING_KEY",
+                ]
+            )
+        self.assertEqual(1, status)
+        self.assertFalse(run.called)
+        failure = json.loads(stderr.getvalue())
+        self.assertEqual("missingCredential", failure["category"])
+
+
+class BenchmarkLauncherTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.log = self.root / "commands.log"
+        self.artifacts = self.root / "artifacts"
+        self.summaries = self.root / "summaries"
+        self.summaries.mkdir()
+        self.env = os.environ.copy()
+        self.env.update(
+            {
+                "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+                "FAKE_COMMAND_LOG": str(self.log),
+                "TMPDIR": str(self.summaries),
+                "CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT": str(self.artifacts),
+                "CHESS_TUTOR_BENCHMARK_TIMESTAMP": "20260901T120000Z",
+            }
+        )
+        self.write_fake("security", "printf '%s\\n' 'sk-private-launcher-key'")
+        self.write_fake("git", "printf '%s\\n' 'source-sha'")
+        self.write_fake(
+            "xcodebuild",
+            """
+            printf 'xcodebuild %s\n' "$*" >> "$FAKE_COMMAND_LOG"
+            mkdir -p "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR"
+            printf '{}\n' > "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR/benchmark-manifest.json"
+            printf '{}\n' > "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR/cases.jsonl"
+            """,
+        )
+        self.write_fake(
+            "python3",
+            """
+            key_state=missing
+            [ -n "${OPENAI_API_KEY:-}" ] && key_state=set
+            printf 'python key=%s %s\n' "$key_state" "$*" >> "$FAKE_COMMAND_LOG"
+            destination=''
+            previous=''
+            for value in "$@"; do
+            if [ "$previous" = '--output' ]; then destination="$value"; fi
+              previous="$value"
+            done
+            if [[ "$*" == *"benchmark.cli run"* ]]; then
+              mkdir -p "$destination"
+              printf 'candidate evidence\n' > "$destination/candidate-sentinel.jsonl"
+            fi
+            if [[ "$*" == *"benchmark.cli grade"* ]]; then
+              printf 'checkpoint evidence\n' > "$(dirname "$destination")/grading-checkpoint.json"
+            fi
+            if [[ "$*" == *"benchmark.cli qualify"* ]]; then
+              printf '{"status":"completed","qualification":"%s/qualifications/fake/qualification.json"}\n' "$CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT"
+            else
+              printf '%s\n' '{"status":"completed"}'
+            fi
+            if [ "${FAKE_QUALIFY_FAIL:-}" = "1" ] && [[ "$*" == *"benchmark.cli qualify"* ]]; then
+              exit 8
+            fi
+            if [ "${FAKE_GRADE_FAIL:-}" = "1" ] && [[ "$*" == *"benchmark.cli grade"* ]]; then
+              exit 7
+            fi
+            if [ -n "${FAKE_BLOCK_STAGE:-}" ] && [[ "$*" == *"benchmark.cli $FAKE_BLOCK_STAGE"* ]]; then
+              trap 'wait "$descendant" || :; printf stopped > "$FAKE_STOPPED"; exit 143' TERM
+              /bin/bash -c 'trap "exit 143" TERM; echo $$ > "$FAKE_DESCENDANT"; while :; do sleep 0.05; done' &
+              descendant=$!
+              printf '%s\n' "$$" > "$FAKE_READY"
+              wait "$descendant"
+            fi
+            [ -z "$destination" ] || mkdir -p "$destination"
+            """,
+        )
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_one_command_exports_runs_grades_and_reports_without_leaking_key(self):
+        result = subprocess.run(
+            [str(LAUNCHER), "comparison", "candidate.json"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        combined = result.stdout + result.stderr
+        commands = self.log.read_text()
+        self.assertEqual(0, result.returncode, combined)
+        self.assertEqual(1, commands.count("xcodebuild"))
+        self.assertEqual(1, commands.count("benchmark.cli qualify"))
+        self.assertEqual(1, commands.count("benchmark.cli run"))
+        self.assertEqual(1, commands.count("benchmark.cli grade"))
+        self.assertEqual(1, commands.count("benchmark.cli report"))
+        self.assertLess(commands.index("benchmark.cli qualify"), commands.index("xcodebuild"))
+        self.assertLess(commands.index("benchmark.cli qualify"), commands.index("benchmark.cli run"))
+        self.assertIn("--qualification", commands)
+        grade_command = next(line for line in commands.splitlines() if "benchmark.cli grade" in line)
+        self.assertIn("--checkpoint " + str(self.artifacts / "runs/20260901T120000Z/grading-checkpoint.json"), grade_command)
+        self.assertIn("--candidate " + str(ROOT / "Tools/CoachingEval/benchmark/configs/production-v2.json"), commands)
+        command_lines = commands.splitlines()
+        for command in ("qualify", "run", "grade", "report"):
+            line = next(line for line in command_lines if f"benchmark.cli {command}" in line)
+            self.assertIn("--pricing " + str(ROOT / "Tools/CoachingEval/benchmark/pricing-v2.json"), line)
+            if command in ("qualify", "grade"):
+                self.assertIn("--judge " + str(ROOT / "Tools/CoachingEval/benchmark/configs/judge-v4.json"), line)
+        self.assertIn("candidate.json", commands)
+        self.assertNotIn("sk-private-launcher-key", combined)
+        self.assertNotIn("sk-private-launcher-key", commands)
+        self.assertTrue((self.artifacts / "runs/20260901T120000Z/report").is_dir())
+        self.assertIn("Development comparison evidence", combined)
+        self.assertEqual([], list(self.summaries.glob("chess-benchmark-qualification.*")))
+
+    def test_quick_mode_needs_no_extra_candidate(self):
+        result = subprocess.run(
+            [str(LAUNCHER), "quick", "--smoke"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        combined = result.stdout + result.stderr
+        commands = self.log.read_text()
+        self.assertEqual(0, result.returncode, combined)
+        self.assertEqual(1, commands.count("benchmark.cli run"))
+        self.assertIn("--case q01-starting-position", commands)
+        self.assertIn("--case s01-danger-selection-response-03", commands)
+        self.assertNotIn("candidate.json", commands)
+        self.assertIn("Diagnostic subset evidence", combined)
+
+    def test_missing_key_is_actionable(self):
+        self.write_fake("security", "exit 44")
+        result = subprocess.run(
+            [str(LAUNCHER), "quick"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("ChessTutor-CoachingEval-OpenAI", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_interrupt_preserves_partial_corpus_export(self):
+        self.write_fake(
+            "xcodebuild",
+            """
+            printf '%s\n' xcodebuild >> "$FAKE_COMMAND_LOG"
+            mkdir -p "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR"
+            printf 'partial corpus\n' > "$COACHING_QUALITY_BENCHMARK_OUTPUT_DIR/partial.jsonl"
+            trap 'exit 130' INT TERM
+            sleep 20
+            """,
+        )
+        process = subprocess.Popen(
+            [str(LAUNCHER), "quick"],
+            cwd=ROOT,
+            env=self.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        partial = self.artifacts / "corpus/source-sha-20260901T120000Z/partial.jsonl"
+        try:
+            # Apple's /usr/bin/python3 shim can spend >2s creating xcrun_db
+            # before the launcher reaches export, even with fake CLI commands.
+            deadline = time.monotonic() + 10
+            while not partial.exists():
+                if time.monotonic() >= deadline:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=5)
+                    output = (stdout + stderr).replace("sk-private-launcher-key", "[redacted]")
+                    commands = self.log.read_text() if self.log.exists() else "no commands"
+                    self.fail(f"Fake corpus export did not become ready; status={process.returncode}; "
+                              f"commands={commands}; output={output[-2000:]}")
+                time.sleep(0.02)
+            os.killpg(process.pid, signal.SIGINT)
+            _, stderr = process.communicate(timeout=5)
+            self.assertEqual(130, process.returncode, stderr)
+            self.assertEqual("partial corpus\n", partial.read_text())
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=5)
+
+    def test_interrupt_preserves_paid_evidence_and_stops_owned_work(self):
+        for stage in ("qualify", "run", "grade"):
+            for signum, status in ((signal.SIGINT, 130), (signal.SIGTERM, 143)):
+                for target_group in (False, True):
+                    with self.subTest(stage=stage, signal=signum, target_group=target_group):
+                        self.interrupt_paid_stage(stage, signum, status, target_group)
+
+    def test_signal_between_launch_and_pid_registration_stops_owned_work(self):
+        hook = self.root / "launch-boundary.bash"
+        hook.write_text("""
+unset BASH_ENV
+set -T
+trap 'if [[ "$BASH_COMMAND" == "owned_child=\\$!" ]]; then
+  while [ ! -f "$FAKE_READY" ] || [ ! -f "$FAKE_DESCENDANT" ]; do sleep 0.01; done
+  kill -"$FAKE_BOUNDARY_SIGNAL" "$$"
+  kill -"$FAKE_BOUNDARY_SECOND_SIGNAL" "$$"
+fi' DEBUG
+""")
+        for signum, status in ((signal.SIGINT, 130), (signal.SIGTERM, 143)):
+            with self.subTest(signal=signum):
+                self.interrupt_paid_stage("qualify", signum, status, False, boundary_hook=hook)
+
+    def interrupt_paid_stage(self, stage, signum, status, target_group, boundary_hook=None):
+        # Use separate roots so a prior interrupted run cannot satisfy assertions.
+        artifact_root = self.root / f"{stage}-{signum}-{target_group}"
+        ready = artifact_root / "ready"
+        stopped = artifact_root / "stopped"
+        descendant = artifact_root / "descendant"
+        environment = dict(self.env, FAKE_BLOCK_STAGE=stage, FAKE_READY=str(ready),
+                           FAKE_STOPPED=str(stopped), FAKE_DESCENDANT=str(descendant),
+                           CHESS_TUTOR_BENCHMARK_ARTIFACT_ROOT=str(artifact_root))
+        if boundary_hook is not None:
+            second = signal.SIGTERM if signum == signal.SIGINT else signal.SIGINT
+            environment.update(BASH_ENV=str(boundary_hook), FAKE_BOUNDARY_SIGNAL=str(int(signum)),
+                               FAKE_BOUNDARY_SECOND_SIGNAL=str(int(second)))
+        process = subprocess.Popen([str(LAUNCHER), "quick"], cwd=ROOT, env=environment,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            deadline = time.monotonic() + 5
+            while not (ready.exists() and descendant.exists()):
+                if time.monotonic() >= deadline:
+                    self.fail(f"Fake paid command did not become ready (status={process.poll()}, "
+                              f"files={list(artifact_root.rglob('*'))})")
+                time.sleep(0.01)
+            if boundary_hook is not None:
+                # DEBUG delivers at the exact boundary. Observe parent exit without
+                # waiting on pipes an orphaned child could otherwise keep open.
+                process.wait(timeout=3)
+                self.assertTrue(stopped.exists(), "New paid child outlived interrupted launcher")
+            elif target_group:
+                os.killpg(process.pid, signum)
+            else:
+                process.send_signal(signum)
+            try:
+                stdout, stderr = process.communicate(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.fail("Launcher left owned work running after interruption")
+            combined = stdout + stderr
+            self.assertEqual(status, process.returncode, combined)
+            session = artifact_root / "runs/20260901T120000Z"
+            corpus = artifact_root / "corpus/source-sha-20260901T120000Z"
+            if stage != "qualify":
+                self.assertTrue((session / "candidates/candidate-sentinel.jsonl").exists())
+                self.assertEqual("candidate evidence\n", (session / "candidates/candidate-sentinel.jsonl").read_text())
+                self.assertTrue((corpus / "benchmark-manifest.json").exists())
+            if stage == "grade":
+                self.assertEqual("checkpoint evidence\n", (session / "grading-checkpoint.json").read_text())
+            self.assertTrue(stopped.exists(), "Owned paid command was not allowed to stop")
+            with self.assertRaises(ProcessLookupError):
+                os.kill(int(descendant.read_text()), 0)
+            for path in (corpus, session / "candidates", session / "grading-checkpoint.json"):
+                self.assertIn(str(path), combined)
+            self.assertIn("Tools/CoachingEval/README.md", combined)
+            self.assertIn("new run", combined)
+            self.assertNotIn("sk-private-launcher-key", combined)
+            self.assertFalse((session / "report").exists())
+            self.assertEqual([], list(self.summaries.glob("chess-benchmark-qualification.*")))
+        finally:
+            # Only terminate these fixture process groups, never another run.
+            for marker in (descendant, ready):
+                if marker.exists():
+                    try:
+                        os.killpg(int(marker.read_text()), signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            process.communicate(timeout=5)
+
+    def test_failed_qualification_prevents_corpus_and_candidate_work(self):
+        self.env["FAKE_QUALIFY_FAIL"] = "1"
+        result = subprocess.run(
+            [str(LAUNCHER), "quick"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        commands = self.log.read_text()
+        self.assertEqual(8, result.returncode)
+        self.assertEqual(1, commands.count("benchmark.cli qualify"))
+        self.assertNotIn("xcodebuild", commands)
+        self.assertNotIn("benchmark.cli run", commands)
+        self.assertNotIn("benchmark.cli grade", commands)
+        self.assertEqual([], list(self.summaries.glob("chess-benchmark-qualification.*")))
+
+    def test_failed_grade_preserves_evidence_without_reporting_missing_grades(self):
+        self.env["FAKE_GRADE_FAIL"] = "1"
+        result = subprocess.run(
+            [str(LAUNCHER), "quick", "--smoke"],
+            cwd=ROOT,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        commands = self.log.read_text()
+        self.assertEqual(7, result.returncode)
+        self.assertNotIn("benchmark.cli report", commands)
+        self.assertTrue((self.artifacts / "corpus/source-sha-20260901T120000Z").is_dir())
+        session = self.artifacts / "runs/20260901T120000Z"
+        self.assertTrue((session / "candidates/candidate-sentinel.jsonl").exists())
+        self.assertTrue((session / "grading-checkpoint.json").exists())
+        self.assertFalse((session / "grades").exists())
+        self.assertFalse((session / "report").exists())
+        for path in (session / "candidates", session / "grading-checkpoint.json"):
+            self.assertIn(str(path), result.stderr)
+        self.assertIn("Tools/CoachingEval/README.md", result.stderr)
+        self.assertIn("new run", result.stderr)
+
+    def write_fake(self, name, body):
+        path = self.bin / name
+        path.write_text("#!/bin/bash\nset -euo pipefail\n" + body.strip() + "\n")
+        path.chmod(0o755)
+
+
+if __name__ == "__main__":
+    unittest.main()

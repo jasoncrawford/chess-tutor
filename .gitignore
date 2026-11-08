@@ -5,3 +5,7 @@ build/
 xcuserdata/
 *.xcuserstate
 .derived-data-log-*
+.coaching-eval/
+.venv/
+__pycache__/
+*.py[cod]
