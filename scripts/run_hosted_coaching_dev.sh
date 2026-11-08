@@ -5,7 +5,7 @@ set -euo pipefail
 readonly KEYCHAIN_SERVICE="ChessTutor-CoachingEval-OpenAI"
 readonly DEFAULT_SIMULATOR="iPad (A16)"
 readonly BUNDLE_IDENTIFIER="org.jasoncrawford.chesstutor"
-readonly DEFAULT_TRIAL_MODEL_CONFIG="Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json"
+readonly DEFAULT_TRIAL_MODEL_CONFIG="Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json"
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 simulator_name="${1:-$DEFAULT_SIMULATOR}"
@@ -86,7 +86,7 @@ fi
 if [ "${CHESS_TUTOR_COACHING_MODEL_CONFIG+set}" = set ]; then
   echo "Local coaching: explicit model configuration override."
 else
-  echo "Local coaching: provisional Astra discovery trial; production default unchanged."
+  echo "Local coaching: provisional Astra experience trial; production default unchanged."
 fi
 printf 'Model configuration: %s\n' "$model_configuration"
 echo "Starting the coaching server..."

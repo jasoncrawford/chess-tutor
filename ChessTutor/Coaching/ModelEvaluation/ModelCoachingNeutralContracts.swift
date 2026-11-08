@@ -26,6 +26,16 @@ struct ModelCoachingNeutralRequest: Codable, Equatable, Sendable {
     let occupiedSquareRelationships: [ModelCoachingNeutralRelationship]
     let tentativeReplies: [ModelCoachingNeutralReply]
     let capabilities: ModelCoachingNeutralCapabilities
+    /// Optional for backward-compatible decoding of older requests and exports.
+    let tentativePosition: ModelCoachingNeutralTentativePosition?
+}
+
+struct ModelCoachingNeutralTentativePosition: Codable, Equatable, Sendable {
+    let pieces: [ModelCoachingNeutralPiece]
+    let occupiedSquareRelationships: [ModelCoachingNeutralRelationship]
+    let movedPieceControlledSquares: [String]
+    /// Absent in older clients and for a staged move that leaves its king in check.
+    let status: String?
 }
 
 struct ModelCoachingNeutralInteraction: Codable, Equatable, Sendable {

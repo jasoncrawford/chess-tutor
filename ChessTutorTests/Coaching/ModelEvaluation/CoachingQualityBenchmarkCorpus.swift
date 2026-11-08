@@ -98,8 +98,10 @@ enum CoachingQualityBenchmarkExportError: Error, Equatable {
 }
 
 enum CoachingQualityBenchmarkExporter {
-    static func artifacts(sourceGitSHA: String) throws -> CoachingQualityBenchmarkArtifacts {
-        let corpus = CoachingQualityBenchmarkCorpus.v1
+    static func artifacts(sourceGitSHA: String, corpus requestedCorpus: CoachingQualityBenchmarkCorpus = .v1,
+                          regression: Bool = false, preserveVerifiedFacts: Bool = false,
+                          regressionSchemaVersion: String = "coaching-quality-playthrough-regression-manifest.v1") throws -> CoachingQualityBenchmarkArtifacts {
+        let corpus = requestedCorpus
         let records = corpus.allTurns.map { turn in
             let request = ModelCoachingNeutralRequestBuilder.build(
                 snapshot: turn.snapshot,
@@ -113,13 +115,13 @@ enum CoachingQualityBenchmarkExporter {
                 split: turn.split,
                 category: turn.category,
                 request: request,
-                graderBrief: enriched(turn.graderBrief, withFactsFrom: request),
+                graderBrief: enriched(turn.graderBrief, withFactsFrom: request, preserveVerifiedFacts: preserveVerifiedFacts),
                 sourceTraceID: turn.sourceTraceID
             )
         }
         let casesJSONL = try jsonl(records)
         let manifest = CoachingQualityBenchmarkManifest(
-            schemaVersion: "coaching-quality-benchmark-manifest.v1",
+            schemaVersion: regression ? regressionSchemaVersion : "coaching-quality-benchmark-manifest.v1",
             sourceGitSHA: sourceGitSHA,
             independentGroupCount: corpus.independent.count,
             sequenceGroupCount: corpus.sequences.count,
@@ -137,7 +139,9 @@ enum CoachingQualityBenchmarkExporter {
         )
     }
 
-    static func write(to outputURL: URL, sourceGitSHA: String) throws {
+    static func write(to outputURL: URL, sourceGitSHA: String, corpus: CoachingQualityBenchmarkCorpus = .v1,
+                      regression: Bool = false, preserveVerifiedFacts: Bool = false,
+                      regressionSchemaVersion: String = "coaching-quality-playthrough-regression-manifest.v1") throws {
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
@@ -156,7 +160,8 @@ enum CoachingQualityBenchmarkExporter {
         )
         try fileManager.createDirectory(at: temporary, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: temporary) }
-        let artifacts = try artifacts(sourceGitSHA: sourceGitSHA)
+        let artifacts = try artifacts(sourceGitSHA: sourceGitSHA, corpus: corpus, regression: regression,
+                                      preserveVerifiedFacts: preserveVerifiedFacts, regressionSchemaVersion: regressionSchemaVersion)
         try artifacts.casesJSONL.write(
             to: temporary.appendingPathComponent("cases.jsonl"),
             options: .atomic
@@ -192,7 +197,8 @@ enum CoachingQualityBenchmarkExporter {
 
     private static func enriched(
         _ brief: CoachingQualityBenchmarkGraderBrief,
-        withFactsFrom request: ModelCoachingNeutralRequest
+        withFactsFrom request: ModelCoachingNeutralRequest,
+        preserveVerifiedFacts: Bool
     ) -> CoachingQualityBenchmarkGraderBrief {
         let piecesByID = Dictionary(uniqueKeysWithValues: request.pieces.map { ($0.id, $0) })
         let learnerColor = request.position.sideToMove
@@ -233,7 +239,9 @@ enum CoachingQualityBenchmarkExporter {
             facts.append("Tentative move: none.")
         }
         return CoachingQualityBenchmarkGraderBrief(
-            verifiedFacts: facts,
+            // Opt in for new suites; historical corpus bytes and grading policy
+            // must not change underneath existing reports or qualifications.
+            verifiedFacts: preserveVerifiedFacts ? facts + brief.verifiedFacts : facts,
             coachingPurpose: brief.coachingPurpose,
             acceptableAlternatives: brief.acceptableAlternatives,
             successCriteria: brief.successCriteria,

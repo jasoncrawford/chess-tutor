@@ -15,7 +15,8 @@ struct LocalCoachingExplanationSource: CoachingExplaining {
             routine: context.routine,
             actions: context.actions.map { actionPresentation(for: $0, context: context) },
             boardTask: context.boardTask,
-            focus: context.focus
+            focus: context.focus,
+            isThinking: context.prompt == .awaitingAdvice
         )
     }
 

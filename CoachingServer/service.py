@@ -10,8 +10,7 @@ import uuid
 from collections.abc import Mapping
 
 from CoachingServer.chess_native_compiler import (
-    compile_context,
-    compile_follow_up_context,
+    PROMPT_GENERATORS,
     parse_neutral_request,
 )
 from CoachingServer.model_configuration import HostedModelConfiguration
@@ -94,7 +93,7 @@ class HostedCoachingService:
             ) = _parse_envelope(request)
             normalized_request = parse_neutral_request(neutral_request)
             is_follow_up = previous_response_id is not None
-            compiler = compile_follow_up_context if is_follow_up else compile_context
+            compiler = PROMPT_GENERATORS[self._configuration.user_prompt_generator][int(is_follow_up)]
             compilation = compiler(
                 neutral_request,
                 self._configuration.prompt_version,

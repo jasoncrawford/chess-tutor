@@ -2,6 +2,15 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedCoachingPresentationProjectorTests: XCTestCase {
+    func testReadyCopyDoesNotDetermineThinkingActivity() {
+        let presentation = HostedCoachingPresentationProjector().presentation(
+            for: .ready(ModelCoachingChessNativeTurn(message: "Thinking…", actions: [], focus: [])),
+            pulseID: 1
+        )
+
+        XCTAssertFalse(presentation.isThinking)
+    }
+
     func testDangerQuestionDerivesMatchingBoardTaskAndNegativeAnswer() {
         let turn = ModelCoachingChessNativeTurn(
             message: "Can you find the pawn in danger?",
@@ -88,11 +97,13 @@ final class HostedCoachingPresentationProjectorTests: XCTestCase {
 
         let thinking = projector.presentation(for: .thinking, pulseID: 1)
         XCTAssertEqual("Thinking…", thinking.primaryMessage)
+        XCTAssertTrue(thinking.isThinking)
         XCTAssertEqual([.stop], thinking.actions.map(\.action))
         XCTAssertEqual(.none, thinking.boardTask)
 
         let failed = projector.presentation(for: .failed, pulseID: 2)
         XCTAssertEqual("I couldn't get help right now.", failed.primaryMessage)
+        XCTAssertFalse(failed.isThinking)
         XCTAssertEqual([.hint, .stop], failed.actions.map(\.action))
         XCTAssertEqual(["Try again", "Close help"], failed.actions.map(\.title))
     }
@@ -113,6 +124,7 @@ final class HostedCoachingPresentationProjectorTests: XCTestCase {
         )
 
         XCTAssertEqual(turn.message, presentation.primaryMessage)
+        XCTAssertFalse(presentation.isThinking)
         XCTAssertNil(presentation.instruction)
         XCTAssertNil(presentation.observation)
         XCTAssertEqual([], presentation.routine)

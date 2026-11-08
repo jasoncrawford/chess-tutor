@@ -33,12 +33,19 @@ service `ChessTutor-CoachingEval-OpenAI`, then run:
 This convenience launcher selects a **provisional local Astra discovery
 trial**, not a deployed production promotion. It reuses the immutable shared
 configuration at
-`Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json`:
+`Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json`:
 GPT-6 Astra with low reasoning for initial and follow-up requests, the
-`tutor-v13-discovery.md` prompt, stored conversation reuse, a 2,048-token output
+`tutor-v13-discovery-v2.md` prompt, stored conversation reuse, a 2,048-token output
 cap, a 30-second timeout, and one attempt. The v13 compiler and response
 contract are unchanged. This local selection does not change the deployed
 Sol default or establish that the automatic benchmark promotion gates passed.
+
+The November 3 revision asks for a concrete consequence of a staged move and
+more precise attack/defense explanations. It was checked against a small real
+playthrough and targeted replays, not a rerun of the full benchmark. The
+October benchmark scores describe the original discovery prompt, which remains
+available through an explicit override using
+`Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json`.
 
 An explicitly set `CHESS_TUTOR_COACHING_MODEL_CONFIG` takes precedence. The
 launcher prints whether it selected the trial default or an explicit override,

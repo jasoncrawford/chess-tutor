@@ -56,14 +56,14 @@ class BenchmarkCorpusTests(unittest.TestCase):
             "sourceTraceID": None,
         }
 
-    def write(self):
+    def write(self, schema="coaching-quality-benchmark-manifest.v1"):
         cases_bytes = _jsonl(self.cases)
         (self.root / "cases.jsonl").write_bytes(cases_bytes)
         groups = {}
         for case in self.cases:
             groups.setdefault(case["groupID"], []).append(case)
         manifest = {
-            "schemaVersion": "coaching-quality-benchmark-manifest.v1",
+            "schemaVersion": schema,
             "sourceGitSHA": "abc123",
             "independentGroupCount": sum(len(turns) == 1 for turns in groups.values()),
             "sequenceGroupCount": sum(len(turns) == 3 for turns in groups.values()),
@@ -86,6 +86,49 @@ class BenchmarkCorpusTests(unittest.TestCase):
         self.assertEqual("abc123", corpus.source_git_sha)
         self.assertEqual(64, len(corpus.sha256))
 
+    def test_loads_separate_eight_case_playthrough_suite_without_holdout_claim(self):
+        self.cases = self.cases[:8]
+        self.write("coaching-quality-playthrough-regression-manifest.v1")
+        corpus = load_corpus(self.root)
+        self.assertTrue(corpus.is_regression)
+        self.assertEqual(8, len(corpus.select()))
+        self.assertEqual(corpus.select(), corpus.select(include_holdout=True))
+
+    def test_regression_schema_does_not_weaken_frozen_inventory_or_allow_holdout(self):
+        self.cases = self.cases[:8]
+        self.write()
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "holdout"
+        self.write("coaching-quality-playthrough-regression-manifest.v1")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "development"
+        self.cases.pop()
+        self.write("coaching-quality-playthrough-regression-manifest.v1")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
+    def test_nine_case_experience_has_its_own_strict_inventory(self):
+        self.cases = self.cases[:9]
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        corpus = load_corpus(self.root)
+        self.assertTrue(corpus.is_regression)
+        self.assertEqual(9, len(corpus.select()))
+        self.assertEqual(corpus.select(), corpus.select(include_holdout=True))
+        self.write("coaching-quality-playthrough-regression-manifest.v1")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "holdout"
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "development"
+        self.cases.pop()
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
     def test_accepts_swift_omission_of_nil_source_trace_id(self):
         for case in self.cases:
             case.pop("sourceTraceID")
@@ -94,6 +137,29 @@ class BenchmarkCorpusTests(unittest.TestCase):
         corpus = load_corpus(self.root)
 
         self.assertTrue(all(turn.source_trace_id is None for turn in corpus.turns))
+
+    def test_polish_experience_inventory_is_versioned_without_relabeling_old_exports(self):
+        self.cases = self.cases[:13]
+        self.write("coaching-quality-experience-regression-manifest.v4")
+        corpus = load_corpus(self.root)
+        self.assertTrue(corpus.is_regression)
+        self.assertEqual(13, len(corpus.select()))
+        self.write("coaching-quality-experience-regression-manifest.v3")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases.pop()
+        self.write("coaching-quality-experience-regression-manifest.v4")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
+    def test_staged_revision_experience_requires_all_fourteen_cases(self):
+        self.cases = self.cases[:14]
+        self.write("coaching-quality-experience-regression-manifest.v5")
+        self.assertEqual(14, len(load_corpus(self.root).select()))
+        self.cases.pop()
+        self.write("coaching-quality-experience-regression-manifest.v5")
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
 
     def test_rejects_hash_duplicate_count_split_category_and_missing_brief(self):
         original = json.loads(json.dumps(self.cases))

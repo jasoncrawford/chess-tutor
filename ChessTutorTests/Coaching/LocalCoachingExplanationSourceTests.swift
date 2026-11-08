@@ -4,6 +4,11 @@ import XCTest
 final class LocalCoachingExplanationSourceTests: XCTestCase {
     private let source = LocalCoachingExplanationSource()
 
+    func testThinkingActivityFollowsAwaitingAdviceRatherThanVisibleCopy() {
+        XCTAssertTrue(source.presentation(for: context(prompt: .awaitingAdvice)).isThinking)
+        XCTAssertFalse(source.presentation(for: context(prompt: .safeLocate)).isThinking)
+    }
+
     func testPresentationUsesPrimaryInstructionObservationContract() {
         let presentation = CoachingPresentation(
             primaryMessage: "What could Black do next?",

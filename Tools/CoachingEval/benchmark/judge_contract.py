@@ -6,6 +6,8 @@ import time
 from decimal import Decimal
 from typing import Mapping
 
+from Tools.CoachingEval.benchmark.budget import BudgetExceeded
+
 
 RUBRIC_DIMENSIONS = (
     "chessCorrectness",
@@ -48,7 +50,7 @@ def judge_call(configuration, client, payload, schema, price_table):
             previous_response_id=None,
             store=False,
         )
-    except JudgeCallError:
+    except (JudgeCallError, BudgetExceeded):
         raise
     except Exception:
         latency = _bounded_float((time.monotonic() - started) * 1000)

@@ -35,8 +35,12 @@ final class HostedCoachingContinuityUITests: XCTestCase {
 
     @MainActor
     func testSupersedingMoveKeepsThinkingShellThenReplacesItAtomically() {
+        XCUIDevice.shared.orientation = .landscapeRight
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-test-hosted-coaching-continuity"]
+        app.launchArguments = [
+            "-ui-test-hosted-coaching-continuity",
+            "-ui-test-hosted-coaching-snapshots",
+        ]
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Choose a piece"].waitForExistence(timeout: 5))
@@ -45,6 +49,18 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         let shell = app.buttons["Close coaching help"]
         XCTAssertTrue(shell.waitForExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts["Choose a piece"].exists)
+        let thinking = app.descendants(matching: .any)["coaching-thinking-indicator"]
+        XCTAssertTrue(thinking.exists)
+        XCTAssertEqual(thinking.label, "Thinking")
+        XCTAssertFalse(app.staticTexts["Thinking…"].exists)
+        let replyArea = app.descendants(matching: .any)["coaching-panel-conversation"].frame
+        XCTAssertEqual(thinking.frame.midX, replyArea.midX, accuracy: 1)
+        XCTAssertEqual(thinking.frame.midY, replyArea.midY, accuracy: 1)
+
+        let thinkingSnapshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        thinkingSnapshot.name = "Coach thinking"
+        thinkingSnapshot.lifetime = .keepAlways
+        add(thinkingSnapshot)
 
         app.buttons["Stage hosted knight move for continuity test"].tap()
         assertThinkingShellRemainsVisible(shell: shell, app: app, duration: 0.65)
@@ -57,7 +73,16 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Play this move"].exists)
         XCTAssertTrue(app.buttons["Try another move"].exists)
         XCTAssertFalse(app.staticTexts["Thinking…"].exists)
+        XCTAssertFalse(thinking.exists)
+        let identity = app.descendants(matching: .any)["coaching-panel-identity"]
+        XCTAssertEqual(identity.label, "Coach")
+        XCTAssertEqual(identity.value as? String, "")
         XCTAssertTrue(shell.exists)
+
+        let readySnapshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        readySnapshot.name = "Coach ready"
+        readySnapshot.lifetime = .keepAlways
+        add(readySnapshot)
     }
 
     @MainActor
@@ -69,7 +94,11 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         let deadline = Date().addingTimeInterval(duration)
         while Date() < deadline {
             XCTAssertTrue(shell.exists)
-            XCTAssertTrue(app.staticTexts["Thinking…"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["coaching-thinking-indicator"].exists)
+            let identity = app.descendants(matching: .any)["coaching-panel-identity"]
+            XCTAssertTrue(identity.exists)
+            XCTAssertEqual(identity.label, "Coach")
+            XCTAssertEqual(identity.value as? String, "Thinking")
             XCTAssertFalse(app.staticTexts["Choose a piece"].exists)
             XCTAssertFalse(app.staticTexts["This opening answer is stale."].exists)
             RunLoop.current.run(until: Date().addingTimeInterval(0.02))

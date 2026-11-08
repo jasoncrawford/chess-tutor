@@ -12,6 +12,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from CoachingServer.chess_native_compiler import PROMPT_GENERATORS
+
 
 _CONFIGURATION_FIELDS = frozenset(
     (
@@ -33,7 +35,7 @@ _CONFIGURATION_FIELDS = frozenset(
     )
 )
 _PROVIDERS = frozenset(("openai-responses-v1",))
-_PROMPT_GENERATORS = {"chess-native-v13": "tutor-v13"}
+_PROMPT_GENERATORS = {name: "tutor-v13" for name in PROMPT_GENERATORS}
 _RESPONSE_CONTRACTS = frozenset(("chess-native-v13",))
 _REASONING_EFFORTS = frozenset(("none", "low", "medium", "high"))
 _TACTICAL_FOLLOW_UP_EVENTS = frozenset(

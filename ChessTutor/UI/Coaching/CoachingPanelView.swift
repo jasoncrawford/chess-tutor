@@ -19,6 +19,7 @@ enum CoachingPanelComposition: Equatable {
 }
 
 private enum CoachingPanelAccessibilitySection: String {
+    case identity
     case conversation
     case routine
     case actions
@@ -29,6 +30,8 @@ private enum CoachingPanelAccessibilitySection: String {
 
     var sortPriority: Double {
         switch self {
+        case .identity:
+            4
         case .conversation:
             3
         case .routine:
@@ -139,7 +142,7 @@ enum CoachingActionRouting {
 
 struct CoachingPanelView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .title2) private var coachingTitleSize: CGFloat = 24
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var coachingBodySize: CGFloat = 18
     @ScaledMetric(relativeTo: .body) private var coachingActionSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var actionMinimumHeight: CGFloat = 44
@@ -173,24 +176,20 @@ struct CoachingPanelView: View {
         switch layout.composition {
         case .tall:
             VStack(spacing: 10) {
-                if !routine.isEmpty {
-                    routineHeader(axis: .horizontal)
-                }
+                panelHeader
 
-                scrollableConversation
+                conversationRegion
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 panelDivider
                 readableActions(axis: .vertical)
             }
         case .wide:
             VStack(spacing: 10) {
-                if !routine.isEmpty {
-                    routineHeader(axis: .horizontal)
-                    panelDivider
-                }
+                panelHeader
+                panelDivider
 
                 HStack(spacing: 10) {
-                    scrollableConversation
+                    conversationRegion
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     panelDivider
                     readableActions(axis: .vertical)
@@ -202,6 +201,7 @@ struct CoachingPanelView: View {
     @ViewBuilder
     private var accessibilityPanelContent: some View {
         VStack(alignment: .leading, spacing: 10) {
+            coachIdentity
             accessibleConversation
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
@@ -218,18 +218,44 @@ struct CoachingPanelView: View {
         )
     }
 
+    private var panelHeader: some View {
+        HStack(spacing: 8) {
+            coachIdentity
+            if !routine.isEmpty {
+                routineHeader(axis: .horizontal)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var coachIdentity: some View {
+        CoachingPanelIdentity(
+            isThinking: presentation?.isThinking == true,
+            showsTitle: routine.isEmpty
+        )
+        .accessibilityIdentifier(CoachingPanelAccessibilitySection.identity.identifier)
+        .accessibilitySortPriority(CoachingPanelAccessibilitySection.identity.sortPriority)
+    }
+
     private var panelDivider: some View {
         Divider()
             .overlay(AppTheme.panelStroke)
             .accessibilityHidden(true)
     }
 
-    private var scrollableConversation: some View {
-        ScrollView(.vertical) {
-            conversation
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+    private var conversationRegion: some View {
+        Group {
+            if presentation?.isThinking == true {
+                CoachingThinkingIndicator(reduceMotion: reduceMotion)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView(.vertical) {
+                    conversation
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
+            }
         }
-        .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .automatic)
         .clipped()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(CoachingPanelAccessibilitySection.conversation.identifier)
@@ -247,9 +273,17 @@ struct CoachingPanelView: View {
 
     private var accessibilityConversationCopy: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let presentation {
+            if presentation?.isThinking == true {
+                // A stable semantic counterpart to the animated visual below.
+                Color.clear
+                    .frame(width: 64, height: 40)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Thinking")
+                    .accessibilityIdentifier("coaching-thinking-indicator")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let presentation {
                 Text(presentation.primaryMessage)
-                    .font(titleFont)
+                    .font(bodyFont)
                     .lineLimit(1)
                     .accessibilitySortPriority(
                         CoachingConversationAccessibilityElement.primaryMessage.sortPriority
@@ -287,7 +321,7 @@ struct CoachingPanelView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let presentation {
                 Text(presentation.primaryMessage)
-                    .font(titleFont)
+                    .font(bodyFont)
                     .foregroundStyle(AppTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilitySortPriority(
@@ -398,10 +432,6 @@ struct CoachingPanelView: View {
         _ = session.chooseCoachingAction(action)
     }
 
-    private var titleFont: Font {
-        AppTheme.coachingTitleFont(size: min(coachingTitleSize, 34))
-    }
-
     private var bodyFont: Font {
         AppTheme.coachingBodyFont(size: min(coachingBodySize, 25))
     }
@@ -423,6 +453,57 @@ struct CoachingPanelView: View {
                 prominence: .quiet
             )
         ]
+    }
+}
+
+private struct CoachingPanelIdentity: View {
+    @ScaledMetric(relativeTo: .title2) private var titleSize: CGFloat = 24
+    let isThinking: Bool
+    let showsTitle: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "lightbulb")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(AppTheme.captureBoxFelt)
+                .frame(width: 26, height: 26)
+            if showsTitle {
+                Text("Coach")
+                    .font(.system(size: min(titleSize, 32), weight: .semibold, design: .serif))
+                    .foregroundStyle(AppTheme.ink)
+            }
+        }
+        .padding(.bottom, 6)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Coach")
+        .accessibilityValue(isThinking ? "Thinking" : "")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Motion belongs to this presentation-only view; request state still comes
+/// exclusively from the session's `isThinking` flag.
+struct CoachingThinkingIndicator: View {
+    let reduceMotion: Bool
+    @State private var startedAt = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            let elapsed = context.date.timeIntervalSince(startedAt)
+            HStack(spacing: 8) {
+                ForEach(0..<3) { index in
+                    let lift = reduceMotion ? 0 : max(0, sin(elapsed * .pi * 2 / 1.4 - Double(index) * 0.8))
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(AppTheme.captureBoxFelt.opacity(0.65 + lift * 0.35))
+                        .frame(width: 14, height: 14)
+                        .offset(y: -8 * lift)
+                }
+            }
+            .frame(width: 64, height: 40)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Thinking")
+        .accessibilityIdentifier("coaching-thinking-indicator")
     }
 }
 

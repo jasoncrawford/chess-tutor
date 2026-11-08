@@ -2,6 +2,17 @@ import XCTest
 
 @MainActor
 final class CoachingPanelAccessibilityUITests: XCTestCase {
+    func testCoachingPanelIdentifiesCoachBeforeConversation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-test-coaching-panel", "tall", "compact-no-observation"]
+        app.launch()
+
+        let identity = app.descendants(matching: .any)["coaching-panel-identity"]
+        XCTAssertTrue(identity.waitForExistence(timeout: 3))
+        XCTAssertEqual(identity.label, "Coach")
+        XCTAssertLessThan(identity.frame.maxY, app.staticTexts["That move seems safe."].frame.minY)
+    }
+
     func testCoachingTypographyAndActionGrowAtAccessibilityExtraLargeInTallLayout() {
         assertTypographyGrows(configuration: "tall")
     }

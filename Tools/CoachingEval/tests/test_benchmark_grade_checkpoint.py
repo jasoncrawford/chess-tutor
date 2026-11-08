@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from Tools.CoachingEval.benchmark.configuration import load_prices
+from Tools.CoachingEval.benchmark.budget import BudgetedClient, BudgetExceeded
 from Tools.CoachingEval.benchmark.grader import grade_run
 from Tools.CoachingEval.tests import test_benchmark_grader as fixtures
 
@@ -77,6 +78,21 @@ class GradeCheckpointTests(unittest.TestCase):
         self.assertEqual(9, len(client.calls))
         self.assertFalse(checkpoint.exists())
         self.assertFalse(checkpoint.with_name(checkpoint.name + ".lock").exists())
+
+    def test_pre_transmission_budget_stop_can_resume_without_unknown_attempt(self):
+        arguments = self.arguments()
+        provider = ScriptedJudge(self.outputs())
+        meter = BudgetedClient(provider, arguments["price_table"], self.root / "budget.jsonl", "0.000001")
+        with self.assertRaises(BudgetExceeded):
+            grade_run(client=meter, **arguments)
+        self.assertEqual([], provider.calls)
+        state = json.loads(arguments["checkpoint_path"].read_text())["state"]
+        self.assertIsNone(state["inFlight"])
+        self.assertEqual({}, state["cells"])
+        grade_run(client=provider, **arguments)
+        state = json.loads(arguments["checkpoint_path"].read_text())["state"]
+        self.assertEqual(9, sum(len(cell["attempts"]) for cell in state["cells"].values()))
+        self.assertTrue(all(attempt["metrics"]["accountingComplete"] for cell in state["cells"].values() for attempt in cell["attempts"]))
 
     def test_checkpoint_does_not_change_completed_grades_or_mechanical_gates(self):
         arguments = self.arguments(run_root=self.make_run())
