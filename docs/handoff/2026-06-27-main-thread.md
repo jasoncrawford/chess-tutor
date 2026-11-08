@@ -2,8 +2,8 @@
 
 ## Latest integration checkpoint — 2026-11-08
 
-The coaching branch is being integrated with main's multiple-game library on
-`codex/integrate-coaching`. See [the integration report](../reports/2026-11-08-coaching-integration.md)
+The coaching branch is integrated with main's multiple-game library on
+`codex/integrate-coaching`, published as PR #24 (not merged). See [the integration report](../reports/2026-11-08-coaching-integration.md)
 for the current architecture, tests, and Coaching Smoke launch instructions.
 The original MVP notes below are historical, not a description of current scope.
 

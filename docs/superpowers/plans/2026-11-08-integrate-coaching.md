@@ -58,5 +58,5 @@
 - [x] Run full native and Python suites, Node review-tool tests if present, and inspect no skipped/failing tests. 1,011 native; 432 Python; 11 Node. Release build passed.
 - [x] Review the integration diff independently, addressing significant findings with regression tests.
 - [x] Verify simulator navigation/new-game/reopen paths and final controls. Use deterministic coaching responses for automation; no paid model eval.
-- [ ] Commit merge and integration fixes, push, and open a PR against main with verification and scope notes. Close #3 with a link to the replacement.
-- [ ] Reload Coaching Smoke with the combined hosted-coaching build and report PR/test status; do not merge the final PR or delete old evidence/worktrees.
+- [x] Commit merge and integration fixes, push, and open a PR against main with verification and scope notes. PR #24 replaces the now-closed #3; merge commit 5b2dbc8 preserves both parents.
+- [x] Reload Coaching Smoke with the combined hosted-coaching build and report PR/test status. Launcher is running; #24 remains open for review with GitHub CI in progress. No old evidence/worktrees deleted.

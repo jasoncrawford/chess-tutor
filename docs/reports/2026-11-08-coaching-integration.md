@@ -7,6 +7,10 @@ PR #23 was merged into `codex/chess-coaching-comparison` at `c7629e7`.
 coaching history without rebasing or cherry-picking. Its new PR replaces the
 stale PR #3; it does not replace the multiple-game work already on main.
 
+Published as [PR #24](https://github.com/jasoncrawford/chess-tutor/pull/24), with
+integration merge `5b2dbc8`. PR #3 is closed as superseded. The replacement stays
+open for review; GitHub's required Python/iPad checks run on the PR.
+
 The combined app retains the Games library, local and remote boards, pending
 invitations, coverage-mode removal, and the polished Coach panel. The obsolete
 in-board Play Remotely button stays removed. Help retains its shorter label.
@@ -73,3 +77,6 @@ The script uses the existing Keychain credential and current Astra trial
 configuration. Leave it running while testing. Start or reopen boards through
 Games. The A16 simulator and physical iPads were not used for this integration.
 Old coaching worktrees and ignored evaluation artifacts are retained.
+
+Delivery: Coaching Smoke was reloaded from this worktree with the local hosted
+server running. Its initial Games screen is ready for starting a new board.
