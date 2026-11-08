@@ -152,7 +152,7 @@ struct GameControlsView: View {
             Button {
                 session.startCoaching()
             } label: {
-                Label("Help me", systemImage: "questionmark.circle")
+                Label("Help", systemImage: "questionmark.circle")
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
             }
