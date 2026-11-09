@@ -57,15 +57,23 @@ The native result bundle is `/tmp/chess-hosted-reviewed-full.xcresult`.
 ## Physical device status
 
 The connected **Family iPad** is the ninth-generation target, running iPadOS
-26.5.2. Trust succeeded and Apple's `devmodectl` confirms Developer Mode is
-enabled. Xcode/CoreDevice still reports it as paired but unavailable, including
-after a cable reconnect. A direct Xcode build targeting its UDID fails because
-the destination is unavailable; a generic signed-device build succeeds. Direct
-installation fails with CoreDevice error 4016 (trusted device services cannot be
-acquired). No app installation or physical-device playtest is claimed yet. No
-pairing reset or device-data reset was performed.
+26.5.2. Trust succeeded and Apple's `devmodectl` confirmed Developer Mode was
+enabled, but Xcode initially reported the iPad unavailable. A direct Xcode build
+could not find its destination, and installation of a successfully signed build
+failed with CoreDevice error 4016. Restarting only the Mac user's
+`CoreDeviceService` resolved discovery: the iPad then appeared as connected and
+physical. No pairing reset or device-data reset was needed.
 
-Once Xcode can connect, run from this worktree:
+The one-command installer then built, installed, and launched the signed
+Release app successfully on Family iPad. A subsequent launch with
+`--terminate-existing` and **no setup environment** also succeeded. The user
+has been asked to open a game and try Help to confirm the on-device coaching
+response; that visual confirmation is still pending.
+
+Coaching Smoke was also restored to the real hosted connection after tests and
+relaunched without setup variables. A16 and existing game data were left alone.
+
+To install or update again, run from this worktree:
 
 ```bash
 python3 scripts/install_hosted_coaching_device.py --device "Family iPad"
