@@ -10,7 +10,8 @@ class DeploymentConfigurationTests(unittest.TestCase):
     def test_vercel_uses_supported_python_runtime_selection(self):
         configuration = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
 
-        self.assertNotIn("functions", configuration)
+        for function in configuration.get("functions", {}).values():
+            self.assertNotIn("runtime", function)
         self.assertEqual("3.12", (ROOT / ".python-version").read_text(encoding="utf-8").strip())
 
 

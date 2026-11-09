@@ -1,0 +1,24 @@
+{
+  "project": "chess-tutor-coaching",
+  "scope": "jasoncrawford",
+  "teamID": "team_Po8VYnXvTN5MGKEp4Z7TP6G4",
+  "baseURL": "https://chess-tutor-coaching.vercel.app",
+  "modelConfiguration": "Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json",
+  "openAIKeychainService": "ChessTutor-CoachingEval-OpenAI",
+  "familyKeychainService": "ChessTutor-HostedCoaching-Family",
+  "runtimeFiles": [
+    "api/index.py",
+    "CoachingServer/http_app.py",
+    "CoachingServer/chess_native_compiler.py",
+    "CoachingServer/model_configuration.py",
+    "CoachingServer/provider_envelope.py",
+    "CoachingServer/service.py",
+    "CoachingServer/structured_logging.py",
+    "Tools/CoachingEval/openai_responses.py",
+    "Tools/CoachingEval/http_security.py",
+    "Tools/CoachingEval/chess_native_response.py",
+    "requirements.txt",
+    ".python-version",
+    "vercel.json"
+  ]
+}

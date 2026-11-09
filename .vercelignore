@@ -1,0 +1,22 @@
+# Prefer scripts/deploy_coaching_server.py, which stages an explicit allowlist.
+# This also prevents a direct root deployment from uploading private artifacts.
+*
+!api/
+!api/index.py
+!CoachingServer/
+!CoachingServer/*.py
+CoachingServer/local.py
+!Tools/
+!Tools/CoachingEval/
+!Tools/CoachingEval/openai_responses.py
+!Tools/CoachingEval/http_security.py
+!Tools/CoachingEval/chess_native_response.py
+!Tools/CoachingEval/prompts/
+!Tools/CoachingEval/prompts/tutor-v13-experience-v6.md
+!Tools/CoachingEval/benchmark/
+!Tools/CoachingEval/benchmark/configs/
+!Tools/CoachingEval/benchmark/configs/models/
+!Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json
+!requirements.txt
+!.python-version
+!vercel.json

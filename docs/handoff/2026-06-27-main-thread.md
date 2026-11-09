@@ -2,9 +2,11 @@
 
 ## Latest integration checkpoint — 2026-11-08
 
-The coaching branch is integrated with main's multiple-game library on
-`codex/integrate-coaching`, published as PR #24 (not merged). See [the integration report](../reports/2026-11-08-coaching-integration.md)
-for the current architecture, tests, and Coaching Smoke launch instructions.
+PR #24 merged the coaching branch with main's multiple-game library at
+`cc6930b98404bcf90ed4df76f32e43a4cea9b659`. See [the integration report](../reports/2026-11-08-coaching-integration.md)
+for the integrated architecture. Hosted family-device deployment is on
+`codex/hosted-device-play`; see [its report](../reports/2026-11-08-hosted-device-play.md)
+for the live HTTPS server, verification evidence, and physical-iPad status.
 The original MVP notes below are historical, not a description of current scope.
 
 ## Product Direction
