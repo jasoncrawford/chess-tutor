@@ -1,0 +1,710 @@
+import copy
+import json
+import socket
+import unittest
+from dataclasses import replace
+from pathlib import Path
+
+from CoachingServer.model_configuration import HostedModelConfiguration
+from CoachingServer.provider_envelope import validate_provider_envelope
+from CoachingServer.service import (
+    HostedCoachingCompletion,
+    HostedCoachingService,
+    HostedCoachingServiceError,
+)
+from CoachingServer.chess_native_compiler import PROMPT_GENERATORS, compile_context
+
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = json.loads(
+    (ROOT / "Tools/CoachingEval/fixtures/chess-native-context-v1.json").read_text(
+        encoding="utf-8"
+    )
+)
+SYSTEM_PROMPT = (
+    ROOT / "Tools/CoachingEval/prompts/tutor-v13.md"
+).read_text(encoding="utf-8")
+PRODUCTION_CONFIGURATION = HostedModelConfiguration.load(
+    ROOT / "CoachingServer/configs/production-v1.json",
+    ROOT,
+)
+GAME_ID = "a1111111-1111-4111-8111-111111111111"
+EPISODE_ID = "b2222222-2222-4222-8222-222222222222"
+
+
+def hosted_request(
+    *,
+    previous_response_id=None,
+    request=None,
+    game_id=GAME_ID,
+    episode_id=EPISODE_ID,
+):
+    return {
+        "schemaVersion": "hosted-coaching-request.v3",
+        "gameID": game_id,
+        "episodeID": episode_id,
+        "request": FIXTURE["request"] if request is None else request,
+        "previousResponseID": previous_response_id,
+    }
+
+
+def decoded_events(captured):
+    values = [json.loads(record.getMessage()) for record in captured.records]
+    for value in values:
+        assert value.pop("schema_version") == "coaching-log.v1"
+        assert value.pop("timestamp").endswith("Z")
+    return values
+
+
+def request_with_latest_event(kind, references=()):
+    request = copy.deepcopy(FIXTURE["request"])
+    event = {
+        "sequence": 1,
+        "kind": kind,
+        "referencedIDs": list(references),
+    }
+    request["interaction"]["latestEvent"] = event
+    request["interaction"]["episodeEvents"] = [event]
+    return request
+
+
+class RecordingProvider:
+    def __init__(self, response=None, error=None):
+        self.calls = []
+        self.response = response or {
+            "id": "resp_provider-private-id",
+            "model": "gpt-5.6-sol-2026-08-01",
+            "status": "completed",
+            "output_text": (
+                '{"message":"Where could this knight help in the center?",'
+                '"actions":["hint"],'
+                '"focus":[{"type":"square","square":"b1"}],'
+                '"expects":"stageMove"}'
+            ),
+            "usage": {
+                "input_tokens": 500,
+                "cached_input_tokens": 25,
+                "output_tokens": 80,
+                "reasoning_tokens": 50,
+                "total_tokens": 580,
+            },
+        }
+        self.error = error
+
+    def complete(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return self.response
+
+
+class EmptyProvider:
+    def __init__(self):
+        self.calls = []
+
+    def complete(self, **kwargs):
+        self.calls.append(kwargs)
+        return None
+
+
+class HostedCoachingServiceTests(unittest.TestCase):
+    def test_staged_result_reaches_the_live_and_benchmark_compiler(self):
+        configuration = HostedModelConfiguration.load(
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v6-low-model.json", ROOT,
+        )
+        request = copy.deepcopy(FIXTURE["request"])
+        request["interaction"]["tentativeMove"] = dict(request["legalMoves"][0], canonicalMove="b1c3", destinationSquare="c3", san="Nc3")
+        request["tentativePosition"] = dict(status="stalemate", pieces=[dict(
+            id="piece:white:knight:c3", color="white", kind="knight", square="c3")],
+            occupiedSquareRelationships=[], movedPieceControlledSquares=[])
+        for previous in (None, "resp_previous"):
+            provider = RecordingProvider(response={
+                "id": "resp_valid", "status": "completed", "output_text": json.dumps(dict(
+                    message="That would be a draw.", actions=[], focus=[], expects="chooseWhetherToPlay")),
+            })
+            service = HostedCoachingService(provider=provider, configuration=configuration)
+            service.complete(hosted_request(previous_response_id=previous, request=request))
+            compiler = PROMPT_GENERATORS[configuration.user_prompt_generator][int(previous is not None)]
+            self.assertEqual(compiler(request, configuration.prompt_version).markdown, provider.calls[0]["user_prompt"])
+            self.assertIn("stalemate — a draw, not a win", provider.calls[0]["user_prompt"])
+
+    def test_grounded_generator_is_identical_in_live_service_and_benchmark(self):
+        configuration = HostedModelConfiguration.load(
+            ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-experience-v4-low-model.json", ROOT,
+        )
+        for previous in (None, "resp_previous"):
+            with self.subTest(previous=previous):
+                provider = RecordingProvider()
+                service = HostedCoachingService(provider=provider, configuration=configuration)
+                service.complete(hosted_request(previous_response_id=previous))
+                compiler = PROMPT_GENERATORS[configuration.user_prompt_generator][int(previous is not None)]
+                expected = compiler(FIXTURE["request"], configuration.prompt_version)
+                self.assertEqual(expected.markdown, provider.calls[0]["user_prompt"])
+                self.assertIn("Selected-piece relationships", provider.calls[0]["user_prompt"])
+                self.assertIn("No legal checkmate in one is available.", provider.calls[0]["user_prompt"])
+
+    def test_shared_provider_envelope_requires_completed_output_and_continuation(self):
+        response = {
+            "id": "resp_valid-123",
+            "status": "completed",
+            "output_text": '{"message":"Valid body"}',
+        }
+
+        self.assertEqual(
+            ("resp_valid-123", '{"message":"Valid body"}'),
+            validate_provider_envelope(response),
+        )
+        invalid = (
+            None,
+            [],
+            {**response, "status": "in_progress"},
+            {key: value for key, value in response.items() if key != "output_text"},
+            {**response, "output_text": None},
+            {key: value for key, value in response.items() if key != "id"},
+            {**response, "id": "request_not-a-continuation"},
+        )
+        for candidate in invalid:
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                validate_provider_envelope(candidate)
+
+    def test_returns_compact_safe_diagnostics_with_the_validated_turn(self):
+        clock = iter((10.0, 10.123))
+        service = HostedCoachingService(
+            provider=RecordingProvider(),
+            configuration=PRODUCTION_CONFIGURATION,
+            clock=lambda: next(clock),
+        )
+
+        completion = service.complete(hosted_request(), trace_id="trace-summary")
+
+        self.assertIsInstance(completion, HostedCoachingCompletion)
+        self.assertEqual(
+            {
+                "request": {
+                    "kind": "initial",
+                    "request_id": "shared-selected-knight",
+                    "prompt_version": "tutor-v13",
+                    "position_revision": 0,
+                    "fen": "4k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+                    "moves": [],
+                    "side_to_move": "white",
+                    "status": "ongoing",
+                    "latest_interaction": {
+                        "sequence": 1,
+                        "kind": "pieceSelected",
+                        "references": ["piece:white:knight:b1"],
+                    },
+                    "selected_piece": "piece:white:knight:b1",
+                    "selected_square": "b1",
+                    "staged_move": None,
+                },
+                "response": {
+                    "message": "Where could this knight help in the center?",
+                    "actions": ["hint"],
+                    "focus": [{"type": "square", "square": "b1"}],
+                    "expects": "stageMove",
+                },
+                "provider": {
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "input_tokens": 500,
+                    "cached_input_tokens": 25,
+                    "output_tokens": 80,
+                    "reasoning_tokens": 50,
+                    "total_tokens": 580,
+                    "latency_ms": 123.0,
+                },
+            },
+            completion.diagnostics,
+        )
+        serialized = json.dumps(completion.diagnostics)
+        self.assertNotIn(SYSTEM_PROMPT, serialized)
+        self.assertNotIn("resp_provider-private-id", serialized)
+        self.assertNotIn('"pieces"', serialized)
+        self.assertNotIn('"legalMoves"', serialized)
+
+    def test_provider_failure_carries_only_compiled_safe_diagnostics(self):
+        service = HostedCoachingService(
+            provider=RecordingProvider(error=RuntimeError("PRIVATE BODY SECRET")),
+            configuration=PRODUCTION_CONFIGURATION,
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request(), trace_id="trace-failure")
+
+        self.assertEqual("providerUnavailable", raised.exception.code)
+        self.assertIsNotNone(raised.exception.diagnostics["request"])
+        self.assertIsNone(raised.exception.diagnostics["response"])
+        self.assertEqual("gpt-5.6-sol", raised.exception.diagnostics["provider"]["model"])
+        self.assertNotIn("PRIVATE BODY SECRET", json.dumps(raised.exception.diagnostics))
+
+    def test_provider_failures_use_the_configured_attempt_limit(self):
+        provider = RecordingProvider(error=RuntimeError("PRIVATE BODY SECRET"))
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=replace(PRODUCTION_CONFIGURATION, maximum_attempts=2),
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("providerUnavailable", raised.exception.code)
+        self.assertEqual(2, len(provider.calls))
+
+    def test_invalid_provider_output_never_appears_in_logs_or_diagnostics(self):
+        provider = RecordingProvider(
+            response={
+                "id": "resp_invalid-private-id",
+                "status": "completed",
+                "output_text": (
+                    '{"message":"PRIVATE RAW PROVIDER OUTPUT",'
+                    '"actions":["unavailable"],"focus":[],'
+                    '"expects":"findEndangeredPiece"}'
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=PRODUCTION_CONFIGURATION,
+        )
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(hosted_request(), trace_id="trace-invalid")
+
+        joined = "\n".join(record.getMessage() for record in captured.records)
+        self.assertNotIn("PRIVATE RAW PROVIDER OUTPUT", joined)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["unavailableAction"], failure["reasons"])
+        self.assertNotIn("resp_invalid-private-id", joined)
+
+    def test_empty_provider_response_is_an_invalid_response_not_unavailability(self):
+        service = HostedCoachingService(
+            provider=EmptyProvider(),
+            configuration=PRODUCTION_CONFIGURATION,
+        )
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("invalidProviderResponse", raised.exception.code)
+
+    def test_rejects_provider_turn_without_a_meaningful_next_interaction(self):
+        provider = RecordingProvider(
+            response={
+                "id": "resp_inert-turn",
+                "status": "completed",
+                "output_text": (
+                    '{"message":"That pawn is safe.",'
+                    '"actions":[],"focus":[],"expects":"none"}'
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertRaises(HostedCoachingServiceError) as captured:
+            service.complete(hosted_request())
+
+        self.assertEqual("invalidProviderResponse", captured.exception.code)
+
+    def test_invalid_json_logs_a_safe_reason_without_provider_content(self):
+        provider = RecordingProvider(
+            response={
+                "id": "resp_invalid-json",
+                "status": "completed",
+                "output_text": "PRIVATE not-json body",
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(hosted_request(), trace_id="trace-invalid-json")
+
+        joined = "\n".join(record.getMessage() for record in captured.records)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["invalidJSON"], failure["reasons"])
+        self.assertNotIn("PRIVATE not-json body", joined)
+
+    def test_overlong_provider_message_logs_specific_safe_reason(self):
+        private_message = "PRIVATE" + ("x" * 251)
+        provider = RecordingProvider(
+            response={
+                "id": "resp_overlong-message",
+                "status": "completed",
+                "output_text": json.dumps(
+                    {
+                        "message": private_message,
+                        "actions": [],
+                        "focus": [],
+                        "expects": "findEndangeredPiece",
+                    },
+                    separators=(",", ":"),
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(hosted_request(), trace_id="trace-overlong")
+
+        joined = "\n".join(record.getMessage() for record in captured.records)
+        failure = next(
+            value
+            for value in decoded_events(captured)
+            if value["event"] == "provider_response_failed"
+        )
+        self.assertEqual(["messageTooLong"], failure["reasons"])
+        self.assertNotIn(private_message, joined)
+
+    def test_logs_provider_lifecycle_with_trace_and_elapsed_time(self):
+        provider = RecordingProvider()
+        clock = iter((10.0, 10.123))
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=PRODUCTION_CONFIGURATION,
+            clock=lambda: next(clock),
+        )
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            service.complete(hosted_request(), trace_id="trace-1")
+
+        self.assertEqual(
+            [
+                {
+                    "level": "info",
+                    "event": "request_compiled",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_started",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "timeout_seconds": 30.0,
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_completed",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 123.0,
+                    "outcome": "completed",
+                    "input_tokens": 500,
+                    "cached_input_tokens": 25,
+                    "output_tokens": 80,
+                    "reasoning_tokens": 50,
+                },
+                {
+                    "level": "info",
+                    "event": "provider_response_validated",
+                    "trace_id": "trace-1",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                },
+            ],
+            decoded_events(captured),
+        )
+
+    def test_logs_timeout_category_without_private_exception_text(self):
+        provider = RecordingProvider(error=socket.timeout("private timeout detail"))
+        clock = iter((20.0, 50.5))
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=PRODUCTION_CONFIGURATION,
+            clock=lambda: next(clock),
+        )
+
+        with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+            with self.assertRaises(HostedCoachingServiceError):
+                service.complete(hosted_request(), trace_id="trace-2")
+
+        self.assertEqual(
+            [
+                {
+                    "level": "info",
+                    "event": "request_compiled",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                },
+                {
+                    "level": "info",
+                    "event": "provider_request_started",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "request_kind": "initial",
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "high",
+                    "timeout_seconds": 30.0,
+                },
+                {
+                    "level": "warning",
+                    "event": "provider_request_failed",
+                    "trace_id": "trace-2",
+                    "game_id": GAME_ID,
+                    "episode_id": EPISODE_ID,
+                    "elapsed_ms": 30500.0,
+                    "outcome": "timeout",
+                },
+            ],
+            decoded_events(captured),
+        )
+        self.assertNotIn(
+            "private timeout detail",
+            "\n".join(record.getMessage() for record in captured.records),
+        )
+
+    def test_calls_provider_once_with_server_owned_prompt_settings_and_schema(self):
+        provider = RecordingProvider()
+        clock = iter((10.0, 10.123))
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=replace(
+                PRODUCTION_CONFIGURATION,
+                model="configured-model",
+                initial_reasoning_effort="medium",
+                maximum_output_tokens=1024,
+                timeout_seconds=12.5,
+                prompt_version="tutor-v12",
+                system_prompt="Configured system prompt.",
+                conversation_reuse=False,
+                store=False,
+            ),
+            clock=lambda: next(clock),
+        )
+
+        response = service.complete(hosted_request()).response
+
+        self.assertEqual(1, len(provider.calls))
+        call = provider.calls[0]
+        self.assertEqual("configured-model", call["model"])
+        self.assertEqual("medium", call["reasoning_effort"])
+        self.assertEqual(1024, call["maximum_output_tokens"])
+        self.assertEqual(12.5, call["timeout"])
+        self.assertIsNone(call["previous_response_id"])
+        self.assertFalse(call["store"])
+        self.assertEqual("Configured system prompt.", call["system_prompt"])
+        self.assertNotIn(GAME_ID, call["system_prompt"])
+        self.assertNotIn(EPISODE_ID, call["system_prompt"])
+        self.assertEqual(
+            compile_context(FIXTURE["request"], "tutor-v12").markdown,
+            call["user_prompt"],
+        )
+        self.assertNotIn(GAME_ID, call["user_prompt"])
+        self.assertNotIn(EPISODE_ID, call["user_prompt"])
+        self.assertFalse(call["schema"]["additionalProperties"])
+        self.assertEqual(
+            [
+                "none",
+                "findEndangeredPiece",
+                "findSafeCapture",
+                "stageMove",
+                "judgeMoveSafety",
+                "chooseWhetherToPlay",
+            ],
+            call["schema"]["properties"]["expects"]["enum"],
+        )
+        self.assertEqual(
+            {
+                "schemaVersion": "hosted-coaching-turn.v3",
+                "requestID": "shared-selected-knight",
+                "positionRevision": 0,
+                "promptVersion": "tutor-v12",
+                "continuationID": "resp_provider-private-id",
+                "turn": {
+                    "message": "Where could this knight help in the center?",
+                    "actions": ["hint"],
+                    "focus": [{"type": "square", "square": "b1"}],
+                    "expects": "stageMove",
+                },
+                "metrics": {
+                    "inputTokens": 500,
+                    "cachedInputTokens": 25,
+                    "outputTokens": 80,
+                    "reasoningTokens": 50,
+                    "totalTokens": 580,
+                    "latencyMilliseconds": 123.0,
+                },
+            },
+            response,
+        )
+        serialized = json.dumps(response)
+        self.assertNotIn("gpt-5.6-sol-2026", serialized)
+
+    def test_simple_follow_up_uses_compact_update_previous_response_and_no_reasoning(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=PRODUCTION_CONFIGURATION,
+        )
+
+        response = service.complete(
+            hosted_request(previous_response_id="resp_previous-123")
+        ).response
+
+        call = provider.calls[0]
+        self.assertEqual("none", call["reasoning_effort"])
+        self.assertEqual("resp_previous-123", call["previous_response_id"])
+        self.assertTrue(call["store"])
+        self.assertTrue(call["user_prompt"].startswith("# Chess coaching update\n"))
+        self.assertNotIn("## Position", call["user_prompt"])
+        self.assertEqual("resp_provider-private-id", response["continuationID"])
+
+    def test_tactical_follow_ups_use_low_reasoning(self):
+        cases = (
+            ("moveStaged", ("move:b1-c3",)),
+            ("moveReplaced", ("move:b1-c3",)),
+            ("squareInspected", ("piece:white:knight:b1",)),
+            ("actionChosen", ("action:hint",)),
+        )
+
+        for kind, references in cases:
+            with self.subTest(kind=kind):
+                provider = RecordingProvider()
+                service = HostedCoachingService(
+                    provider=provider,
+                    configuration=PRODUCTION_CONFIGURATION,
+                )
+                service.complete(
+                    hosted_request(
+                        previous_response_id="resp_previous-123",
+                        request=request_with_latest_event(kind, references),
+                    )
+                )
+                self.assertEqual("low", provider.calls[0]["reasoning_effort"])
+
+    def test_simple_follow_up_effort_comes_from_the_configuration(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(
+            provider=provider,
+            configuration=replace(
+                PRODUCTION_CONFIGURATION,
+                simple_follow_up_reasoning_effort="low",
+            ),
+        )
+        service.complete(hosted_request(previous_response_id="resp_previous-123"))
+        self.assertEqual("low", provider.calls[0]["reasoning_effort"])
+
+    def test_rejects_invalid_request_before_provider_call(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+        request = dict(FIXTURE["request"], authoredAdvice="Play the knight.")
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request(request=request))
+
+        self.assertEqual("invalidRequest", raised.exception.code)
+        self.assertEqual([], provider.calls)
+
+    def test_rejects_invalid_provider_output_without_returning_private_content(self):
+        provider = RecordingProvider(
+            response={
+                "status": "completed",
+                "output_text": (
+                    '{"message":"PRIVATE TRACE",'
+                    '"actions":["unavailable"],"focus":[]}'
+                ),
+                "usage": {},
+            }
+        )
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("invalidProviderResponse", raised.exception.code)
+        self.assertNotIn("PRIVATE", str(raised.exception))
+
+    def test_redacts_provider_exceptions(self):
+        provider = RecordingProvider(error=RuntimeError("secret provider body"))
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("providerUnavailable", raised.exception.code)
+        self.assertNotIn("secret", str(raised.exception))
+
+    def test_preserves_provider_timeout_as_a_stable_timeout_failure(self):
+        provider = RecordingProvider(error=socket.timeout("private timeout detail"))
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("providerTimeout", raised.exception.code)
+        self.assertNotIn("private", str(raised.exception))
+
+    def test_maps_provider_gateway_timeout_to_the_same_stable_timeout_failure(self):
+        error = RuntimeError("private provider body")
+        error.category = "httpError"
+        error.http_status = 504
+        provider = RecordingProvider(error=error)
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(hosted_request())
+
+        self.assertEqual("providerTimeout", raised.exception.code)
+        self.assertNotIn("private", str(raised.exception))
+
+    def test_rejects_invalid_or_extra_envelope_fields_before_provider_call(self):
+        provider = RecordingProvider()
+        service = HostedCoachingService(provider=provider, configuration=PRODUCTION_CONFIGURATION)
+        invalid = hosted_request(previous_response_id="not-a-response-id")
+        invalid["clientReasoningEffort"] = "max"
+
+        with self.assertRaises(HostedCoachingServiceError) as raised:
+            service.complete(invalid)
+
+        self.assertEqual("invalidRequest", raised.exception.code)
+        self.assertEqual([], provider.calls)
+
+    def test_rejects_missing_malformed_or_noncanonical_correlation_ids(self):
+        invalid_requests = (
+            {key: value for key, value in hosted_request().items() if key != "gameID"},
+            hosted_request(game_id="not-a-uuid"),
+            hosted_request(game_id=GAME_ID.upper()),
+            hosted_request(episode_id="not-a-uuid"),
+            hosted_request(episode_id=EPISODE_ID.upper()),
+        )
+
+        for invalid in invalid_requests:
+            with self.subTest(invalid=invalid):
+                provider = RecordingProvider()
+                service = HostedCoachingService(
+                    provider=provider,
+                    configuration=PRODUCTION_CONFIGURATION,
+                )
+                with self.assertRaises(HostedCoachingServiceError) as raised:
+                    service.complete(invalid)
+                self.assertEqual("invalidRequest", raised.exception.code)
+                self.assertEqual([], provider.calls)
+
+
+if __name__ == "__main__":
+    unittest.main()

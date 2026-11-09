@@ -1,0 +1,472 @@
+{
+  "schemaVersion": "coaching-judge-sensitivity.v1",
+  "provenance": "Agent-authored bounds, not human calibration. V2 preserves all 12 frozen V1 controls and adds the impossible queen-mate question discovered in V3 transfer, plus an achievable rook-mate contrast. Use experience-v2 briefs with the mechanically derived complete mate-in-one set. Historical V1 controls/results remain unchanged.",
+  "cases": [
+    {
+      "id": "false-knight-defense",
+      "caseID": "e01-knight-defense",
+      "source": {
+        "kind": "authored contrast reproducing observed Nc3-d4 hallucination"
+      },
+      "position": {
+        "id": "e01-knight-defense",
+        "fen": "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3",
+        "move": "b1c3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": "Your knight now protects your pawn on d4. Keep this move?",
+        "actions": [],
+        "focus": [
+          {
+            "type": "square",
+            "square": "d4"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "max": 2
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": true
+      }
+    },
+    {
+      "id": "true-knight-attack",
+      "caseID": "e01-knight-defense",
+      "source": {
+        "kind": "authored positive contrast"
+      },
+      "position": {
+        "id": "e01-knight-defense",
+        "fen": "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3",
+        "move": "b1c3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": "Your knight now attacks Black's middle pawn. You can play this move or try another.",
+        "actions": [],
+        "focus": [
+          {
+            "type": "square",
+            "square": "d5"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "min": 4
+        },
+        "discoveryAndIndependence": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "ignored-answer",
+      "caseID": "e02-explain-answer",
+      "source": {
+        "file": ".coaching-eval/regression/20261104T155542Z/evaluation/playthrough/candidates/records.jsonl",
+        "cellID": "astra-discovery-v2-low|p07-defended-piece-answer|r2"
+      },
+      "position": {
+        "id": "e02-explain-answer",
+        "fen": "r4r2/ppp2p1k/2npq2p/4p3/2B3Q1/3P1N2/PPP2PPP/R4RK1 w - - 1 17",
+        "move": null,
+        "event": "pieceSelected"
+      },
+      "candidateTurn": {
+        "message": "Can you find an enemy piece your bishop can capture for a good trade?",
+        "actions": [
+          "hint"
+        ],
+        "focus": [],
+        "expects": "findSafeCapture"
+      },
+      "scores": {
+        "latestActionResponsiveness": {
+          "max": 3
+        },
+        "coachingJudgment": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": false
+      }
+    },
+    {
+      "id": "explained-answer",
+      "caseID": "e02-explain-answer",
+      "source": {
+        "kind": "authored positive contrast"
+      },
+      "position": {
+        "id": "e02-explain-answer",
+        "fen": "r4r2/ppp2p1k/2npq2p/4p3/2B3Q1/3P1N2/PPP2PPP/R4RK1 w - - 1 17",
+        "move": null,
+        "event": "pieceSelected"
+      },
+      "candidateTurn": {
+        "message": "Yes, the queen attacks your bishop, but your pawn could take it back. Which of your pieces needs protection?",
+        "actions": [
+          "hint"
+        ],
+        "focus": [],
+        "expects": "findEndangeredPiece"
+      },
+      "scores": {
+        "latestActionResponsiveness": {
+          "min": 4
+        },
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "premature-opening-answer",
+      "caseID": "e04-opening-discovery",
+      "source": {
+        "kind": "authored negative contrast"
+      },
+      "position": {
+        "id": "e04-opening-discovery",
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "move": null,
+        "event": "helpOpened"
+      },
+      "candidateTurn": {
+        "message": "Move your pawn from e2 to e4 to control the middle.",
+        "actions": [
+          "hint"
+        ],
+        "focus": [
+          {
+            "type": "square",
+            "square": "e2"
+          },
+          {
+            "type": "square",
+            "square": "e4"
+          }
+        ],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "discoveryAndIndependence": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": false
+      }
+    },
+    {
+      "id": "opening-goal",
+      "caseID": "e04-opening-discovery",
+      "source": {
+        "kind": "authored positive contrast"
+      },
+      "position": {
+        "id": "e04-opening-discovery",
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "move": null,
+        "event": "helpOpened"
+      },
+      "candidateTurn": {
+        "message": "Can you move a pawn to help control the middle? Try your idea on the board.",
+        "actions": [
+          "hint"
+        ],
+        "focus": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "discoveryAndIndependence": {
+          "min": 4
+        },
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "unhelpful-requested-hint",
+      "caseID": "e05-requested-hint",
+      "source": {
+        "kind": "authored negative contrast"
+      },
+      "position": {
+        "id": "e05-requested-hint",
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "move": null,
+        "event": "actionChosen"
+      },
+      "candidateTurn": {
+        "message": "Think of a good move and try it.",
+        "actions": [],
+        "focus": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": false
+      }
+    },
+    {
+      "id": "useful-requested-hint",
+      "caseID": "e05-requested-hint",
+      "source": {
+        "kind": "authored positive contrast; same precision is allowed only after Hint"
+      },
+      "position": {
+        "id": "e05-requested-hint",
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "move": null,
+        "event": "actionChosen"
+      },
+      "candidateTurn": {
+        "message": "Try moving this pawn two squares. It gives your bishop a way out.",
+        "actions": [],
+        "focus": [
+          {
+            "type": "square",
+            "square": "e2"
+          },
+          {
+            "type": "square",
+            "square": "e4"
+          }
+        ],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        },
+        "discoveryAndIndependence": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "aimless-check",
+      "caseID": "e06-mating-goal",
+      "source": {
+        "file": ".coaching-eval/later-game/20261104/evaluation/candidates/records.jsonl",
+        "cellID": "astra-discovery-v2-low|l06-mating-net-help|r2"
+      },
+      "position": {
+        "id": "e06-mating-goal",
+        "fen": "R1Q5/8/8/8/8/7R/P4KPP/3k4 w - - 3 46",
+        "move": null,
+        "event": "helpOpened"
+      },
+      "candidateTurn": {
+        "message": "Your queen can make the black king move. Can you try a move that gives check?",
+        "actions": [
+          "hint"
+        ],
+        "focus": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": false
+      }
+    },
+    {
+      "id": "mating-goal",
+      "caseID": "e06-mating-goal",
+      "source": {
+        "kind": "authored positive contrast"
+      },
+      "position": {
+        "id": "e06-mating-goal",
+        "fen": "R1Q5/8/8/8/8/7R/P4KPP/3k4 w - - 3 46",
+        "move": null,
+        "event": "helpOpened"
+      },
+      "candidateTurn": {
+        "message": "Can your rooks help trap the king, giving check with no escape? Try a move.",
+        "actions": [
+          "hint"
+        ],
+        "focus": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        },
+        "discoveryAndIndependence": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "generic-development",
+      "caseID": "e07-concrete-feedback",
+      "source": {
+        "kind": "retained message from playthrough bishop-2"
+      },
+      "position": {
+        "id": "e07-concrete-feedback",
+        "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+        "move": "f1c4",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": "Your bishop is joining the game! Would you like to keep this move?",
+        "actions": [],
+        "focus": [
+          {
+            "type": "square",
+            "square": "c4"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": false
+      }
+    },
+    {
+      "id": "concrete-development",
+      "caseID": "e07-concrete-feedback",
+      "source": {
+        "kind": "authored positive contrast"
+      },
+      "position": {
+        "id": "e07-concrete-feedback",
+        "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+        "move": "f1c4",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": "Your bishop now attacks a pawn near Black's king. Play it, or try another idea.",
+        "actions": [],
+        "focus": [
+          {
+            "type": "square",
+            "square": "f7"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        },
+        "discoveryAndIndependence": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "impossible-piece-goal",
+      "caseID": "e06-mating-goal",
+      "source": {
+        "file": ".coaching-eval/experience/20261104/transfer-v3/later-game/candidates/records.jsonl",
+        "cellID": "astra-experience-v3-low|l06-mating-net-help|r3"
+      },
+      "position": {
+        "id": "e06-mating-goal",
+        "fen": "R1Q5/8/8/8/8/7R/P4KPP/3k4 w - - 3 46",
+        "move": null,
+        "event": "helpOpened"
+      },
+      "candidateTurn": {
+        "actions": [
+          "hint"
+        ],
+        "expects": "stageMove",
+        "focus": [],
+        "message": "Your king already blocks some escape squares near the black king. Can your queen give check and leave him nowhere safe to go? Try it on the board!"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "max": 2
+        },
+        "coherenceAndAnswerability": {
+          "max": 2
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": true,
+        "severeError": true
+      }
+    },
+    {
+      "id": "achievable-piece-goal",
+      "caseID": "e06-mating-goal",
+      "source": {
+        "kind": "authored positive contrast changing only queen to rook"
+      },
+      "position": {
+        "id": "e06-mating-goal",
+        "fen": "R1Q5/8/8/8/8/7R/P4KPP/3k4 w - - 3 46",
+        "move": null,
+        "event": "helpOpened"
+      },
+      "candidateTurn": {
+        "actions": [
+          "hint"
+        ],
+        "expects": "stageMove",
+        "focus": [],
+        "message": "Your king already blocks some escape squares near the black king. Can your rook give check and leave him nowhere safe to go? Try it on the board!"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "min": 4
+        },
+        "coherenceAndAnswerability": {
+          "min": 4
+        },
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    }
+  ]
+}

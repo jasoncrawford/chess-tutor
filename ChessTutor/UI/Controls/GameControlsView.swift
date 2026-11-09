@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct GameControlsPresentation: Equatable {
     enum PrimaryAction: Equatable {
@@ -12,15 +13,22 @@ struct GameControlsPresentation: Equatable {
         case about
     }
 
+    enum SupplementalAction: Equatable {
+        case help
+    }
+
     let primaryAction: PrimaryAction
+    let supplementalActions: [SupplementalAction]
     let secondaryActions: [SecondaryAction]
 
     init(
         result: GameResult,
         isRemoteGameEnded: Bool = false,
         isInvitationPending: Bool = false,
-        isRemotePlayAvailable: Bool = false
+        isRemotePlayAvailable: Bool = false,
+        canRequestCoaching: Bool = false
     ) {
+        supplementalActions = canRequestCoaching ? [.help] : []
         if isInvitationPending {
             primaryAction = .waiting
             secondaryActions = [.about]
@@ -70,10 +78,17 @@ struct GameControlsView: View {
             result: session.state.result,
             isRemoteGameEnded: session.isRemoteGameEnded,
             isInvitationPending: isInvitationPending,
-            isRemotePlayAvailable: isRemotePlayAvailable
+            isRemotePlayAvailable: isRemotePlayAvailable,
+            canRequestCoaching: session.canRequestCoaching
         )
 
-        primaryButton(for: presentation.primaryAction)
+        HStack(spacing: 8) {
+            primaryButton(for: presentation.primaryAction)
+
+            ForEach(presentation.supplementalActions, id: \.self) { action in
+                supplementalButton(for: action)
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .lineLimit(1)
         .minimumScaleFactor(0.85)
@@ -127,6 +142,26 @@ struct GameControlsView: View {
         .labelStyle(.titleAndIcon)
     }
 
+    @ViewBuilder
+    private func supplementalButton(
+        for action: GameControlsPresentation.SupplementalAction
+    ) -> some View {
+        switch action {
+        case .help:
+            Button {
+                session.startCoaching()
+            } label: {
+                Label("Help", systemImage: "questionmark.circle")
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+            }
+            .frame(width: 94)
+            .buttonStyle(SupplementalGameButtonStyle())
+            .font(.system(size: 17, weight: .semibold, design: .rounded))
+            .labelStyle(.titleAndIcon)
+        }
+    }
+
 }
 
 private struct PrimaryGameButtonStyle: ButtonStyle {
@@ -154,6 +189,24 @@ private struct PrimaryGameButtonStyle: ButtonStyle {
     }
 }
 
+private struct SupplementalGameButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(AppTheme.mutedInk)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(AppTheme.panelWarmth.opacity(configuration.isPressed ? 0.94 : 0.58))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(AppTheme.panelStroke, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.84), value: configuration.isPressed)
+    }
+}
+
 struct AboutSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var diagnosticsShareItem: DiagnosticsShareItem?
@@ -161,10 +214,16 @@ struct AboutSheetView: View {
     @State private var isPreparingDiagnostics = false
     let diagnosticsLog: DiagnosticsLog
     let buildInfo: AppBuildInfo
+    let coachingGameID: String?
 
-    init(diagnosticsLog: DiagnosticsLog = .shared, buildInfo: AppBuildInfo = .current()) {
+    init(
+        diagnosticsLog: DiagnosticsLog = .shared,
+        buildInfo: AppBuildInfo = .current(),
+        coachingGameID: String? = nil
+    ) {
         self.diagnosticsLog = diagnosticsLog
         self.buildInfo = buildInfo
+        self.coachingGameID = coachingGameID
     }
 
     var body: some View {
@@ -205,6 +264,18 @@ struct AboutSheetView: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .leading, spacing: 8) {
+                if let coachingGameID {
+                    Button {
+                        UIPasteboard.general.string = coachingGameID
+                    } label: {
+                        Label("Copy Coaching Game ID", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundStyle(AppTheme.boardFrame)
+                    .accessibilityIdentifier("copy-coaching-game-id")
+                }
+
                 Button {
                     shareDiagnostics()
                 } label: {

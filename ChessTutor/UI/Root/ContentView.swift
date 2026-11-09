@@ -8,7 +8,7 @@ private enum RemoteSyncMessage {
 }
 
 struct ContentView: View {
-    @State private var session = GameSession()
+    @State private var session: GameSession
     @State private var gameLibrary: GameLibrary
     @State private var pendingPromotion: PendingPromotion?
     @State private var isShowingAbout = false
@@ -40,14 +40,18 @@ struct ContentView: View {
     private let remoteGameTransport: any RemoteGameTransport
     private let remotePlayRuntimeMode: RemotePlayRuntimeMode
     private let diagnosticsLog: DiagnosticsLog
+    private let hostedCoachingProvider: (any HostedCoachingTurning)?
     #if DEBUG
     @State private var isCaptureTestModeEnabled = false
     @State private var fakeRemoteLab = FakeRemoteGameLab()
     #endif
     @Namespace private var captureNamespace
 
-    init() {
-        let gameLibraryStore = GameLibraryStore()
+    init(
+        hostedCoachingProvider: (any HostedCoachingTurning)? = nil,
+        gameLibraryStore: GameLibraryStore = GameLibraryStore()
+    ) {
+        self.hostedCoachingProvider = hostedCoachingProvider
         self.gameLibraryStore = gameLibraryStore
         let gameLibrary = GameLibrary(
             snapshot: (try? gameLibraryStore.load())
@@ -78,11 +82,11 @@ struct ContentView: View {
         let initialActiveRemoteGameController: RemoteGameSessionController?
         if case let .board(id) = gameLibrary.route,
            let savedGame = gameLibrary.game(id: id) {
-            initialSession = GameSession(replayingCommittedMoves: savedGame.moves)
+            initialSession = GameLifecycle.session(for: savedGame, hostedCoachingProvider: hostedCoachingProvider)
             initialActiveRemoteGameController = nil
         } else if case let .board(id) = gameLibrary.route,
                   let savedGame = gameLibrary.remoteGame(id: id),
-                  let restoredSession = try? Self.restoredSession(from: savedGame.snapshot),
+                  let restoredSession = try? GameLifecycle.session(for: savedGame, hostedCoachingProvider: hostedCoachingProvider),
                   let restoredController = try? RemoteGameSessionController(
                     snapshot: savedGame.snapshot,
                     transport: self.remoteGameTransport
@@ -91,15 +95,14 @@ struct ContentView: View {
             initialSession = restoredSession
             initialActiveRemoteGameController = restoredController
         } else if case let .board(id) = gameLibrary.route,
-                  gameLibrary.pendingRemoteBoard(id: id) != nil {
-            initialSession = GameSession()
-            initialSession.lockBoard(message: "Waiting for this invitation to be accepted.", statusText: "Invitation pending")
+                  let board = gameLibrary.pendingRemoteBoard(id: id) {
+            initialSession = GameLifecycle.session(for: board, hostedCoachingProvider: hostedCoachingProvider)
             initialActiveRemoteGameController = nil
         } else {
             if (try? activeRemoteGameStore.load()) != nil {
                 try? activeRemoteGameStore.clear()
             }
-            initialSession = GameSession()
+            initialSession = GameSession(hostedCoachingProvider: hostedCoachingProvider)
             initialActiveRemoteGameController = nil
         }
         _session = State(initialValue: initialSession)
@@ -211,6 +214,9 @@ struct ContentView: View {
             replayBufferedRemotePushNotifications()
             presentPendingBoardInvitationIfNeeded()
         }
+        .task(id: session.coachingRequestIdentity) { [session] in
+            await session.resolvePendingCoachingAdvice()
+        }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
         }
@@ -249,7 +255,10 @@ struct ContentView: View {
             }
             fetchRemoteGameStatusAfterPush(gameID: RemoteGameID(rawValue: rawGameID))
         }
-        .sheet(item: $pendingPromotion) { promotion in
+        .sheet(
+            item: $pendingPromotion,
+            onDismiss: session.cancelPromotionChoice
+        ) { promotion in
             PromotionPickerView(color: promotion.color) { kind in
                 #if DEBUG
                 if let testingSquare = promotion.testingSquare {
@@ -266,8 +275,13 @@ struct ContentView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingAbout) {
-            AboutSheetView(diagnosticsLog: diagnosticsLog)
-                .presentationDetents([.height(380)])
+            AboutSheetView(
+                diagnosticsLog: diagnosticsLog,
+                coachingGameID: session.currentCoachingGameID
+            )
+                .presentationDetents([
+                    .height(session.currentCoachingGameID == nil ? 380 : 430)
+                ])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingGameTypeChooser) {
@@ -440,8 +454,10 @@ struct ContentView: View {
 
     private func startLocalGame() {
         cancelRemoteGameSync(clearSavedGame: true)
+        session.stopCoaching()
+        pendingPromotion = nil
         let game = gameLibrary.createLocalGame()
-        session = GameSession()
+        session = GameLifecycle.session(for: game, hostedCoachingProvider: hostedCoachingProvider)
         gameLibrary.showBoard(game.id)
         remoteLifecycle = RemoteGameLifecycleController(
             session: session,
@@ -453,7 +469,9 @@ struct ContentView: View {
 
     private func openLocalGame(_ game: ManagedLocalGame) {
         cancelRemoteGameSync(clearSavedGame: true)
-        session = GameSession(replayingCommittedMoves: game.moves)
+        session.stopCoaching()
+        pendingPromotion = nil
+        session = GameLifecycle.session(for: game, hostedCoachingProvider: hostedCoachingProvider)
         gameLibrary.showBoard(game.id)
         remoteLifecycle = RemoteGameLifecycleController(
             session: session,
@@ -476,8 +494,9 @@ struct ContentView: View {
 
     private func openPendingRemoteBoard(_ board: ManagedPendingRemoteBoard) {
         cancelRemoteGameSync(clearSavedGame: false)
-        session = GameSession()
-        session.lockBoard(message: "Waiting for this invitation to be accepted.", statusText: "Invitation pending")
+        session.stopCoaching()
+        pendingPromotion = nil
+        session = GameLifecycle.session(for: board, hostedCoachingProvider: hostedCoachingProvider)
         gameLibrary.showBoard(board.id)
         remoteLifecycle = RemoteGameLifecycleController(
             session: session,
@@ -523,11 +542,13 @@ struct ContentView: View {
     }
 
     private func openRemoteGame(_ game: ManagedRemoteGame) {
-        guard let restoredSession = try? Self.restoredSession(from: game.snapshot),
+        guard let restoredSession = try? GameLifecycle.session(for: game, hostedCoachingProvider: hostedCoachingProvider),
               let controller = try? RemoteGameSessionController(snapshot: game.snapshot, transport: remoteGameTransport) else {
             return
         }
         cancelRemoteGameSync(clearSavedGame: false)
+        session.stopCoaching()
+        pendingPromotion = nil
         RemoteGameLifecycleController.applyRemoteSeats(from: game.snapshot.descriptor, to: restoredSession)
         session = restoredSession
         gameLibrary.showBoard(game.id)
@@ -546,6 +567,8 @@ struct ContentView: View {
     }
 
     private func showGames() {
+        session.stopCoaching()
+        pendingPromotion = nil
         gameLibrary.showGames()
         persistGameLibrary()
     }
@@ -658,7 +681,9 @@ struct ContentView: View {
         let board = gameLibrary.createPendingRemoteBoard(invite, role: .inviter)
         outboundInvitationNotice = board
         gameLibrary.showBoard(board.id)
-        session = GameSession()
+        session.stopCoaching()
+        pendingPromotion = nil
+        session = GameLifecycle.session(for: board, hostedCoachingProvider: hostedCoachingProvider)
         session.lockBoard(message: "Waiting for someone to join this game.", statusText: "Invitation sent")
         remoteLifecycle = RemoteGameLifecycleController(
             session: session,
@@ -1157,6 +1182,7 @@ struct ContentView: View {
                 for: inviteID,
                 snapshot: activeRemoteGameController.snapshot
             )
+            session.bindCoachingGame(to: board.id.rawValue)
             gameLibrary.showBoard(board.id)
             persistGameLibrary()
         }
@@ -1611,7 +1637,8 @@ struct ContentView: View {
         remoteMoveFetchTask?.cancel()
         remoteMoveFetchTask = nil
         stopRemotePresenceHeartbeat()
-        remoteLifecycle.endRemoteGameAfterOpponentEnded(descriptor: descriptor)
+        remoteLifecycle.endRemoteGameAfterOpponentEnded(descriptor: descriptor, gameLibrary: gameLibrary)
+        persistGameLibrary()
         try? activeRemoteGameStore.clear()
     }
 
@@ -1948,18 +1975,6 @@ struct ContentView: View {
             return descriptor.whitePlayer
         }
         return descriptor.blackPlayer
-    }
-
-    private static func restoredSession(from snapshot: ActiveRemoteGameSnapshot) throws -> GameSession {
-        let projectedState = try RemoteGameSessionController.projectedState(from: snapshot)
-        let moves = try snapshot.acceptedEvents
-            .sorted { $0.sequenceNumber < $1.sequenceNumber }
-            .map { try RemoteMoveCodec.decode($0.move) }
-        let session = GameSession(replayingCommittedMoves: moves)
-        guard session.state == projectedState else {
-            throw RemoteGameSessionController.Error.invalidSnapshot
-        }
-        return session
     }
 
     private static func remoteInviteTransport(

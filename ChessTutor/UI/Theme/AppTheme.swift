@@ -7,8 +7,11 @@ enum AppTheme {
     static let panelStroke = Color(red: 0.35, green: 0.28, blue: 0.20).opacity(0.12)
     static let panelShadow = Color.black.opacity(0.07)
     static let panelWarmth = Color(red: 0.96, green: 0.91, blue: 0.80).opacity(0.72)
+    static let coachingControlFill = Color(red: 0.96, green: 0.91, blue: 0.80).opacity(0.76)
     static let panelTopLight = Color.white.opacity(0.28)
     static let captureBoxWood = Color(red: 0.53, green: 0.40, blue: 0.24)
+    static let coachingResponseFill = captureBoxWood.opacity(0.10)
+    static let coachingResponseRule = captureBoxWood.opacity(0.52)
     static let captureBoxFelt = Color(red: 0.26, green: 0.43, blue: 0.35)
     static let captureBoxShadow = Color.black.opacity(0.15)
     static let selectedPiecePlinth = Color(red: 0.32, green: 0.23, blue: 0.14).opacity(0.12)
@@ -32,10 +35,22 @@ enum AppTheme {
     static let guidanceRed = Color(red: 0.86, green: 0.19, blue: 0.16)
     static let guidanceCoral = Color(red: 0.94, green: 0.30, blue: 0.24)
     static let guidanceTeal = Color(red: 0.08, green: 0.55, blue: 0.50)
+    static let coachFocusRing = Color(red: 0.43, green: 0.29, blue: 0.52).opacity(0.82)
+    static let coachCandidateKeyline = Color(red: 1.00, green: 0.96, blue: 0.81).opacity(0.98)
+    static let coachCandidateRing = Color(red: 0.33, green: 0.35, blue: 0.57).opacity(0.95)
+    static let coachAttackerPath = Color(red: 0.39, green: 0.23, blue: 0.48).opacity(0.76)
+    static let coachCandidatePath = Color(red: 0.25, green: 0.31, blue: 0.53).opacity(0.70)
     static let whitePiece = Color(red: 0.98, green: 0.94, blue: 0.84)
     static let blackPiece = Color(red: 0.17, green: 0.19, blue: 0.18)
 
     static let panelTitleFont = Font.system(size: 30, weight: .semibold, design: .serif)
+    static func coachingBodyFont(size: CGFloat) -> Font {
+        Font.system(size: size, weight: .regular, design: .rounded)
+    }
+
+    static func coachingActionFont(size: CGFloat) -> Font {
+        Font.system(size: size, weight: .semibold, design: .rounded)
+    }
     static let panelBodyFont = Font.system(size: 18, weight: .regular, design: .rounded)
     static let pieceTitleFont = Font.system(size: 23, weight: .semibold, design: .serif)
     static let pieceBodyFont = Font.system(size: 17, weight: .regular, design: .rounded)

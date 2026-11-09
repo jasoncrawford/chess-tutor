@@ -108,7 +108,10 @@ final class RemoteGameLifecycleController {
         activeRemoteGameController = nil
     }
 
-    func endRemoteGameAfterOpponentEnded(descriptor: RemoteGameDescriptor) {
+    func endRemoteGameAfterOpponentEnded(descriptor: RemoteGameDescriptor, gameLibrary: GameLibrary) {
+        guard let snapshot = activeRemoteGameController?.snapshot,
+              snapshot.descriptor.id == descriptor.id else { return }
+        gameLibrary.recordRemoteGameEnded(snapshot)
         clearRemoteGameState()
         session.endRemoteGame(message: "\(Self.opponent(from: descriptor).displayName) ended this game.")
     }

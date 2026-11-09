@@ -1,0 +1,223 @@
+{
+  "schemaVersion": "coaching-judge-sensitivity.v1",
+  "provenance": "Retained model outputs from 2026-11-03. Expectations authored by Codex from independently checked chess facts and the approved coaching intent; not human calibration.",
+  "cases": [
+    {
+      "id": "bad-pawn",
+      "caseID": "p01-one-way-defense",
+      "source": {
+        "file": ".coaching-eval/playthrough/20261103/old-responses.jsonl",
+        "case": "danger-8",
+        "index": null
+      },
+      "position": {
+        "id": "p01-one-way-defense",
+        "fen": "rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3",
+        "move": "d2d3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "actions": [],
+        "expects": "chooseWhetherToPlay",
+        "focus": [
+          {
+            "square": "d3",
+            "type": "square"
+          },
+          {
+            "square": "e4",
+            "type": "square"
+          }
+        ],
+        "message": "Now your pawns protect each other! Would you like to keep this move?"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "max": 2
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": true
+      }
+    },
+    {
+      "id": "bad-forced-reply",
+      "caseID": "p02-no-forced-defense",
+      "source": {
+        "file": ".coaching-eval/playthrough/20261103/new-responses.jsonl",
+        "case": "white-knight-2",
+        "index": null
+      },
+      "position": {
+        "id": "p02-no-forced-defense",
+        "fen": "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P4/PPP2PPP/RNBQK1NR w KQkq - 1 4",
+        "move": "g1f3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "actions": [],
+        "expects": "chooseWhetherToPlay",
+        "focus": [
+          {
+            "square": "e5",
+            "type": "square"
+          }
+        ],
+        "message": "Your knight now attacks Black’s middle pawn, making Black defend it. Want to keep this move?"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": true
+      }
+    },
+    {
+      "id": "bad-generic-bishop",
+      "caseID": "p03-bishop-consequence",
+      "source": {
+        "file": ".coaching-eval/playthrough/20261103/old-responses.jsonl",
+        "case": "bishop-2",
+        "index": null
+      },
+      "position": {
+        "id": "p03-bishop-consequence",
+        "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+        "move": "f1c4",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "actions": [],
+        "expects": "chooseWhetherToPlay",
+        "focus": [
+          {
+            "square": "c4",
+            "type": "square"
+          }
+        ],
+        "message": "Your bishop is joining the game! Would you like to keep this move?"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "good-pawn",
+      "caseID": "p01-one-way-defense",
+      "source": {
+        "file": ".coaching-eval/playthrough/20261103/revision-2-focused.jsonl",
+        "case": "danger-8",
+        "index": 1
+      },
+      "position": {
+        "id": "p01-one-way-defense",
+        "fen": "rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3",
+        "move": "d2d3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "actions": [],
+        "expects": "chooseWhetherToPlay",
+        "focus": [
+          {
+            "square": "e4",
+            "type": "square"
+          }
+        ],
+        "message": "Your moved pawn now protects your pawn on e4. Want to keep this move?"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "min": 4
+        },
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "good-knight",
+      "caseID": "p02-no-forced-defense",
+      "source": {
+        "file": ".coaching-eval/playthrough/20261103/revision-2-focused.jsonl",
+        "case": "white-knight-2",
+        "index": 3
+      },
+      "position": {
+        "id": "p02-no-forced-defense",
+        "fen": "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P4/PPP2PPP/RNBQK1NR w KQkq - 1 4",
+        "move": "g1f3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "actions": [],
+        "expects": "chooseWhetherToPlay",
+        "focus": [
+          {
+            "square": "g1",
+            "type": "square"
+          }
+        ],
+        "message": "Moving your knight opens the way for your king to castle later. Keep this move?"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "min": 4
+        },
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "good-bishop",
+      "caseID": "p03-bishop-consequence",
+      "source": {
+        "file": ".coaching-eval/playthrough/20261103/revision-2-focused.jsonl",
+        "case": "bishop-2",
+        "index": 0
+      },
+      "position": {
+        "id": "p03-bishop-consequence",
+        "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+        "move": "f1c4",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "actions": [],
+        "expects": "chooseWhetherToPlay",
+        "focus": [
+          {
+            "square": "f7",
+            "type": "square"
+          }
+        ],
+        "message": "Your bishop now attacks a pawn near Black's king. Would you like to keep this move?"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "min": 4
+        },
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    }
+  ]
+}
