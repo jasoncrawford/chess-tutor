@@ -1,5 +1,64 @@
 #if DEBUG
+import Security
 import SwiftUI
+
+/// Only this UUID-scoped Debug fixture may select or remove test credentials.
+struct HostedConfigurationUITestSupport {
+    let id: UUID
+
+    static var current: Self? {
+        let prefix = "-ui-test-hosted-config-"
+        guard let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }),
+              let id = UUID(uuidString: String(argument.dropFirst(prefix.count))) else { return nil }
+        return Self(id: id)
+    }
+
+    var credentialStore: KeychainHostedCoachingCredentialStore {
+        KeychainHostedCoachingCredentialStore(service: "org.jasoncrawford.chesstutor.ui-test.\(id.uuidString)")
+    }
+
+    var libraryURL: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("hosted-config-test-\(id.uuidString).json")
+    }
+
+    func cleanup() throws {
+        let status = SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: credentialStore.service,
+            kSecAttrAccount as String: credentialStore.account,
+        ] as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw HostedCoachingConfigurationError.credentialStoreFailure
+        }
+        if FileManager.default.fileExists(atPath: libraryURL.path) {
+            try FileManager.default.removeItem(at: libraryURL)
+        }
+    }
+}
+
+struct HostedConfigurationUITestFixture: View {
+    let support: HostedConfigurationUITestSupport
+    let provider: (any HostedCoachingTurning)?
+    @State private var cleanupMessage = "Cleaning up configuration test"
+
+    var body: some View {
+        if ProcessInfo.processInfo.arguments.contains("-cleanup-hosted-config-test") {
+            Text(cleanupMessage).task {
+                do {
+                    try support.cleanup()
+                    cleanupMessage = "Configuration test cleanup complete"
+                } catch {
+                    cleanupMessage = "Configuration test cleanup failed"
+                }
+            }
+        } else {
+            ContentView(
+                hostedCoachingProvider: provider,
+                gameLibraryStore: GameLibraryStore(fileURL: support.libraryURL)
+            )
+        }
+    }
+}
 
 /// Exercises the real root view and persistence with an isolated store and no paid API calls.
 struct ManagedGamesCoachingUITestFixture: View {

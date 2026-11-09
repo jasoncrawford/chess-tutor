@@ -107,6 +107,15 @@ final class HostedCoachingConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try HostedCoachingConfiguration.resolve(environment: ["CHESS_TUTOR_COACHING_BASE_URL": "https://coach.example:444"], credentialStore: store, isDebugBuild: false))
     }
 
+    func testDebugHTTPRejectsDNSNamesThatOnlyResemblePrivateAddresses() {
+        for host in ["127.0.0.1.attacker.example", "10.0.0.1.attacker.example", "192.168.1.1.attacker.example", "172.16.0.1.attacker.example", "10.word.0.0.1", "10..0.0.1"] {
+            XCTAssertThrowsError(try HostedCoachingConfiguration.resolve(
+                environment: ["CHESS_TUTOR_COACHING_BASE_URL": "http://\(host)", "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "test-token"],
+                credentialStore: FakeHostedCredentialStore(), isDebugBuild: true
+            ), host)
+        }
+    }
+
     func testFailedReplacementPreservesOldPairAndFailsClosed() throws {
         let original = HostedCoachingConfiguration(baseURL: URL(string: "https://coach.example")!, accessToken: "old-token")
         let store = FakeHostedCredentialStore(configuration: original)

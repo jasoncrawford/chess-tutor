@@ -9,6 +9,16 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         defer { server.stop() }
         let port = try await server.start()
         let app = XCUIApplication()
+        let namespace = "-ui-test-hosted-config-\(UUID().uuidString)"
+        app.launchArguments = [namespace]
+        defer {
+            app.terminate()
+            app.launchEnvironment = [:]
+            app.launchArguments = [namespace, "-cleanup-hosted-config-test"]
+            app.launch()
+            XCTAssertTrue(app.staticTexts["Configuration test cleanup complete"].waitForExistence(timeout: 5))
+            app.terminate()
+        }
         app.launchEnvironment = [
             "CHESS_TUTOR_COACHING_BASE_URL": "http://127.0.0.1:\(port)",
             "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "configuration-test-only-token",
@@ -16,16 +26,11 @@ final class HostedCoachingContinuityUITests: XCTestCase {
         app.launch()
         app.terminate()
         app.launchEnvironment = [:]
+        XCTAssertNil(app.launchEnvironment["CHESS_TUTOR_COACHING_BASE_URL"])
+        XCTAssertNil(app.launchEnvironment["CHESS_TUTOR_COACHING_ACCESS_TOKEN"])
         app.launch()
-
-        if app.buttons["Games"].waitForExistence(timeout: 2) { app.buttons["Games"].tap() }
-        if app.buttons["empty-games-start-local"].waitForExistence(timeout: 2) {
-            app.buttons["empty-games-start-local"].tap()
-        } else {
-            XCTAssertTrue(app.buttons["games-start-card"].waitForExistence(timeout: 5))
-            app.buttons["games-start-card"].tap()
-            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'On this iPad'")).firstMatch.tap()
-        }
+        XCTAssertTrue(app.buttons["empty-games-start-local"].waitForExistence(timeout: 5))
+        app.buttons["empty-games-start-local"].tap()
         XCTAssertTrue(app.buttons["Help"].waitForExistence(timeout: 5))
         app.buttons["Help"].tap()
         await fulfillment(of: [requestReceived], timeout: 10)

@@ -43,7 +43,10 @@ elif name == "vercel":
         print("https://test-deployment.vercel.app")
 elif name == "xcrun":
     if arguments[:3] == ["devicectl", "list", "devices"]:
-        print(json.dumps({"result": {"devices": [{"identifier": "test-device-id", "properties": {"hardware": {"reality": os.environ.get("SETUP_TEST_REALITY", "physical"), "deviceType": "iPad", "udid": "test-hardware-udid"}, "state": {"name": "Family iPad", "pairingState": os.environ.get("SETUP_TEST_PAIRING", "paired")}, "connection": {"state": "connected"}}}]}}))
+        hardware = {"deviceType": "iPad", "udid": "test-hardware-udid", "productType": "iPad12,1", "ecid": 123456}
+        if "SETUP_TEST_REALITY" in os.environ:
+            hardware["reality"] = os.environ["SETUP_TEST_REALITY"]
+        print(json.dumps({"result": {"devices": [{"identifier": "test-device-id", "properties": {"hardware": hardware, "state": {"name": "Family iPad"}, "connection": {"pairingState": os.environ.get("SETUP_TEST_PAIRING", "paired"), "state": os.environ.get("SETUP_TEST_CONNECTION", "connected")}}}]}}))
     elif arguments[:4] == ["devicectl", "device", "install", "app"] and os.environ.get("SETUP_TEST_FAIL") == "install":
         print("error containing test-family-token", file=sys.stderr)
         sys.exit(1)

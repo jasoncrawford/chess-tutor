@@ -62,7 +62,7 @@ class DeviceSetupTests(unittest.TestCase):
         self.assertFalse(any(call["args"][:4] == ["devicectl", "device", "process", "launch"] for call in self.calls()))
 
     def test_simulated_and_unpaired_devices_are_not_installed(self):
-        for key, value in [("SETUP_TEST_REALITY", "simulated"), ("SETUP_TEST_PAIRING", "unpaired")]:
+        for key, value in [("SETUP_TEST_REALITY", "simulated"), ("SETUP_TEST_PAIRING", "unpaired"), ("SETUP_TEST_CONNECTION", "unavailable")]:
             with self.subTest(key=key):
                 self.environment[key] = value
                 result = self.run_setup()

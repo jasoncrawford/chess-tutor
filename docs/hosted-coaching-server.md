@@ -147,6 +147,12 @@ After a playtest, copy the game's ID from About and export/filter the project's
 runtime logs promptly. There is no database or long-term trace archive, and this
 setup does not add a paid logging upgrade. See [runtime log retention](https://vercel.com/docs/logs/runtime).
 
+Use the Vercel dashboard's request details when collecting a full trace. The
+installed Vercel CLI 50.19.1 historical log command prints only the first
+application message in each request, even with `--expand`; that summary is not
+a complete coaching trace. Do not mistake it for the full JSONL output described
+above.
+
 ## Install on the family iPad
 
 Connect and unlock the iPad, trust this Mac, and enable Developer Mode if iPadOS

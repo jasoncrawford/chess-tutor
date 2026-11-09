@@ -94,7 +94,11 @@ struct HostedCoachingConfiguration: Codable, Equatable, Sendable {
         if host == "localhost" || host == "::1" || host == "[::1]" {
             return true
         }
-        let octets = host.split(separator: ".").compactMap { Int($0) }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count == 4, labels.allSatisfy({
+            !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) }
+        }) else { return false }
+        let octets = labels.compactMap { Int($0) }
         guard octets.count == 4, octets.allSatisfy({ (0...255).contains($0) }) else {
             return false
         }

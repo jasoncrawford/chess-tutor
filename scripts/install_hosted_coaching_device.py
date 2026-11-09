@@ -21,9 +21,15 @@ class DeviceSetup:
             properties = item.get("properties", {})
             hardware = properties.get("hardware", item.get("hardwareProperties", {}))
             state = properties.get("state", item.get("deviceProperties", {}))
-            if hardware.get("reality") != "physical" or hardware.get("deviceType") != "iPad":
+            connection = properties.get("connection", item.get("connectionProperties", {}))
+            # Current CoreDevice marks simulators explicitly, but physical iPads
+            # can omit reality. Their hardware ECID identifies a real device.
+            physical = hardware.get("reality") == "physical" or (
+                hardware.get("reality") is None and isinstance(hardware.get("ecid"), int)
+            )
+            if not physical or hardware.get("deviceType") != "iPad":
                 continue
-            devices.append({"id": item["identifier"], "udid": hardware["udid"], "name": state.get("name", "iPad"), "paired": state.get("pairingState")})
+            devices.append({"id": item["identifier"], "udid": hardware["udid"], "name": state.get("name", "iPad"), "paired": connection.get("pairingState"), "connection": connection.get("state", connection.get("tunnelState"))})
         return devices
 
     def install(self, selector):
@@ -34,6 +40,8 @@ class DeviceSetup:
         device = matches[0]
         if device["paired"] not in (None, "paired"):
             raise RuntimeError("The selected iPad is not paired. Unlock it and trust this Mac first.")
+        if device["connection"] in ("unavailable", "disconnected"):
+            raise RuntimeError("The iPad is paired but unavailable to Xcode. Check Developer Mode and Device Hub's connection status before retrying.")
         token = self.deployment.family_token()
         with tempfile.TemporaryDirectory(prefix="chess-device-build-") as build:
             print(f'Building ChessTutor for {device["name"]}…', flush=True)
@@ -68,7 +76,7 @@ def main():
         if args.list_devices:
             devices = setup.devices()
             for device in devices:
-                print(f'{device["name"]}: {device["id"]}')
+                print(f'{device["name"]}: {device["id"]} ({device["connection"] or "connection unknown"})')
             if not devices:
                 print("No physical iPads found. Connect and unlock the family iPad, then tap Trust.")
         else:
