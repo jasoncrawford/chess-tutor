@@ -6,11 +6,11 @@ turn. The device never receives the OpenAI key.
 
 The server owns the system prompt, converts the structured device request
 into model-facing Markdown, and validates the model's strict JSON before
-returning it. The deployed and direct-server default remains `tutor-v13`
-with GPT-5.6 Sol: opening Help uses high reasoning. A
+returning it. The family deployment and development launcher select the accepted
+`astra-experience-v7-low-model.json` policy: GPT-6 Astra, low reasoning for all
+requests, the pinned `tutor-v13-experience-v6.md` prompt, and grounded-v4 compiler. A
 meaningful follow-up continues that Responses API chain with a compact update.
-Move evaluation, inspected tactical replies, and Hint use low reasoning; simple
-episode updates use none. Selecting a piece remains local and does not call the
+Selecting a piece remains local and does not call the
 server. The iPad validates the JSON again before showing it.
 
 The model chooses one authoritative expected response for each turn. The app
@@ -30,22 +30,13 @@ service `ChessTutor-CoachingEval-OpenAI`, then run:
 ./scripts/run_hosted_coaching_dev.sh
 ```
 
-This convenience launcher selects a **provisional local Astra discovery
-trial**, not a deployed production promotion. It reuses the immutable shared
-configuration at
-`Tools/CoachingEval/benchmark/configs/models/astra-discovery-v2-low-model.json`:
+This convenience launcher reuses the immutable shared configuration at
+`Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json`:
 GPT-6 Astra with low reasoning for initial and follow-up requests, the
-`tutor-v13-discovery-v2.md` prompt, stored conversation reuse, a 2,048-token output
+`tutor-v13-experience-v6.md` prompt, stored conversation reuse, a 2,048-token output
 cap, a 30-second timeout, and one attempt. The v13 compiler and response
-contract are unchanged. This local selection does not change the deployed
-Sol default or establish that the automatic benchmark promotion gates passed.
-
-The November 3 revision asks for a concrete consequence of a staged move and
-more precise attack/defense explanations. It was checked against a small real
-playthrough and targeted replays, not a rerun of the full benchmark. The
-October benchmark scores describe the original discovery prompt, which remains
-available through an explicit override using
-`Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json`.
+contract are unchanged. Hosting this policy does not change the prompt or assert
+new benchmark results; it makes the play-tested policy available off the Mac.
 
 An explicitly set `CHESS_TUTOR_COACHING_MODEL_CONFIG` takes precedence. The
 launcher prints whether it selected the trial default or an explicit override,
@@ -78,9 +69,9 @@ for `CHESS_TUTOR_COACHING_ACCESS_TOKEN`, then run:
 .venv/bin/python -m CoachingServer.local --host 127.0.0.1 --port 8787
 ```
 
-Direct server invocation and deployment still load
+Direct server invocation (without the deployment configuration) still loads
 `CoachingServer/configs/production-v1.json` when the model override is unset;
-the local launcher's Astra default does not apply to them. To compare a
+the local launcher's Astra default does not apply to it. To compare a
 different pinned model policy locally, set `CHESS_TUTOR_COACHING_MODEL_CONFIG`
 to another repository-relative configuration path. The app cannot choose the
 model policy. No Fast service tier is used.
@@ -92,8 +83,9 @@ Check readiness with `GET http://127.0.0.1:8787/health`. Coaching requests use
 Enable hosted mode in the app by setting
 `CHESS_TUTOR_COACHING_BASE_URL`. For the simulator, use
 `http://127.0.0.1:8787`. Supply `CHESS_TUTOR_COACHING_ACCESS_TOKEN` on the first
-launch; the app stores it in the device Keychain. If the base URL is absent,
-the existing local coach remains active. If hosted mode is configured but the
+launch; the app stores the URL and token together in the device Keychain. On
+later Home-screen launches it restores that configuration without launch variables.
+A never-configured app retains its existing local behavior. If hosted mode is configured but the
 server or model fails, the app shows Retry and never substitutes local advice.
 
 The base URL may be plain HTTP only in Debug builds and only for loopback or a
@@ -123,20 +115,63 @@ but creates a new episode ID.
 
 ## Vercel
 
-The committed `api/index.py` exposes the same WSGI app and `vercel.json` routes
-both endpoints to it. The committed `.python-version` selects Python 3.12.
-Configure `OPENAI_API_KEY` and
-`CHESS_TUTOR_COACHING_ACCESS_TOKEN` as encrypted Vercel environment variables,
-then deploy from the repository root:
+The deployment manifest is `CoachingServer/deployment.json`. It identifies the
+`chess-tutor-coaching` project in team `jasoncrawford`, the stable HTTPS origin,
+the selected model, the explicit upload allowlist, and Keychain **service names**
+(never their contents). With Vercel CLI installed/logged in and the existing
+OpenAI key in Keychain, run:
 
 ```bash
-vercel
-vercel --prod
+python3 scripts/deploy_coaching_server.py --deploy
 ```
 
-Set the app base URL to the resulting HTTPS origin. Do not commit either
-secret. Vercel recognizes `app` as a WSGI entry point for a Python Function;
-see the [Vercel Python runtime documentation](https://vercel.com/docs/functions/runtimes/python).
+The command creates the dedicated project if absent, generates a separate
+random family token in Keychain service `ChessTutor-HostedCoaching-Family`,
+and sets missing production secrets through stdin. It never overwrites existing
+cloud secrets. Missing local credentials for an already-configured server fail
+closed; do not generate a replacement token without deliberately rotating the
+server and re-provisioning every device. The OpenAI key stays server-side.
+
+Only the minimal runtime and pinned resources are staged in a temporary directory.
+No iPad assets, eval logs, local secrets, or build artifacts are uploaded. To
+inspect the package without deploying: `python3 scripts/deploy_coaching_server.py
+--package /tmp/chess-runtime-inspection` (destination must not exist).
+
+`api/index.py` exposes the same Flask application. `vercel.json` routes requests,
+pins the family model policy and sets a 60-second ceiling; `.python-version`
+selects Python 3.12. The provider timeout remains 30 seconds.
+See [Vercel's Python runtime](https://vercel.com/docs/functions/runtimes/python).
+
+This team's existing Pro plan retains runtime logs for **one day by default**.
+After a playtest, copy the game's ID from About and export/filter the project's
+runtime logs promptly. There is no database or long-term trace archive, and this
+setup does not add a paid logging upgrade. See [runtime log retention](https://vercel.com/docs/logs/runtime).
+
+## Install on the family iPad
+
+Connect and unlock the iPad, trust this Mac, and enable Developer Mode if iPadOS
+asks for it. With the Xcode signing account already configured:
+
+```bash
+python3 scripts/install_hosted_coaching_device.py --list-devices
+python3 scripts/install_hosted_coaching_device.py --device "<listed identifier or exact iPad name>"
+```
+
+The second command builds a signed Release app, installs it on that exact
+physical iPad, and performs the setup launch. It reads the family token from
+macOS Keychain and passes it through the device-launch process environment—not
+arguments or a configuration file. No OpenAI key is installed on the iPad.
+The installed app saves its HTTPS endpoint and family token as one device-only
+Keychain item. Launch it from the Home screen, start a game, and try Help. The
+Mac and this terminal are no longer needed. Chess works offline; the coach
+requires internet. This remains a development-signed family build, not TestFlight
+or App Store distribution; signing/provisioning expiration still applies.
+
+Re-running setup updates the existing app without deleting games. It never
+chooses a simulator or an ambiguous device name. The URL and token must be
+re-provisioned together when changing servers. A different-origin URL alone
+cannot borrow a saved token. Keychain failures show unavailable hosted help
+rather than silently reverting to the old local coach.
 
 The endpoint is intentionally private and stateless. It keeps no in-process
 conversation map. The app holds one opaque Responses API ID in memory while

@@ -2,8 +2,8 @@ import Foundation
 import Security
 
 protocol HostedCoachingCredentialStoring: Sendable {
-    func loadAccessToken() throws -> String?
-    func saveAccessToken(_ token: String) throws
+    func loadConfiguration() throws -> HostedCoachingConfiguration?
+    func saveConfiguration(_ configuration: HostedCoachingConfiguration) throws
 }
 
 enum HostedCoachingConfigurationError: Error, Equatable, Sendable {
@@ -12,7 +12,7 @@ enum HostedCoachingConfigurationError: Error, Equatable, Sendable {
     case credentialStoreFailure
 }
 
-struct HostedCoachingConfiguration: Equatable, Sendable {
+struct HostedCoachingConfiguration: Codable, Equatable, Sendable {
     let baseURL: URL
     let accessToken: String
 
@@ -21,37 +21,53 @@ struct HostedCoachingConfiguration: Equatable, Sendable {
         credentialStore: any HostedCoachingCredentialStoring = KeychainHostedCoachingCredentialStore(),
         isDebugBuild: Bool = Self.isDebugBuild
     ) throws -> HostedCoachingConfiguration? {
-        guard let rawBaseURL = environment["CHESS_TUTOR_COACHING_BASE_URL"],
-              !rawBaseURL.isEmpty else {
-            return nil
-        }
-        let baseURL = try validatedBaseURL(rawBaseURL, isDebugBuild: isDebugBuild)
-
-        if let launchToken = environment["CHESS_TUTOR_COACHING_ACCESS_TOKEN"],
-           !launchToken.isEmpty {
-            do {
-                try credentialStore.saveAccessToken(launchToken)
-            } catch {
-                throw HostedCoachingConfigurationError.credentialStoreFailure
-            }
-        }
-        let token: String?
         do {
-            token = try credentialStore.loadAccessToken()
+            guard let rawBaseURL = environment["CHESS_TUTOR_COACHING_BASE_URL"] else {
+                guard environment["CHESS_TUTOR_COACHING_ACCESS_TOKEN"] == nil else {
+                    throw HostedCoachingConfigurationError.invalidBaseURL
+                }
+                guard let saved = try credentialStore.loadConfiguration() else { return nil }
+                return try validated(saved, isDebugBuild: isDebugBuild)
+            }
+            let baseURL = try validatedBaseURL(rawBaseURL, isDebugBuild: isDebugBuild)
+            if let token = environment["CHESS_TUTOR_COACHING_ACCESS_TOKEN"] {
+                let configuration = try validated(
+                    Self(baseURL: baseURL, accessToken: token), isDebugBuild: isDebugBuild
+                )
+                try credentialStore.saveConfiguration(configuration)
+                return configuration
+            }
+            guard let saved = try credentialStore.loadConfiguration() else {
+                throw HostedCoachingConfigurationError.missingAccessToken
+            }
+            let configuration = try validated(saved, isDebugBuild: isDebugBuild)
+            guard configuration.baseURL == baseURL else {
+                throw HostedCoachingConfigurationError.missingAccessToken
+            }
+            return configuration
+        } catch let error as HostedCoachingConfigurationError {
+            throw error
         } catch {
             throw HostedCoachingConfigurationError.credentialStoreFailure
         }
-        guard let token, !token.isEmpty else {
+    }
+
+    private static func validated(_ configuration: Self, isDebugBuild: Bool) throws -> Self {
+        let token = configuration.accessToken
+        guard !token.isEmpty, token.unicodeScalars.allSatisfy({ (33...126).contains($0.value) }) else {
             throw HostedCoachingConfigurationError.missingAccessToken
         }
-        return HostedCoachingConfiguration(baseURL: baseURL, accessToken: token)
+        return Self(
+            baseURL: try validatedBaseURL(configuration.baseURL.absoluteString, isDebugBuild: isDebugBuild),
+            accessToken: token
+        )
     }
 
     private static func validatedBaseURL(
         _ value: String,
         isDebugBuild: Bool
     ) throws -> URL {
-        guard let components = URLComponents(string: value),
+        guard var components = URLComponents(string: value),
               let scheme = components.scheme?.lowercased(),
               let host = components.host?.lowercased(),
               !host.isEmpty,
@@ -60,27 +76,29 @@ struct HostedCoachingConfiguration: Equatable, Sendable {
               components.query == nil,
               components.fragment == nil,
               components.path.isEmpty || components.path == "/",
-              let url = components.url else {
+              components.port.map({ (1...65535).contains($0) }) ?? true else {
             throw HostedCoachingConfigurationError.invalidBaseURL
         }
-        if scheme == "https" {
-            return url
-        }
-        guard scheme == "http", isDebugBuild, isPrivateDevelopmentHost(host) else {
+        guard scheme == "https" || (scheme == "http" && isDebugBuild && isPrivateDevelopmentHost(host)) else {
             throw HostedCoachingConfigurationError.invalidBaseURL
         }
+        components.scheme = scheme
+        components.host = host
+        components.path = ""
+        if components.port == (scheme == "https" ? 443 : 80) { components.port = nil }
+        guard let url = components.url else { throw HostedCoachingConfigurationError.invalidBaseURL }
         return url
     }
 
     private static func isPrivateDevelopmentHost(_ host: String) -> Bool {
-        if host == "localhost" || host == "::1" || host.hasPrefix("127.") {
+        if host == "localhost" || host == "::1" || host == "[::1]" {
             return true
         }
         let octets = host.split(separator: ".").compactMap { Int($0) }
         guard octets.count == 4, octets.allSatisfy({ (0...255).contains($0) }) else {
             return false
         }
-        return octets[0] == 10
+        return octets[0] == 127 || octets[0] == 10
             || (octets[0] == 192 && octets[1] == 168)
             || (octets[0] == 172 && (16...31).contains(octets[1]))
     }
@@ -95,10 +113,15 @@ struct HostedCoachingConfiguration: Equatable, Sendable {
 }
 
 struct KeychainHostedCoachingCredentialStore: HostedCoachingCredentialStoring, Sendable {
-    private let service = "org.jasoncrawford.chesstutor.hosted-coaching"
-    private let account = "access-token"
+    let service: String
+    let account: String
 
-    func loadAccessToken() throws -> String? {
+    init(service: String = "org.jasoncrawford.chesstutor.hosted-coaching", account: String = "connection") {
+        self.service = service
+        self.account = account
+    }
+
+    func loadConfiguration() throws -> HostedCoachingConfiguration? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -113,17 +136,14 @@ struct KeychainHostedCoachingCredentialStore: HostedCoachingCredentialStoring, S
         }
         guard status == errSecSuccess,
               let data = item as? Data,
-              let token = String(data: data, encoding: .utf8),
-              !token.isEmpty else {
+              let configuration = try? JSONDecoder().decode(HostedCoachingConfiguration.self, from: data) else {
             throw HostedCoachingConfigurationError.credentialStoreFailure
         }
-        return token
+        return configuration
     }
 
-    func saveAccessToken(_ token: String) throws {
-        guard !token.isEmpty, let data = token.data(using: .utf8) else {
-            throw HostedCoachingConfigurationError.credentialStoreFailure
-        }
+    func saveConfiguration(_ configuration: HostedCoachingConfiguration) throws {
+        let data = try JSONEncoder().encode(configuration)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -153,9 +173,6 @@ enum HostedCoachingRuntime {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         credentialStore: any HostedCoachingCredentialStoring = KeychainHostedCoachingCredentialStore()
     ) -> (any HostedCoachingTurning)? {
-        guard environment["CHESS_TUTOR_COACHING_BASE_URL"]?.isEmpty == false else {
-            return nil
-        }
         do {
             guard let configuration = try HostedCoachingConfiguration.resolve(
                 environment: environment,

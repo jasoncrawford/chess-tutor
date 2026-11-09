@@ -1,6 +1,37 @@
 import XCTest
+import Network
 
 final class HostedCoachingContinuityUITests: XCTestCase {
+    @MainActor
+    func testRealHostedConfigurationSurvivesEnvironmentFreeRelaunch() async throws {
+        let requestReceived = expectation(description: "Relaunched app contacts saved endpoint with saved credential")
+        let server = try ConfigurationProbeServer(received: requestReceived)
+        defer { server.stop() }
+        let port = try await server.start()
+        let app = XCUIApplication()
+        app.launchEnvironment = [
+            "CHESS_TUTOR_COACHING_BASE_URL": "http://127.0.0.1:\(port)",
+            "CHESS_TUTOR_COACHING_ACCESS_TOKEN": "configuration-test-only-token",
+        ]
+        app.launch()
+        app.terminate()
+        app.launchEnvironment = [:]
+        app.launch()
+
+        if app.buttons["Games"].waitForExistence(timeout: 2) { app.buttons["Games"].tap() }
+        if app.buttons["empty-games-start-local"].waitForExistence(timeout: 2) {
+            app.buttons["empty-games-start-local"].tap()
+        } else {
+            XCTAssertTrue(app.buttons["games-start-card"].waitForExistence(timeout: 5))
+            app.buttons["games-start-card"].tap()
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'On this iPad'")).firstMatch.tap()
+        }
+        XCTAssertTrue(app.buttons["Help"].waitForExistence(timeout: 5))
+        app.buttons["Help"].tap()
+        await fulfillment(of: [requestReceived], timeout: 10)
+        app.terminate()
+    }
+
     @MainActor
     func testHostedQuestionAcceptsPieceTapAndEverythingLooksSafe() {
         let app = XCUIApplication()
@@ -104,4 +135,59 @@ final class HostedCoachingContinuityUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         }
     }
+}
+
+// Real loopback transport, no paid model and no test endpoint in application code.
+private final class ConfigurationProbeServer: @unchecked Sendable {
+    private let listener: NWListener
+    private let received: XCTestExpectation
+    private let queue = DispatchQueue(label: "configuration-probe")
+
+    init(received: XCTestExpectation) throws {
+        listener = try NWListener(using: .tcp, on: .any)
+        self.received = received
+    }
+
+    func start() async throws -> UInt16 {
+        try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { [self] state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(returning: listener.port!.rawValue)
+                case .failed(let error):
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default: break
+                }
+            }
+            listener.newConnectionHandler = { [self] connection in
+                connection.start(queue: queue)
+                readHeaders(connection, buffer: Data())
+            }
+            listener.start(queue: queue)
+        }
+    }
+
+    private func readHeaders(_ connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 131072) { [self] data, _, complete, error in
+            let accumulated = buffer + (data ?? Data())
+            let text = String(decoding: accumulated, as: UTF8.self)
+            if text.contains("\r\n\r\n") {
+                if text.hasPrefix("POST /v1/coaching-turn HTTP/1.1"),
+                   text.lowercased().contains("authorization: bearer configuration-test-only-token\r\n") {
+                    received.fulfill()
+                }
+                let body = "{\"error\":{\"code\":\"providerUnavailable\"}}"
+                let response = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+            } else if !complete && error == nil && accumulated.count < 131072 {
+                readHeaders(connection, buffer: accumulated)
+            } else {
+                connection.cancel()
+            }
+        }
+    }
+
+    func stop() { listener.cancel() }
 }
