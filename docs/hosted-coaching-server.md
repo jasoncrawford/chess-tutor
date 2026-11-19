@@ -101,6 +101,16 @@ HTTP status, and elapsed time. It deliberately excludes credentials, prompts,
 full rule arrays, provider/continuation IDs, reasoning, raw provider bodies, and
 exception text.
 
+Provider failures also include a bounded `provider.transport` object in the
+`coaching_turn` record (and `transport` on `provider_request_failed`): category,
+HTTP status, phase, and `headers_ms` when response headers arrived.
+`awaitingHeaders` includes connection setup **and** provider processing; it does
+not establish which was slow. `readingBody` means headers arrived before the
+failure. The metadata never contains exception text or provider content.
+HTTP 504 and device network timeouts show a specific timeout message with
+**Try again** / **Close help**, preserving the staged move and game.
+See [the November 18 incident replay](reports/2026-11-18-coaching-timeout-investigation.md).
+
 In a hosted build, open About and choose **Copy Coaching Game ID**. Use that
 value to filter retained server logs by `game_id`; within the result,
 `episode_id` groups one opening of Help and `trace_id` identifies one HTTP

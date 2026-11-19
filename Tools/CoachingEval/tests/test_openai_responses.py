@@ -1,4 +1,6 @@
 import email.message
+import http.client
+import io
 import json
 import socket
 import sys
@@ -141,6 +143,40 @@ def complete(client, *, previous_response_id=None, store=False):
 
 
 class OpenAIResponsesClientTests(unittest.TestCase):
+    def test_malformed_status_line_never_escapes_as_private_exception_text(self):
+        class Socket:
+            def makefile(self, _mode):
+                return io.BytesIO(b"PRIVATE provider status line\r\n\r\n")
+        class MalformedOpener:
+            def open(self, _request, timeout):
+                response = http.client.HTTPResponse(Socket())
+                response.begin()
+                return response
+        client = openai_responses.OpenAIResponsesClient("http://127.0.0.1:8080")
+        client.opener = MalformedOpener()
+        with self.assertRaises(openai_responses.OpenAIResponsesError) as caught:
+            complete(client)
+        self.assertEqual("transportError", caught.exception.category)
+        self.assertEqual("awaitingHeaders", caught.exception.phase)
+        self.assertNotIn("PRIVATE", str(caught.exception))
+
+    def test_interrupted_error_body_does_not_erase_known_http_status(self):
+        class Socket:
+            def makefile(self, _mode):
+                return io.BytesIO(b"HTTP/1.1 504 Gateway Timeout\r\nTransfer-Encoding: chunked\r\n\r\n40\r\nPRIVATE truncated body")
+        class ErrorOpener:
+            def open(self, request, timeout):
+                response = http.client.HTTPResponse(Socket())
+                response.begin()
+                raise urllib.error.HTTPError(request.full_url, 504, "fixed", response.headers, response)
+        client = openai_responses.OpenAIResponsesClient("http://127.0.0.1:8080")
+        client.opener = ErrorOpener()
+        with self.assertRaises(openai_responses.OpenAIResponsesError) as caught:
+            complete(client)
+        self.assertEqual(504, caught.exception.http_status)
+        self.assertEqual("httpResponse", caught.exception.phase)
+        self.assertNotIn("PRIVATE", str(caught.exception))
+
     def test_failure_metadata_rejects_unbounded_or_private_values(self):
         for value in (float("nan"), float("inf"), -1, 300001, True, "PRIVATE"):
             error = openai_responses.OpenAIResponsesError("fixed", phase="PRIVATE",

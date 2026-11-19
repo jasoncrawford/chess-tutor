@@ -68,14 +68,31 @@ Local diagnostic artifacts (not source-controlled):
   says: “The coach took too long to reply. Try again, or keep playing.”
 - Retry remains user-controlled, preserving the current game, staged move and
   last successful continuation. Closing/reopening Help rejects late failures.
+- Independent review found and reproduced malformed HTTP status lines escaping
+  the bounded Python error handler, and interrupted error bodies hiding an
+  already-known HTTP status. The handler now bounds HTTP protocol exceptions
+  and closes unused error bodies without reading them.
+- The real iPad URLSession loader also handles non-200 status immediately after
+  headers, cancelling the unused body stream. Successful responses retain the
+  size limit. A cancelled resolver ignores both queued success and failure.
 
 ## Verification / rollout
 
 The provider phase/body-timeout tests, server diagnostic test, and three native
 timeout/retry tests were observed failing before their fixes. The incident
 replay test passed and exported the real-rule request. Full post-change test
-results and PR status are recorded at delivery; no new production deployment
-or physical-iPad installation is implied by these local tests.
+results:
+
+- 1,024 native tests passed; zero failures or skips. Result bundle:
+  `/tmp/chess-timeout-verified-native.xcresult`.
+- 66 server tests passed (`/tmp/chess-timeout-server-final.log`).
+- 380 evaluation-tooling tests passed (`/tmp/chess-timeout-eval-final.log`).
+- `git diff --check` passed. One independent review; all four important findings
+  fixed and covered by regression tests, with none deferred.
+
+These are local results. The PR is left for review; no new production deployment
+or physical-iPad installation is implied. Model, prompt, reasoning and benchmark
+configurations are unchanged, so no paid quality-evaluation run was performed.
 
 After merging/deploying the diagnostics, collect the next failure's
 `coaching_turn` record. `awaitingHeaders` still includes connection establishment
@@ -83,3 +100,16 @@ and provider processing: it must not be labeled as proven model reasoning time.
 A `readingBody` failure establishes that an HTTP response had already begun.
 If the slow response problem recurs, use that evidence for a longer hosted
 diagnostic or a separately budgeted latency-policy experiment.
+
+Execution decisions: native test waits overlapped Python implementation/tests;
+the initial full native run was stopped after review found additional cases,
+and a new complete run was started against all final fixes. No review finding
+was deferred. No deadline change or model-quality change was made.
+
+The first complete native run passed 1,023 tests and failed the new URLSession
+fixture test. An isolated local probe demonstrated that omitting Content-Type
+made URLSession buffer the simulated response before yielding its headers.
+The fixture now declares JSON (matching the server), uses a private URL scheme
+that cannot fall through to external networking, and still never supplies the
+body. Its regression was rechecked against the old body-reading behavior before
+the final full-suite run; no production behavior was weakened to satisfy it.

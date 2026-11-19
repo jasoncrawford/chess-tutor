@@ -36,6 +36,7 @@ protocol HostedCoachingTurning: Sendable {
 enum HostedCoachingTransportError: Error, Equatable, Sendable {
     case invalidRequest
     case serverUnavailable
+    case timedOut
     case invalidResponse
     case staleResponse
 }

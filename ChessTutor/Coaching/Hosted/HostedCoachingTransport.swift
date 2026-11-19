@@ -31,6 +31,12 @@ extension URLSession: HostedCoachingHTTPDataLoading {
         maximumBytes: Int
     ) async throws -> (Data, URLResponse) {
         let (bytes, response) = try await bytes(for: request)
+        defer { bytes.task.cancel() }
+        // Only successful replies have a body we use. Preserve error status
+        // even if a gateway sends an oversized, stalled or truncated HTML body.
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            return (Data(), response)
+        }
         let expectedLength = response.expectedContentLength
         guard expectedLength < 0 || expectedLength <= maximumBytes else {
             throw HostedCoachingHTTPDataLoadingError.responseTooLarge
@@ -132,6 +138,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             if Task.isCancelled {
                 throw CancellationError()
             }
+            if (error as? URLError)?.code == .timedOut {
+                throw HostedCoachingTransportError.timedOut
+            }
             throw HostedCoachingTransportError.serverUnavailable
         }
 
@@ -139,6 +148,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             throw HostedCoachingTransportError.invalidResponse
         }
         guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 504 {
+                throw HostedCoachingTransportError.timedOut
+            }
             throw HostedCoachingTransportError.serverUnavailable
         }
         guard data.count <= Self.maximumResponseBytes else {

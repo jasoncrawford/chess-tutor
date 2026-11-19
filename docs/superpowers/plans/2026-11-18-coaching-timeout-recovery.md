@@ -30,24 +30,26 @@
 
 Files: `Tools/CoachingEval/openai_responses.py`, its tests, `CoachingServer/service.py`, server tests; a native incident-replay test; incident report under `docs/reports/`.
 
-- [ ] Reconstruct the logged 46-ply game through production rules and assert the resulting FEN. Export an opt-in neutral request for diagnostic replay.
-- [ ] Compare one hosted replay with the same direct request allowing up to 90 seconds. Retain timing/usage only; cap initial paid calls at four.
-- [ ] Write failing tests for header-vs-body timeout classification, safe phase/timing metadata and HTTP-status preservation in logs.
-- [ ] Implement minimal provider diagnostics and verify the tests pass. Do not speculate about upstream processing versus network stalls.
-- [ ] Run server and evaluation-tooling tests and commit the diagnostic work.
+- [x] Reconstruct the logged 46-ply game through production rules and assert the resulting FEN. Export an opt-in neutral request for diagnostic replay.
+- [x] Compare one hosted replay with the same direct request allowing up to 90 seconds. Retain timing/usage only; cap initial paid calls at four.
+- [x] Write failing tests for header-vs-body timeout classification, safe phase/timing metadata and HTTP-status preservation in logs.
+- [x] Implement minimal provider diagnostics and verify the tests pass. Do not speculate about upstream processing versus network stalls.
+- [x] Run server and evaluation-tooling tests and commit the diagnostic work.
 
 ### Task 2: Recoverable client timeout
 
 Files: hosted transport/contracts/session/projector, GameSession hosted error handling, corresponding XCTest files.
 
-- [ ] Write failing tests demonstrating HTTP 504 and URL timeout propagate distinctly to child-facing timeout copy, with retry and close controls.
-- [ ] Test retry after a failed staged-move follow-up preserves the move, game, and continuation; test cancellation/stale completion separately.
-- [ ] Implement typed timeout handling in the existing session/model layer. Keep other failures generic and do not render arbitrary server text.
-- [ ] Only if replay evidence supports it, add a separate hosted runtime configuration with coordinated provider/client/platform deadlines, keeping frozen benchmark configs intact; test actual loaded policy.
-- [ ] Run native tests and Python suites, document measured results/limitations, obtain one independent review, and open a PR. Leave it unmerged.
+- [x] Write failing tests demonstrating HTTP 504 and URL timeout propagate distinctly to child-facing timeout copy, with retry and close controls.
+- [x] Test retry after a failed staged-move follow-up preserves the move, game, and continuation; test cancellation/stale completion separately.
+- [x] Implement typed timeout handling in the existing session/model layer. Keep other failures generic and do not render arbitrary server text.
+- [x] Assess deadline changes: replay did not demonstrate that more time permits completion, so retain existing provider/client/platform deadlines and frozen benchmark configs.
+- [x] Run native tests and Python suites, document measured results/limitations, obtain one independent review, and prepare the PR. Leave it unmerged for user review.
 
 ## Progress
 
 - PR #25 merged with user approval; baseline `eb15f4a`.
 - Existing server baseline: 65 tests passed.
 - Incident: three warm-server initial requests timed out after ~30 seconds. Failing FEN `r2q2k1/ppp5/6N1/2PP1r1p/3Q4/5p2/PPP2PP1/R4RK1 w - - 0 24`.
+- Four controlled probes completed; no production deadline or coaching policy changes.
+- Final verification: 1,024 native, 66 server and 380 evaluation-tooling tests passed, with zero skips. All four independent-review findings fixed; the corrected URLSession fixture demonstrated the old error-body bug before the final green run.

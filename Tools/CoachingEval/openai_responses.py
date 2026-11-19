@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Narrow, trace-free OpenAI Responses API transport for coaching pilots."""
 
+import http.client
 import json
 import math
 import re
@@ -29,7 +30,6 @@ _ERROR_CATEGORIES = frozenset(
         "multipleOutputTexts",
     )
 )
-_MAXIMUM_ERROR_BODY_BYTES = 64 * 1024
 _MAXIMUM_RESPONSE_BODY_BYTES = 1024 * 1024
 _MAXIMUM_IDENTIFIER_BYTES = 256
 _MAXIMUM_OUTPUT_TEXT_BYTES = 64 * 1024
@@ -178,7 +178,7 @@ class OpenAIResponsesClient:
                 else "OpenAI Responses API request failed"
             )
             raise OpenAIResponsesError(message, category=category, phase=phase, headers_ms=headers_ms) from None
-        except (OSError, ValueError):
+        except (OSError, ValueError, http.client.HTTPException):
             raise OpenAIResponsesError(
                 "OpenAI Responses API request failed",
                 category="transportError",
@@ -254,13 +254,11 @@ def _read_bounded_response(response):
 
 
 def _discard_http_error(error):
-    try:
-        error.read(_MAXIMUM_ERROR_BODY_BYTES)
-    except (OSError, ValueError):
-        pass
+    # The status is already known. Reading an unused, possibly stalled or
+    # truncated error body can hide it behind a second transport failure.
     try:
         error.close()
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         pass
 
 

@@ -98,6 +98,7 @@ final class HostedCoachingTransportTests: XCTestCase {
             "expects": "none",
         ]
         let cases: [(status: Int, response: [String: Any], expected: HostedCoachingTransportError)] = [
+            (504, ["error": ["code": "providerTimeout"]], .timedOut),
             (503, try hostedResponseObject(request: request, turn: validTurn), .serverUnavailable),
             (200, try hostedResponseObject(request: request, requestID: "stale", turn: validTurn), .staleResponse),
             (200, try hostedResponseObject(request: request, revision: 999, turn: validTurn), .staleResponse),
@@ -151,6 +152,23 @@ final class HostedCoachingTransportTests: XCTestCase {
                 XCTFail("Expected invalid response")
             } catch let error as HostedCoachingTransportError {
                 XCTAssertEqual(.invalidResponse, error)
+            }
+        }
+    }
+
+    func testNetworkTimeoutIsDistinctFromAnOfflineConnection() async throws {
+        let request = try sharedRequest()
+        let contract = ModelCoachingChessNativeContextCompiler.responseContract(for: request, promptVersion: "tutor-v13")
+        for (code, expected) in [(URLError.Code.timedOut, HostedCoachingTransportError.timedOut),
+                                 (.notConnectedToInternet, .serverUnavailable)] {
+            let loader = RecordingHostedLoader(error: URLError(code))
+            let transport = URLSessionHostedCoachingTransport(baseURL: URL(string: "https://coach.example")!,
+                                                              accessToken: "token", loader: loader)
+            do {
+                _ = try await transport.turn(for: request, contract: contract, continuationID: nil, correlation: correlation)
+                XCTFail("Expected transport failure")
+            } catch {
+                XCTAssertEqual(error as? HostedCoachingTransportError, expected)
             }
         }
     }
@@ -246,6 +264,30 @@ final class HostedCoachingTransportTests: XCTestCase {
         XCTAssertEqual(64 * 1024, buffer.data.count)
     }
 
+    func testRealURLSessionPreservesErrorStatusWithoutReadingErrorBodies() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HeaderOnlyCoachingProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        for status in [503, 504] {
+            for length in [100_000, 8] {
+                var request = URLRequest(url: URL(string: "coaching-test://response/\(status)/\(length)")!)
+                request.timeoutInterval = 2
+                let (data, response) = try await session.data(for: request, maximumBytes: 16)
+                XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, status)
+                XCTAssertTrue(data.isEmpty)
+            }
+        }
+        var success = URLRequest(url: URL(string: "coaching-test://response/200/100000")!)
+        success.timeoutInterval = 2
+        do {
+            _ = try await session.data(for: success, maximumBytes: 16)
+            XCTFail("Successful responses must still respect the body limit")
+        } catch {
+            XCTAssertEqual(error as? HostedCoachingHTTPDataLoadingError, .responseTooLarge)
+        }
+    }
+
     private func makeTransport(data: Data, status: Int) -> URLSessionHostedCoachingTransport {
         URLSessionHostedCoachingTransport(
             baseURL: URL(string: "https://coach.example")!,
@@ -336,6 +378,23 @@ private final class RecordingHostedLoader: HostedCoachingHTTPDataLoading, @unche
         if let error { throw error }
         return (data, response)
     }
+}
+
+// Exercises URLSession's real AsyncBytes loader: headers arrive, body never does.
+private final class HeaderOnlyCoachingProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.scheme == "coaching-test" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let parts = request.url!.pathComponents
+        // Without Content-Type, URLSession buffers the fixture for MIME sniffing
+        // before yielding AsyncBytes. Declare JSON, just like the server does.
+        let response = HTTPURLResponse(url: request.url!, statusCode: Int(parts[1])!,
+                                       httpVersion: "HTTP/1.1", headerFields: [
+                                        "Content-Length": parts[2], "Content-Type": "application/json",
+                                       ])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    }
+    override func stopLoading() {}
 }
 
 private extension JSONEncoder {

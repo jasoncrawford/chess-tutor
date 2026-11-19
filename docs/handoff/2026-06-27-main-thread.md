@@ -2,10 +2,15 @@
 
 ## Latest integration checkpoint — 2026-11-08
 
+November 18 update: PR #25 is merged at `eb15f4a`; the user confirmed coaching
+works on Family iPad without a Mac server. An intermittent provider-timeout
+investigation and scoped recovery changes are documented in
+[the incident report](../reports/2026-11-18-coaching-timeout-investigation.md).
+
 PR #24 merged the coaching branch with main's multiple-game library at
 `cc6930b98404bcf90ed4df76f32e43a4cea9b659`. See [the integration report](../reports/2026-11-08-coaching-integration.md)
-for the integrated architecture. Hosted family-device deployment is on
-`codex/hosted-device-play`; see [its report](../reports/2026-11-08-hosted-device-play.md)
+for the integrated architecture. Hosted family-device deployment is now on main
+through PR #25; see [its report](../reports/2026-11-08-hosted-device-play.md)
 for the live HTTPS server, verification evidence, and physical-iPad status.
 The original MVP notes below are historical, not a description of current scope.
 
