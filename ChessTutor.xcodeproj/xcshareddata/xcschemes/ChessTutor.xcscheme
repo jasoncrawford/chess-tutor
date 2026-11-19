@@ -119,6 +119,11 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
+            key = "COACHING_INCIDENT_REQUEST_PATH"
+            value = "$(COACHING_INCIDENT_REQUEST_PATH)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
             key = "COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR"
             value = "$(COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR)"
             isEnabled = "YES">

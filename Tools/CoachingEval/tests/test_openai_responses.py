@@ -141,6 +141,14 @@ def complete(client, *, previous_response_id=None, store=False):
 
 
 class OpenAIResponsesClientTests(unittest.TestCase):
+    def test_failure_metadata_rejects_unbounded_or_private_values(self):
+        for value in (float("nan"), float("inf"), -1, 300001, True, "PRIVATE"):
+            error = openai_responses.OpenAIResponsesError("fixed", phase="PRIVATE",
+                http_status=True, headers_ms=value)
+            self.assertIsNone(error.phase)
+            self.assertIsNone(error.http_status)
+            self.assertIsNone(error.headers_ms)
+
     def test_posts_exact_responses_payload_and_returns_only_bounded_final_fields(self):
         with FakeResponsesServer() as server:
             client = openai_responses.OpenAIResponsesClient(server.base_url)
@@ -308,6 +316,43 @@ class OpenAIResponsesClientTests(unittest.TestCase):
         self.assertEqual(2, opener.timeout)
         self.assertEqual("timeout", raised.exception.category)
         self.assertNotIn("private", str(raised.exception).lower())
+
+    def test_timeout_before_headers_is_identified_without_guessing_its_network_cause(self):
+        class TimeoutOpener:
+            def open(self, _request, timeout):
+                raise socket.timeout("PRIVATE network detail")
+
+        client = openai_responses.OpenAIResponsesClient("http://127.0.0.1:8080")
+        client.opener = TimeoutOpener()
+        with self.assertRaises(openai_responses.OpenAIResponsesError) as caught:
+            complete(client)
+        self.assertEqual("awaitingHeaders", getattr(caught.exception, "phase", None))
+        self.assertIsNone(getattr(caught.exception, "headers_ms", None))
+
+    def test_response_body_failures_keep_their_category_and_received_headers(self):
+        class SlowBody:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def read(self, _limit):
+                raise failure
+
+        class BodyOpener:
+            def open(self, _request, timeout):
+                return SlowBody()
+
+        client = openai_responses.OpenAIResponsesClient("http://127.0.0.1:8080")
+        client.opener = BodyOpener()
+        for failure, category in ((socket.timeout("PRIVATE partial response"), "timeout"),
+                                  (OSError("PRIVATE connection reset"), "transportError")):
+            with self.subTest(category=category):
+                with self.assertRaises(openai_responses.OpenAIResponsesError) as caught:
+                    complete(client)
+                self.assertEqual(category, caught.exception.category)
+                self.assertEqual("readingBody", caught.exception.phase)
+                self.assertGreaterEqual(caught.exception.headers_ms, 0)
+                self.assertNotIn("PRIVATE", str(caught.exception))
 
     def test_malformed_success_body_is_rejected_without_echoing_it(self):
         private_body = b'{"PRIVATE_REASONING":"developer-secret"'

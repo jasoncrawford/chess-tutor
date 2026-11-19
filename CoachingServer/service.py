@@ -19,6 +19,7 @@ from CoachingServer.provider_envelope import (
     validate_provider_envelope,
 )
 from CoachingServer.structured_logging import emit_event
+from Tools.CoachingEval.openai_responses import OpenAIResponsesError
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -161,6 +162,14 @@ class HostedCoachingService:
                 provider_error = error
         if not provider_returned:
             elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
+            transport = {}
+            if isinstance(provider_error, OpenAIResponsesError):
+                transport["transport"] = {
+                    "category": provider_error.category,
+                    "phase": provider_error.phase,
+                    "http_status": provider_error.http_status,
+                    "headers_ms": provider_error.headers_ms,
+                }
             is_timeout = (
                 isinstance(provider_error, (TimeoutError, socket.timeout))
                 or getattr(provider_error, "category", None) == "timeout"
@@ -172,28 +181,17 @@ class HostedCoachingService:
                 **correlation,
                 elapsed_ms=elapsed_milliseconds,
                 outcome="timeout" if is_timeout else "unavailable",
+                **transport,
             )
-            if is_timeout:
-                raise HostedCoachingServiceError(
-                    "providerTimeout",
-                    _diagnostics(
-                        request=request_summary,
-                        provider=_provider_summary(
-                            model=self._configuration.model,
-                            reasoning_effort=reasoning_effort,
-                            metrics=_metrics(None, elapsed_milliseconds),
-                        ),
-                    ),
-                ) from None
             raise HostedCoachingServiceError(
-                "providerUnavailable",
+                "providerTimeout" if is_timeout else "providerUnavailable",
                 _diagnostics(
                     request=request_summary,
-                    provider=_provider_summary(
+                    provider={**_provider_summary(
                         model=self._configuration.model,
                         reasoning_effort=reasoning_effort,
                         metrics=_metrics(None, elapsed_milliseconds),
-                    ),
+                    ), **transport},
                 ),
             ) from None
         elapsed_milliseconds = _elapsed_milliseconds(self._clock(), started)
