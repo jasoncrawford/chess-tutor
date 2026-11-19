@@ -31,6 +31,12 @@ extension URLSession: HostedCoachingHTTPDataLoading {
         maximumBytes: Int
     ) async throws -> (Data, URLResponse) {
         let (bytes, response) = try await bytes(for: request)
+        defer { bytes.task.cancel() }
+        // Only successful replies have a body we use. Preserve error status
+        // even if a gateway sends an oversized, stalled or truncated HTML body.
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            return (Data(), response)
+        }
         let expectedLength = response.expectedContentLength
         guard expectedLength < 0 || expectedLength <= maximumBytes else {
             throw HostedCoachingHTTPDataLoadingError.responseTooLarge
@@ -111,7 +117,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = body
-        urlRequest.timeoutInterval = 35
+        // Outwait the 60-second provider budget so the server can return its
+        // validated advice or timeout response before the device gives up.
+        urlRequest.timeoutInterval = 70
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -132,6 +140,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             if Task.isCancelled {
                 throw CancellationError()
             }
+            if (error as? URLError)?.code == .timedOut {
+                throw HostedCoachingTransportError.timedOut
+            }
             throw HostedCoachingTransportError.serverUnavailable
         }
 
@@ -139,6 +150,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             throw HostedCoachingTransportError.invalidResponse
         }
         guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 504 {
+                throw HostedCoachingTransportError.timedOut
+            }
             throw HostedCoachingTransportError.serverUnavailable
         }
         guard data.count <= Self.maximumResponseBytes else {

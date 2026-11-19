@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import signal
@@ -58,9 +59,9 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("server-stopped", command_log)
         self.assertIn("venv-create", command_log)
         self.assertIn("dependency-install requirements.txt", command_log)
-        selected = "Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json"
+        selected = "CoachingServer/configs/production-v2.json"
         self.assertIn(f"server-model-config={selected}\n", command_log)
-        self.assertIn("Local coaching: provisional Astra experience trial; production default unchanged.", combined_output)
+        self.assertIn("Local coaching: family deployment policy.", combined_output)
         self.assertIn(f"Model configuration: {selected}", combined_output)
         self.assertNotIn("explicit model configuration override", combined_output)
 
@@ -84,7 +85,7 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
                 self.assertNotIn("local-token-secret", output + command_log)
                 self.assertIn("server-stopped", command_log)
 
-    def test_live_trial_matches_repeatable_benchmark_candidate(self):
+    def test_live_policy_matches_deployment_and_benchmark_except_timeout(self):
         candidate = load_candidate(
             REPOSITORY_ROOT / "Tools/CoachingEval/benchmark/configs/astra-experience-v7-low.json",
             REPOSITORY_ROOT,
@@ -93,9 +94,29 @@ class HostedCoachingDevelopmentLauncherTests(unittest.TestCase):
         self.assertEqual(130, status, output)
         selected = next(line.split("=", 1)[1] for line in commands.splitlines()
                         if line.startswith("server-model-config="))
+        deployment = json.loads((REPOSITORY_ROOT / "CoachingServer/deployment.json").read_text())
+        self.assertEqual(selected, deployment["modelConfiguration"])
         live = HostedModelConfiguration.load(Path(selected), REPOSITORY_ROOT)
-        self.assertEqual(live.sha256, candidate.model_configuration.sha256)
+        expected = dict(candidate.model_configuration.raw)
+        self.assertEqual(expected["timeoutSeconds"], 30)  # historical benchmark remains frozen
+        expected["timeoutSeconds"] = 60
+        self.assertEqual(dict(live.raw), expected)
         self.assertEqual(live.system_prompt, candidate.model_configuration.system_prompt)
+
+    def test_example_environment_does_not_restore_the_old_timeout(self):
+        example = subprocess.run(
+            ["/bin/bash", "-c", '. "$1"; printf "%s" "${CHESS_TUTOR_COACHING_MODEL_CONFIG-}"',
+             "example-env", str(REPOSITORY_ROOT / ".env.example")],
+            env={}, capture_output=True, text=True, check=True,
+        )
+        if example.stdout:
+            self.env["CHESS_TUTOR_COACHING_MODEL_CONFIG"] = example.stdout
+        status, output, commands = self._launch_and_stop()
+        self.assertEqual(130, status, output)
+        selected = next(line.split("=", 1)[1] for line in commands.splitlines()
+                        if line.startswith("server-model-config="))
+        live = HostedModelConfiguration.load(Path(selected), REPOSITORY_ROOT)
+        self.assertEqual(live.timeout_seconds, 60)
 
     def test_opens_legacy_simulator_without_trying_device_hub(self):
         returncode, output, command_log = self._launch_and_stop()

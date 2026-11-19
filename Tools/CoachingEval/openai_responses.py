@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Narrow, trace-free OpenAI Responses API transport for coaching pilots."""
 
+import http.client
 import json
+import math
 import re
 import socket
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,7 +30,6 @@ _ERROR_CATEGORIES = frozenset(
         "multipleOutputTexts",
     )
 )
-_MAXIMUM_ERROR_BODY_BYTES = 64 * 1024
 _MAXIMUM_RESPONSE_BODY_BYTES = 1024 * 1024
 _MAXIMUM_IDENTIFIER_BYTES = 256
 _MAXIMUM_OUTPUT_TEXT_BYTES = 64 * 1024
@@ -38,10 +40,14 @@ _PREVIOUS_RESPONSE_ID = re.compile(r"resp_[A-Za-z0-9_-]{1,251}\Z")
 class OpenAIResponsesError(RuntimeError):
     """A bounded provider failure that never retains provider response content."""
 
-    def __init__(self, message, *, category="invalidResponse", http_status=None):
+    def __init__(self, message, *, category="invalidResponse", http_status=None,
+                 phase=None, headers_ms=None):
         super().__init__(message)
         self.category = category if category in _ERROR_CATEGORIES else "invalidResponse"
-        self.http_status = http_status if isinstance(http_status, int) else None
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+        self.phase = phase if phase in ("awaitingHeaders", "readingBody", "httpResponse") else None
+        self.headers_ms = (round(headers_ms, 3) if type(headers_ms) in (int, float)
+                           and math.isfinite(headers_ms) and 0 <= headers_ms <= 300_000 else None)
 
 
 class OpenAIResponsesClient:
@@ -135,20 +141,30 @@ class OpenAIResponsesClient:
             headers=headers,
             method="POST",
         )
+        phase = "awaitingHeaders"
+        headers_ms = None
+        started = time.monotonic()
         try:
             with self.opener.open(request, timeout=timeout) as response:
+                headers_ms = (time.monotonic() - started) * 1000
+                phase = "readingBody"
                 body = _read_bounded_response(response)
         except urllib.error.HTTPError as error:
+            headers_ms = (time.monotonic() - started) * 1000
             _discard_http_error(error)
             raise OpenAIResponsesError(
                 f"OpenAI Responses API returned HTTP {error.code}",
                 category="httpError",
                 http_status=error.code,
+                phase="httpResponse",
+                headers_ms=headers_ms,
             ) from None
         except (TimeoutError, socket.timeout):
             raise OpenAIResponsesError(
                 "OpenAI Responses API request timed out",
                 category="timeout",
+                phase=phase,
+                headers_ms=headers_ms,
             ) from None
         except urllib.error.URLError as error:
             category = (
@@ -161,11 +177,13 @@ class OpenAIResponsesClient:
                 if category == "timeout"
                 else "OpenAI Responses API request failed"
             )
-            raise OpenAIResponsesError(message, category=category) from None
-        except (OSError, ValueError):
+            raise OpenAIResponsesError(message, category=category, phase=phase, headers_ms=headers_ms) from None
+        except (OSError, ValueError, http.client.HTTPException):
             raise OpenAIResponsesError(
                 "OpenAI Responses API request failed",
                 category="transportError",
+                phase=phase,
+                headers_ms=headers_ms,
             ) from None
 
         return _extract_completed_output(body)
@@ -221,13 +239,8 @@ def _validate_arguments(
 
 
 def _read_bounded_response(response):
-    try:
-        raw_body = response.read(_MAXIMUM_RESPONSE_BODY_BYTES + 1)
-    except OSError:
-        raise OpenAIResponsesError(
-            "OpenAI Responses API request failed",
-            category="transportError",
-        ) from None
+    # Classify I/O failures at the transport boundary, retaining the read phase.
+    raw_body = response.read(_MAXIMUM_RESPONSE_BODY_BYTES + 1)
     if len(raw_body) > _MAXIMUM_RESPONSE_BODY_BYTES:
         raise _invalid_response()
     try:
@@ -241,13 +254,11 @@ def _read_bounded_response(response):
 
 
 def _discard_http_error(error):
-    try:
-        error.read(_MAXIMUM_ERROR_BODY_BYTES)
-    except (OSError, ValueError):
-        pass
+    # The status is already known. Reading an unused, possibly stalled or
+    # truncated error body can hide it behind a second transport failure.
     try:
         error.close()
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         pass
 
 

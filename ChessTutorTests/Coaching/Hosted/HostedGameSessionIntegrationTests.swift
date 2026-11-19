@@ -428,6 +428,46 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         )
     }
 
+    func testLateTimeoutCannotReplaceAReopenedHelpEpisode() async throws {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        session.startCoaching()
+        let oldTask = Task { await session.resolvePendingCoachingAdvice() }
+        let oldRequest = await provider.waitForOnlyRequest()
+        session.stopCoaching()
+        session.startCoaching()
+        let currentID = session.pendingCoachingRequestID
+
+        await provider.fail(requestID: oldRequest.requestID, error: .timedOut)
+        await oldTask.value
+        XCTAssertEqual(currentID, session.pendingCoachingRequestID)
+        XCTAssertEqual("Thinking…", session.coachingPresentation?.primaryMessage)
+        XCTAssertEqual([.stop], session.coachingPresentation?.actions.map(\.action))
+        session.stopCoaching()
+        XCTAssertNil(session.coachingPresentation)
+    }
+
+    func testCancelledResolverIgnoresQueuedTimeoutAndSuccess() async throws {
+        for succeeds in [false, true] {
+            let provider = ControlledHostedCoachingProvider()
+            let session = GameSession(hostedCoachingProvider: provider)
+            session.startCoaching()
+            let task = Task { await session.resolvePendingCoachingAdvice() }
+            let request = await provider.waitForOnlyRequest()
+            let pendingID = session.pendingCoachingRequestID
+            task.cancel()
+            if succeeds {
+                await provider.succeed(requestID: request.requestID, message: "Obsolete reply.")
+            } else {
+                await provider.fail(requestID: request.requestID, error: .timedOut)
+            }
+            await task.value
+            XCTAssertEqual(session.pendingCoachingRequestID, pendingID)
+            XCTAssertEqual(session.coachingPresentation?.primaryMessage, "Thinking…")
+            session.stopCoaching()
+        }
+    }
+
     func testHostedIdentificationAllowsTapCaptureAfterSelectingMover() async throws {
         let state = try middlegamePlaythroughState()
         let from = Square(file: .c, rank: 4)
@@ -587,10 +627,10 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         XCTAssertEqual(.moveStaged, stagedRequest.interaction.latestEvent.kind)
         XCTAssertEqual(["move:g1-f3"], stagedRequest.interaction.latestEvent.referencedIDs)
 
-        await provider.fail(requestID: stagedRequest.requestID)
+        await provider.fail(requestID: stagedRequest.requestID, error: .timedOut)
         await stagedTask.value
         XCTAssertNil(session.pendingCoachingRequestID)
-        XCTAssertEqual("I couldn't get help right now.", session.coachingPresentation?.primaryMessage)
+        XCTAssertEqual("The coach took too long to reply. Try again, or keep playing.", session.coachingPresentation?.primaryMessage)
         XCTAssertEqual([.hint, .stop], session.coachingPresentation?.actions.map(\.action))
 
         XCTAssertNil(session.chooseCoachingAction(.hint))
@@ -598,6 +638,10 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         let retryTask = Task { await session.resolvePendingCoachingAdvice() }
         let retryRequest = await provider.waitForRequest(id: "hosted-\(retryID)")
         XCTAssertEqual(.helpReopened, retryRequest.interaction.latestEvent.kind)
+        XCTAssertEqual(stagedRequest.position, retryRequest.position)
+        XCTAssertEqual(stagedRequest.interaction.tentativeMove, retryRequest.interaction.tentativeMove)
+        let retryContinuation = await provider.waitForContinuation(id: retryRequest.requestID)
+        XCTAssertEqual(stagedContinuation, retryContinuation)
         await provider.succeed(
             requestID: retryRequest.requestID,
             message: "How does your knight help from f3?",
@@ -770,10 +814,10 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
         )
     }
 
-    func fail(requestID: String) {
+    func fail(requestID: String, error: HostedCoachingTransportError = .serverUnavailable) {
         guard let call = pending.removeValue(forKey: requestID) else {
             fatalError("Missing hosted request \(requestID)")
         }
-        call.continuation.resume(throwing: HostedCoachingTransportError.serverUnavailable)
+        call.continuation.resume(throwing: error)
     }
 }

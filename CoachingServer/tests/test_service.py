@@ -13,6 +13,7 @@ from CoachingServer.service import (
     HostedCoachingServiceError,
 )
 from CoachingServer.chess_native_compiler import PROMPT_GENERATORS, compile_context
+from Tools.CoachingEval.openai_responses import OpenAIResponsesError
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -477,6 +478,26 @@ class HostedCoachingServiceTests(unittest.TestCase):
             "private timeout detail",
             "\n".join(record.getMessage() for record in captured.records),
         )
+
+    def test_logs_safe_provider_failure_phase_and_status(self):
+        for category, status, phase, headers_ms in (
+            ("timeout", None, "awaitingHeaders", None),
+            ("timeout", None, "readingBody", 12.5),
+            ("httpError", 429, "httpResponse", 15.0),
+        ):
+            with self.subTest(phase=phase):
+                error = OpenAIResponsesError("PRIVATE secret", category=category,
+                    http_status=status, phase=phase, headers_ms=headers_ms)
+                service = HostedCoachingService(provider=RecordingProvider(error=error),
+                    configuration=PRODUCTION_CONFIGURATION)
+                with self.assertLogs("ChessTutor.CoachingServer", level="INFO") as captured:
+                    with self.assertRaises(HostedCoachingServiceError) as caught:
+                        service.complete(hosted_request())
+                failure = next(e for e in decoded_events(captured) if e["event"] == "provider_request_failed")
+                expected = dict(category=category, phase=phase, http_status=status, headers_ms=headers_ms)
+                self.assertEqual(expected, failure.get("transport"))
+                self.assertEqual(expected, caught.exception.diagnostics["provider"].get("transport"))
+                self.assertNotIn("PRIVATE", " ".join(captured.output))
 
     def test_calls_provider_once_with_server_owned_prompt_settings_and_schema(self):
         provider = RecordingProvider()

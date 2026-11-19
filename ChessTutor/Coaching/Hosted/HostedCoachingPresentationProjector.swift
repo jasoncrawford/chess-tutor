@@ -11,9 +11,11 @@ struct HostedCoachingPresentationProjector: Sendable {
                 focus: .empty,
                 isThinking: true
             )
-        case .failed:
+        case .failed, .timedOut:
             return makePresentation(
-                message: "I couldn't get help right now.",
+                message: phase == .timedOut
+                    ? "The coach took too long to reply. Try again, or keep playing."
+                    : "I couldn't get help right now.",
                 actions: [
                     CoachingActionPresentation(
                         action: .hint,

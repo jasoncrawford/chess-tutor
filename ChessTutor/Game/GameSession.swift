@@ -742,11 +742,13 @@ final class GameSession {
                     continuationID: pending.continuationID,
                     correlation: pending.correlation
                 )
+                try Task.checkCancellation()
                 receiveHostedCoachingResponse(response, for: pending)
             } catch is CancellationError {
                 return
             } catch {
-                failHostedCoachingRequest(pending)
+                guard !Task.isCancelled else { return }
+                failHostedCoachingRequest(pending, error: error as? HostedCoachingTransportError ?? .serverUnavailable)
             }
             return
         }
@@ -829,7 +831,7 @@ final class GameSession {
             switch action {
             case .hint:
                 guard var hostedSession = hostedCoachingSession else { return nil }
-                if hostedSession.phase == .failed {
+                if hostedSession.phase == .failed || hostedSession.phase == .timedOut {
                     hostedSession.recordRetry()
                 } else {
                     hostedSession.recordHintAction()
@@ -919,11 +921,14 @@ final class GameSession {
         hostedCoachingSession = hostedSession
     }
 
-    private func failHostedCoachingRequest(_ pending: PendingHostedCoachingRequest) {
+    private func failHostedCoachingRequest(
+        _ pending: PendingHostedCoachingRequest,
+        error: HostedCoachingTransportError
+    ) {
         guard pendingHostedCoachingRequestIsApplicable(pending),
               var hostedSession = hostedCoachingSession else { return }
         pendingHostedCoachingRequest = nil
-        hostedSession.fail()
+        hostedSession.fail(error)
         hostedCoachingSession = hostedSession
     }
 

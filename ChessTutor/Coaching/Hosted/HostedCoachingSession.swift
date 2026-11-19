@@ -152,8 +152,8 @@ struct HostedCoachingSession: Equatable, Sendable {
         pulseID += 1
     }
 
-    mutating func fail() {
-        phase = .failed
+    mutating func fail(_ error: HostedCoachingTransportError = .serverUnavailable) {
+        phase = error == .timedOut ? .timedOut : .failed
         pulseID += 1
     }
 
@@ -175,4 +175,5 @@ enum HostedCoachingPhase: Equatable, Sendable {
     case thinking
     case ready(ModelCoachingChessNativeTurn)
     case failed
+    case timedOut
 }

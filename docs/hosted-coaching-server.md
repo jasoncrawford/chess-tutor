@@ -7,7 +7,7 @@ turn. The device never receives the OpenAI key.
 The server owns the system prompt, converts the structured device request
 into model-facing Markdown, and validates the model's strict JSON before
 returning it. The family deployment and development launcher select the accepted
-`astra-experience-v7-low-model.json` policy: GPT-6 Astra, low reasoning for all
+`CoachingServer/configs/production-v2.json` policy: GPT-6 Astra, low reasoning for all
 requests, the pinned `tutor-v13-experience-v6.md` prompt, and grounded-v4 compiler. A
 meaningful follow-up continues that Responses API chain with a compact update.
 Selecting a piece remains local and does not call the
@@ -30,16 +30,19 @@ service `ChessTutor-CoachingEval-OpenAI`, then run:
 ./scripts/run_hosted_coaching_dev.sh
 ```
 
-This convenience launcher reuses the immutable shared configuration at
-`Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json`:
+This convenience launcher uses the same configuration as family deployment at
+`CoachingServer/configs/production-v2.json`:
 GPT-6 Astra with low reasoning for initial and follow-up requests, the
 `tutor-v13-experience-v6.md` prompt, stored conversation reuse, a 2,048-token output
-cap, a 30-second timeout, and one attempt. The v13 compiler and response
+cap, a 60-second timeout, and one attempt. The v13 compiler and response
 contract are unchanged. Hosting this policy does not change the prompt or assert
 new benchmark results; it makes the play-tested policy available off the Mac.
+Only the timeout differs from the accepted `astra-experience-v7-low-model.json`
+benchmark configuration, which remains frozen at 30 seconds. Historical latency
+and failure-rate measurements therefore retain their original deadline.
 
 An explicitly set `CHESS_TUTOR_COACHING_MODEL_CONFIG` takes precedence. The
-launcher prints whether it selected the trial default or an explicit override,
+launcher prints whether it selected the family deployment policy or an explicit override,
 and passes that selection only to its server child, not the iPad. Empty or
 invalid overrides fail configuration loading; they do not silently fall back
 to Astra. To use the unchanged Sol policy locally:
@@ -90,7 +93,10 @@ server or model fails, the app shows Retry and never substitutes local advice.
 
 The base URL may be plain HTTP only in Debug builds and only for loopback or a
 private LAN address. Production configuration requires HTTPS. Device requests
-time out after 35 seconds.
+use a 70-second request timeout, leaving 10 seconds beyond the provider budget
+for server work and returning either advice or a useful timeout response.
+These are timeout limits, not artificial delays; successful replies return
+immediately. The player can still close Help while a request is pending.
 
 ## Reviewing one game
 
@@ -100,6 +106,16 @@ move summary, the validated advice shown by the app, provider metrics, outcome,
 HTTP status, and elapsed time. It deliberately excludes credentials, prompts,
 full rule arrays, provider/continuation IDs, reasoning, raw provider bodies, and
 exception text.
+
+Provider failures also include a bounded `provider.transport` object in the
+`coaching_turn` record (and `transport` on `provider_request_failed`): category,
+HTTP status, phase, and `headers_ms` when response headers arrived.
+`awaitingHeaders` includes connection setup **and** provider processing; it does
+not establish which was slow. `readingBody` means headers arrived before the
+failure. The metadata never contains exception text or provider content.
+HTTP 504 and device network timeouts show a specific timeout message with
+**Try again** / **Close help**, preserving the staged move and game.
+See [the November 18 incident replay](reports/2026-11-18-coaching-timeout-investigation.md).
 
 In a hosted build, open About and choose **Copy Coaching Game ID**. Use that
 value to filter retained server logs by `game_id`; within the result,
@@ -138,8 +154,13 @@ inspect the package without deploying: `python3 scripts/deploy_coaching_server.p
 --package /tmp/chess-runtime-inspection` (destination must not exist).
 
 `api/index.py` exposes the same Flask application. `vercel.json` routes requests,
-pins the family model policy and sets a 60-second ceiling; `.python-version`
-selects Python 3.12. The provider timeout remains 30 seconds.
+pins the family model policy and sets a 90-second ceiling; `.python-version`
+selects Python 3.12. The provider timeout is 60 seconds, with one attempt.
+Deploy the server and rebuild/install the iPad app to apply the coordinated
+60/70/90-second provider/client/platform limits. A server-only update leaves an
+old iPad build's 35-second client cutoff in place; update the iPad before or
+alongside the server. These limits provide headroom, not faster generation or
+a guarantee against all timeouts.
 See [Vercel's Python runtime](https://vercel.com/docs/functions/runtimes/python).
 
 This team's existing Pro plan retains runtime logs for **one day by default**.

@@ -3,7 +3,7 @@
   "scope": "jasoncrawford",
   "teamID": "team_Po8VYnXvTN5MGKEp4Z7TP6G4",
   "baseURL": "https://chess-tutor-coaching.vercel.app",
-  "modelConfiguration": "Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json",
+  "modelConfiguration": "CoachingServer/configs/production-v2.json",
   "openAIKeychainService": "ChessTutor-CoachingEval-OpenAI",
   "familyKeychainService": "ChessTutor-HostedCoaching-Family",
   "runtimeFiles": [
