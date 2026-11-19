@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": { "api/index.py": { "maxDuration": 60 } },
+  "env": {
+    "CHESS_TUTOR_COACHING_MODEL_CONFIG": "Tools/CoachingEval/benchmark/configs/models/astra-experience-v7-low-model.json"
+  },
   "rewrites": [
     {
       "source": "/(.*)",
