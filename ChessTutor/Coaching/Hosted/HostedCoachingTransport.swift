@@ -117,7 +117,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = body
-        urlRequest.timeoutInterval = 35
+        // Outwait the 60-second provider budget so the server can return its
+        // validated advice or timeout response before the device gives up.
+        urlRequest.timeoutInterval = 70
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")

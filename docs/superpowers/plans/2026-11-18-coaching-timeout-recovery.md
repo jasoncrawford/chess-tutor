@@ -15,7 +15,7 @@
 - Keep GPT-6 Astra, low reasoning, tutor-v13-experience-v6 and grounded-v4 unchanged.
 - At most four paid diagnostic calls initially; no model sweep or judge run.
 - No automatic retry that doubles paid requests; retry remains player-controlled.
-- Do not change timeout budgets without evidence that additional time permits completion.
+- Original investigation constraint: do not change timeout budgets without evidence that additional time permits completion. Superseded for the scoped mitigation by the user's November 19 approval to increase timeout headroom; do not claim this proves the cause of the original failures.
 - No device reset, game deletion, or intervention in A16.
 
 ## Review focus
@@ -61,3 +61,34 @@ Files: hosted transport/contracts/session/projector, GameSession hosted error ha
 - [x] Run four initial-position replays in a disposable Vercel project in the same region, allowing 90 seconds for diagnosis. All four completed; the slowest provider call took 29.9 seconds, of which OpenAI reported 29.8 seconds processing. This supports provider-side variability but does not reproduce a >30-second call.
 - [x] Remove temporary projects/deployments and verify production is unchanged. Document the incomplete final phase trace; make future log collection wait for terminal events before cleanup.
 - [x] Verify and review the repeatable diagnostic tool; retain the evidence and limitations in PR #26. Fresh full suites: 72 server and 381 evaluation-tooling tests pass, zero skips. The single incremental review finding (failure-path log loss) was reproduced and fixed. No production deadline change or additional paid run is authorized by this checklist.
+
+### Task 3: Coordinated timeout headroom (November 19 approval)
+
+**Design:** The user accepted more timeout headroom. Use a 60-second provider
+timeout, 70-second iPad request timeout, and 90-second Vercel function limit.
+These are maximum waits, not imposed delays. Preserve one attempt, cancellation,
+retry behavior, model, prompts, token limit and reasoning. More headroom may
+prevent premature failures; it is not a speedup or a proven cure. Changing the
+model was the alternative and is outside this change.
+
+**Files:** Add `CoachingServer/configs/production-v2.json`, copied from the
+accepted `astra-experience-v7-low-model.json` with only timeout 60. Point
+`CoachingServer/deployment.json`, `vercel.json` and the development launcher to
+it. Do not rewrite historical benchmark inputs or the legacy v1 configuration.
+Change `HostedCoachingTransport.swift` to send timeout 70. Update deployment,
+launcher and native transport tests and the incident report/runbook.
+
+**Interfaces:** Existing configuration schema and transport API; no new API.
+
+**Review focus:** Deployment/dev must select the same new config; the packaged
+service must pass timeout 60 to the provider; client/platform must leave margins;
+quality settings and historical benchmark configurations must not drift; no
+automatic retry. The user subsequently explicitly authorized merging once green,
+updating the connected family iPad and deploying the server change.
+
+- [x] Write failing tests for the actual packaged provider call's 60-second budget, dev/production alignment and only-timeout difference from the accepted benchmark; update the native outgoing-request test for 70 seconds and cross-layer margins.
+- [x] Run Python focused tests and the native transport test; expect failures at the old 30/35-second budgets.
+- [x] Apply the coordinated configuration changes; update current runbook/status without rewriting historical experiment results.
+- [x] Run complete Python and native suites; expect zero failures/skips. No paid requests or benchmark grading. Result: 1,013 native unit +11 UI +73 server +381 eval-tooling tests pass, zero skips.
+- [x] Obtain one final review, address important findings with regressions, commit/push to PR #26. Review complete: stale `.env.example` override fixed after a failing regression; an extra packaged timeout/one-attempt negative test is a deferred minor (runtime attempt policy remains1).
+- [ ] With the user's explicit authorization, merge only after GitHub checks pass, then update the connected family iPad and deploy the server configuration. Verify health and authentication without paid model calls. If the device is unavailable, clearly report that its old client cutoff remains until it is updated.

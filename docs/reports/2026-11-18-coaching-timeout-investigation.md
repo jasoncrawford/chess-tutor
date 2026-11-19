@@ -1,5 +1,39 @@
 # Family iPad coaching timeouts — November 18
 
+## November 19 mitigation
+
+The user approved increasing timeout headroom. PR #26 now selects a dedicated
+`CoachingServer/configs/production-v2.json`: the accepted Astra experience-v7
+policy with **only** its provider timeout raised from 30 to 60 seconds. The iPad
+request timeout is 70 seconds and Vercel's function ceiling is 90 seconds.
+The development launcher selects the same configuration. Historical benchmark
+inputs and the legacy v1 config remain untouched; this changes no model,
+prompt, reasoning, output-token limit or automatic-retry policy.
+
+This is an approved mitigation, not proof that it rescues the originally failed
+requests. Successful requests still return immediately. No additional paid
+replay or quality benchmark was run for this configuration change. The live
+server and family iPad have not been updated: both a deployment and an app
+rebuild/install are required, with the newer iPad installed before or alongside
+the server so the old 35-second client cutoff does not mask the extra headroom.
+The investigation and limits described below are the earlier checkpoints.
+
+Verification for the headroom change: **1,013 native unit tests, 11 UI tests,
+73 server tests and 381 evaluation-tooling tests passed, zero failures/skips**.
+Native result: `/tmp/chess-headroom-full.xcresult`; Python logs:
+`/tmp/chess-headroom-server-full.log` and `/tmp/chess-headroom-eval-full.log`.
+The packaged-app/provider, development-policy and native outgoing-request tests
+were observed failing with the old limits before the changes. Final review also
+caught `.env.example` silently restoring the old timeout; a shell/launcher
+regression reproduced 30 seconds and passed after making the example override
+optional. One minor suggestion is deferred: an additional packaged-server test
+that counts attempts on a provider timeout (the attempt policy remains one;
+timeout mapping and exact policy parity already have coverage).
+
+The user subsequently authorized merging once CI is green and rolling out both
+parts. As of this source checkpoint that rollout is pending; do not infer that
+the live endpoint or physical iPad is updated from the passing local tests.
+
 ## Finding
 
 The reported failures were the server's 30-second provider timeout, not a
@@ -96,8 +130,8 @@ The most likely explanation is provider processing variability colliding with
 our 30-second deadline. However, none of these provider calls exceeded 30
 seconds (call 2 came within about 0.1 seconds). Therefore this experiment did
 **not** demonstrate that a longer timeout rescues a formerly failing request.
-It is a diagnostic finding, not a root-cause fix. Production remains at
-30/35/60 seconds; no prompt, model, reasoning, or deployment changes were made.
+It is a diagnostic finding, not a root-cause fix. At this diagnostic checkpoint,
+production remained at 30/35/60 seconds; no prompt, model, reasoning, or deployment changes were made.
 A coordinated deadline increase remains a possible mitigation, not a latency
 improvement. Changing model/effort would require quality evaluation.
 

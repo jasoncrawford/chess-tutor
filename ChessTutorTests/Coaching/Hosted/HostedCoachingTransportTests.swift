@@ -55,7 +55,15 @@ final class HostedCoachingTransportTests: XCTestCase {
         XCTAssertEqual("POST", sent.httpMethod)
         XCTAssertEqual("Bearer private-token", sent.value(forHTTPHeaderField: "Authorization"))
         XCTAssertEqual("application/json", sent.value(forHTTPHeaderField: "Content-Type"))
-        XCTAssertEqual(35, sent.timeoutInterval)
+        XCTAssertEqual(70, sent.timeoutInterval)
+        // The device must outwait the provider and leave room for the 504 reply.
+        let deployment = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf:
+            repositoryRoot.appendingPathComponent("CoachingServer/deployment.json"))) as? [String: Any])
+        let policyPath = try XCTUnwrap(deployment["modelConfiguration"] as? String)
+        let policy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf:
+            repositoryRoot.appendingPathComponent(policyPath))) as? [String: Any])
+        let providerTimeout = try XCTUnwrap(policy["timeoutSeconds"] as? Double)
+        XCTAssertGreaterThanOrEqual(sent.timeoutInterval, providerTimeout + 10)
         XCTAssertEqual([64 * 1024], loader.maximumByteCounts)
         let sentBody = try XCTUnwrap(sent.httpBody)
         let sentObject = try XCTUnwrap(

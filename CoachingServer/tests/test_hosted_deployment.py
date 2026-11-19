@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import shutil
 
+from CoachingServer.tests.test_service import RecordingProvider, hosted_request
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/deploy_coaching_server.py"
@@ -61,9 +62,13 @@ class HostedDeploymentTests(unittest.TestCase):
             environment.update(json.loads((bundle / "vercel.json").read_text())["env"])
             probe = '''
 from pathlib import Path
+import json
 import os
+import sys
+from unittest.mock import patch
 from api.index import app
 from CoachingServer.model_configuration import HostedModelConfiguration
+from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 c = HostedModelConfiguration.load(os.environ["CHESS_TUTOR_COACHING_MODEL_CONFIG"], Path.cwd())
 assert c.model == "gpt-6-astra"
 assert c.user_prompt_generator == "chess-native-grounded-v4"
@@ -76,8 +81,21 @@ assert client.post("/v1/coaching-turn", json={}, headers={"Authorization": "Bear
 assert client.post("/v1/coaching-turn", json={}, headers={"Authorization": "Bearer test-family-token"}).status_code == 400
 for path in ("/.env", "/CoachingServer/http_app.py", "/vercel.json"):
     assert client.get(path).status_code == 404
+fixture = json.load(sys.stdin)
+with patch.object(OpenAIResponsesClient, "complete", return_value=fixture["response"]) as provider:
+    for previous in (None, "resp_previous"):
+        fixture["request"]["previousResponseID"] = previous
+        result = client.post("/v1/coaching-turn", json=fixture["request"],
+                             headers={"Authorization": "Bearer test-family-token"})
+        assert result.status_code == 200, result.json
+        assert provider.call_args.kwargs["timeout"] == 60, provider.call_args.kwargs["timeout"]
+    assert provider.call_count == 2  # one attempt per turn, no new automatic retry
+platform = json.loads(Path("vercel.json").read_text())["functions"]["api/index.py"]["maxDuration"]
+assert platform >= c.timeout_seconds + 30
 '''
-            result = subprocess.run([sys.executable, "-c", probe], cwd=bundle, env=environment, capture_output=True, text=True)
+            fixture = json.dumps({"request": hosted_request(), "response": RecordingProvider().response})
+            result = subprocess.run([sys.executable, "-c", probe], cwd=bundle, env=environment,
+                                    input=fixture, capture_output=True, text=True)
             self.assertEqual(0, result.returncode, result.stderr)
 
     def test_package_refuses_to_overwrite_an_existing_directory(self):
