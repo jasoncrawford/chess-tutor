@@ -53,3 +53,11 @@ Files: hosted transport/contracts/session/projector, GameSession hosted error ha
 - Incident: three warm-server initial requests timed out after ~30 seconds. Failing FEN `r2q2k1/ppp5/6N1/2PP1r1p/3Q4/5p2/PPP2PP1/R4RK1 w - - 0 24`.
 - Four controlled probes completed; no production deadline or coaching policy changes.
 - Final verification: 1,024 native, 66 server and 380 evaluation-tooling tests passed, with zero skips. All four independent-review findings fixed; the corrected URLSession fixture demonstrated the old error-body bug before the final green run.
+
+### Follow-up: isolate slow hosted processing
+
+- [x] User approved pursuing the unresolved cause. Cap this follow-up at four additional paid requests, leaving the live deployment and quality policy unchanged.
+- [x] Instrument connection, request-send, headers and completion in an opt-in diagnostic bundle, with the provider's reported processing time and safe client correlation IDs.
+- [x] Run four initial-position replays in a disposable Vercel project in the same region, allowing 90 seconds for diagnosis. All four completed; the slowest provider call took 29.9 seconds, of which OpenAI reported 29.8 seconds processing. This supports provider-side variability but does not reproduce a >30-second call.
+- [x] Remove temporary projects/deployments and verify production is unchanged. Document the incomplete final phase trace; make future log collection wait for terminal events before cleanup.
+- [x] Verify and review the repeatable diagnostic tool; retain the evidence and limitations in PR #26. Fresh full suites: 72 server and 381 evaluation-tooling tests pass, zero skips. The single incremental review finding (failure-path log loss) was reproduced and fixed. No production deadline change or additional paid run is authorized by this checklist.

@@ -8,9 +8,11 @@ returned HTTP 504 at approximately 30.04 seconds. Vercel reported warm
 functions, no crash, and a 60-second platform limit. Prompt compilation took
 only a few milliseconds. The failure was inside the outbound provider call.
 
-This identifies the failing boundary, **not** whether the delay was provider
-queueing/generation or the intervening network. The old logs did not record
-whether response headers had arrived. No provider outage is established.
+The original logs identify the failing boundary, **not** whether the delay was
+provider processing or the intervening network. The longer hosted replay below
+strongly supports provider processing as the source of the slow responses, but
+did not reproduce a provider call exceeding 30 seconds. No provider outage is
+established, and the original timed-out calls have no phase measurements.
 
 ## Controlled replay
 
@@ -54,6 +56,81 @@ Local diagnostic artifacts (not source-controlled):
 - `/tmp/chess-timeout-probe.jsonl`
 - `/tmp/chess-timeout-probe-repeat.jsonl`
 
+## Longer hosted replay (November 19 UTC / November 18 local)
+
+Following the user's request to pursue the cause rather than just improve error
+handling, four additional paid calls replayed the same rule-generated request
+through a disposable Vercel project in `iad1`. It used the same app, prompt,
+model and reasoning policy. Only the generated diagnostic bundle changed the
+provider/platform deadlines to 90/120 seconds; its HTTP caller allowed 110
+seconds. Each call was an initial Help request with no continuation. No paid
+retry or model sweep ran.
+
+The diagnostic measured DNS/TCP/verified TLS, request submission, response
+headers, and body completion. OpenAI's `openai-processing-ms` response header
+reports provider processing time; it does not distinguish internal queueing
+from inference. See the [OpenAI API reference](https://developers.openai.com/api/reference/overview/).
+
+| Call | HTTPS connected | Provider reported processing | Provider call total | Hosted HTTP wall time | Reasoning tokens |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 9.8 ms | 12.559 s | 13.340 s | 13.672 s | 296 |
+| 2 | 7.2 ms | 29.766 s | 29.897 s | 30.218 s | 755 |
+| 3 | 7.7 ms | 28.181 s | 28.248 s | 28.460 s | 776 |
+| 4 | 8.2 ms | Not retained | 28.264 s | 28.672 s | 661 |
+
+All four returned HTTP 200. For the three fully retained traces, body
+reading/parsing after response headers took less than 10 ms. The fourth
+response's metrics were retained, but its final phase logs had not appeared
+when the project was removed. They could not be retrieved afterward. The
+repeatable tool now polls for terminal log events before cleanup and explicitly
+reports any missing events; no extra paid call was made to fill that gap.
+
+These results show that slow **successful** hosted calls spend almost all their
+time in provider processing, not connection setup, request upload, prompt
+compilation or response parsing. The input was constant at 1,889 tokens, with
+1,886 cached input tokens on calls 2–4. Reported reasoning output varied from
+296 to 776 tokens, but this correlation does not prove reasoning alone caused
+the latency.
+
+The most likely explanation is provider processing variability colliding with
+our 30-second deadline. However, none of these provider calls exceeded 30
+seconds (call 2 came within about 0.1 seconds). Therefore this experiment did
+**not** demonstrate that a longer timeout rescues a formerly failing request.
+It is a diagnostic finding, not a root-cause fix. Production remains at
+30/35/60 seconds; no prompt, model, reasoning, or deployment changes were made.
+A coordinated deadline increase remains a possible mitigation, not a latency
+improvement. Changing model/effort would require quality evaluation.
+
+Diagnostic setup initially encountered Vercel preview login protection. Those
+attempts were removed before any model call. The eventual disposable project
+used a random bearer token, one-hour expiry, and checked rejection of
+unauthenticated requests before making the four calls. Its deployment and
+project were deleted afterward. The live production deployment ID and access
+protection were verified unchanged.
+
+Reproduction, **only with approval for up to four additional paid requests**:
+
+```sh
+.venv/bin/python -m scripts.probe_hosted_coaching \
+  --request /tmp/chess-nov18-incident-request.json --calls 4
+```
+
+This requires `VERCEL_TOKEN`, the existing OpenAI Keychain credential, and the
+neutral request exported by
+`HostedCoachingIncidentReplayTests.testNovember18TimeoutPositionCanBeReplayedAndExported`
+with `COACHING_INCIDENT_REQUEST_PATH` set in the test process. Credentials are
+never passed as command arguments or printed. The command creates and deletes
+only its newly named diagnostic project; it does not promote a deployment into
+the production project. It logs timing/usage, not prompts, replies or reasoning
+content. The diagnostic implementation is excluded from the production runtime
+manifest.
+
+Evidence: `/tmp/chess-hosted-rootcause-replay-6.jsonl`; diagnostic game
+`3c416ddd-86ad-4791-92fc-27377a58e099`, now-deleted deployment
+`dpl_G6LR6DvLtdyN2ZhZCLNdeMeYKmER`. Total additional usage reported by the four
+successful calls: 7,556 input tokens (5,658 cached), 2,767 output tokens,
+including 2,488 reasoning tokens.
+
 ## Changes
 
 - Preserve response-body timeouts as `timeout`, instead of converting them to
@@ -90,6 +167,18 @@ results:
 - `git diff --check` passed. One independent review; all four important findings
   fixed and covered by regression tests, with none deferred.
 
+After the longer hosted diagnostic, fresh full Python runs passed 72 server
+tests and 381 evaluation-tooling tests, with zero failures or skips
+(`/tmp/chess-rootcause-server-final.log` and
+`/tmp/chess-rootcause-eval-final.log`). Native source was unchanged from the
+1,024-test run above. The incremental diagnostic review found one important
+issue: caller-side exceptions could skip log collection before deletion. A
+failing lifecycle regression reproduced it; attempted-call logs are now
+collected in `finally`, with deletion in a nested `finally`. The regression
+passed, as did the complete suites after the fix. No review finding was
+deferred. Log-ingestion polling also has incomplete/complete regression cases;
+cleanup and call-cap tests make no external requests.
+
 These are local results. The PR is left for review; no new production deployment
 or physical-iPad installation is implied. Model, prompt, reasoning and benchmark
 configurations are unchanged, so no paid quality-evaluation run was performed.
@@ -99,7 +188,8 @@ After merging/deploying the diagnostics, collect the next failure's
 and provider processing: it must not be labeled as proven model reasoning time.
 A `readingBody` failure establishes that an HTTP response had already begun.
 If the slow response problem recurs, use that evidence for a longer hosted
-diagnostic or a separately budgeted latency-policy experiment.
+diagnostic (the first four-call hosted run above did not exceed 30 seconds) or
+a separately budgeted latency-policy experiment.
 
 Execution decisions: native test waits overlapped Python implementation/tests;
 the initial full native run was stopped after review found additional cases,
