@@ -1,0 +1,276 @@
+{
+  "schemaVersion": "coaching-judge-sensitivity.v1",
+  "provenance": "Agent-authored visual sensitivity contrasts, not human calibration. Mechanics (reversed arrows, stale origins, discovery spoilers) are rejected by the shared validator fixtures. These controls test semantic reference identity, coordinate density, and unnecessary reset instructions. Require fresh sensitivity evidence before interpreting visual grades.",
+  "cases": [
+    {
+      "id": "wrong-same-kind-piece",
+      "caseID": "v02-threat-3",
+      "source": {
+        "kind": "authored visual contrast"
+      },
+      "position": {
+        "id": "v02-threat-3",
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K1N1 w - - 0 1",
+        "move": null,
+        "event": "pieceSelected"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "g1"
+          },
+          {
+            "type": "text",
+            "text": ". Can you move it out of the way?"
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "max": 2
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": true
+      }
+    },
+    {
+      "id": "correct-linked-piece",
+      "caseID": "v02-threat-3",
+      "source": {
+        "kind": "authored visual contrast"
+      },
+      "position": {
+        "id": "v02-threat-3",
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K1N1 w - - 0 1",
+        "move": null,
+        "event": "pieceSelected"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": ". Can you move it out of the way?"
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "min": 4
+        },
+        "childClarity": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "coordinate-heavy",
+      "caseID": "v02-threat-3",
+      "source": {
+        "kind": "authored visual contrast"
+      },
+      "position": {
+        "id": "v02-threat-3",
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K1N1 w - - 0 1",
+        "move": null,
+        "event": "pieceSelected"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "The rook on b8 attacks the knight on b1 along b7, b6, b5, b4, b3 and b2; g1 is safe from b8. Move the knight on b1 off that file."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "childClarity": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "concise-reference",
+      "caseID": "v02-threat-3",
+      "source": {
+        "kind": "authored visual contrast"
+      },
+      "position": {
+        "id": "v02-threat-3",
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K1N1 w - - 0 1",
+        "move": null,
+        "event": "pieceSelected"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": ". Can you move it out of the way?"
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "stageMove"
+      },
+      "scores": {
+        "childClarity": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "mandatory-reset-detour",
+      "caseID": "v05-draft-revision",
+      "source": {
+        "kind": "authored visual contrast"
+      },
+      "position": {
+        "id": "v05-draft-revision",
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "move": "g1h3",
+        "event": "actionChosen"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "First tap \"Try another move\", then move your knight from g1 to f3 to help control the middle."
+          }
+        ],
+        "actions": [],
+        "visuals": [
+          {
+            "type": "move",
+            "from": "g1",
+            "to": "f3"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coherenceAndAnswerability": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "direct-draft-revision",
+      "caseID": "v05-draft-revision",
+      "source": {
+        "kind": "authored visual contrast"
+      },
+      "position": {
+        "id": "v05-draft-revision",
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "move": "g1h3",
+        "event": "actionChosen"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "h3"
+          },
+          {
+            "type": "text",
+            "text": " "
+          },
+          {
+            "type": "square",
+            "text": "here",
+            "square": "f3"
+          },
+          {
+            "type": "text",
+            "text": " to help control the middle."
+          }
+        ],
+        "actions": [],
+        "visuals": [
+          {
+            "type": "move",
+            "from": "g1",
+            "to": "f3"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coherenceAndAnswerability": {
+          "min": 4
+        },
+        "chessCorrectness": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    }
+  ]
+}

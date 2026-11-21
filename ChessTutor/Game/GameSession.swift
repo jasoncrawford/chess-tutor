@@ -126,8 +126,7 @@ final class GameSession {
     var coachingPresentation: CoachingPresentation? {
         if let hostedCoachingSession {
             return HostedCoachingPresentationProjector().presentation(
-                for: hostedCoachingSession.phase,
-                pulseID: hostedCoachingSession.pulseID
+                for: hostedCoachingSession, board: committedState.board, tentativeMove: tentativeMove
             )
         }
         return coachingSession?.presentation
@@ -143,13 +142,7 @@ final class GameSession {
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
         if let hostedCoachingSession {
-            if hostedCoachingSession.isAwaitingPieceAnswer {
-                return .identify(allowsMoveRevision: false)
-            }
-            return HostedCoachingPresentationProjector().presentation(
-                for: hostedCoachingSession.phase,
-                pulseID: hostedCoachingSession.pulseID
-            ).boardTask
+            return coachingPresentation?.boardTask ?? .none
         }
         return coachingSession?.authoritativeBoardTask ?? .none
     }
@@ -256,13 +249,14 @@ final class GameSession {
 
         switch committedState.result {
         case .ongoing:
-            return BoardGuidancePresentation.make(
+            let guidance = BoardGuidancePresentation.make(
                 state: state,
                 analysis: displayedAnalysis,
                 selectedSquare: selectedSquare,
                 showsSelectedReach: assistSettings.showLegalMovesOnSelection,
                 keepsOnlyCheckmateKingThreat: false
             )
+            return hostedCoachingSession == nil ? guidance : guidance.quietForCoaching(in: state.board)
         case .checkmate:
             return BoardGuidancePresentation.make(
                 state: state,
@@ -786,6 +780,10 @@ final class GameSession {
         intent: CoachingSquareInteractionIntent
     ) -> Bool {
         if var hostedSession = hostedCoachingSession {
+            if intent == .dragStart, hostedSession.isAnswering {
+                playInsteadOfAnswering()
+                return false
+            }
             // A destination tap is a move, even while the tutor asks the player
             // to identify a piece. Use allowed moves, independent of visible
             // hints and of whether the move will ultimately pass check rules.
@@ -802,9 +800,8 @@ final class GameSession {
                       in: committedState
                   ) else {
                 logCoachingEvent("board_input", fields: ["intent": intent == .tap ? "tap" : "drag", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "local"])
-                return false
+                return hostedSession.isAnswering && intent == .tap
             }
-            selectWithoutSynchronizing(square)
             hostedCoachingSession = hostedSession
             logCoachingEvent("board_input", fields: ["intent": "tap", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "answer"])
             queueHostedCoachingRequest(debounced: true)
@@ -889,6 +886,26 @@ final class GameSession {
         hostedCoachingSession = nil
         pendingHostedCoachingRequest = nil
         hostedCoachingWorkID = nil
+    }
+
+    func replayCoachingReference(at runIndex: Int) {
+        hostedCoachingSession?.replayReference(at: runIndex)
+    }
+
+    var coachingReferenceReplayID: String? { hostedCoachingSession?.referenceReplayID }
+
+    func expireCoachingReference(replayID: String?) {
+        hostedCoachingSession?.expireReference(replayID: replayID)
+    }
+
+    func replayCoachingVisual() {
+        hostedCoachingSession?.replayVisual()
+    }
+
+    func playInsteadOfAnswering() {
+        guard hostedCoachingSession?.isAnswering == true else { return }
+        pendingHostedCoachingRequest = nil
+        hostedCoachingSession?.playInstead()
     }
 
     private func queueHostedCoachingRequest(debounced: Bool = false) {

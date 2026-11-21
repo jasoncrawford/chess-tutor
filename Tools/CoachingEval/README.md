@@ -576,3 +576,34 @@ V5's terminal-outcome evidence addresses that retained failure.
 
 See [the November 4 experience report](../../docs/reports/2026-11-04-coaching-experience.md)
 for retained comparisons, failed candidates, and latency limitations.
+
+## Visual coaching regression
+
+`bash scripts/run_coaching_regressions.sh --visual` exports ten native-generated
+turns (seven independent cases and one three-turn sequence) and their complete
+rendered prompts, with **no API calls**. It requires a clean checkout so the
+export can be bound to a commit. Read the printed artifact directory's
+`prompts/prompts.json` before running a changed prompt.
+
+`bash scripts/run_coaching_regressions.sh --visual --paid --max-cost 10` opts into
+the paid run using the existing macOS Keychain item. This is a new experiment
+cap, not permission to spend a previous cap again. For iterations, invoke
+`Tools.CoachingEval.benchmark.visual_evaluation` with a new `--output` and the
+same `--budget-journal` throughout. Never run two spending clients concurrently.
+Existing output directories are rejected; interrupted grading can use the
+existing grade/checkpoint recovery workflow without replaying candidate calls.
+
+The pinned visual candidate shares its exact compiler, schema and validator
+with the v4 server. The unchanged judge rubric sees both readable text and
+the exact links/arrows. Six agent-authored semantic controls, repeated three
+times, test wrong-piece links, coordinate density and unnecessary draft-reset
+instructions. They are sensitivity tests, **not human calibration**. Shared
+Python/Swift fixtures separately reject reversed attacks, stale piece origins,
+and discovery-spoiling links/arrows. Ordinary prose is not penalized merely for
+having no links.
+
+Reports retain raw structured output, mechanical failures, judge grades,
+latency, token use and estimated cost. `visualMetrics` counts links, arrows,
+coordinates and legacy-unavailable capabilities separately from quality.
+This small development suite does not establish broad chess reliability or
+authorize production promotion; use the existing broader suites as well.

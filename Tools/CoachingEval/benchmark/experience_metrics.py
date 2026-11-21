@@ -3,6 +3,7 @@
 import math
 import re
 import statistics
+from Tools.CoachingEval.benchmark.visual_metrics import message_text
 
 
 class ExperienceMetrics:
@@ -38,12 +39,12 @@ class ExperienceMetrics:
                 turn = row.get("parsedTurn") or {}
                 if valid:
                     valid_messages += 1
-                    marks = turn.get("message", "").count("!")
+                    marks = message_text(turn).count("!")
                     exclamatory_messages += marks > 0
                     exclamation_marks += marks
                 if valid and turn.get("expects") == "chooseWhetherToPlay":
                     confirmation_count += 1
-                    message = turn.get("message", "").strip().lower()
+                    message = message_text(turn).strip().lower()
                     closing = re.split(r"[.!]", message)[-1].strip()
                     if closing.endswith("?") and re.search(r"\b(keep|play|try another)\b", closing):
                         endings.append(closing)

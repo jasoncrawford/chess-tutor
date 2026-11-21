@@ -1,4 +1,46 @@
 struct HostedCoachingPresentationProjector: Sendable {
+    func presentation(for session: HostedCoachingSession, board: Board, tentativeMove: Move?) -> CoachingPresentation {
+        if session.isPlayingInstead {
+            return makePresentation(message: "Try a move on the board.", actions: [closeAction], focus: .empty, boardTask: .move)
+        }
+        let waitingForAnswer = session.phase == .thinking && session.isAnswering
+        let phase = waitingForAnswer ? session.displayedTurn.map(HostedCoachingPhase.ready) ?? session.phase : session.phase
+        var result = presentation(for: phase, pulseID: session.pulseID)
+        result.canPlayInstead = session.isAnswering
+        result.isAwaitingAnswer = waitingForAnswer
+        guard case .ready(let turn) = phase else { return result }
+        result.visualContent = turn.visualContent
+        result.canReplayVisual = !waitingForAnswer && turn.visualContent?.visuals.isEmpty == false
+        var emphasized = Set<Square>()
+        var candidates = Set<Square>()
+        var paths = Set<CoachFocusPath>()
+        if let answer = session.answerSquare {
+            emphasized.insert(answer)
+        } else if let reference = session.referenceSquare.flatMap(square) {
+            emphasized.insert(reference)
+        } else if let content = turn.visualContent {
+            for cue in content.visuals {
+                guard let from = square(cue.endpoints.from), let to = square(cue.endpoints.to) else { continue }
+                switch cue {
+                case .attack:
+                    paths.insert(.init(source: from, destination: to, role: .attacker))
+                case .move:
+                    let revision = tentativeMove?.from == from && tentativeMove?.to != to
+                    let source = revision ? tentativeMove!.to : from
+                    let knight = board[from]?.kind == .knight
+                    paths.insert(.init(source: source, destination: to, role: .candidate,
+                        geometryKind: revision ? .relocation : knight ? .knight : .direct))
+                }
+                candidates.insert(to)
+            }
+        }
+        if turn.visualContent != nil || session.answerSquare != nil {
+            result.focus = .init(emphasizedSquares: emphasized, candidateSquares: candidates,
+                                paths: paths, pulseID: session.pulseID)
+        }
+        return result
+    }
+
     func presentation(
         for phase: HostedCoachingPhase,
         pulseID: Int

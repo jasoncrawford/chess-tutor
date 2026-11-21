@@ -232,6 +232,12 @@ struct ChessBoardView: View {
                     viewingAngle: viewingAngle
                 )
 
+                piecesOverlay(
+                    side: side,
+                    origin: origin,
+                    guidance: guidance
+                )
+
                 if let coaching = session.coachingPresentation {
                     CoachFocusOverlay(
                         focus: coaching.focus,
@@ -240,13 +246,16 @@ struct ChessBoardView: View {
                         viewingAngle: viewingAngle,
                         reducesMotion: accessibilityReduceMotion
                     )
+                    if coaching.canPlayInstead {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(AppTheme.moveInlayHighlight, lineWidth: 6)
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(AppTheme.coachFocusRing, lineWidth: 3))
+                            .frame(width: side, height: side)
+                            .position(x: origin.x + side / 2, y: origin.y + side / 2)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                 }
-
-                piecesOverlay(
-                    side: side,
-                    origin: origin,
-                    guidance: guidance
-                )
 
                 if let dragState {
                     PieceIconView(piece: dragState.piece)

@@ -1,6 +1,10 @@
 #!/bin/bash
 # Export real Swift inputs and evaluate the current local coach. Paid calls are opt-in.
 set -euo pipefail
+if [ "${1:-}" = "--visual" ]; then
+  shift
+  exec bash "$(dirname "$0")/run_visual_coaching_eval.sh" "$@"
+fi
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repository_root"

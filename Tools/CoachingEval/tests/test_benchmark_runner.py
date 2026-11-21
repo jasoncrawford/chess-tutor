@@ -61,6 +61,26 @@ class FakeClient:
 
 
 class BenchmarkRunnerTests(unittest.TestCase):
+    def test_visual_candidate_uses_shared_server_schema_and_preserves_runs(self):
+        configuration = load_candidate(ROOT / "Tools/CoachingEval/benchmark/configs/astra-visual-v1-low.json", ROOT)
+        client = FakeClient()
+        original = client.complete
+        def visual_reply(**arguments):
+            reply = original(**arguments)
+            reply["model"] = configuration.model_configuration.model
+            reply["output_text"] = json.dumps(dict(message=[dict(type="text", text="What could help in the middle?")],
+                                                  actions=["hint"], visuals=[], expects="stageMove"))
+            return reply
+        client.complete = visual_reply
+        destination = self.root / "visual"
+        run_candidates(corpus=self.corpus, configurations=[configuration], mode="regression", destination=destination,
+                       provider_factory=lambda _: client, price_table=load_prices(ROOT / "Tools/CoachingEval/benchmark/pricing-v2.json"))
+        rows = [json.loads(line) for line in (destination / "records.jsonl").read_text().splitlines()]
+        self.assertTrue(all(row["mechanicalValidation"]["valid"] for row in rows))
+        self.assertIsInstance(rows[0]["parsedTurn"]["message"], list)
+        self.assertIn("visuals", client.calls[0]["schema"]["required"])
+        self.assertNotIn("focus", client.calls[0]["schema"]["required"])
+
     def test_stop_on_provider_failure_preserves_failed_case_status_and_timing(self):
         client = FakeClient(failures=[OpenAIResponsesError("secret", category="http", http_status=502)])
         destination = self.root / "provider-stopped"

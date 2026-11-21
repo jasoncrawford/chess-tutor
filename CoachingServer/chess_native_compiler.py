@@ -108,11 +108,11 @@ def compile_outcome_follow_up_context(request, prompt_version):
 
 
 def compile_visual_context(request, prompt_version):
-    return VisualContextCompiler.compile(request, compile_outcome_context(request, "tutor-v13"), prompt_version)
+    return VisualContextCompiler.compile(parse_neutral_request(request), compile_outcome_context(request, "tutor-v13"), prompt_version)
 
 
 def compile_visual_follow_up_context(request, prompt_version):
-    return VisualContextCompiler.compile(request, compile_outcome_follow_up_context(request, "tutor-v13"), prompt_version)
+    return VisualContextCompiler.compile(parse_neutral_request(request), compile_outcome_follow_up_context(request, "tutor-v13"), prompt_version)
 
 
 PROMPT_GENERATORS = {

@@ -1,0 +1,8 @@
+{
+  "baseline": false,
+  "id": "astra-visual-v2-low",
+  "modelConfigurationPath": "CoachingServer/configs/visual-v2.json",
+  "modelConfigurationSHA256": "672fdbca23e03bc67b2fb55dd1723a58000b6514e37b0cbbfccb0fc9a6550c01",
+  "pricingVersion": "openai-2026-09-06",
+  "schemaVersion": "coaching-quality-candidate.v2"
+}

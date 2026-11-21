@@ -53,7 +53,7 @@ enum CoachBoardAccessibilityContext {
         guard case .identify = presentation?.boardTask else {
             return nil
         }
-        return presentation?.instruction
+        return presentation?.instruction ?? "Tap a piece to answer the coach"
     }
 }
 
@@ -81,9 +81,7 @@ struct CoachFocusOverlay: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .onChange(of: focus.pulseID) {
-            runPulse()
-        }
+        .task(id: focus.pulseID) { await runPulse() }
         .onChange(of: reducesMotion) {
             if reducesMotion {
                 pulseScale = 1
@@ -97,27 +95,17 @@ struct CoachFocusOverlay: View {
         style: CoachFocusStyle
     ) {
         for focusPath in focus.paths.sorted(by: pathOrder) {
-            let layout = CoachFocusPathLayout.make(
-                from: focusPath.source,
-                to: focusPath.destination,
-                geometry: geometry
-            )
+            guard let layout = CoachArrowGeometry.make(source: focusPath.source,
+                destination: focusPath.destination, kind: focusPath.geometryKind, geometry: geometry) else { continue }
             var path = Path()
-            path.move(to: layout.start)
-            path.addLine(to: layout.end)
-            let color = focusPath.role == .attacker
-                ? AppTheme.coachAttackerPath
-                : AppTheme.coachCandidatePath
-            context.stroke(
-                path,
-                with: .color(color),
-                style: StrokeStyle(
-                    lineWidth: geometry.cellSize * style.pathLineWidthInCells,
-                    lineCap: .round,
-                    lineJoin: .round,
-                    dash: style.pathDash(for: focusPath.role).map { $0 * geometry.cellSize }
-                )
-            )
+            path.addLines(layout.points)
+            context.stroke(path, with: .color(AppTheme.moveInlayHighlight), style: .init(lineWidth: geometry.cellSize * 0.095, lineCap: .round, lineJoin: .round))
+            context.stroke(path, with: .color(AppTheme.coachFocusRing), style: .init(lineWidth: geometry.cellSize * 0.055, lineCap: .round, lineJoin: .round))
+            var head = Path()
+            head.addLines(layout.arrowhead)
+            head.closeSubpath()
+            context.stroke(head, with: .color(AppTheme.moveInlayHighlight), lineWidth: geometry.cellSize * 0.035)
+            context.fill(head, with: .color(AppTheme.coachFocusRing))
         }
     }
 
@@ -174,7 +162,7 @@ struct CoachFocusOverlay: View {
         }
     }
 
-    private func runPulse() {
+    @MainActor private func runPulse() async {
         let policy = CoachFocusMotionPolicy(reducesMotion: reducesMotion)
         guard policy.pulseScale > 1 else {
             pulseScale = 1
@@ -184,11 +172,9 @@ struct CoachFocusOverlay: View {
         withAnimation(.easeOut(duration: 0.14)) {
             pulseScale = policy.pulseScale
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                pulseScale = 1
-            }
-        }
+        try? await Task.sleep(for: .milliseconds(140))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeInOut(duration: 0.22)) { pulseScale = 1 }
     }
 
     private func ringRect(center: CGPoint, diameter: CGFloat) -> CGRect {

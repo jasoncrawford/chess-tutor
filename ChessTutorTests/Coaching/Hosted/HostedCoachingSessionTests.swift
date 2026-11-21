@@ -21,7 +21,8 @@ final class HostedCoachingSessionTests: XCTestCase {
         XCTAssertEqual(.pieceSelected, session.latestEvent.kind)
         XCTAssertEqual(["piece:white:pawn:f2"], session.latestEvent.referencedIDs)
         XCTAssertEqual(.thinking, session.phase)
-        XCTAssertFalse(session.recordPieceSelectionAnswer(at: pawnSquare, in: state))
+        XCTAssertTrue(session.recordPieceSelectionAnswer(at: Square(file: .e, rank: 2), in: state))
+        XCTAssertEqual(["piece:white:pawn:e2"], session.latestEvent.referencedIDs)
     }
 
     func testNegativeAnswerUsesTheCurrentQuestionSemantics() {

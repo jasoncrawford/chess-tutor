@@ -25,6 +25,19 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class BenchmarkReportTests(unittest.TestCase):
+    def test_visual_regression_has_ten_turns_and_requires_every_repetition(self):
+        records = [dict(cellID=f"visual|v{i}|r{rep}", configurationID="visual",
+                        caseID=f"v{i}", repetition=rep, split="development")
+                   for i in range(10) for rep in range(1, 4)]
+        manifest = dict(mode="regression", regressionSuite=True,
+                        corpusManifestSchema="coaching-quality-visual-regression-manifest.v1",
+                        evidence=dict(classification="regressionDevelopment", trialEligible=False,
+                                      promotionEvidenceEligible=False))
+        issues = []
+        self.assertTrue(_run_evidence(manifest, records, {"visual": {}}, issues)["completeMatrix"])
+        self.assertEqual([], issues)
+        self.assertFalse(_run_evidence(manifest, records[:-1], {"visual": {}}, []) ["completeMatrix"])
+
     def test_regression_roundtrip_grades_and_reports_one_candidate_without_a_baseline(self):
         runner = runner_fixtures.BenchmarkRunnerTests()
         runner.setUp()

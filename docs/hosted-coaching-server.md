@@ -252,6 +252,31 @@ turn discards the ID. No reasoning trace is returned or logged.
 
 ## API boundary
 
+### Visual-coaching preview (v4)
+
+The server routes `hosted-coaching-request.v3` to the unchanged production-v2
+configuration and `hosted-coaching-request.v4` to visual-v2. The latter returns
+`hosted-coaching-turn.v4` / `tutor-v14`: typed text/piece/square message runs and
+at most one validated attack or move arrow. The new native client opts into v4;
+installed v3 clients keep their existing plain-text response. Both paths share
+authentication, limits, timing, correlation IDs and failure handling.
+
+To preview, run `./scripts/run_hosted_coaching_dev.sh "ChessTutor Coaching Smoke"`
+from the visual-coaching checkout. No production deployment or family-device
+installation is needed. `CHESS_TUTOR_COACHING_VISUAL_MODEL_CONFIG` overrides the
+visual path independently of the legacy model configuration.
+
+Roll out **server first**, verify both versions, then install the v4 client.
+Do not install the new client against an old v3-only server. Each Help episode
+starts without a continuation; continuation IDs are in-memory only and do not
+survive app replacement. Close Help before changing a development endpoint.
+Keep the v3 route until all installed clients have been updated. Deploying or
+installing the preview is a separate, explicitly authorized operation.
+
+Linked words and Replay are local presentation actions; Play instead locally
+cancels pending answer work. They do not generate provider calls. The board
+and legal move guards remain playable while help is open.
+
 `POST /v1/coaching-turn` accepts one strict `hosted-coaching-request.v3`
 envelope containing game and Help-episode UUIDs, a
 `model-coaching-neutral-request.v1` object, and an optional previous response

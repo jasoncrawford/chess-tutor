@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 
 from Tools.CoachingEval.benchmark.configuration import validate_candidate_usage
 from Tools.CoachingEval.benchmark.grader import RUBRIC_DIMENSIONS
+from Tools.CoachingEval.benchmark.visual_metrics import VisualMetrics
 
 
 _BOOTSTRAP_DRAWS = 10_000
@@ -214,6 +215,7 @@ def build_report(run_root: Path, grade_root: Path, price_table) -> dict:
         "executionPolicies": _execution_policies(configurations),
         "experimentChanges": _experiment_changes(configurations, baseline_id),
         "configurations": aggregates,
+        "visualMetrics": VisualMetrics.summarize(records),
         "confidenceIntervals": confidence,
         "paretoFrontier": frontier,
         "judgeOverhead": judge_overhead,
@@ -1006,6 +1008,7 @@ def _run_evidence(manifest, records, configurations, issues):
         records,
         configurations,
         regression_suite=manifest.get("regressionSuite") is True,
+        corpus_schema=manifest.get("corpusManifestSchema"),
     )
     if not diagnostic_subset and not complete_matrix:
         issues.append("candidate comparison matrix is incomplete")
@@ -1030,13 +1033,14 @@ def _run_evidence(manifest, records, configurations, issues):
     }
 
 
-def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configurations, *, regression_suite=False):
+def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configurations, *, regression_suite=False, corpus_schema=None):
     if diagnostic_subset or mode not in ("quick", "comparison", "regression"):
         return False
     if regression_suite and (mode != "regression" or include_holdout):
         return False
     repetitions = 1 if mode == "quick" else 3
-    expected_split_counts = {"development": 8 if regression_suite else 56}
+    regression_count = 10 if corpus_schema == "coaching-quality-visual-regression-manifest.v1" else 8
+    expected_split_counts = {"development": regression_count if regression_suite else 56}
     if include_holdout:
         expected_split_counts["holdout"] = 14
     expected_case_count = sum(expected_split_counts.values())

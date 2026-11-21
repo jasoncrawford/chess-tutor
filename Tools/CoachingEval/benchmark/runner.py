@@ -26,6 +26,7 @@ from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseValidationError,
 )
 from Tools.CoachingEval.openai_responses import OpenAIResponsesError
+from Tools.CoachingEval.visual_response import VisualResponseContract
 
 
 _TRACE_MARKER = re.compile(r"<\s*/?\s*think\b|reasoning_content", re.IGNORECASE)
@@ -162,7 +163,9 @@ def _preflight(configurations, turns, repetitions, price_table):
                     turn.request,
                     model_configuration.prompt_version,
                 )
-                contract = ChessNativeResponseContract.from_markdown(compilation.markdown)
+                contract = (VisualResponseContract.from_request(parse_neutral_request(turn.request))
+                            if model_configuration.response_contract == "chess-native-v14"
+                            else ChessNativeResponseContract.from_markdown(compilation.markdown))
                 schema = contract.json_schema()
                 json.dumps(schema, sort_keys=True)
                 normalized_request = parse_neutral_request(turn.request)
@@ -455,6 +458,8 @@ def _manifest(
         "schemaVersion": "coaching-quality-candidate-run.v1",
         "mode": mode,
         **({"regressionSuite": corpus.is_regression} if mode == "regression" else {}),
+        **({"corpusManifestSchema": json.loads(corpus.manifest_path.read_text())["schemaVersion"]}
+           if corpus.is_regression and corpus.manifest_path else {}),
         "diagnosticSubset": diagnostic_subset,
         "includeHoldout": include_holdout,
         "evidence": {

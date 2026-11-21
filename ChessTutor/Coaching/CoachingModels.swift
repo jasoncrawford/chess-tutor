@@ -499,9 +499,11 @@ enum CoachingRoutineState: Equatable, Sendable {
 
 struct CoachFocusPath: Equatable, Hashable, Sendable {
     enum Role: Equatable, Hashable, Sendable { case attacker, defender, candidate }
+    enum GeometryKind: Equatable, Hashable, Sendable { case direct, knight, relocation }
     let source: Square
     let destination: Square
     let role: Role
+    var geometryKind: GeometryKind = .direct
 }
 
 struct CoachFocusPresentation: Equatable, Sendable {
@@ -558,8 +560,12 @@ struct CoachingPresentation: Equatable, Sendable {
     let routine: [CoachingRoutineState]
     let actions: [CoachingActionPresentation]
     let boardTask: CoachingBoardTask
-    let focus: CoachFocusPresentation
+    var focus: CoachFocusPresentation
     let isThinking: Bool
+    var visualContent: ModelCoachingVisualContent? = nil
+    var canPlayInstead: Bool = false
+    var canReplayVisual: Bool = false
+    var isAwaitingAnswer: Bool = false
 
     init(
         primaryMessage: String,

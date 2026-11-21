@@ -154,6 +154,22 @@ struct CoachingPanelView: View {
     let onCommittedMove: (Move) -> Void
 
     var body: some View {
+        Group {
+            if presentation?.visualContent != nil {
+                renderedPanel
+            } else {
+                renderedPanel.accessibilityRepresentation { accessibilityPanelContent }
+            }
+        }
+        .task(id: session.coachingReferenceReplayID) {
+            guard let replay = session.coachingReferenceReplayID else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            session.expireCoachingReference(replayID: replay)
+        }
+    }
+
+    private var renderedPanel: some View {
         panelContent
             .frame(
                 width: layout.physicalContentSize.width,
@@ -166,9 +182,6 @@ struct CoachingPanelView: View {
                 height: layout.tabletopContentSize.height
             )
             .accessibilityElement(children: .contain)
-            .accessibilityRepresentation {
-                accessibilityPanelContent
-            }
     }
 
     @ViewBuilder
@@ -192,7 +205,7 @@ struct CoachingPanelView: View {
                     conversationRegion
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     panelDivider
-                    readableActions(axis: .vertical)
+                    readableActions(axis: .horizontal)
                 }
             }
         }
@@ -201,7 +214,7 @@ struct CoachingPanelView: View {
     @ViewBuilder
     private var accessibilityPanelContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            coachIdentity
+            panelHeader
             accessibleConversation
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
@@ -225,6 +238,15 @@ struct CoachingPanelView: View {
                 routineHeader(axis: .horizontal)
             }
             Spacer(minLength: 0)
+            if presentation?.canReplayVisual == true {
+                Button { session.replayCoachingVisual() } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.coachFocusRing)
+                .accessibilityLabel("Replay board hint")
+            }
         }
     }
 
@@ -282,9 +304,8 @@ struct CoachingPanelView: View {
                     .accessibilityIdentifier("coaching-thinking-indicator")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let presentation {
-                Text(presentation.primaryMessage)
+                messageCopy(presentation)
                     .font(bodyFont)
-                    .lineLimit(1)
                     .accessibilitySortPriority(
                         CoachingConversationAccessibilityElement.primaryMessage.sortPriority
                     )
@@ -320,7 +341,7 @@ struct CoachingPanelView: View {
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let presentation {
-                Text(presentation.primaryMessage)
+                messageCopy(presentation)
                     .font(bodyFont)
                     .foregroundStyle(AppTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
@@ -347,6 +368,19 @@ struct CoachingPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func messageCopy(_ presentation: CoachingPresentation) -> some View {
+        if let content = presentation.visualContent {
+            CoachingMessageView(content: content, board: session.state.board,
+                                onReference: session.replayCoachingReference)
+        } else {
+            Text(presentation.primaryMessage)
+        }
+        if presentation.isAwaitingAnswer {
+            ProgressView().controlSize(.small).accessibilityLabel("Thinking")
+        }
     }
 
     @ViewBuilder
@@ -384,7 +418,7 @@ struct CoachingPanelView: View {
                     actionButtons
                 }
             case .horizontal:
-                HStack(spacing: 7) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
                     actionButtons
                 }
             }
@@ -397,6 +431,13 @@ struct CoachingPanelView: View {
 
     @ViewBuilder
     private var actionButtons: some View {
+        if presentation?.canPlayInstead == true {
+            Button("Play instead") { session.playInsteadOfAnswering() }
+                .frame(minHeight: 44)
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.coachFocusRing)
+                .accessibilityHint("Stop answering and move pieces normally")
+        }
         ForEach(actions, id: \.action) { action in
             Button {
                 choose(action.action)
@@ -412,6 +453,7 @@ struct CoachingPanelView: View {
             }
             .buttonStyle(CoachingActionButtonStyle(prominence: action.prominence))
             .accessibilityLabel(action.accessibilityLabel)
+            .disabled(presentation?.isAwaitingAnswer == true && action.action != .stop)
         }
     }
 

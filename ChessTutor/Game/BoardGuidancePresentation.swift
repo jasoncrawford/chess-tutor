@@ -21,6 +21,13 @@ struct BoardGuidancePresentation: Equatable, Sendable {
     let selectedPaths: Set<BoardGuidancePath>
     let supporterSquares: Set<Square>
 
+    func quietForCoaching(in board: Board) -> BoardGuidancePresentation {
+        let kings = threatenedSquares.filter { board[$0]?.kind == .king }
+        return .init(sideToMove: sideToMove, threatenedSquares: kings, prominentThreatSquares: kings,
+                     defendedSquares: [], visibleDefenseSquares: [], selectedSquare: nil,
+                     selectedPaths: [], supporterSquares: [])
+    }
+
     func accessibilityLabel(for square: Square, piece: Piece) -> String {
         let identity = "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue) on \(squareName(square))"
         let isThreatened = threatenedSquares.contains(square)

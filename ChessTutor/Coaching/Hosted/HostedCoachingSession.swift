@@ -7,13 +7,49 @@ struct HostedCoachingSession: Equatable, Sendable {
     private(set) var events: [ModelCoachingNeutralEpisodeEvent] = []
     private(set) var pulseID = 0
     private(set) var continuationID: String?
+    private(set) var displayedTurn: ModelCoachingChessNativeTurn?
+    private(set) var referenceSquare: String?
+    private(set) var answerSquare: Square?
+    private(set) var isPlayingInstead = false
+    var referenceReplayID: String? { referenceSquare == nil ? nil : "\(episodeID):\(pulseID)" }
+
+    mutating func expireReference(replayID: String?) {
+        guard let replayID, replayID == referenceReplayID else { return }
+        referenceSquare = nil
+    }
+
+    var isAnswering: Bool {
+        guard !isPlayingInstead, phase != .failed, phase != .timedOut else { return false }
+        if phase == .thinking && events.last?.kind != .pieceSelected { return false }
+        return displayedTurn?.expects == .findEndangeredPiece
+            || displayedTurn?.expects == .findSafeCapture || displayedTurn?.expects == .selectPiece
+    }
+
+    mutating func replayReference(at index: Int) {
+        guard case .ready = phase, !isPlayingInstead,
+              let runs = displayedTurn?.visualContent?.runs, runs.indices.contains(index),
+              let square = runs[index].referencedSquare else { return }
+        referenceSquare = square
+        pulseID += 1
+    }
+
+    mutating func replayVisual() {
+        guard case .ready = phase, !isPlayingInstead,
+              displayedTurn?.visualContent?.visuals.isEmpty == false else { return }
+        referenceSquare = nil
+        pulseID += 1
+    }
+
+    mutating func playInstead() {
+        guard isAnswering else { return }
+        isPlayingInstead = true
+        referenceSquare = nil
+        answerSquare = nil
+        pulseID += 1
+    }
 
     private var lastSelectedSquare: Square?
     private var lastTentativeMove: Move?
-    private var pendingSelectionQuestion: ModelCoachingChessNativeExpectedResponse?
-
-    // Retain board input semantics independently of the visible thinking panel.
-    var isAwaitingPieceAnswer: Bool { pendingSelectionQuestion != nil }
 
     var latestEvent: ModelCoachingNeutralEpisodeEvent {
         precondition(!events.isEmpty, "Hosted coaching must be opened before use")
@@ -31,7 +67,10 @@ struct HostedCoachingSession: Equatable, Sendable {
     mutating func openHelp(selectedSquare: Square?, tentativeMove: Move?) {
         events = []
         continuationID = nil
-        pendingSelectionQuestion = nil
+        displayedTurn = nil
+        isPlayingInstead = false
+        referenceSquare = nil
+        answerSquare = nil
         lastSelectedSquare = selectedSquare
         lastTentativeMove = tentativeMove
         append(kind: .helpOpened, referencedIDs: [])
@@ -50,7 +89,10 @@ struct HostedCoachingSession: Equatable, Sendable {
         }
 
         if tentativeMove != lastTentativeMove {
-            pendingSelectionQuestion = nil
+            displayedTurn = nil
+            referenceSquare = nil
+            answerSquare = nil
+            isPlayingInstead = false
             if let tentativeMove {
                 append(
                     kind: lastTentativeMove == nil ? .moveStaged : .moveReplaced,
@@ -71,7 +113,6 @@ struct HostedCoachingSession: Equatable, Sendable {
     }
 
     mutating func recordHintAction() {
-        pendingSelectionQuestion = nil
         append(kind: .actionChosen, referencedIDs: ["action:hint"])
         phase = .thinking
     }
@@ -84,7 +125,6 @@ struct HostedCoachingSession: Equatable, Sendable {
             return false
         }
         append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
-        pendingSelectionQuestion = nil
         phase = .thinking
         return true
     }
@@ -102,7 +142,6 @@ struct HostedCoachingSession: Equatable, Sendable {
             return false
         }
         append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
-        pendingSelectionQuestion = nil
         phase = .thinking
         return true
     }
@@ -112,34 +151,23 @@ struct HostedCoachingSession: Equatable, Sendable {
         at square: Square,
         in committedState: GameState
     ) -> Bool {
-        let expected: ModelCoachingChessNativeExpectedResponse?
-        if case .ready(let turn) = phase {
-            expected = turn.expects
-        } else if phase == .thinking {
-            expected = pendingSelectionQuestion
-        } else {
-            expected = nil
-        }
-        guard expected == .selectPiece
-                || expected == .findEndangeredPiece
-                || expected == .findSafeCapture,
+        guard isAnswering,
               let piece = committedState.board[square] else { return false }
         let pieceID = ModelCoachingPositionEncoder.pieceID(piece, at: square)
         if phase == .thinking, latestEvent.kind == .pieceSelected,
-           latestEvent.referencedIDs == [pieceID] {
-            return false
-        }
-        pendingSelectionQuestion = expected
+           latestEvent.referencedIDs == [pieceID] { return false }
+        answerSquare = square
+        referenceSquare = nil
+        pulseID += 1
         append(
             kind: .pieceSelected,
-            referencedIDs: [pieceID]
+            referencedIDs: [ModelCoachingPositionEncoder.pieceID(piece, at: square)]
         )
         phase = .thinking
         return true
     }
 
     mutating func recordRetry() {
-        pendingSelectionQuestion = nil
         append(kind: .helpReopened, referencedIDs: [])
         phase = .thinking
     }
@@ -171,13 +199,15 @@ struct HostedCoachingSession: Equatable, Sendable {
         continuationID: String
     ) {
         self.continuationID = continuationID
-        pendingSelectionQuestion = nil
+        displayedTurn = turn
+        referenceSquare = nil
+        answerSquare = nil
+        isPlayingInstead = false
         phase = .ready(turn)
         pulseID += 1
     }
 
     mutating func fail(_ error: HostedCoachingTransportError = .serverUnavailable) {
-        pendingSelectionQuestion = nil
         phase = error == .timedOut ? .timedOut : .failed
         pulseID += 1
     }

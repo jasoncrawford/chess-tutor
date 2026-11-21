@@ -15,6 +15,8 @@ from typing import Any, Mapping
 
 from CoachingServer.chess_native_compiler import parse_neutral_request
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
+from Tools.CoachingEval.benchmark.visual_metrics import message_text
+from Tools.CoachingEval.visual_response import VisualResponseContract
 from Tools.CoachingEval.benchmark.judge_contract import (
     JudgeCallError,
     RUBRIC_DIMENSIONS,
@@ -309,8 +311,8 @@ def _pairwise_jobs(run_manifest, records, turns, configuration):
                 "graderBrief": _brief_payload(turn.grader_brief),
                 "judgeContext": JudgeReferenceSet.judge_context(parse_neutral_request(turn.request)),
                 "availableUI": _available_ui(candidate),
-                "responseA": response_a,
-                "responseB": response_b,
+                "responseA": readable_turn(response_a),
+                "responseB": readable_turn(response_b),
             }
             yield {
                 "schemaVersion": "coaching-quality-pairwise-grade.v1",
@@ -423,13 +425,19 @@ def _load_calibration(path):
     return rows
 
 
+def readable_turn(turn):
+    if not isinstance(turn.get("message"), list):
+        return turn
+    return {**turn, "message": message_text(turn), "messageRuns": turn["message"]}
+
+
 def absolute_payload(turn, record):
     return {
         "kind": "absolute",
         "graderBrief": _brief_payload(turn.grader_brief),
         "judgeContext": JudgeReferenceSet.judge_context(parse_neutral_request(turn.request)),
         "availableUI": _available_ui(record),
-        "candidateTurn": record["parsedTurn"],
+        "candidateTurn": readable_turn(record["parsedTurn"]),
     }
 
 
@@ -444,6 +452,10 @@ def _brief_payload(brief):
 
 
 def _available_ui(record):
+    if isinstance((record.get("parsedTurn") or {}).get("message"), list):
+        return {"actions": ["hint"], "expectedResponses": list(VisualResponseContract.EXPECTED_RESPONSES),
+                "visuals": "Optional local piece/square links and one directed attack or move arrow. Links highlight without a network request. Discovery answers must not be linked or shown. Draft arrows use the original move but start at the displayed piece; direct revision needs no reset button.",
+                "localControls": ["Replay board hint", "Play instead (when answering)"]}
     contract = ChessNativeResponseContract.from_markdown(record["userPrompt"])
     return {
         "actions": list(contract.actions),
