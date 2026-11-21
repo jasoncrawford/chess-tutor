@@ -2,6 +2,29 @@ import XCTest
 
 final class ManagedGamesCoachingUITests: XCTestCase {
     @MainActor
+    func testRealBoardUsesLastPieceTapWhileAdviceIsPending() {
+        XCUIDevice.shared.orientation = .landscapeRight
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-test-managed-games", "managed-games-run-\(UUID().uuidString)", "-test-piece-answer-burst"]
+        app.launch()
+        app.buttons["empty-games-start-local"].tap()
+        XCTAssertTrue(app.buttons["Help"].waitForExistence(timeout: 5))
+        app.buttons["Help"].tap()
+        XCTAssertTrue(app.staticTexts["Choose a knight."].waitForExistence(timeout: 5))
+        let first = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'White knight on b1'")).firstMatch
+        let second = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'White knight on g1'")).firstMatch
+        XCTAssertTrue(first.exists)
+        XCTAssertTrue(second.exists)
+        // Physical contacts exercise the board's zero-distance drag/tap routing,
+        // not the fixture buttons or the session handler directly.
+        first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.05)
+        second.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.05)
+        app.buttons["Release test advice"].tap()
+        XCTAssertTrue(app.staticTexts["Selected piece:white:knight:g1."].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["Selected piece:white:knight:b1."].exists)
+    }
+
+    @MainActor
     func testCoachingWorksAcrossNewReopenedAndRelaunchedGames() {
         XCUIDevice.shared.orientation = .landscapeRight
         let app = XCUIApplication()

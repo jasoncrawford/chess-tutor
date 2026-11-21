@@ -4,6 +4,24 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testRapidPieceAnswersSendTheLastChoiceNotTheFirst() async throws {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .selectPiece)
+
+        XCTAssertTrue(session.handleCoachingSquareTap(Square(file: .b, rank: 1)))
+        let workIdentity = session.coachingRequestIdentity
+        XCTAssertTrue(session.handleCoachingSquareTap(Square(file: .g, rank: 1)))
+        XCTAssertEqual(session.coachingRequestIdentity, workIdentity)
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        XCTAssertEqual(request.interaction.latestEvent.referencedIDs, ["piece:white:knight:g1"])
+        await provider.succeed(requestID: request.requestID, message: "Consider this knight.", expects: .stageMove)
+        await task.value
+        XCTAssertEqual(session.coachingPresentation?.primaryMessage, "Consider this knight.")
+    }
+
     func testOpponentEndedGameStaysLockedAfterSavingAndReopeningWithCaptureHistory() throws {
         let descriptor = RemoteGameDescriptor(
             id: RemoteGameID(rawValue: "ended-remote"), protocolVersion: 1, status: .active,
@@ -454,7 +472,6 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
             session.startCoaching()
             let task = Task { await session.resolvePendingCoachingAdvice() }
             let request = await provider.waitForOnlyRequest()
-            let pendingID = session.pendingCoachingRequestID
             task.cancel()
             if succeeds {
                 await provider.succeed(requestID: request.requestID, message: "Obsolete reply.")
@@ -462,8 +479,9 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
                 await provider.fail(requestID: request.requestID, error: .timedOut)
             }
             await task.value
-            XCTAssertEqual(session.pendingCoachingRequestID, pendingID)
-            XCTAssertEqual(session.coachingPresentation?.primaryMessage, "Thinking…")
+            XCTAssertNil(session.pendingCoachingRequestID)
+            XCTAssertEqual(session.coachingPresentation?.primaryMessage, "I couldn't get help right now.")
+            XCTAssertEqual(session.coachingPresentation?.actions.map(\.action), [.hint, .stop])
             session.stopCoaching()
         }
     }

@@ -68,23 +68,49 @@ struct ManagedGamesCoachingUITestFixture: View {
 
     private let store: GameLibraryStore
     private let provider: ManagedGamesCoachingUITestProvider
+    private let testsPieceAnswers: Bool
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
+        testsPieceAnswers = arguments.contains("-test-piece-answer-burst")
         let runID = arguments.first(where: { $0.hasPrefix("managed-games-run-") }) ?? UUID().uuidString
         store = GameLibraryStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("\(runID).json"))
-        provider = ManagedGamesCoachingUITestProvider(delayFirst: arguments.contains("-delay-first-help"))
+        provider = ManagedGamesCoachingUITestProvider(
+            delayFirst: arguments.contains("-delay-first-help"), testsPieceAnswers: testsPieceAnswers
+        )
     }
 
     var body: some View {
         ContentView(hostedCoachingProvider: provider, gameLibraryStore: store)
+            .overlay(alignment: .bottomTrailing) {
+                if testsPieceAnswers {
+                    Button("Release test advice") {
+                        Task { await provider.releaseAnswer() }
+                    }
+                    .padding(8)
+                    .background(.white)
+                }
+            }
     }
 }
 
 private actor ManagedGamesCoachingUITestProvider: HostedCoachingTurning {
     private var delayFirst: Bool
+    private let testsPieceAnswers: Bool
+    private var holdsAnswer: Bool
+    private var answerWaiter: CheckedContinuation<Void, Never>?
 
-    init(delayFirst: Bool) { self.delayFirst = delayFirst }
+    init(delayFirst: Bool, testsPieceAnswers: Bool) {
+        self.delayFirst = delayFirst
+        self.testsPieceAnswers = testsPieceAnswers
+        self.holdsAnswer = testsPieceAnswers
+    }
+
+    func releaseAnswer() {
+        holdsAnswer = false
+        answerWaiter?.resume()
+        answerWaiter = nil
+    }
 
     func turn(
         for request: ModelCoachingNeutralRequest,
@@ -96,13 +122,20 @@ private actor ManagedGamesCoachingUITestProvider: HostedCoachingTurning {
             delayFirst = false
             try await Task.sleep(for: .seconds(10))
         }
+        let isAnswer = request.interaction.latestEvent.kind == .pieceSelected
+        if testsPieceAnswers && isAnswer && holdsAnswer {
+            await withCheckedContinuation { answerWaiter = $0 }
+        }
+        let message = testsPieceAnswers
+            ? (isAnswer ? "Selected \(request.interaction.latestEvent.referencedIDs.last ?? "none")." : "Choose a knight.")
+            : "Game \(correlation.gameID). Moves: \(request.gameHistory.count)."
         return HostedCoachingResponse(
             schemaVersion: "hosted-coaching-turn.v3", requestID: request.requestID,
             positionRevision: request.positionRevision, promptVersion: "managed-games-ui-test",
             continuationID: "test-\(correlation.episodeID)",
             turn: ModelCoachingChessNativeTurn(
-                message: "Game \(correlation.gameID). Moves: \(request.gameHistory.count).",
-                actions: ["hint"], focus: [], expects: .stageMove
+                message: message, actions: ["hint"], focus: [],
+                expects: testsPieceAnswers && !isAnswer ? .selectPiece : .stageMove
             ),
             metrics: HostedCoachingMetrics(
                 inputTokens: 0, cachedInputTokens: 0, outputTokens: 0,

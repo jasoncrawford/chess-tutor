@@ -1,5 +1,11 @@
 # Main Thread Handoff - 2026-06-27
 
+November 20 client change: coaching board updates use a tunable 400 ms debounce,
+one in-flight call, and one replaceable pending update. Client interaction/timing
+events are included in About → Share Diagnostics; see
+[the hosted coaching runbook](../hosted-coaching-server.md#client-interaction-timing)
+and [design](../superpowers/specs/2026-11-20-coaching-debounce-design.md).
+
 ## Latest integration checkpoint — 2026-11-08
 
 November 18 update: PR #25 is merged at `eb15f4a`; the user confirmed coaching

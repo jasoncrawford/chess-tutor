@@ -47,6 +47,11 @@ final class GameSession {
         let correlation: HostedCoachingCorrelation
         let committedState: GameState
         let tentativeMove: Move?
+        let scheduledAt: TimeInterval
+        let notBefore: TimeInterval
+        let burstStartedAt: TimeInterval
+        let coalescedCount: Int
+        var previousFlightFinishedAt: TimeInterval?
     }
 
     private var committedState: GameState
@@ -62,6 +67,15 @@ final class GameSession {
     private var pendingCoachingRequest: PendingCoachingRequest?
     private var hostedCoachingSession: HostedCoachingSession?
     private var pendingHostedCoachingRequest: PendingHostedCoachingRequest?
+    // This identity survives pending-input replacements, so SwiftUI does not
+    // cancel an already-dispatched HTTP request for every new board interaction.
+    private var hostedCoachingWorkID: Int?
+    @ObservationIgnored private var hostedResolverIsRunning = false
+    @ObservationIgnored private var hostedResolverWaiters: [CheckedContinuation<Void, Never>] = []
+    @ObservationIgnored private var hostedInFlightRequestID: Int?
+    private let hostedCoachingTiming: HostedCoachingTiming
+    private let coachingDiagnosticSink: @Sendable (DiagnosticsEvent) -> Void
+    @ObservationIgnored private var coachingDiagnosticSequence = 0
     private var nextCoachingRequestID = 0
     private var coachingPositionRevision = 0
     var selectedSquare: Square?
@@ -129,6 +143,9 @@ final class GameSession {
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
         if let hostedCoachingSession {
+            if hostedCoachingSession.isAwaitingPieceAnswer {
+                return .identify(allowsMoveRevision: false)
+            }
             return HostedCoachingPresentationProjector().presentation(
                 for: hostedCoachingSession.phase,
                 pulseID: hostedCoachingSession.pulseID
@@ -142,7 +159,7 @@ final class GameSession {
     }
 
     var coachingRequestIdentity: CoachingRequestIdentity {
-        CoachingRequestIdentity(session: ObjectIdentifier(self), requestID: pendingCoachingRequestID)
+        CoachingRequestIdentity(session: ObjectIdentifier(self), requestID: hostedCoachingWorkID ?? pendingCoachingRequest?.id)
     }
 
     var currentCoachingGameID: String? {
@@ -297,6 +314,8 @@ final class GameSession {
         state: GameState = .startingPosition(),
         coachingAdvisor: any CoachingAdvising = LocalCoachingAdvisor(),
         hostedCoachingProvider: (any HostedCoachingTurning)? = nil,
+        hostedCoachingTiming: HostedCoachingTiming = HostedCoachingTiming(),
+        coachingDiagnosticSink: @escaping @Sendable (DiagnosticsEvent) -> Void = HostedCoachingDiagnostics.record,
         coachingGameID: UUID? = nil,
         coachingIdentifierFactory: @escaping () -> String = {
             UUID().uuidString.lowercased()
@@ -306,6 +325,8 @@ final class GameSession {
         self.displayedAnalysis = Self.makeAnalysis(for: state)
         self.coachingAdvisor = coachingAdvisor
         self.hostedCoachingProvider = hostedCoachingProvider
+        self.hostedCoachingTiming = hostedCoachingTiming
+        self.coachingDiagnosticSink = coachingDiagnosticSink
         self.coachingIdentifierFactory = coachingIdentifierFactory
         self.hostedCoachingGameID = coachingGameID?.uuidString.lowercased() ?? coachingIdentifierFactory()
     }
@@ -732,24 +753,8 @@ final class GameSession {
 
     @MainActor
     func resolvePendingCoachingAdvice() async {
-        if let pending = pendingHostedCoachingRequest,
-           let hostedCoachingProvider,
-           hostedCoachingSession != nil {
-            do {
-                let response = try await hostedCoachingProvider.turn(
-                    for: pending.request,
-                    contract: pending.contract,
-                    continuationID: pending.continuationID,
-                    correlation: pending.correlation
-                )
-                try Task.checkCancellation()
-                receiveHostedCoachingResponse(response, for: pending)
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
-                failHostedCoachingRequest(pending, error: error as? HostedCoachingTransportError ?? .serverUnavailable)
-            }
+        if let hostedCoachingProvider {
+            await resolveHostedCoachingAdvice(using: hostedCoachingProvider)
             return
         }
 
@@ -788,16 +793,21 @@ final class GameSession {
                localCanActForCurrentTurn,
                tentativeMove == nil,
                actionableMovesForSelection.contains(where: { $0.to == square }) {
+                logCoachingEvent("board_input", fields: ["intent": "tap", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "move_destination"])
                 return false
             }
             guard intent == .tap,
                   hostedSession.recordPieceSelectionAnswer(
                       at: square,
                       in: committedState
-                  ) else { return false }
+                  ) else {
+                logCoachingEvent("board_input", fields: ["intent": intent == .tap ? "tap" : "drag", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "local"])
+                return false
+            }
             selectWithoutSynchronizing(square)
             hostedCoachingSession = hostedSession
-            queueHostedCoachingRequest()
+            logCoachingEvent("board_input", fields: ["intent": "tap", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "answer"])
+            queueHostedCoachingRequest(debounced: true)
             return true
         }
 
@@ -854,7 +864,7 @@ final class GameSession {
             case .keepLooking:
                 guard tentativeMove != nil else { return nil }
                 restoreCommittedPosition()
-                _ = synchronizeCoachingInteraction()
+                _ = synchronizeCoachingInteraction(debounced: false)
                 return nil
             case .done:
                 return finishTurn()
@@ -869,14 +879,22 @@ final class GameSession {
     }
 
     func stopCoaching() {
+        if let pending = pendingHostedCoachingRequest {
+            logCoachingEvent("request_cancelled", pending: pending, fields: [
+                "reason": "help_closed", "was_dispatched": String(hostedInFlightRequestID == pending.id)
+            ])
+        }
         coachingSession = nil
         pendingCoachingRequest = nil
         hostedCoachingSession = nil
         pendingHostedCoachingRequest = nil
+        hostedCoachingWorkID = nil
     }
 
-    private func queueHostedCoachingRequest() {
+    private func queueHostedCoachingRequest(debounced: Bool = false) {
         guard var hostedSession = hostedCoachingSession else { return }
+        let now = hostedCoachingTiming.now()
+        let replaced = pendingHostedCoachingRequest.flatMap { $0.id == hostedInFlightRequestID ? nil : $0 }
         nextCoachingRequestID += 1
         let id = nextCoachingRequestID
         let request = hostedSession.request(
@@ -901,8 +919,20 @@ final class GameSession {
             continuationID: hostedSession.continuationID,
             correlation: correlation,
             committedState: committedState,
-            tentativeMove: tentativeMove
+            tentativeMove: tentativeMove,
+            scheduledAt: now,
+            notBefore: now + (debounced ? hostedCoachingTiming.debounceSeconds : 0),
+            burstStartedAt: replaced?.burstStartedAt ?? now,
+            coalescedCount: (replaced?.coalescedCount ?? -1) + 1,
+            previousFlightFinishedAt: replaced?.previousFlightFinishedAt
         )
+        if hostedCoachingWorkID == nil { hostedCoachingWorkID = id }
+        logCoachingEvent(replaced == nil ? "request_scheduled" : "request_coalesced", pending: pendingHostedCoachingRequest, fields: [
+            "replaced_request_id": replaced?.request.requestID ?? "none",
+            "interaction": request.interaction.latestEvent.kind.rawValue,
+            "debounced": String(debounced),
+            "waiting_for_request": hostedInFlightRequestID.map { "hosted-\($0)" } ?? "none"
+        ])
     }
 
     private func receiveHostedCoachingResponse(
@@ -912,13 +942,20 @@ final class GameSession {
         guard pendingHostedCoachingRequestIsApplicable(pending),
               response.requestID == pending.request.requestID,
               response.positionRevision == pending.request.positionRevision,
-              var hostedSession = hostedCoachingSession else { return }
+              var hostedSession = hostedCoachingSession else {
+            logCoachingEvent("response_discarded", pending: pending, fields: ["reason": "superseded"])
+            return
+        }
         pendingHostedCoachingRequest = nil
+        hostedCoachingWorkID = nil
         hostedSession.receive(
             response.turn,
             continuationID: response.continuationID
         )
         hostedCoachingSession = hostedSession
+        logCoachingEvent("response_applied", pending: pending, fields: [
+            "interaction_to_advice_ms": Self.coachingMilliseconds(hostedCoachingTiming.now() - pending.scheduledAt)
+        ])
     }
 
     private func failHostedCoachingRequest(
@@ -926,10 +963,15 @@ final class GameSession {
         error: HostedCoachingTransportError
     ) {
         guard pendingHostedCoachingRequestIsApplicable(pending),
-              var hostedSession = hostedCoachingSession else { return }
+              var hostedSession = hostedCoachingSession else {
+            logCoachingEvent("response_discarded", pending: pending, fields: ["reason": "superseded_error"])
+            return
+        }
         pendingHostedCoachingRequest = nil
+        hostedCoachingWorkID = nil
         hostedSession.fail(error)
         hostedCoachingSession = hostedSession
+        logCoachingEvent("failure_applied", pending: pending)
     }
 
     private func pendingHostedCoachingRequestIsApplicable(
@@ -940,6 +982,128 @@ final class GameSession {
             && pending.tentativeMove == tentativeMove
             && pending.request.positionRevision == coachingPositionRevision
             && hostedCoachingSession != nil
+    }
+
+    @MainActor
+    private func resolveHostedCoachingAdvice(using provider: any HostedCoachingTurning) async {
+        guard let workID = hostedCoachingWorkID else { return }
+        // A reopened episode can start its SwiftUI task before the cancelled old
+        // one unwinds. Wait for that resolver as well as ordinary in-flight work.
+        while hostedResolverIsRunning {
+            await withCheckedContinuation { hostedResolverWaiters.append($0) }
+            guard !Task.isCancelled, hostedCoachingWorkID == workID else { return }
+        }
+        guard hostedCoachingWorkID == workID else { return }
+        hostedResolverIsRunning = true
+        var activePending = pendingHostedCoachingRequest
+        defer {
+            if Task.isCancelled, hostedCoachingWorkID == workID,
+               let latest = pendingHostedCoachingRequest {
+                if latest.id == activePending?.id {
+                    // The view's task ended without an applicable result. Leave
+                    // an explicit retry, not a stranded Thinking state or an
+                    // automatic second attempt of an already-sent request.
+                    failHostedCoachingRequest(latest, error: .serverUnavailable)
+                } else {
+                    // Preserve genuinely newer input, but give SwiftUI a fresh
+                    // task identity so it can resume after this owner exits.
+                    hostedCoachingWorkID = latest.id
+                }
+            }
+            hostedResolverIsRunning = false
+            let waiters = hostedResolverWaiters
+            hostedResolverWaiters = []
+            for waiter in waiters { waiter.resume() }
+        }
+
+        while !Task.isCancelled, hostedCoachingWorkID == workID,
+              let pending = pendingHostedCoachingRequest, hostedCoachingSession != nil {
+            activePending = pending
+            let remaining = pending.notBefore - hostedCoachingTiming.now()
+            if remaining > 0.000001 {
+                do {
+                    try await hostedCoachingTiming.sleep(remaining)
+                } catch {
+                    logCoachingEvent("request_cancelled", pending: pending, fields: ["reason": "debounce_cancelled", "was_dispatched": "false"])
+                    if !Task.isCancelled {
+                        failHostedCoachingRequest(pending, error: .serverUnavailable)
+                    }
+                    return
+                }
+                // Input may have replaced this snapshot while the timer slept.
+                continue
+            }
+
+            let started = hostedCoachingTiming.now()
+            hostedInFlightRequestID = pending.id
+            logCoachingEvent("request_dispatched", pending: pending, fields: [
+                "coalesced_count": String(pending.coalescedCount),
+                "selected_square": pending.request.interaction.selectedSquare ?? "none",
+                "staged_move": pending.request.interaction.tentativeMove?.canonicalMove ?? "none",
+                "wait_ms": Self.coachingMilliseconds(started - pending.scheduledAt),
+                "burst_ms": Self.coachingMilliseconds(started - pending.burstStartedAt),
+                "debounce_wait_ms": Self.coachingMilliseconds(pending.notBefore - pending.scheduledAt),
+                "in_flight_wait_ms": Self.coachingMilliseconds((pending.previousFlightFinishedAt ?? pending.notBefore) - pending.notBefore)
+            ])
+            do {
+                let response = try await provider.turn(
+                    for: pending.request, contract: pending.contract,
+                    continuationID: pending.continuationID, correlation: pending.correlation
+                )
+                finishHostedCoachingFlight(pending)
+                logCoachingEvent("request_completed", pending: pending, fields: ["duration_ms": Self.coachingMilliseconds(hostedCoachingTiming.now() - started)])
+                guard !Task.isCancelled else {
+                    logCoachingEvent("response_discarded", pending: pending, fields: ["reason": "resolver_cancelled"])
+                    return
+                }
+                receiveHostedCoachingResponse(response, for: pending)
+            } catch {
+                finishHostedCoachingFlight(pending)
+                if Task.isCancelled {
+                    logCoachingEvent("request_cancelled", pending: pending, fields: ["reason": "resolver_cancelled", "was_dispatched": "true"])
+                    return
+                }
+                let safeError = error as? HostedCoachingTransportError ?? .serverUnavailable
+                logCoachingEvent("request_failed", pending: pending, fields: [
+                    "category": String(describing: safeError),
+                    "duration_ms": Self.coachingMilliseconds(hostedCoachingTiming.now() - started)
+                ])
+                failHostedCoachingRequest(pending, error: safeError)
+            }
+            // Only a genuinely newer input may produce another call. A rejected
+            // response must never cause an automatic retry of the same snapshot.
+            if pendingHostedCoachingRequest?.id == pending.id { return }
+        }
+    }
+
+    private func finishHostedCoachingFlight(_ pending: PendingHostedCoachingRequest) {
+        hostedInFlightRequestID = nil
+        if pendingHostedCoachingRequest?.id != pending.id {
+            pendingHostedCoachingRequest?.previousFlightFinishedAt = hostedCoachingTiming.now()
+        }
+    }
+
+    private func logCoachingEvent(
+        _ name: String,
+        pending: PendingHostedCoachingRequest? = nil,
+        fields: [String: String] = [:]
+    ) {
+        guard hostedCoachingProvider != nil,
+              let episodeID = pending?.correlation.episodeID ?? hostedCoachingSession?.episodeID else { return }
+        coachingDiagnosticSequence += 1
+        var fields = fields
+        fields["schema_version"] = "coaching-client.v1"
+        fields["game_id"] = pending?.correlation.gameID ?? hostedCoachingGameID
+        fields["episode_id"] = episodeID
+        fields["event_sequence"] = String(coachingDiagnosticSequence)
+        fields["uptime_ms"] = Self.coachingMilliseconds(hostedCoachingTiming.now())
+        fields["debounce_ms"] = Self.coachingMilliseconds(hostedCoachingTiming.debounceSeconds)
+        if let pending { fields["request_id"] = pending.request.requestID }
+        coachingDiagnosticSink(DiagnosticsEvent(category: "coaching", name: name, fields: fields))
+    }
+
+    private static func coachingMilliseconds(_ seconds: TimeInterval) -> String {
+        String(Int((max(0, seconds) * 1000).rounded()))
     }
 
     private func queueCoachingRequest(
@@ -1035,7 +1199,7 @@ final class GameSession {
     }
 
     @discardableResult
-    private func synchronizeCoachingInteraction() -> Move? {
+    private func synchronizeCoachingInteraction(debounced: Bool = true) -> Move? {
         if var hostedSession = hostedCoachingSession {
             let changed = hostedSession.recordInteraction(
                 committedState: committedState,
@@ -1043,8 +1207,13 @@ final class GameSession {
                 tentativeMove: tentativeMove
             )
             hostedCoachingSession = hostedSession
+            logCoachingEvent("interaction", fields: [
+                "disposition": changed ? "coaching" : "local",
+                "selected_square": selectedSquare.map(ModelCoachingPositionEncoder.squareName) ?? "none",
+                "kind": changed ? hostedSession.latestEvent.kind.rawValue : "selection"
+            ])
             if changed {
-                queueHostedCoachingRequest()
+                queueHostedCoachingRequest(debounced: debounced)
             }
             return nil
         }
