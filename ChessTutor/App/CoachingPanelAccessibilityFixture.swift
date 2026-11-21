@@ -257,7 +257,7 @@ struct CoachingContinuityUITestFixture: View {
             }
             .padding()
         }
-        .task(id: session.pendingCoachingRequestID) {
+        .task(id: session.coachingRequestIdentity) {
             await session.resolvePendingCoachingAdvice()
         }
     }
@@ -381,7 +381,7 @@ struct HostedCoachingContinuityUITestFixture: View {
             }
             .padding()
         }
-        .task(id: session.pendingCoachingRequestID) {
+        .task(id: session.coachingRequestIdentity) {
             await session.resolvePendingCoachingAdvice()
         }
     }
