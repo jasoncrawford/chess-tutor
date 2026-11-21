@@ -102,7 +102,7 @@ immediately. The player can still close Help while a request is pending.
 
 Application logs are one-line `coaching-log.v1` JSON objects. Each completed
 request has exactly one `coaching_turn` record containing a compact board and
-move summary, the validated advice shown by the app, provider metrics, outcome,
+move summary, the validated advice returned to the app, provider metrics, outcome,
 HTTP status, and elapsed time. It deliberately excludes credentials, prompts,
 full rule arrays, provider/continuation IDs, reasoning, raw provider bodies, and
 exception text.
@@ -128,6 +128,50 @@ jq 'select(.event == "coaching_turn" and .game_id == "<copied-game-id>")' server
 
 New Game creates a new game ID. Closing and reopening Help keeps the game ID
 but creates a new episode ID.
+
+### Client interaction timing
+
+For rapid tapping or unexplained waiting, use **About → Share Diagnostics** on
+the iPad. Server logs only describe requests that reached the server; the client
+export also describes local-only input and requests combined before dispatch.
+The existing bounded log retains approximately the most recent 512 KB (it trims
+to roughly half that size when full), so export soon after the incident.
+
+Client coaching records use the existing compact diagnostics format, category
+`coaching`, and `schema_version=coaching-client.v1`. They include UTC event time,
+monotonic `uptime_ms`, `event_sequence`, `game_id`, `episode_id`, and (for request
+events) `request_id`. Sort events within a session by `event_sequence`; asynchronous
+file writes need not finish in event order. Join server records using game,
+episode, and request ID; wall-clock subtraction across devices is not a reliable
+latency measurement.
+
+| Event | Meaning |
+| --- | --- |
+| `board_input`, `interaction` | Tap/drag or resulting state change; disposition distinguishes local exploration, an answer, or a move destination. |
+| `request_scheduled`, `request_coalesced` | First pending update, or replacement of an unsent update. Replaced request ID is included. |
+| `request_dispatched` | Passed to the transport; not proof of server receipt. Includes final selection/move and wait measurements. |
+| `request_completed`, `request_failed`, `request_cancelled` | Client operation outcome; only safe error categories are recorded. Client cancellation does not prove provider cancellation or a cost refund. |
+| `response_applied`, `failure_applied`, `response_discarded` | Used for current advice or rejected as outdated. Applied means updated presentation state, not proof that the child read it. |
+
+At dispatch, `coalesced_count` counts **unsent** updates replaced (not completed
+or cancelled provider calls). `wait_ms` is time since the final relevant input;
+`burst_ms` is time since the first input represented by that pending batch.
+`debounce_wait_ms` is the configured quiet interval applied to this request.
+`in_flight_wait_ms` is additional waiting for a previous call **beyond** that
+quiet interval, avoiding double counting their overlap. `duration_ms` measures
+the client operation; `interaction_to_advice_ms` includes the final input's
+wait plus the operation when advice is applied. These, input timings and
+`debounce_ms` let us compare request reduction against extra waiting and estimate
+alternative intervals without making more model calls.
+
+The current starting interval is 400 ms in `HostedCoachingTiming`. Opening Help
+and explicit controls have no debounce delay. Changed piece answers and move
+revisions use trailing-edge debounce; identical repeated answers and ordinary
+selections stay local. One call runs at a time per GameSession, with only the
+latest update waiting. Neither the board nor turn completion waits for coaching.
+This is not a cross-device server rate limit. Prompts, advice text, credentials,
+continuation IDs, full payloads, and arbitrary errors are excluded from these
+client events. No additional network telemetry is sent.
 
 ## Vercel
 

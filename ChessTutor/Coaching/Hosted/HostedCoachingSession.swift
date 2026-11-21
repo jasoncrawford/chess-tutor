@@ -10,6 +10,10 @@ struct HostedCoachingSession: Equatable, Sendable {
 
     private var lastSelectedSquare: Square?
     private var lastTentativeMove: Move?
+    private var pendingSelectionQuestion: ModelCoachingChessNativeExpectedResponse?
+
+    // Retain board input semantics independently of the visible thinking panel.
+    var isAwaitingPieceAnswer: Bool { pendingSelectionQuestion != nil }
 
     var latestEvent: ModelCoachingNeutralEpisodeEvent {
         precondition(!events.isEmpty, "Hosted coaching must be opened before use")
@@ -27,6 +31,7 @@ struct HostedCoachingSession: Equatable, Sendable {
     mutating func openHelp(selectedSquare: Square?, tentativeMove: Move?) {
         events = []
         continuationID = nil
+        pendingSelectionQuestion = nil
         lastSelectedSquare = selectedSquare
         lastTentativeMove = tentativeMove
         append(kind: .helpOpened, referencedIDs: [])
@@ -45,6 +50,7 @@ struct HostedCoachingSession: Equatable, Sendable {
         }
 
         if tentativeMove != lastTentativeMove {
+            pendingSelectionQuestion = nil
             if let tentativeMove {
                 append(
                     kind: lastTentativeMove == nil ? .moveStaged : .moveReplaced,
@@ -65,6 +71,7 @@ struct HostedCoachingSession: Equatable, Sendable {
     }
 
     mutating func recordHintAction() {
+        pendingSelectionQuestion = nil
         append(kind: .actionChosen, referencedIDs: ["action:hint"])
         phase = .thinking
     }
@@ -77,6 +84,7 @@ struct HostedCoachingSession: Equatable, Sendable {
             return false
         }
         append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
+        pendingSelectionQuestion = nil
         phase = .thinking
         return true
     }
@@ -94,6 +102,7 @@ struct HostedCoachingSession: Equatable, Sendable {
             return false
         }
         append(kind: .actionChosen, referencedIDs: ["action:\(action)"])
+        pendingSelectionQuestion = nil
         phase = .thinking
         return true
     }
@@ -103,20 +112,34 @@ struct HostedCoachingSession: Equatable, Sendable {
         at square: Square,
         in committedState: GameState
     ) -> Bool {
-        guard case .ready(let turn) = phase,
-              turn.expects == .selectPiece
-                || turn.expects == .findEndangeredPiece
-                || turn.expects == .findSafeCapture,
+        let expected: ModelCoachingChessNativeExpectedResponse?
+        if case .ready(let turn) = phase {
+            expected = turn.expects
+        } else if phase == .thinking {
+            expected = pendingSelectionQuestion
+        } else {
+            expected = nil
+        }
+        guard expected == .selectPiece
+                || expected == .findEndangeredPiece
+                || expected == .findSafeCapture,
               let piece = committedState.board[square] else { return false }
+        let pieceID = ModelCoachingPositionEncoder.pieceID(piece, at: square)
+        if phase == .thinking, latestEvent.kind == .pieceSelected,
+           latestEvent.referencedIDs == [pieceID] {
+            return false
+        }
+        pendingSelectionQuestion = expected
         append(
             kind: .pieceSelected,
-            referencedIDs: [ModelCoachingPositionEncoder.pieceID(piece, at: square)]
+            referencedIDs: [pieceID]
         )
         phase = .thinking
         return true
     }
 
     mutating func recordRetry() {
+        pendingSelectionQuestion = nil
         append(kind: .helpReopened, referencedIDs: [])
         phase = .thinking
     }
@@ -148,11 +171,13 @@ struct HostedCoachingSession: Equatable, Sendable {
         continuationID: String
     ) {
         self.continuationID = continuationID
+        pendingSelectionQuestion = nil
         phase = .ready(turn)
         pulseID += 1
     }
 
     mutating func fail(_ error: HostedCoachingTransportError = .serverUnavailable) {
+        pendingSelectionQuestion = nil
         phase = error == .timedOut ? .timedOut : .failed
         pulseID += 1
     }
