@@ -103,7 +103,7 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             encoder.outputFormatting = [.sortedKeys]
             body = try encoder.encode(
                 HostedCoachingWireRequest(
-                    schemaVersion: "hosted-coaching-request.v3",
+                    schemaVersion: "hosted-coaching-request.v4",
                     gameID: correlation.gameID,
                     episodeID: correlation.episodeID,
                     request: request,
@@ -184,8 +184,8 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             }
 
             let wire = try JSONDecoder().decode(HostedCoachingWireResponse.self, from: data)
-            guard wire.schemaVersion == "hosted-coaching-turn.v3",
-                  wire.promptVersion == "tutor-v13",
+            guard wire.schemaVersion == "hosted-coaching-turn.v4",
+                  wire.promptVersion == "tutor-v14",
                   Self.isValidContinuationID(wire.continuationID) else {
                 throw HostedCoachingTransportError.invalidResponse
             }
@@ -201,10 +201,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
                 withJSONObject: rawTurn,
                 options: [.sortedKeys]
             )
-            let turn = try ModelCoachingChessNativeTurnDecoder.decodeAndValidate(
+            let turn = try ModelCoachingVisualTurnDecoder.decodeAndValidate(
                 turnData,
-                contract: contract,
-                requiresExpectedResponse: true
+                request: request
             )
             guard turn.expects != .none else {
                 throw HostedCoachingTransportError.invalidResponse
@@ -274,7 +273,6 @@ private struct HostedCoachingWireResponse: Decodable {
     let positionRevision: Int
     let promptVersion: String
     let continuationID: String
-    let turn: ModelCoachingChessNativeTurn
     let metrics: HostedCoachingMetrics
 }
 

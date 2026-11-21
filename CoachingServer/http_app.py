@@ -21,6 +21,8 @@ from CoachingServer.service import (
     HostedCoachingServiceError,
 )
 from CoachingServer.structured_logging import emit_event
+from CoachingServer.versioned_service import VersionedHostedCoachingService
+from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 
 
 _MAXIMUM_BODY_BYTES = 128 * 1024
@@ -182,11 +184,12 @@ def create_environment_application():
         "CoachingServer/configs/production-v1.json",
     )
     configuration = HostedModelConfiguration.load(configuration_path, root)
-    from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
-
-    service = HostedCoachingService(
-        provider=OpenAIResponsesClient(api_key=api_key),
-        configuration=configuration,
+    visual_configuration = HostedModelConfiguration.load(os.environ.get(
+        "CHESS_TUTOR_COACHING_VISUAL_MODEL_CONFIG", "CoachingServer/configs/visual-v1.json"), root)
+    provider = OpenAIResponsesClient(api_key=api_key)
+    service = VersionedHostedCoachingService(
+        legacy=HostedCoachingService(provider=provider, configuration=configuration),
+        visual=HostedCoachingService(provider=provider, configuration=visual_configuration),
     )
     return create_application(service=service, access_token=access_token)
 

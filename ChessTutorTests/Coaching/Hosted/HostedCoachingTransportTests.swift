@@ -17,9 +17,9 @@ final class HostedCoachingTransportTests: XCTestCase {
         let responseData = try hostedResponseData(
             request: request,
             turn: [
-                "message": "Where could this knight help in the center?",
+                "message": [["type": "text", "text": "Where could "], ["type": "piece", "text": "this knight", "square": "b1"], ["type": "text", "text": " help in the center?"]],
                 "actions": ["hint"],
-                "focus": [["type": "square", "square": "b1"]],
+                "visuals": [],
                 "expects": "stageMove",
             ]
         )
@@ -50,6 +50,7 @@ final class HostedCoachingTransportTests: XCTestCase {
         XCTAssertEqual("resp_next-123", response.continuationID)
         XCTAssertEqual(12, response.metrics.cachedInputTokens)
         XCTAssertEqual("Where could this knight help in the center?", response.turn.message)
+        XCTAssertEqual("b1", response.turn.visualContent?.runs[1].referencedSquare)
         let sent = try XCTUnwrap(loader.requests.first)
         XCTAssertEqual(URL(string: "https://coach.example/v1/coaching-turn"), sent.url)
         XCTAssertEqual("POST", sent.httpMethod)
@@ -73,7 +74,7 @@ final class HostedCoachingTransportTests: XCTestCase {
             ["episodeID", "gameID", "previousResponseID", "request", "schemaVersion"],
             sentObject.keys.sorted()
         )
-        XCTAssertEqual("hosted-coaching-request.v3", sentObject["schemaVersion"] as? String)
+        XCTAssertEqual("hosted-coaching-request.v4", sentObject["schemaVersion"] as? String)
         XCTAssertEqual(correlation.gameID, sentObject["gameID"] as? String)
         XCTAssertEqual(correlation.episodeID, sentObject["episodeID"] as? String)
         XCTAssertTrue(sentObject["previousResponseID"] is NSNull)
@@ -341,10 +342,10 @@ final class HostedCoachingTransportTests: XCTestCase {
         turn: [String: Any]
     ) throws -> [String: Any] {
         [
-            "schemaVersion": "hosted-coaching-turn.v3",
+            "schemaVersion": "hosted-coaching-turn.v4",
             "requestID": requestID ?? request.requestID,
             "positionRevision": revision ?? request.positionRevision,
-            "promptVersion": "tutor-v13",
+            "promptVersion": "tutor-v14",
             "continuationID": "resp_next-123",
             "turn": turn,
             "metrics": [

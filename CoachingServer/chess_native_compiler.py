@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from CoachingServer.visual_compiler import VisualContextCompiler
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -106,12 +107,21 @@ def compile_outcome_follow_up_context(request, prompt_version):
     return _compile_context(request, prompt_version, is_follow_up=True, grounded=True, displayed=True, mating_goals=True, outcome=True)
 
 
+def compile_visual_context(request, prompt_version):
+    return VisualContextCompiler.compile(request, compile_outcome_context(request, "tutor-v13"), prompt_version)
+
+
+def compile_visual_follow_up_context(request, prompt_version):
+    return VisualContextCompiler.compile(request, compile_outcome_follow_up_context(request, "tutor-v13"), prompt_version)
+
+
 PROMPT_GENERATORS = {
     "chess-native-v13": (compile_context, compile_follow_up_context),
     "chess-native-grounded-v1": (compile_grounded_context, compile_grounded_follow_up_context),
     "chess-native-grounded-v2": (compile_displayed_context, compile_displayed_follow_up_context),
     "chess-native-grounded-v3": (compile_goal_context, compile_goal_follow_up_context),
     "chess-native-grounded-v4": (compile_outcome_context, compile_outcome_follow_up_context),
+    "chess-visual-grounded-v1": (compile_visual_context, compile_visual_follow_up_context),
 }
 
 
