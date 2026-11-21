@@ -1,0 +1,1187 @@
+{
+  "schemaVersion": "visual-coaching-validation.v1",
+  "requests": {
+    "normal": {
+      "schemaVersion": "model-coaching-neutral-request.v1",
+      "requestID": "shared-selected-knight",
+      "positionRevision": 0,
+      "position": {
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+        "sideToMove": "white",
+        "status": "ongoing"
+      },
+      "gameHistory": [],
+      "interaction": {
+        "selectedSquare": "b1",
+        "selectedPieceReference": "piece:white:knight:b1",
+        "tentativeMove": null,
+        "latestEvent": {
+          "sequence": 1,
+          "kind": "pieceSelected",
+          "referencedIDs": [
+            "piece:white:knight:b1"
+          ]
+        },
+        "episodeEvents": [
+          {
+            "sequence": 1,
+            "kind": "pieceSelected",
+            "referencedIDs": [
+              "piece:white:knight:b1"
+            ]
+          }
+        ]
+      },
+      "pieces": [
+        {
+          "id": "piece:black:king:e8",
+          "color": "black",
+          "kind": "king",
+          "square": "e8"
+        },
+        {
+          "id": "piece:white:king:e1",
+          "color": "white",
+          "kind": "king",
+          "square": "e1"
+        },
+        {
+          "id": "piece:white:knight:b1",
+          "color": "white",
+          "kind": "knight",
+          "square": "b1"
+        },
+        {
+          "id": "piece:black:rook:b8",
+          "color": "black",
+          "kind": "rook",
+          "square": "b8"
+        }
+      ],
+      "legalMoves": [
+        {
+          "id": "move:b1-a3",
+          "san": "Na3",
+          "canonicalMove": "b1a3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "a3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        },
+        {
+          "id": "move:b1-c3",
+          "san": "Nc3",
+          "canonicalMove": "b1c3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "c3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        }
+      ],
+      "occupiedSquareRelationships": [
+        {
+          "id": "relationship:attack:piece:black:rook:b8->piece:white:knight:b1",
+          "kind": "attacks",
+          "sourcePieceReference": "piece:black:rook:b8",
+          "targetPieceReference": "piece:white:knight:b1"
+        }
+      ],
+      "tentativeReplies": [],
+      "capabilities": {
+        "canSelectBoardPiece": true,
+        "canInspectSquare": true,
+        "canStageMove": true,
+        "canReplaceMove": false,
+        "canRemoveMove": false
+      }
+    },
+    "hint": {
+      "schemaVersion": "model-coaching-neutral-request.v1",
+      "requestID": "shared-selected-knight",
+      "positionRevision": 0,
+      "position": {
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+        "sideToMove": "white",
+        "status": "ongoing"
+      },
+      "gameHistory": [],
+      "interaction": {
+        "selectedSquare": "b1",
+        "selectedPieceReference": "piece:white:knight:b1",
+        "tentativeMove": null,
+        "latestEvent": {
+          "sequence": 2,
+          "kind": "actionChosen",
+          "referencedIDs": [
+            "action:hint"
+          ]
+        },
+        "episodeEvents": [
+          {
+            "sequence": 1,
+            "kind": "pieceSelected",
+            "referencedIDs": [
+              "piece:white:knight:b1"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "actionChosen",
+            "referencedIDs": [
+              "action:hint"
+            ]
+          }
+        ]
+      },
+      "pieces": [
+        {
+          "id": "piece:black:king:e8",
+          "color": "black",
+          "kind": "king",
+          "square": "e8"
+        },
+        {
+          "id": "piece:white:king:e1",
+          "color": "white",
+          "kind": "king",
+          "square": "e1"
+        },
+        {
+          "id": "piece:white:knight:b1",
+          "color": "white",
+          "kind": "knight",
+          "square": "b1"
+        },
+        {
+          "id": "piece:black:rook:b8",
+          "color": "black",
+          "kind": "rook",
+          "square": "b8"
+        }
+      ],
+      "legalMoves": [
+        {
+          "id": "move:b1-a3",
+          "san": "Na3",
+          "canonicalMove": "b1a3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "a3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        },
+        {
+          "id": "move:b1-c3",
+          "san": "Nc3",
+          "canonicalMove": "b1c3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "c3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        }
+      ],
+      "occupiedSquareRelationships": [
+        {
+          "id": "relationship:attack:piece:black:rook:b8->piece:white:knight:b1",
+          "kind": "attacks",
+          "sourcePieceReference": "piece:black:rook:b8",
+          "targetPieceReference": "piece:white:knight:b1"
+        }
+      ],
+      "tentativeReplies": [],
+      "capabilities": {
+        "canSelectBoardPiece": true,
+        "canInspectSquare": true,
+        "canStageMove": true,
+        "canReplaceMove": false,
+        "canRemoveMove": false
+      }
+    },
+    "staged": {
+      "schemaVersion": "model-coaching-neutral-request.v1",
+      "requestID": "shared-selected-knight",
+      "positionRevision": 0,
+      "position": {
+        "fen": "1r2k3/8/8/8/8/8/8/1N2K3 w - - 0 1",
+        "sideToMove": "white",
+        "status": "ongoing"
+      },
+      "gameHistory": [],
+      "interaction": {
+        "selectedSquare": "a3",
+        "selectedPieceReference": "piece:white:knight:b1",
+        "tentativeMove": {
+          "id": "move:b1-a3",
+          "san": "Na3",
+          "canonicalMove": "b1a3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "a3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        },
+        "latestEvent": {
+          "sequence": 2,
+          "kind": "moveStaged",
+          "referencedIDs": [
+            "move:b1-a3"
+          ]
+        },
+        "episodeEvents": [
+          {
+            "sequence": 1,
+            "kind": "pieceSelected",
+            "referencedIDs": [
+              "piece:white:knight:b1"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "moveStaged",
+            "referencedIDs": [
+              "move:b1-a3"
+            ]
+          }
+        ]
+      },
+      "pieces": [
+        {
+          "id": "piece:black:king:e8",
+          "color": "black",
+          "kind": "king",
+          "square": "e8"
+        },
+        {
+          "id": "piece:white:king:e1",
+          "color": "white",
+          "kind": "king",
+          "square": "e1"
+        },
+        {
+          "id": "piece:white:knight:b1",
+          "color": "white",
+          "kind": "knight",
+          "square": "b1"
+        },
+        {
+          "id": "piece:black:rook:b8",
+          "color": "black",
+          "kind": "rook",
+          "square": "b8"
+        }
+      ],
+      "legalMoves": [
+        {
+          "id": "move:b1-a3",
+          "san": "Na3",
+          "canonicalMove": "b1a3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "a3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        },
+        {
+          "id": "move:b1-c3",
+          "san": "Nc3",
+          "canonicalMove": "b1c3",
+          "sourcePieceReference": "piece:white:knight:b1",
+          "destinationSquare": "c3",
+          "capturePieceReference": null,
+          "special": "none",
+          "isLegal": true,
+          "givesCheck": false,
+          "givesCheckmate": false
+        }
+      ],
+      "occupiedSquareRelationships": [
+        {
+          "id": "relationship:attack:piece:black:rook:b8->piece:white:knight:b1",
+          "kind": "attacks",
+          "sourcePieceReference": "piece:black:rook:b8",
+          "targetPieceReference": "piece:white:knight:b1"
+        }
+      ],
+      "tentativeReplies": [],
+      "capabilities": {
+        "canSelectBoardPiece": true,
+        "canInspectSquare": true,
+        "canStageMove": true,
+        "canReplaceMove": true,
+        "canRemoveMove": true
+      },
+      "tentativePosition": {
+        "pieces": [
+          {
+            "id": "piece:black:king:e8",
+            "color": "black",
+            "kind": "king",
+            "square": "e8"
+          },
+          {
+            "id": "piece:white:king:e1",
+            "color": "white",
+            "kind": "king",
+            "square": "e1"
+          },
+          {
+            "id": "piece:white:knight:a3",
+            "color": "white",
+            "kind": "knight",
+            "square": "a3"
+          },
+          {
+            "id": "piece:black:rook:b8",
+            "color": "black",
+            "kind": "rook",
+            "square": "b8"
+          }
+        ],
+        "occupiedSquareRelationships": [],
+        "movedPieceControlledSquares": [
+          "b1",
+          "c2",
+          "c4",
+          "b5"
+        ],
+        "status": "ongoing"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "square-with-trailing-newline",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [{"type": "square", "text": "here", "square": "c3\n"}],
+        "actions": [], "visuals": [], "expects": "stageMove"
+      }
+    },
+    {
+      "id": "plain",
+      "context": "normal",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "linked-threat",
+      "context": "normal",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": ". Where could it go?"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "attack",
+            "from": "b8",
+            "to": "b1"
+          }
+        ],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "empty-square",
+      "context": "normal",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try "
+          },
+          {
+            "type": "square",
+            "text": "here",
+            "square": "c3"
+          },
+          {
+            "type": "text",
+            "text": "."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "knight-move",
+      "context": "hint",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "move",
+            "from": "b1",
+            "to": "c3"
+          }
+        ],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "empty-piece",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "this knight",
+            "square": "c3"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "off-board",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "square",
+            "text": "here",
+            "square": "c9"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "three-references",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "rook",
+            "square": "b8"
+          },
+          {
+            "type": "piece",
+            "text": "knight",
+            "square": "b1"
+          },
+          {
+            "type": "piece",
+            "text": "king",
+            "square": "e1"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "two-arrows",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": ". Where could it go?"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "attack",
+            "from": "b8",
+            "to": "b1"
+          },
+          {
+            "type": "move",
+            "from": "b1",
+            "to": "c3"
+          }
+        ],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "reversed-attack",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": ". Where could it go?"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "attack",
+            "from": "b1",
+            "to": "b8"
+          }
+        ],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "unavailable-move",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "move",
+            "from": "b1",
+            "to": "b2"
+          }
+        ],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "unknown-key",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove",
+        "extra": true
+      }
+    },
+    {
+      "id": "unknown-run-key",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Look.",
+            "url": "https://example.test"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "no-response",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "none"
+      }
+    },
+    {
+      "id": "unavailable-action",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "playMove"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "duplicate-action",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint",
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "notation",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Play Nc3."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "blank",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "   "
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "limit-256",
+      "context": "normal",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "limit-257",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "ten-runs",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          },
+          {
+            "type": "text",
+            "text": "word "
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "stageMove"
+      }
+    },
+    {
+      "id": "question-no-visuals",
+      "context": "normal",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Which knight needs help? Tap it to show me."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "question-answer-link",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "question-source-without-hint",
+      "context": "normal",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "this rook",
+            "square": "b8"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "hint-source-clue",
+      "context": "hint",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks which knight? Tap it to show me."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "hint-answer-link",
+      "context": "hint",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "hint-question-arrow",
+      "context": "hint",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "This rook",
+            "square": "b8"
+          },
+          {
+            "type": "text",
+            "text": " attacks "
+          },
+          {
+            "type": "piece",
+            "text": "your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": ". Where could it go?"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "attack",
+            "from": "b8",
+            "to": "b1"
+          }
+        ],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "hint-question-square",
+      "context": "hint",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "square",
+            "text": "here",
+            "square": "b1"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findEndangeredPiece"
+      }
+    },
+    {
+      "id": "capture-source-clue",
+      "context": "hint",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "Your knight",
+            "square": "b1"
+          },
+          {
+            "type": "text",
+            "text": " can take which piece? Tap it."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findSafeCapture"
+      }
+    },
+    {
+      "id": "capture-answer-clue",
+      "context": "hint",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "the rook",
+            "square": "b8"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "findSafeCapture"
+      }
+    },
+    {
+      "id": "staged-visible-piece",
+      "context": "staged",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "Your knight",
+            "square": "a3"
+          },
+          {
+            "type": "text",
+            "text": " is out of the rook's path."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      }
+    },
+    {
+      "id": "staged-old-origin",
+      "context": "staged",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "piece",
+            "text": "Your knight",
+            "square": "b1"
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      }
+    },
+    {
+      "id": "staged-canonical-revision",
+      "context": "staged",
+      "valid": true,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "move",
+            "from": "b1",
+            "to": "c3"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      }
+    },
+    {
+      "id": "staged-impossible-second-move",
+      "context": "staged",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "move",
+            "from": "a3",
+            "to": "c3"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      }
+    },
+    {
+      "id": "staged-stale-attack",
+      "context": "staged",
+      "valid": false,
+      "turn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Try moving a piece toward the middle."
+          }
+        ],
+        "actions": [
+          "hint"
+        ],
+        "visuals": [
+          {
+            "type": "attack",
+            "from": "b8",
+            "to": "b1"
+          }
+        ],
+        "expects": "chooseWhetherToPlay"
+      }
+    }
+  ]
+}
+
