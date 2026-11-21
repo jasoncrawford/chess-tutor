@@ -7,6 +7,36 @@ final class HostedCoachingDebounceTests: XCTestCase {
     private let b1 = Square(file: .b, rank: 1)
     private let g1 = Square(file: .g, rank: 1)
 
+    func testVisualControlsLogLocallyAndEscapeCancelsDebouncedAnswer() async throws {
+        let fixture = Fixture()
+        fixture.session.startCoaching()
+        let initial = Task { await fixture.session.resolvePendingCoachingAdvice() }
+        _ = try await fixture.provider.request(at: 0)
+        await fixture.provider.succeed(at: 0, message: "Your knight", visualContent:
+            .init(runs: [.piece(text: "Your knight", square: "g1")], visuals: [.move(from: "g1", to: "f3")]))
+        await initial.value
+        fixture.session.replayCoachingReference(at: 0)
+        fixture.session.replayCoachingVisual()
+        await assertCallCount(fixture.provider, 1)
+        XCTAssertEqual(fixture.events.snapshot.filter { $0.name == "visual_reference" }.count, 1)
+        XCTAssertEqual(fixture.events.snapshot.filter { $0.name == "visual_replay" }.count, 1)
+        fixture.session.chooseCoachingAction(.hint)
+        let hint = Task { await fixture.session.resolvePendingCoachingAdvice() }
+        _ = try await fixture.provider.request(at: 1)
+        await fixture.provider.succeed(at: 1, message: "Tap a knight", expects: .selectPiece)
+        await hint.value
+        fixture.session.handleCoachingSquareTap(b1)
+        let answeringIdentity = fixture.session.coachingRequestIdentity
+        fixture.session.playInsteadOfAnswering()
+        XCTAssertNil(fixture.session.pendingCoachingRequestID)
+        XCTAssertNotEqual(fixture.session.coachingRequestIdentity, answeringIdentity)
+        fixture.clock.advance(by: 1)
+        await fixture.session.resolvePendingCoachingAdvice()
+        await assertCallCount(fixture.provider, 2)
+        XCTAssertTrue(fixture.events.snapshot.contains { $0.name == "request_cancelled" && $0.fields["reason"] == "play_instead" })
+        XCTAssertTrue(fixture.events.snapshot.contains { $0.name == "play_instead" && $0.fields["disposition"] == "local" })
+    }
+
     func testTrailingDeadlineUsesFinalAnswerAndLogsCombinedRequests() async throws {
         let fixture = Fixture()
         try await fixture.open(expects: .selectPiece)
@@ -17,7 +47,8 @@ final class HostedCoachingDebounceTests: XCTestCase {
         fixture.clock.advance(by: 0.2)
         XCTAssertTrue(fixture.session.handleCoachingSquareTap(g1))
         XCTAssertEqual(fixture.session.coachingRequestIdentity, identity)
-        XCTAssertEqual(fixture.session.selectedSquare, g1)
+        XCTAssertNil(fixture.session.selectedSquare, "Answering does not select a mover")
+        XCTAssertEqual(fixture.session.coachingPresentation?.focus.emphasizedSquares, [g1])
         fixture.clock.advance(by: 0.2)
         await eventually { fixture.clock.sleepCount == 2 }
         fixture.clock.advance(by: 0.199)
@@ -78,6 +109,8 @@ final class HostedCoachingDebounceTests: XCTestCase {
         try await fixture.open(expects: .selectPiece)
         XCTAssertTrue(fixture.session.handleCoachingSquareTap(g1))
         fixture.clock.advance(by: 0.1)
+        XCTAssertFalse(fixture.session.handleCoachingSquareDragStart(g1))
+        fixture.session.select(g1)
         XCTAssertEqual(fixture.session.moveSelectedPiece(to: Square(file: .f, rank: 3)), .moved)
         XCTAssertTrue(fixture.session.canFinishTurn)
         XCTAssertFalse(fixture.session.handleCoachingSquareTap(b1), "A stale selection question must not consume taps after a move")
@@ -399,13 +432,13 @@ private actor DebounceProvider: HostedCoachingTurning {
         pending = [:]
         for call in calls.values { call.resume(throwing: CancellationError()) }
     }
-    func succeed(at index: Int, message: String, expects: ModelCoachingChessNativeExpectedResponse = .stageMove, requestIDOverride: String? = nil) {
+    func succeed(at index: Int, message: String, expects: ModelCoachingChessNativeExpectedResponse = .stageMove, requestIDOverride: String? = nil, visualContent: ModelCoachingVisualContent? = nil) {
         let request = requests[index]
         pending.removeValue(forKey: index)?.resume(returning: HostedCoachingResponse(
             schemaVersion: "hosted-coaching-turn.v3", requestID: requestIDOverride ?? request.requestID,
             positionRevision: request.positionRevision, promptVersion: "tutor-v13",
             continuationID: "secret-continuation", turn: ModelCoachingChessNativeTurn(
-                message: message, actions: ["hint"], focus: [], expects: expects
+                message: message, actions: ["hint"], focus: [], expects: expects, visualContent: visualContent
             ), metrics: HostedCoachingMetrics(inputTokens: 10, cachedInputTokens: 0, outputTokens: 5,
                 reasoningTokens: 0, totalTokens: 15, latencyMilliseconds: 20)
         ))

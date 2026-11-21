@@ -50,7 +50,7 @@ struct VisualCoachingUITestFixture: View {
             Text("Requests: \(provider.calls)").font(.caption).padding(4).accessibilityIdentifier("visual-request-count")
         }
         .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("-visual-large") ? .accessibility3 : .large)
-        .task(id: session.pendingCoachingRequestID) { await session.resolvePendingCoachingAdvice() }
+        .task(id: session.coachingRequestIdentity) { await session.resolvePendingCoachingAdvice() }
     }
 }
 

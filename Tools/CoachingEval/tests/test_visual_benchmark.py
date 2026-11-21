@@ -13,6 +13,14 @@ from Tools.CoachingEval.benchmark.visual_evaluation import run
 
 
 class VisualBenchmarkTests(unittest.TestCase):
+    def test_move_hint_acceptance_requires_directional_arrow_not_just_linked_endpoints(self):
+        row = dict(cellID="visual|v05-draft-revision|r1", caseID="v05-draft-revision",
+                   parsedTurn=dict(message=[dict(type="piece", text="Your knight", square="h3"),
+                                           dict(type="square", text="here", square="f3")], visuals=[]))
+        self.assertEqual([row["cellID"]], VisualMetrics.missing_move_arrows([row], {"v05-draft-revision"}))
+        row["parsedTurn"]["visuals"] = [dict(type="move", **{"from": "g1", "to": "f3"})]
+        self.assertEqual([], VisualMetrics.missing_move_arrows([row], {"v05-draft-revision"}))
+
     def test_visual_export_is_free_paid_calls_require_cap_and_saved_run_is_not_replayed(self):
         root = Path(__file__).resolve().parents[3]
         request = json.loads((root / "Tools/CoachingEval/fixtures/visual-coaching-validation-v1.json").read_text())["requests"]["normal"]

@@ -9,6 +9,12 @@ def message_text(turn):
 
 class VisualMetrics:
     @staticmethod
+    def missing_move_arrows(records, required_case_ids):
+        """Explicit fixture acceptance, separate from semantic judge scores."""
+        return [row["cellID"] for row in records if row["caseID"] in required_case_ids
+                and not any(cue.get("type") == "move" for cue in (row.get("parsedTurn") or {}).get("visuals", []))]
+
+    @staticmethod
     def summarize(records):
         result = {}
         for row in records:

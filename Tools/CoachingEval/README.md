@@ -583,7 +583,7 @@ for retained comparisons, failed candidates, and latency limitations.
 turns (seven independent cases and one three-turn sequence) and their complete
 rendered prompts, with **no API calls**. It requires a clean checkout so the
 export can be bound to a commit. Read the printed artifact directory's
-`prompts/prompts.json` before running a changed prompt.
+`evaluation/prompts.json` before running a changed prompt.
 
 `bash scripts/run_coaching_regressions.sh --visual --paid --max-cost 10` opts into
 the paid run using the existing macOS Keychain item. This is a new experiment

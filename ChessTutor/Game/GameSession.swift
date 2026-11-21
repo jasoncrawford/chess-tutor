@@ -141,7 +141,7 @@ final class GameSession {
     }
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
-        if let hostedCoachingSession {
+        if hostedCoachingSession != nil {
             return coachingPresentation?.boardTask ?? .none
         }
         return coachingSession?.authoritativeBoardTask ?? .none
@@ -889,7 +889,11 @@ final class GameSession {
     }
 
     func replayCoachingReference(at runIndex: Int) {
+        let previousPulse = hostedCoachingSession?.pulseID
         hostedCoachingSession?.replayReference(at: runIndex)
+        if hostedCoachingSession?.pulseID != previousPulse {
+            logCoachingEvent("visual_reference", fields: ["run_index": String(runIndex), "disposition": "local"])
+        }
     }
 
     var coachingReferenceReplayID: String? { hostedCoachingSession?.referenceReplayID }
@@ -899,13 +903,24 @@ final class GameSession {
     }
 
     func replayCoachingVisual() {
+        let previousPulse = hostedCoachingSession?.pulseID
         hostedCoachingSession?.replayVisual()
+        if hostedCoachingSession?.pulseID != previousPulse {
+            logCoachingEvent("visual_replay", fields: ["disposition": "local"])
+        }
     }
 
     func playInsteadOfAnswering() {
         guard hostedCoachingSession?.isAnswering == true else { return }
+        if let pending = pendingHostedCoachingRequest {
+            logCoachingEvent("request_cancelled", pending: pending, fields: [
+                "reason": "play_instead", "was_dispatched": String(hostedInFlightRequestID == pending.id)
+            ])
+        }
         pendingHostedCoachingRequest = nil
+        hostedCoachingWorkID = nil
         hostedCoachingSession?.playInstead()
+        logCoachingEvent("play_instead", fields: ["disposition": "local"])
     }
 
     private func queueHostedCoachingRequest(debounced: Bool = false) {

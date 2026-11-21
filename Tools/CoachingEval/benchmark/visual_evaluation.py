@@ -15,6 +15,7 @@ from Tools.CoachingEval.benchmark.report import write_report
 from Tools.CoachingEval.benchmark.regression import RegressionEvaluation
 from Tools.CoachingEval.benchmark.runner import run_candidates
 from Tools.CoachingEval.benchmark.sensitivity import JudgeSensitivity
+from Tools.CoachingEval.benchmark.visual_metrics import VisualMetrics
 from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 
 
@@ -27,7 +28,7 @@ def run(corpus_path, output, *, client=None, max_cost=None, qualification_root=N
     output = Path(output)
     if output.exists():
         raise FileExistsError("Refusing to replay a saved run; retain its budget and grading checkpoints")
-    candidate = load_candidate(config / "configs/astra-visual-v2-low.json", root)
+    candidate = load_candidate(config / "configs/astra-visual-v3-low.json", root)
     prices = load_prices(config / "pricing-v2.json")
     # Validate a paid cap before creating anything or transmitting a request.
     if client is not None and max_cost is None:
@@ -57,7 +58,11 @@ def run(corpus_path, output, *, client=None, max_cost=None, qualification_root=N
                   destination=output / "grades", qualification_path=qualification, price_table=prices,
                   checkpoint_path=output / "grading-checkpoint.json")
         aggregate, _ = write_report(output / "candidates", output / "grades", prices, output / "report")
+        records = [json.loads(line) for line in (output / "candidates/records.jsonl").read_text().splitlines()]
+        result["missingRequestedMoveArrows"] = VisualMetrics.missing_move_arrows(records, {"v04-move-hint", "v05-draft-revision"})
         result["status"] = "completed" if not json.loads(aggregate.read_text())["integrityIssues"] else "integrityFailure"
+        if result["status"] == "completed" and result["missingRequestedMoveArrows"]:
+            result["status"] = "visualAcceptanceFailed"
         return result
     except BaseException:
         result["status"] = "stopped"
