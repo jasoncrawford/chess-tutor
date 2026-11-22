@@ -61,7 +61,37 @@ the explicit visual manifest now binds the ten-turn inventory. Failed/diagnostic
 artifacts remain unchanged. Configuration/prompt hashes and execution file hashes
 identify exactly what ran; early corpora were exported from a working snapshot.
 
-Final verification and broader guardrail results are recorded below when complete.
+Final visual-v3 targeted run: **29/30 completed and mechanically valid; all 29
+completed answers graded strong**, with no severe content flags. Five of the six
+requested move-hint attempts completed; all five supplied the required arrow.
+The sixth returned an incomplete provider response. It remains a failure, not a
+rerolled success; the aggregate therefore reports 96.7% strong/valid and incomplete
+cost accounting. Its p90 latency, including that failed attempt, was 5.15 seconds.
+This is a development regression result, not a production promotion certificate.
+
+The interrupted run resumed only its seven unattempted candidate cells. Completed
+and failed records kept their original latency and usage. The old dry preview
+(which incorrectly rendered follow-ups as initial prompts) is retained separately;
+dry previews now use exactly the same compiler as the paid runner. Resume checks
+input/configuration/schema bindings, restores sequence continuations, and refuses
+to replay an unknown in-flight candidate automatically.
+
+The broader frozen playthrough suite produced **23/24 valid, strong replies**;
+one transport failure remains in the denominator (p90 3.93 seconds). The frozen
+later-game suite produced **24/24 valid, strong replies, no severe flags**
+(p90 4.20 seconds). A failed playthrough judge call was resumed from its checkpoint
+without regrading completed cells; its unknown-charge reservation remains counted.
+The additional six-turn conversation subset is diagnostic, not a holdout.
+Its candidate sweep stopped before attempt 18 of 18 because the next conservative
+reservation would exceed the approved cap; 17 attempts are retained and ungraded.
+Do not treat that partial sweep as passing. The targeted suite's separate
+three-turn answer sequence was completed and graded in all three repetitions.
+
+Final ledger: **$9.703365 estimated/reserved against the $10 cumulative cap**,
+with four unresolved reservations (the early interrupted qualification, incomplete
+candidate, transport-failed candidate and failed judge call). This is deliberately
+conservative, not an assertion that the provider invoiced that amount. No further
+automated paid validation was started after the cap guard stopped the sweep.
 
 ## Verification and design decisions
 
@@ -72,6 +102,39 @@ Native UI tests exercise actual reference buttons, local escape, and a drag
 while a delayed answer is in flight. Motion-policy tests exercise the actual
 renderer with Reduce Motion enabled/disabled; no test claims to toggle the
 simulator's read-only system preference.
+
+Final local verification: **81 server tests, 401 evaluation tests, 1,044 native
+unit tests and 16 UI tests passed**. The complete native run exposed duplicate
+VoiceOver routine announcements in the legacy panel; after restoring that panel's
+semantic header, all 16 UI tests were rerun and passed. A final 24-test runner
+check also passed after making the in-flight marker durable before transmission.
+The Python suite needed the machine's installed Node 22 on PATH, not its obsolete
+system Node; no tests were skipped to accommodate that environment issue.
+
+The independent review found five important gaps, all addressed in one fix pass:
+
+- Board answers now resolve displayed draft pieces, including captures; empty old
+  origins do not create answers. The v4 compiler prioritizes the latest answer
+  event over a previously selected mover without altering the v3 compiler behavior.
+- Protocol-tagged continuation handles reset v3/v4 cross-version context.
+- VoiceOver reference values identify the actual piece/square; Replay describes
+  arrow direction and draft relocation even while a linked reference is focused.
+- Actual ±90-degree panel tests verify semantic order, target values, local
+  activation and contained 44-point targets. Full-screen native captures confirm
+  the layout; app-only rotated screenshots were cropped by the test framework.
+- Candidate resume, cumulative journal reuse and exact follow-up previews are
+  repeatable and tested. Provider/judge failures retain cost reservations.
+
+The reviewer delivered these findings before its session ended; there was no
+second review or claim of a post-fix reviewer sign-off. Accessibility hierarchy
+and actions are automatically tested; spoken VoiceOver audio was not manually
+audited. The app mechanics remain usable if a provider call fails.
+
+Retained local evidence: `.coaching-eval/visual/20261121/` contains the exact
+corpora, full prompts and responses, budget ledger, versioned reports, migration
+script, execution notes and native full-screen screenshots. The preview launcher
+is running against this worktree's local server; the initial playable board was
+verified on **ChessTutor Coaching Smoke** without an extra paid Help request.
 
 Answer taps deliberately do not also select a piece to move. Play instead or a
 drag restores normal movement; an intentionally preselected move destination
