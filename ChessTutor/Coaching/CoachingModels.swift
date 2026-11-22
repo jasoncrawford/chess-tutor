@@ -558,7 +558,7 @@ struct CoachingPresentation: Equatable, Sendable {
     let observation: String?
     let hint: CoachingHint?
     let routine: [CoachingRoutineState]
-    let actions: [CoachingActionPresentation]
+    var actions: [CoachingActionPresentation]
     let boardTask: CoachingBoardTask
     var focus: CoachFocusPresentation
     let isThinking: Bool
@@ -567,6 +567,7 @@ struct CoachingPresentation: Equatable, Sendable {
     var canPlayInstead: Bool = false
     var canReplayVisual: Bool = false
     var isAwaitingAnswer: Bool = false
+    var boardAnswerPrompt: String? = nil
 
     init(
         primaryMessage: String,

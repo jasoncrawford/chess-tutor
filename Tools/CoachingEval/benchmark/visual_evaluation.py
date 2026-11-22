@@ -28,7 +28,7 @@ def run(corpus_path, output, *, client=None, max_cost=None, qualification_root=N
     output = Path(output)
     if output.exists() and not resume:
         raise FileExistsError("Refusing to replay a saved run; retain its budget and grading checkpoints")
-    candidate = load_candidate(config / "configs/astra-visual-v3-low.json", root)
+    candidate = load_candidate(config / "configs/astra-visual-v4-low.json", root)
     prices = load_prices(config / "pricing-v2.json")
     # Validate a paid cap before creating anything or transmitting a request.
     if client is not None and max_cost is None:

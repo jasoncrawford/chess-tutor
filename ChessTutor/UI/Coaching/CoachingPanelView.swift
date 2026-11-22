@@ -238,16 +238,6 @@ struct CoachingPanelView: View {
                 routineHeader(axis: .horizontal)
             }
             Spacer(minLength: 0)
-            if presentation?.canReplayVisual == true {
-                Button { session.replayCoachingVisual() } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(AppTheme.coachFocusRing)
-                .accessibilityLabel("Replay board hint")
-                .accessibilityValue(CoachingVisualAccessibility.arrow(presentation?.replayPath, board: session.state.board))
-            }
         }
     }
 
@@ -268,9 +258,17 @@ struct CoachingPanelView: View {
 
     private var conversationRegion: some View {
         Group {
-            if presentation?.isThinking == true {
-                CoachingThinkingIndicator(reduceMotion: reduceMotion)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if presentation?.isThinking == true || presentation?.isAwaitingAnswer == true {
+                VStack(spacing: 14) {
+                    CoachingThinkingIndicator(reduceMotion: reduceMotion)
+                    if presentation?.isAwaitingAnswer == true {
+                        Text("Checking your answer…")
+                            .font(bodyFont)
+                            .foregroundStyle(AppTheme.mutedInk)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.vertical) {
                     conversation
@@ -296,7 +294,7 @@ struct CoachingPanelView: View {
 
     private var accessibilityConversationCopy: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if presentation?.isThinking == true {
+            if presentation?.isThinking == true || presentation?.isAwaitingAnswer == true {
                 // A stable semantic counterpart to the animated visual below.
                 Color.clear
                     .frame(width: 64, height: 40)
@@ -304,6 +302,9 @@ struct CoachingPanelView: View {
                     .accessibilityLabel("Thinking")
                     .accessibilityIdentifier("coaching-thinking-indicator")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if presentation?.isAwaitingAnswer == true {
+                    Text("Checking your answer…").font(bodyFont)
+                }
             } else if let presentation {
                 messageCopy(presentation)
                     .font(bodyFont)
@@ -359,6 +360,19 @@ struct CoachingPanelView: View {
                             CoachingConversationAccessibilityElement.instruction.sortPriority
                         )
                 }
+                if presentation.canReplayVisual {
+                    Button { session.replayCoachingVisual() } label: {
+                        Label("Show arrow", systemImage: "arrow.up.right")
+                            .font(AppTheme.coachingActionFont(size: 16))
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                            .background(AppTheme.coachFocusRing.opacity(0.08), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppTheme.coachFocusRing)
+                    .accessibilityValue(CoachingVisualAccessibility.arrow(presentation.replayPath, board: session.state.board))
+                    .accessibilityHint("Show the coach's arrow on the board again")
+                }
 
                 if let observation = presentation.observation {
                     CoachingResponseNote(text: observation, font: bodyFont)
@@ -374,13 +388,10 @@ struct CoachingPanelView: View {
     @ViewBuilder
     private func messageCopy(_ presentation: CoachingPresentation) -> some View {
         if let content = presentation.visualContent {
-            CoachingMessageView(content: content, board: session.state.board,
+            CoachingMessageView(content: content, board: session.state.board, fontSize: min(coachingBodySize, 25),
                                 onReference: session.replayCoachingReference)
         } else {
             Text(presentation.primaryMessage)
-        }
-        if presentation.isAwaitingAnswer {
-            ProgressView().controlSize(.small).accessibilityLabel("Thinking")
         }
     }
 

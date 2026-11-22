@@ -18,7 +18,13 @@ struct VisualCoachingUITestFixture: View {
                 Square(file: .b, rank: 1): Piece(kind: .knight, color: .white),
                 Square(file: .g, rank: 1): Piece(kind: .knight, color: .white),
             ]), sideToMove: .white) : .startingPosition()
-        let session = GameSession(state: state, hostedCoachingProvider: provider)
+        let edgeState = GameState(board: Board(pieces: [
+            Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+            Square(file: .h, rank: 8): Piece(kind: .king, color: .black),
+            Square(file: .a, rank: 7): Piece(kind: .rook, color: .white),
+            Square(file: .h, rank: 7): Piece(kind: .rook, color: .black)
+        ]), sideToMove: .white)
+        let session = GameSession(state: provider.scenario == "edge-drag" ? edgeState : state, hostedCoachingProvider: provider)
         if provider.scenario == "draft" {
             session.select(Square(file: .g, rank: 1))
             _ = session.moveSelectedPiece(to: Square(file: .h, rank: 3))
@@ -53,7 +59,11 @@ struct VisualCoachingUITestFixture: View {
         }
         .background(AppTheme.table)
         .overlay(alignment: .bottomTrailing) {
-            Text("Requests: \(provider.calls)").font(.caption).padding(4).accessibilityIdentifier("visual-request-count")
+            VStack {
+                Text("Requests: \(provider.calls)").accessibilityIdentifier("visual-request-count")
+                Text("Focus: \(session.coachingPresentation?.focus.emphasizedSquares.map(ModelCoachingPositionEncoder.squareName).sorted().joined(separator: ",") ?? "")")
+                    .accessibilityIdentifier("visual-focus")
+            }.font(.caption).padding(4)
         }
         .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("-visual-large") ? .accessibility3 : .large)
         .task(id: session.coachingRequestIdentity) { await session.resolvePendingCoachingAdvice() }
@@ -75,7 +85,10 @@ struct VisualCoachingUITestFixture: View {
         try await Task.sleep(for: .milliseconds(request.interaction.latestEvent.kind == .pieceSelected ? answerDelay : 150))
         let content: ModelCoachingVisualContent
         let expects: ModelCoachingChessNativeExpectedResponse
-        if scenario == "question" && request.interaction.tentativeMove != nil {
+        if scenario == "edge-drag" {
+            content = .init(runs: [.text("Tap the rook that needs help.")], visuals: [])
+            expects = request.interaction.tentativeMove == nil ? .findEndangeredPiece : .chooseWhetherToPlay
+        } else if scenario == "question" && request.interaction.tentativeMove != nil {
             content = .init(runs: [.text("Your knight moved out of the rook's path.")], visuals: [])
             expects = .chooseWhetherToPlay
         } else if scenario == "question" && request.interaction.latestEvent.kind != .pieceSelected {
@@ -84,6 +97,12 @@ struct VisualCoachingUITestFixture: View {
         } else if scenario == "question" || scenario == "explanation" {
             content = .init(runs: [.piece(text: "This rook", square: "b8"), .text(" attacks "),
                 .piece(text: "your knight", square: "b1"), .text(". Can you move it out of the way?")], visuals: [.attack(from: "b8", to: "b1")])
+            expects = .stageMove
+        } else if scenario == "paragraph" {
+            // Layout-only sample matching the long linked phrases from play testing.
+            content = .init(runs: [.text("That brings "), .piece(text: "your other knight", square: "g1"),
+                .text(" off the back row and into the game. It now attacks "),
+                .piece(text: "Black's middle pawn", square: "e7"), .text(".")], visuals: [])
             expects = .stageMove
         } else {
             content = .init(runs: [.text("Try moving "), .piece(text: "your knight", square: scenario == "draft" ? "h3" : "g1"),

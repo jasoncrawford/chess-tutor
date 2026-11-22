@@ -21,7 +21,7 @@ class VisualBenchmarkTests(unittest.TestCase):
         request = json.loads((root / "Tools/CoachingEval/fixtures/visual-coaching-validation-v1.json").read_text())["requests"]["normal"]
         corpus = SimpleNamespace(turns=[SimpleNamespace(identifier=f"s{i}", group_id="sequence", step_index=i, request=request)
                                         for i in (1, 2, 3)])
-        candidate = load_candidate(root / "Tools/CoachingEval/benchmark/configs/astra-visual-v3-low.json", root)
+        candidate = load_candidate(root / "Tools/CoachingEval/benchmark/configs/astra-visual-v4-low.json", root)
         prices = load_prices(root / "Tools/CoachingEval/benchmark/pricing-v2.json")
         prompts = preview_prompts(corpus, candidate, prices)
         self.assertEqual("initial", prompts[0]["kind"])

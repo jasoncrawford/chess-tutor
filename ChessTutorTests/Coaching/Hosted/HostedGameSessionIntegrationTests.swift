@@ -4,6 +4,30 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testCommitNamesAndPlaysTheDraftNotTheSuggestedAlternative() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        let c2 = Square(file: .c, rank: 2), c3 = Square(file: .c, rank: 3)
+        session.select(c2)
+        _ = session.moveSelectedPiece(to: c3)
+        session.startCoaching()
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        await provider.succeed(requestID: request.requestID, message: "Try a middle pawn instead.", expects: .chooseWhetherToPlay,
+            visualContent: .init(runs: [.text("Try a middle pawn instead.")], visuals: [.move(from: "e2", to: "e4")]))
+        await task.value
+        let commit = session.coachingPresentation?.actions.first { $0.action == .done }
+        XCTAssertEqual(commit?.title, "Play my move")
+        XCTAssertTrue(commit?.accessibilityLabel.contains("pawn") == true)
+        XCTAssertTrue(commit?.accessibilityLabel.contains("c3") == true)
+        let move = session.chooseCoachingAction(.done)
+        XCTAssertEqual(move?.from, c2)
+        XCTAssertEqual(move?.to, c3)
+        XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertNotNil(session.state.board[Square(file: .e, rank: 2)])
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+    }
+
     func testAnswerUsesDisplayedDraftPieceAndIgnoresItsEmptyOrigin() async {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)

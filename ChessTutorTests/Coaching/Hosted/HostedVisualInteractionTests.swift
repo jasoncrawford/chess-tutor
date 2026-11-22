@@ -2,6 +2,32 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedVisualInteractionTests: XCTestCase {
+    func testBoardAnswerPromptTracksExpectedActionAndClearsOnEscapeAndFailure() {
+        for (expects, prompt): (ModelCoachingChessNativeExpectedResponse, String) in [
+            (.findEndangeredPiece, "Tap the piece that needs help"),
+            (.findSafeCapture, "Tap a piece you can capture"),
+            (.selectPiece, "Tap a piece to answer")
+        ] {
+            var session = HostedCoachingSession(learner: .white)
+            session.openHelp(selectedSquare: nil, tentativeMove: nil)
+            session.receive(.init(message: "Which piece?", actions: ["hint"], focus: [], expects: expects), continuationID: "resp_one")
+            let state = GameState.startingPosition()
+            let projector = HostedCoachingPresentationProjector()
+            XCTAssertEqual(projector.presentation(for: session, board: state.board, tentativeMove: nil).boardAnswerPrompt, prompt)
+            XCTAssertTrue(session.recordPieceSelectionAnswer(at: Square(file: .b, rank: 1), in: state))
+            let waiting = projector.presentation(for: session, board: state.board, tentativeMove: nil)
+            XCTAssertEqual(waiting.boardAnswerPrompt, prompt)
+            XCTAssertTrue(waiting.isAwaitingAnswer)
+            session.playInstead()
+            let escaped = projector.presentation(for: session, board: state.board, tentativeMove: nil)
+            XCTAssertNil(escaped.boardAnswerPrompt)
+            XCTAssertFalse(escaped.isAwaitingAnswer)
+        }
+        for phase: HostedCoachingPhase in [.failed, .timedOut] {
+            XCTAssertNil(HostedCoachingPresentationProjector().presentation(for: phase, pulseID: 0).boardAnswerPrompt)
+        }
+    }
+
     func testReferenceAndReplayAreLocalAndDoNotChangeConversation() {
         var session = HostedCoachingSession(learner: .white)
         session.openHelp(selectedSquare: nil, tentativeMove: nil)

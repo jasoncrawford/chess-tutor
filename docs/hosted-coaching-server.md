@@ -255,11 +255,15 @@ turn discards the ID. No reasoning trace is returned or logged.
 ### Visual-coaching preview (v4)
 
 The server routes `hosted-coaching-request.v3` to the unchanged production-v2
-configuration and `hosted-coaching-request.v4` to visual-v3. The latter returns
+configuration and `hosted-coaching-request.v4` to visual-v4. The latter returns
 `hosted-coaching-turn.v4` / `tutor-v14`: typed text/piece/square message runs and
 at most one validated attack or move arrow. The new native client opts into v4;
 installed v3 clients keep their existing plain-text response. Both paths share
 authentication, limits, timing, correlation IDs and failure handling.
+
+Visual-v4 preserves visual-v3's chess policy, changing only the commit control
+name to “Play my move” and explaining that it commits the child's draft, not a
+suggested alternative. The visual benchmark uses the same pinned revision.
 
 To preview, run `./scripts/run_hosted_coaching_dev.sh "ChessTutor Coaching Smoke"`
 from the visual-coaching checkout. No production deployment or family-device

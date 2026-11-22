@@ -4,6 +4,43 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingPanelLayoutTests: XCTestCase {
+    func testAnswerBannerNeverCoversTheGridInAnyReadingOrientation() {
+        for angle in [0.0, 90, 180, -90] {
+            let layout = CoachingBoardLayout(size: CGSize(width: 600, height: 600), bannerHeight: 88,
+                                             readableRotationDegrees: angle)
+            let board = CGRect(origin: layout.origin, size: CGSize(width: layout.side, height: layout.side))
+            let vertical = abs(angle) == 90
+            let banner = CGRect(x: layout.bannerCenter.x - (vertical ? 88 : layout.side) / 2,
+                                y: layout.bannerCenter.y - (vertical ? layout.side : 88) / 2,
+                                width: vertical ? 88 : layout.side, height: vertical ? layout.side : 88)
+            XCTAssertFalse(board.intersects(banner))
+            XCTAssertTrue(CGRect(x: -0.01, y: -0.01, width: 600.02, height: 600.02).contains(board))
+            XCTAssertTrue(CGRect(x: -0.01, y: -0.01, width: 600.02, height: 600.02).contains(banner))
+            XCTAssertEqual(board.width, board.height)
+        }
+    }
+
+    @MainActor
+    func testLinkedParagraphWrapsWithTheSameLineHeightAsOrdinaryProse() {
+        let content = ModelCoachingVisualContent(runs: [
+            .text("That brings "), .piece(text: "your other knight", square: "g1"),
+            .text(" off the back row and into the game. It now attacks "),
+            .piece(text: "White's middle pawn", square: "e2"), .text(".")
+        ], visuals: [])
+        for width: CGFloat in [180, 228, 360] {
+            for size: CGFloat in [17, 25] {
+                let linked = UIHostingController(rootView: CoachingMessageView(
+                    content: content, board: GameState.startingPosition().board, fontSize: size, onReference: { _ in }
+                ).font(AppTheme.coachingBodyFont(size: size)))
+                let plain = UIHostingController(rootView: Text(content.plainText)
+                    .font(AppTheme.coachingBodyFont(size: size)).fixedSize(horizontal: false, vertical: true))
+                let proposal = CGSize(width: width, height: 2000)
+                XCTAssertEqual(linked.sizeThatFits(in: proposal).height, plain.sizeThatFits(in: proposal).height,
+                               accuracy: 1, "Links must not add tall rows or become unbreakable phrases at width \(width), font \(size)")
+            }
+        }
+    }
+
     @MainActor
     func testThinkingTilesAreCenteredInTheOpenReplyArea() throws {
         for frame in try thinkingFrames() {

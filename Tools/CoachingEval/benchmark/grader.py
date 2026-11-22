@@ -455,7 +455,8 @@ def _available_ui(record):
     if isinstance((record.get("parsedTurn") or {}).get("message"), list):
         return {"actions": ["hint"], "expectedResponses": list(VisualResponseContract.EXPECTED_RESPONSES),
                 "visuals": "Optional local piece/square links and one directed attack or move arrow. Links highlight without a network request. Discovery answers must not be linked or shown. Draft arrows use the original move but start at the displayed piece; direct revision needs no reset button.",
-                "localControls": ["Replay board hint", "Play instead (when answering)"]}
+                "localControls": ["Show arrow", "Play instead (when answering)",
+                                  "Play my move (commits the child's staged move, not a suggested alternative)"]}
     contract = ChessNativeResponseContract.from_markdown(record["userPrompt"])
     return {
         "actions": list(contract.actions),

@@ -1,5 +1,20 @@
 # Visual coaching
 
+## November 22 play-test corrections
+
+The user requested a more explicit board-answer mode after trying the initial
+preview. This supersedes the quiet-border/no-banner requirement below: reserve
+space above the board for a readable instruction, without covering any square.
+Pending answers use the full-size thinking animation and “Checking your answer…”.
+The cryptic replay icon becomes a named “Show arrow” control by the explanation.
+
+Inline references are now native text links, not 44-point-tall button boxes.
+Their phrases wrap naturally; miniature pieces are omitted from prose. Native
+link accessibility and named highlight actions retain access to board targets.
+The commit action says “Play my move” and still commits only the staged move,
+never a suggested alternative. The pinned visual-v4 prompt mirrors that label;
+it does not change chess-coaching policy. See the [feedback plan](../plans/2026-11-22-visual-coaching-feedback.md).
+
 ## Intent and approved direction
 
 Make the coach easier for a beginning reader to understand: short explanations

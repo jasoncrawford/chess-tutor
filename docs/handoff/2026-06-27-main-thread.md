@@ -1,5 +1,12 @@
 # Main Thread Handoff - 2026-06-27
 
+November 22 play-test feedback on PR #28: linked prose now uses native wrapping,
+the draft action is “Play my move”, board-answer mode has an explicit banner,
+pending answers use centered animated feedback, and replay is named “Show arrow”.
+The banner's layout is retained during drag/drop to keep destinations stable.
+Visual-v4 pins the matching control-name prompt correction; no paid model calls
+or production rollout. See [the feedback report](../reports/2026-11-22-visual-coaching-feedback.md).
+
 November 21 preview: `codex/visual-coaching` adds local tappable coach references,
 directional arrows, and an explicit but quiet board-answer interaction. It includes
 merged PR #27's debounce/logging. The new client requires the dual v3/v4 server;

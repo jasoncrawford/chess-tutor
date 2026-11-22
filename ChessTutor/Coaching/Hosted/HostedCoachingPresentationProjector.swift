@@ -10,6 +10,22 @@ struct HostedCoachingPresentationProjector: Sendable {
         result.isAwaitingAnswer = waitingForAnswer
         guard case .ready(let turn) = phase else { return result }
         result.visualContent = turn.visualContent
+        if session.isAnswering {
+            switch turn.expects {
+            case .findEndangeredPiece: result.boardAnswerPrompt = "Tap the piece that needs help"
+            case .findSafeCapture: result.boardAnswerPrompt = "Tap a piece you can capture"
+            default: result.boardAnswerPrompt = "Tap a piece to answer"
+            }
+        }
+        if turn.visualContent != nil, let move = tentativeMove {
+            let piece = board[move.from]?.kind.rawValue ?? "piece"
+            let destination = ModelCoachingPositionEncoder.squareName(move.to)
+            result.actions = result.actions.map { action in
+                guard action.action == .done else { return action }
+                return CoachingActionPresentation(action: .done, title: "Play my move",
+                    accessibilityLabel: "Play my move, \(piece) to \(destination)", prominence: action.prominence)
+            }
+        }
         result.canReplayVisual = !waitingForAnswer && turn.visualContent?.visuals.isEmpty == false
         var emphasized = Set<Square>()
         var candidates = Set<Square>()
