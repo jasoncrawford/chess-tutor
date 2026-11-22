@@ -185,7 +185,7 @@ def create_environment_application():
     )
     configuration = HostedModelConfiguration.load(configuration_path, root)
     visual_configuration = HostedModelConfiguration.load(os.environ.get(
-        "CHESS_TUTOR_COACHING_VISUAL_MODEL_CONFIG", "CoachingServer/configs/visual-v4.json"), root)
+        "CHESS_TUTOR_COACHING_VISUAL_MODEL_CONFIG", "CoachingServer/configs/visual-v5.json"), root)
     provider = OpenAIResponsesClient(api_key=api_key)
     service = VersionedHostedCoachingService(
         legacy=HostedCoachingService(provider=provider, configuration=configuration),

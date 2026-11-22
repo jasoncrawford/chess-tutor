@@ -18,15 +18,20 @@ struct HostedCoachingPresentationProjector: Sendable {
             }
         }
         if turn.visualContent != nil, let move = tentativeMove {
+            let hasAlternative = turn.visualContent!.visuals.contains { cue in
+                guard case .move(let from, let to) = cue else { return false }
+                return from != ModelCoachingPositionEncoder.squareName(move.from)
+                    || to != ModelCoachingPositionEncoder.squareName(move.to)
+            }
             let piece = board[move.from]?.kind.rawValue ?? "piece"
             let destination = ModelCoachingPositionEncoder.squareName(move.to)
-            result.actions = result.actions.map { action in
+            result.actions = result.actions.compactMap { action in
                 guard action.action == .done else { return action }
-                return CoachingActionPresentation(action: .done, title: "Play my move",
-                    accessibilityLabel: "Play my move, \(piece) to \(destination)", prominence: action.prominence)
+                guard !hasAlternative else { return nil }
+                return CoachingActionPresentation(action: .done, title: "Play this move",
+                    accessibilityLabel: "Play this move, \(piece) to \(destination)", prominence: action.prominence)
             }
         }
-        result.canReplayVisual = !waitingForAnswer && turn.visualContent?.visuals.isEmpty == false
         var emphasized = Set<Square>()
         var candidates = Set<Square>()
         var paths = Set<CoachFocusPath>()
@@ -47,6 +52,9 @@ struct HostedCoachingPresentationProjector: Sendable {
             }
         }
         result.replayPath = paths.first
+        result.arrowIsDraft = paths.contains {
+            $0.role == .candidate && $0.source == tentativeMove?.from && $0.destination == tentativeMove?.to
+        }
         if let answer = session.answerSquare {
             emphasized.insert(answer)
             paths.removeAll(); candidates.removeAll()

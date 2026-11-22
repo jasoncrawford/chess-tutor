@@ -2,6 +2,23 @@ import XCTest
 @testable import ChessTutor
 
 final class HostedVisualInteractionTests: XCTestCase {
+    @MainActor
+    func testSpokenMatchingDraftArrowNamesTheVisiblePiece() {
+        let session = GameSession()
+        let g1 = Square(file: .g, rank: 1), h3 = Square(file: .h, rank: 3)
+        session.select(g1)
+        _ = session.moveSelectedPiece(to: h3)
+        var hosted = HostedCoachingSession(learner: .white)
+        hosted.openHelp(selectedSquare: nil, tentativeMove: nil)
+        hosted.receive(.init(message: "Your knight moved.", actions: [], focus: [], expects: .chooseWhetherToPlay,
+            visualContent: .init(runs: [.text("Your knight moved.")], visuals: [.move(from: "g1", to: "h3")])), continuationID: "resp_test")
+        let presentation = HostedCoachingPresentationProjector().presentation(for: hosted,
+            board: GameState.startingPosition().board, tentativeMove: Move(from: g1, to: h3))
+        XCTAssertEqual(CoachingVisualAccessibility.arrow(presentation.replayPath, board: session.state.board,
+                                                        isStagedMove: presentation.arrowIsDraft),
+                       "White knight on h3 moved from g1.")
+    }
+
     func testBoardAnswerPromptTracksExpectedActionAndClearsOnEscapeAndFailure() {
         for (expects, prompt): (ModelCoachingChessNativeExpectedResponse, String) in [
             (.findEndangeredPiece, "Tap the piece that needs help"),

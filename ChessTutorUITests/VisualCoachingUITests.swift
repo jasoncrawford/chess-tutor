@@ -26,11 +26,11 @@ import XCTest
         let app = XCUIApplication()
         app.launchArguments = ["-ui-test-visual-coaching", "paragraph", "-visual-large"]
         app.launch()
-        let knight = app.links["your other knight"]
+        let knight = reference("your other knight", in: app)
         XCTAssertTrue(knight.waitForExistence(timeout: 5))
         knight.tap()
         assertFocus("g1", in: app)
-        app.links["Black's middle pawn"].tap()
+        reference("Black's middle pawn", in: app).tap()
         assertFocus("e7", in: app)
         XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
         attach(app, "wrapped-paragraph-large")
@@ -55,23 +55,21 @@ import XCTest
         }
     }
 
-    func testLinksReplayAndEscapeAreLocalAndAccessible() {
+    func testLinksAndEscapeAreLocalWithoutRedundantArrowControl() {
         XCUIDevice.shared.orientation = .landscapeLeft
         let app = XCUIApplication()
         app.launchArguments = ["-ui-test-visual-coaching", "explanation"]
         app.launch()
-        let link = app.links["This rook"]
+        let link = reference("This rook", in: app)
         XCTAssertTrue(link.waitForExistence(timeout: 5))
         XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
-        XCTAssertTrue(app.links["your knight"].exists)
-        link.tap()
+        XCTAssertTrue(reference("your knight", in: app).exists)
+        // The artwork itself must activate the same link as its words.
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+            .withOffset(CGVector(dx: 5, dy: 0)).tap()
         assertFocus("b8", in: app)
         XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
-        let replay = app.buttons["Show arrow"]
-        XCTAssertTrue(replay.exists)
-        XCTAssertEqual("Black rook on b8 attacks White knight on b1.", replay.value as? String)
-        replay.tap()
-        assertFocus("", in: app)
+        XCTAssertFalse(app.buttons["Show arrow"].exists)
         XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
         attach(app, "linked-explanation")
 
@@ -92,11 +90,13 @@ import XCTest
         let app = XCUIApplication()
         app.launchArguments = ["-ui-test-visual-coaching", "draft", "-visual-wide", "-visual-large"]
         app.launch()
-        let piece = app.links["your knight"]
+        let piece = reference("your knight", in: app)
         XCTAssertTrue(piece.waitForExistence(timeout: 5))
         XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
         XCTAssertTrue(app.links["here"].exists)
-        XCTAssertEqual("Try White knight on h3 at f3 instead.", app.buttons["Show arrow"].value as? String)
+        XCTAssertFalse(app.buttons["Show arrow"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Play this move")).firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Play my move")).firstMatch.exists)
         piece.tap()
         assertFocus("h3", in: app)
         XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
@@ -119,10 +119,12 @@ import XCTest
             let app = XCUIApplication()
             app.launchArguments = ["-ui-test-visual-coaching", "draft", "-visual-rotation", rotation]
             app.launch()
-            let first = app.links["your knight"]
+            let first = reference("your knight", in: app)
             let second = app.links["here"]
             XCTAssertTrue(first.waitForExistence(timeout: 5))
-            XCTAssertEqual(["your knight", "here"], app.links.allElementsBoundByIndex.map(\.label))
+            XCTAssertEqual(["your knight", "here"], app.links.allElementsBoundByIndex.map {
+                $0.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            })
             for (link, target) in [(first, "h3"), (second, "f3")] {
                 XCTAssertTrue(link.isHittable)
                 XCTAssertTrue(app.frame.contains(link.frame))
@@ -158,5 +160,11 @@ import XCTest
         let expected = NSPredicate(format: "label == %@", "Focus: \(square)")
         XCTAssertTrue(app.staticTexts.matching(identifier: "visual-focus").matching(expected).firstMatch.waitForExistence(timeout: 1.5),
                       "Expected local highlight on \(square)", file: file, line: line)
+    }
+
+    private func reference(_ words: String, in app: XCUIApplication) -> XCUIElement {
+        // TextKit omits the decorative attachment from its spoken name, leaving
+        // only the nonbreaking space between that icon and the first word.
+        app.links.matching(NSPredicate(format: "label == %@ OR label == %@", words, "\u{00a0}" + words)).firstMatch
     }
 }

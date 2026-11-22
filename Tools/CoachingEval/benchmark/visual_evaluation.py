@@ -28,7 +28,7 @@ def run(corpus_path, output, *, client=None, max_cost=None, qualification_root=N
     output = Path(output)
     if output.exists() and not resume:
         raise FileExistsError("Refusing to replay a saved run; retain its budget and grading checkpoints")
-    candidate = load_candidate(config / "configs/astra-visual-v4-low.json", root)
+    candidate = load_candidate(config / "configs/astra-visual-v5-low.json", root)
     prices = load_prices(config / "pricing-v2.json")
     # Validate a paid cap before creating anything or transmitting a request.
     if client is not None and max_cost is None:
@@ -84,8 +84,10 @@ def run(corpus_path, output, *, client=None, max_cost=None, qualification_root=N
         aggregate, _ = write_report(output / "candidates", output / "grades", prices, output / "report")
         records = [json.loads(line) for line in (output / "candidates/records.jsonl").read_text().splitlines()]
         result["missingRequestedMoveArrows"] = VisualMetrics.missing_move_arrows(records, {"v04-move-hint", "v05-draft-revision"})
+        result["pronounPieceLinks"] = [row["cellID"] for row in records
+            if VisualMetrics.pronoun_piece_links(row.get("parsedTurn") or {})]
         result["status"] = "completed" if not json.loads(aggregate.read_text())["integrityIssues"] else "integrityFailure"
-        if result["status"] == "completed" and result["missingRequestedMoveArrows"]:
+        if result["status"] == "completed" and (result["missingRequestedMoveArrows"] or result["pronounPieceLinks"]):
             result["status"] = "visualAcceptanceFailed"
         return result
     except BaseException:

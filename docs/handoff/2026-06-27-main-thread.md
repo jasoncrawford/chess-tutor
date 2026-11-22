@@ -1,5 +1,12 @@
 # Main Thread Handoff - 2026-06-27
 
+November 22 follow-up: inline piece icons are restored as baseline-aligned native
+text attachments. Show arrow is removed. Ordinary drafts say “Play this move”;
+an illustrated alternative hides commit, and closing Help retains the draft.
+Visual-v5 prefers descriptive noun-phrase links; eval checks pronoun links and
+supplies actual controls to the judge. See [the follow-up report](../reports/2026-11-22-coaching-references-controls.md).
+The earlier feedback details below are historical where superseded.
+
 November 22 play-test feedback on PR #28: linked prose now uses native wrapping,
 the draft action is “Play my move”, board-answer mode has an explicit banner,
 pending answers use centered animated feedback, and replay is named “Show arrow”.

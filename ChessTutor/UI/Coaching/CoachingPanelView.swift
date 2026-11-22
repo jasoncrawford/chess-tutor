@@ -360,19 +360,6 @@ struct CoachingPanelView: View {
                             CoachingConversationAccessibilityElement.instruction.sortPriority
                         )
                 }
-                if presentation.canReplayVisual {
-                    Button { session.replayCoachingVisual() } label: {
-                        Label("Show arrow", systemImage: "arrow.up.right")
-                            .font(AppTheme.coachingActionFont(size: 16))
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 44)
-                            .background(AppTheme.coachFocusRing.opacity(0.08), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AppTheme.coachFocusRing)
-                    .accessibilityValue(CoachingVisualAccessibility.arrow(presentation.replayPath, board: session.state.board))
-                    .accessibilityHint("Show the coach's arrow on the board again")
-                }
 
                 if let observation = presentation.observation {
                     CoachingResponseNote(text: observation, font: bodyFont)
@@ -389,6 +376,8 @@ struct CoachingPanelView: View {
     private func messageCopy(_ presentation: CoachingPresentation) -> some View {
         if let content = presentation.visualContent {
             CoachingMessageView(content: content, board: session.state.board, fontSize: min(coachingBodySize, 25),
+                                arrowDescription: CoachingVisualAccessibility.arrow(presentation.replayPath,
+                                    board: session.state.board, isStagedMove: presentation.arrowIsDraft),
                                 onReference: session.replayCoachingReference)
         } else {
             Text(presentation.primaryMessage)

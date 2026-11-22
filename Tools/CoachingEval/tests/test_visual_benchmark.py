@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from Tools.CoachingEval.benchmark.visual_metrics import VisualMetrics
 from Tools.CoachingEval.benchmark.experience_metrics import ExperienceMetrics
-from Tools.CoachingEval.benchmark.grader import _available_ui, readable_turn
+from Tools.CoachingEval.benchmark.grader import _available_ui, _pairwise_jobs, readable_turn
 from CoachingServer.chess_native_compiler import compile_visual_context, compile_visual_follow_up_context
 from Tools.CoachingEval.benchmark.visual_evaluation import run
 from Tools.CoachingEval.benchmark.configuration import load_candidate, load_prices
@@ -16,12 +16,64 @@ from Tools.CoachingEval.benchmark.runner import preview_prompts
 
 
 class VisualBenchmarkTests(unittest.TestCase):
+    def test_pairwise_controls_are_blinded_and_attached_only_to_their_response(self):
+        root = Path(__file__).resolve().parents[3]
+        request = json.loads((root / "Tools/CoachingEval/fixtures/visual-coaching-validation-v1.json").read_text())["requests"]["staged"]
+        turns = {"draft": SimpleNamespace(request=request, grader_brief=SimpleNamespace(
+            verified_facts=(), coaching_purpose="Consider a draft", acceptable_alternatives=(),
+            success_criteria=(), severe_failure_criteria=()))}
+        manifest = dict(mode="comparison", configurations=[dict(id="baseline", baseline=True), dict(id="candidate", baseline=False)])
+        records = [dict(configurationID=identifier, caseID="draft", repetition=1, mechanicalValidation={"valid": True},
+            parsedTurn=dict(message=[dict(type="text", text=message)], actions=[], expects="chooseWhetherToPlay", visuals=visuals))
+            for identifier, message, visuals in [("baseline", "Your move is an option.", []),
+                ("candidate", "Try a middle pawn instead.", [dict(type="move", **{"from": "e2", "to": "e4"})])]]
+        seen = set()
+        for seed in range(8):
+            metadata, payload = list(_pairwise_jobs(manifest, records, turns, SimpleNamespace(review_seed=seed)))[0]
+            seen.add(metadata["candidatePresentedAs"])
+            self.assertNotIn("availableUI", payload, "Candidate-only UI leaks identity and contradicts the other response")
+            for side in ("responseA", "responseB"):
+                controls = payload["availableUIByResponse"][side]["localControls"]
+                self.assertEqual("Play this move" in controls, payload[side]["message"] == "Your move is an option.")
+        self.assertEqual({"A", "B"}, seen)
+
+    def test_pronoun_piece_link_is_visible_as_a_clarity_regression(self):
+        row = dict(cellID="bishop", configurationID="visual", mechanicalValidation={"valid": True},
+                   parsedTurn=dict(message=[dict(type="text", text="You brought your bishop out, but "),
+                       dict(type="piece", text="this pawn", square="d5"), dict(type="text", text=" can take "),
+                       dict(type="piece", text="it", square="c4"), dict(type="text", text=".")], visuals=[]))
+        self.assertEqual(1, VisualMetrics.summarize([row])["visual"].get("pronounPieceLinkCount"))
+        row["parsedTurn"]["message"] = [dict(type="text", text="You brought "),
+            dict(type="piece", text="your bishop", square="c4"), dict(type="text", text=" out, but "),
+            dict(type="piece", text="this pawn", square="d5"), dict(type="text", text=" can take it.")]
+        self.assertEqual(0, VisualMetrics.summarize([row])["visual"].get("pronounPieceLinkCount"))
+        row["parsedTurn"]["message"] = [dict(type="square", text="here", square="c4")]
+        self.assertEqual(0, VisualMetrics.summarize([row])["visual"].get("pronounPieceLinkCount"))
+
+    def test_judge_controls_match_the_actual_response_not_all_possible_controls(self):
+        row = dict(parsedTurn=dict(message=[dict(type="text", text="Find the piece in danger.")],
+                                   visuals=[], expects="findEndangeredPiece", actions=[]))
+        self.assertEqual(["No piece needs help", "Play instead", "Close help"], _available_ui(row).get("localControls"))
+        row["parsedTurn"]["expects"] = "stageMove"
+        self.assertEqual(["Close help"], _available_ui(row).get("localControls"))
+
+    def test_judge_commit_control_matches_canonical_draft_and_arrow(self):
+        request = {"interaction": {"tentativeMove": {"canonicalMove": "g1h3"}}}
+        for visuals, controls in [([], ["Play this move", "Try another move", "Close help"]),
+            ([dict(type="move", **{"from": "g1", "to": "h3"})], ["Play this move", "Try another move", "Close help"]),
+            ([dict(type="attack", **{"from": "g4", "to": "h3"})], ["Play this move", "Try another move", "Close help"]),
+            ([dict(type="move", **{"from": "g1", "to": "f3"})], ["Try another move", "Close help"]),
+            ([dict(type="move", **{"from": "e2", "to": "e4"})], ["Try another move", "Close help"])]:
+            row = dict(parsedTurn=dict(message=[dict(type="text", text="Consider your move.")],
+                visuals=visuals, expects="chooseWhetherToPlay", actions=[]))
+            self.assertEqual(controls, _available_ui(row, request).get("localControls"))
+
     def test_dry_prompts_use_the_actual_followup_compiler(self):
         root = Path(__file__).resolve().parents[3]
         request = json.loads((root / "Tools/CoachingEval/fixtures/visual-coaching-validation-v1.json").read_text())["requests"]["normal"]
         corpus = SimpleNamespace(turns=[SimpleNamespace(identifier=f"s{i}", group_id="sequence", step_index=i, request=request)
                                         for i in (1, 2, 3)])
-        candidate = load_candidate(root / "Tools/CoachingEval/benchmark/configs/astra-visual-v4-low.json", root)
+        candidate = load_candidate(root / "Tools/CoachingEval/benchmark/configs/astra-visual-v5-low.json", root)
         prices = load_prices(root / "Tools/CoachingEval/benchmark/pricing-v2.json")
         prompts = preview_prompts(corpus, candidate, prices)
         self.assertEqual("initial", prompts[0]["kind"])
