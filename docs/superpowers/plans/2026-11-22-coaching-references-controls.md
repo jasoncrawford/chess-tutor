@@ -48,7 +48,7 @@ consumes the candidate turn and original request's tentative move.
   update eval acceptance and controls. Export prompts without paid calls.
 - [x] Run full native suite (one simulator job), server suite, and offline eval
   suite; inspect screenshots, obtain one independent review, fix material findings.
-- [ ] Commit/push to PR #28, update its description, restart Coaching Smoke with
+- [x] Commit/push to PR #28, update its description, restart Coaching Smoke with
   the saved game preserved. Record evidence and scope in the handoff/report.
 
 **Verification:** `xcodebuild test -project ChessTutor.xcodeproj -scheme ChessTutor

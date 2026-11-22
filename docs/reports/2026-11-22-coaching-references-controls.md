@@ -55,3 +55,9 @@ The prompt change's wording quality remains for live play testing.
 
 Local Coaching Smoke preview only. No production deployment, Family iPad
 installation, merge, or auto-merge. Saved games are retained.
+
+Checkpoint `3d25955` is installed and running in Coaching Smoke with visual-v5.
+BuildInfo verifies the commit, and a live screenshot verifies the saved game,
+not a UI-test fixture. PR #28 is updated; hosted CI is running. Artifacts are in
+`.coaching-eval/visual/20261122/reference-controls/`, with the live server log at
+`.coaching-eval/visual/20261122/reference-controls-preview.log`.
