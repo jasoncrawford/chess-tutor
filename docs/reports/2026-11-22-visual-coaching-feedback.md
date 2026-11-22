@@ -76,3 +76,6 @@ are automated here; a physical-device VoiceOver pass is not claimed.
 
 This remains the local Coaching Smoke preview on PR #28. No production server
 deployment, Family iPad installation, merge, or auto-merge is part of this change.
+Code checkpoint `4a2d033` is installed and running with the local server; the saved
+game was retained. BuildInfo and a live simulator screenshot verify the normal
+playable app, not a test fixture. GitHub CI was running at handoff.

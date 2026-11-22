@@ -49,9 +49,10 @@ Files: `HostedCoachingPresentationProjector.swift`, `CoachingModels.swift`, `Coa
 
 - [x] Run native unit and UI suites; inspect full-screen screenshots.
 - [x] Independent review of this feedback diff; fix important findings with regression tests.
-- [ ] Update report, commit/push to PR #28, check CI, relaunch Coaching Smoke with local server. No production deployment or physical iPad installation.
+- [x] Update report, commit/push to PR #28, check CI, relaunch Coaching Smoke with local server. No production deployment or physical iPad installation.
 
 ## Progress
 
 - PR #28 remains open; working tree clean at `2486b0f`. Current main is already its base through PR #27. Continuing this PR's review feedback in the same worktree.
 - Confirmed code path: links have 44-point minimum row height and are indivisible HStacks; replay currently restores the same arrow; Done commits the draft independent of coach visuals.
+- Completed: code checkpoint `4a2d033`, full native/server/eval tests pass, independent review's drag finding fixed. Local Coaching Smoke relaunched with saved game intact. PR #28 updated; GitHub CI still running at handoff. Two non-blocking review follow-ups are in the report.
