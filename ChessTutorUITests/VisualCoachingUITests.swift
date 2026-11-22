@@ -54,7 +54,7 @@ import XCTest
     }
 
     private func attach(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -75,6 +75,7 @@ import XCTest
             XCTAssertEqual(["coach-reference-1", "coach-reference-3"], references.map(\.identifier))
             for link in [first, second] {
                 XCTAssertTrue(link.isHittable)
+                XCTAssertTrue(app.frame.contains(link.frame))
                 XCTAssertGreaterThanOrEqual(min(link.frame.width, link.frame.height), 44)
                 link.tap()
                 XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)

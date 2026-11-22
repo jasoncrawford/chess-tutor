@@ -214,7 +214,7 @@ struct CoachingPanelView: View {
     @ViewBuilder
     private var accessibilityPanelContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            panelHeader
+            coachIdentity
             accessibleConversation
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 

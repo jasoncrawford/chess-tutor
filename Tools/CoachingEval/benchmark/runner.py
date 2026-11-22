@@ -153,7 +153,7 @@ def run_candidates(
             if previous_response_id is None:
                 raise ValueError("Saved sequence lacks a continuation; do not replay earlier calls")
         if progress_path is not None:
-            pending_path.write_bytes(_pretty_json_bytes({"cellID": _base_record(cell)["cellID"]}))
+            _append_progress(pending_path, {"cellID": _base_record(cell)["cellID"]})
         try:
             record, response_id = _execute_cell(
                 cell, clients[configuration.identifier], previous_response_id=previous_response_id,
