@@ -34,6 +34,7 @@ struct CoachingMessageView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(run.text)
+                    .accessibilityValue(CoachingVisualAccessibility.reference(run, board: board))
                     .accessibilityHint("Highlight on the board")
                     .accessibilityIdentifier("coach-reference-\(index)")
                 } else {
@@ -54,6 +55,37 @@ struct CoachingMessageView: View {
               let file = Square.File(rawValue: Int(byte) - 96),
               let rank = Int(String(name.suffix(1))), (1...8).contains(rank) else { return nil }
         return board[Square(file: file, rank: rank)]
+    }
+}
+
+/// Spoken equivalents of validated board gestures, without adding visible copy.
+enum CoachingVisualAccessibility {
+    static func reference(_ run: ModelCoachingVisualMessageRun, board: Board) -> String {
+        guard let name = run.referencedSquare else { return "" }
+        guard case .piece = run, let square = square(name) else { return "Square \(name)" }
+        return piece(at: square, board: board)
+    }
+
+    static func arrow(_ path: CoachFocusPath?, board: Board) -> String {
+        guard let path else { return "" }
+        let source = piece(at: path.source, board: board)
+        let destination = ModelCoachingPositionEncoder.squareName(path.destination)
+        if path.geometryKind == .relocation { return "Try \(source) at \(destination) instead." }
+        if path.role == .attacker { return "\(source) attacks \(piece(at: path.destination, board: board))." }
+        return "Move \(source) to \(destination)."
+    }
+
+    private static func piece(at square: Square, board: Board) -> String {
+        let name = ModelCoachingPositionEncoder.squareName(square)
+        guard let piece = board[square] else { return "square \(name)" }
+        return "\(piece.color.rawValue.capitalized) \(piece.kind.rawValue) on \(name)"
+    }
+
+    private static func square(_ name: String) -> Square? {
+        guard name.utf8.count == 2, let byte = name.utf8.first,
+              let file = Square.File(rawValue: Int(byte) - 96),
+              let rank = Int(String(name.suffix(1))), (1...8).contains(rank) else { return nil }
+        return Square(file: file, rank: rank)
     }
 }
 

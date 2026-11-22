@@ -225,9 +225,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
     }
 
     private static func isValidContinuationID(_ value: String) -> Bool {
-        guard value.utf8.count <= 256,
+        guard value.utf8.count <= (value.hasPrefix("resp_v4_") ? 259 : 256),
               value.hasPrefix("resp_") else { return false }
-        let suffix = value.dropFirst(5)
+        let suffix = value.dropFirst(value.hasPrefix("resp_v4_") ? 8 : 5)
         return !suffix.isEmpty && suffix.utf8.allSatisfy { byte in
             (48...57).contains(byte)
                 || (65...90).contains(byte)

@@ -4,6 +4,49 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testAnswerUsesDisplayedDraftPieceAndIgnoresItsEmptyOrigin() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        let g1 = Square(file: .g, rank: 1), h3 = Square(file: .h, rank: 3)
+        session.select(g1)
+        _ = session.moveSelectedPiece(to: h3)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .selectPiece)
+        XCTAssertTrue(session.handleCoachingSquareTap(g1))
+        XCTAssertNil(session.pendingCoachingRequestID, "An empty displayed square is not an answer")
+        XCTAssertTrue(session.handleCoachingSquareTap(h3))
+        XCTAssertNotNil(session.pendingCoachingRequestID)
+        guard session.pendingCoachingRequestID != nil else { return }
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        XCTAssertEqual(["piece:white:knight:h3"], request.interaction.latestEvent.referencedIDs)
+        XCTAssertEqual(Piece(kind: .knight, color: .white), session.state.board[h3])
+        XCTAssertTrue(session.canFinishTurn)
+        await provider.succeed(requestID: request.requestID, message: "Your knight.", expects: .chooseWhetherToPlay)
+        await task.value
+    }
+
+    func testAnswerAtDraftCaptureNamesCapturingPieceNotCapturedPiece() async {
+        let provider = ControlledHostedCoachingProvider()
+        let e4 = Square(file: .e, rank: 4), d5 = Square(file: .d, rank: 5)
+        let state = GameState(board: Board(pieces: [
+            Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+            Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+            e4: Piece(kind: .pawn, color: .white), d5: Piece(kind: .pawn, color: .black)
+        ]), sideToMove: .white)
+        let session = GameSession(state: state, hostedCoachingProvider: provider)
+        session.select(e4)
+        _ = session.moveSelectedPiece(to: d5)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .selectPiece)
+        XCTAssertTrue(session.handleCoachingSquareTap(d5))
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        XCTAssertEqual(["piece:white:pawn:d5"], request.interaction.latestEvent.referencedIDs)
+        await provider.succeed(requestID: request.requestID, message: "Your pawn.", expects: .chooseWhetherToPlay)
+        await task.value
+    }
+
     func testRapidPieceAnswersSendTheLastChoiceNotTheFirst() async throws {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)

@@ -108,11 +108,15 @@ def compile_outcome_follow_up_context(request, prompt_version):
 
 
 def compile_visual_context(request, prompt_version):
-    return VisualContextCompiler.compile(parse_neutral_request(request), compile_outcome_context(request, "tutor-v13"), prompt_version)
+    base = _compile_context(request, "tutor-v13", is_follow_up=False, grounded=True,
+                            displayed=True, mating_goals=True, outcome=True, visual_answers=True)
+    return VisualContextCompiler.compile(parse_neutral_request(request), base, prompt_version)
 
 
 def compile_visual_follow_up_context(request, prompt_version):
-    return VisualContextCompiler.compile(parse_neutral_request(request), compile_outcome_follow_up_context(request, "tutor-v13"), prompt_version)
+    base = _compile_context(request, "tutor-v13", is_follow_up=True, grounded=True,
+                            displayed=True, mating_goals=True, outcome=True, visual_answers=True)
+    return VisualContextCompiler.compile(parse_neutral_request(request), base, prompt_version)
 
 
 PROMPT_GENERATORS = {
@@ -134,16 +138,25 @@ def _compile_context(
     displayed: bool = False,
     mating_goals: bool = False,
     outcome: bool = False,
+    visual_answers: bool = False,
 ) -> ChessNativeCompilation:
     parsed = _parse_neutral_request(request)
     prompt_version = _nonempty_string(prompt_version, "promptVersion")
     pieces_by_id = {piece["id"]: piece for piece in parsed["pieces"]}
+    interaction_pieces = pieces_by_id
+    if visual_answers and parsed["interaction"]["latestEvent"]["kind"] == "pieceSelected":
+        # An answer is independent of the piece selected for movement. Resolve
+        # the event against the board the child actually sees, including drafts.
+        if parsed.get("tentativePosition"):
+            interaction_pieces = {piece["id"]: piece for piece in parsed["tentativePosition"]["pieces"]}
+        answer_id = _first(parsed["interaction"]["latestEvent"]["referencedIDs"])
+        parsed["interaction"]["selectedPieceReference"] = answer_id
     scoped_replies = _replies_for_current_interaction(parsed, pieces_by_id)
     actions = _available_actions(parsed, prompt_version=prompt_version)
     allowable_moves = _available_move_focus(parsed, scoped_replies)
 
     shared_sections = (
-        ("Latest interaction", _latest_interaction_lines(parsed, pieces_by_id)),
+        ("Latest interaction", _latest_interaction_lines(parsed, interaction_pieces)),
         (
             "Relevant legal facts",
             _relevant_legal_fact_lines(parsed, pieces_by_id, scoped_replies)

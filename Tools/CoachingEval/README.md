@@ -589,9 +589,16 @@ export can be bound to a commit. Read the printed artifact directory's
 the paid run using the existing macOS Keychain item. This is a new experiment
 cap, not permission to spend a previous cap again. For iterations, invoke
 `Tools.CoachingEval.benchmark.visual_evaluation` with a new `--output` and the
-same `--budget-journal` throughout. Never run two spending clients concurrently.
-Existing output directories are rejected; interrupted grading can use the
-existing grade/checkpoint recovery workflow without replaying candidate calls.
+same `--budget-journal` throughout; the shell launcher accepts this option too.
+Never run two spending clients concurrently. Resume the same saved run with
+`bash scripts/run_coaching_regressions.sh --visual --paid --max-cost 10 --resume RUN_DIR`
+(and the original `--budget-journal` if one was supplied). This skips export,
+checks exact input/configuration/schema bindings, restores sequence continuations,
+and sends only remaining candidate cells. Completed and failed attempts retain
+their original timing/cost; failed candidates are not silently retried. A call
+interrupted before its result was saved has an unknown outcome and blocks
+automatic candidate recovery. Grading retains its existing checkpoint recovery.
+Dry previews use the same initial/follow-up compiler as actual candidate calls.
 
 The pinned visual candidate shares its exact compiler, schema and validator
 with the v4 server. The unchanged judge rubric sees both readable text and

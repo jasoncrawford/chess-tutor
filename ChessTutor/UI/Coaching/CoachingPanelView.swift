@@ -246,6 +246,7 @@ struct CoachingPanelView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(AppTheme.coachFocusRing)
                 .accessibilityLabel("Replay board hint")
+                .accessibilityValue(CoachingVisualAccessibility.arrow(presentation?.replayPath, board: session.state.board))
             }
         }
     }

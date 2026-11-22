@@ -29,18 +29,24 @@ struct VisualCoachingUITestFixture: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let arguments = ProcessInfo.processInfo.arguments
+            let rotationIndex = arguments.firstIndex(of: "-visual-rotation")
+            let rotation = rotationIndex.flatMap { arguments.indices.contains($0 + 1) ? Double(arguments[$0 + 1]) : nil } ?? 0
+            let rotated = abs(rotation) == 90
             let wide = ProcessInfo.processInfo.arguments.contains("-visual-wide")
             let side = min(proxy.size.height - (wide ? 250 : 50), proxy.size.width - (wide ? 40 : 320))
             let layout = CoachingPanelLayout(tabletopRegionSize: CGSize(width: wide ? side : 280, height: wide ? 235 : side),
-                physicalRegionSize: CGSize(width: wide ? side : 280, height: wide ? 235 : side), physicalAxis: wide ? .horizontal : .vertical)
+                physicalRegionSize: CGSize(width: rotated ? side : wide ? side : 280, height: rotated ? 280 : wide ? 235 : side),
+                physicalAxis: wide || rotated ? .horizontal : .vertical)
             let axis = wide ? AnyLayout(VStackLayout(spacing: 20)) : AnyLayout(HStackLayout(spacing: 20))
             axis {
-                ChessBoardView(session: session, captureNamespace: captures, viewingAngle: .normal,
-                               readableRotationDegrees: 0, isCaptureTestModeEnabled: false)
+                ChessBoardView(session: session, captureNamespace: captures,
+                               viewingAngle: rotation == 90 ? .clockwiseQuarterTurn : rotation == -90 ? .counterclockwiseQuarterTurn : .normal,
+                               readableRotationDegrees: rotation, isCaptureTestModeEnabled: false)
                     .frame(width: side, height: side)
-                SidebarPanelView(panelSize: layout.physicalRegionSize) {
+                SidebarPanelView(panelSize: layout.tabletopRegionSize) {
                     CoachingPanelView(session: session, presentation: session.coachingPresentation, layout: layout,
-                                      readableRotationDegrees: 0, onCommittedMove: { _ in })
+                                      readableRotationDegrees: rotation, onCommittedMove: { _ in })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

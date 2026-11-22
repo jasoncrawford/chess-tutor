@@ -270,6 +270,9 @@ Roll out **server first**, verify both versions, then install the v4 client.
 Do not install the new client against an old v3-only server. Each Help episode
 starts without a continuation; continuation IDs are in-memory only and do not
 survive app replacement. Close Help before changing a development endpoint.
+V4 continuation handles are protocol-tagged (`resp_v4_…`); the router unwraps
+them for the provider and resets cross-version continuations in either direction.
+The tag is version isolation, not an authentication or authorization mechanism.
 Keep the v3 route until all installed clients have been updated. Deploying or
 installing the preview is a separate, explicitly authorized operation.
 

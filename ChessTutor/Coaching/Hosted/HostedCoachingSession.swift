@@ -149,10 +149,10 @@ struct HostedCoachingSession: Equatable, Sendable {
     @discardableResult
     mutating func recordPieceSelectionAnswer(
         at square: Square,
-        in committedState: GameState
+        in displayedState: GameState
     ) -> Bool {
         guard isAnswering,
-              let piece = committedState.board[square] else { return false }
+              let piece = displayedState.board[square] else { return false }
         let pieceID = ModelCoachingPositionEncoder.pieceID(piece, at: square)
         if phase == .thinking, latestEvent.kind == .pieceSelected,
            latestEvent.referencedIDs == [pieceID] { return false }

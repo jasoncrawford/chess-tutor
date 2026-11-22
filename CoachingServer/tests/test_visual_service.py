@@ -58,12 +58,28 @@ class VisualServiceTests(unittest.TestCase):
         self.assertEqual(1, len(self.visual_provider.calls))
 
     def test_followup_retains_visual_schema_and_context(self):
-        response = self.post("v4", previous="resp_previous")
+        response = self.post("v4", previous="resp_v4_previous")
         self.assertEqual(200, response.status_code)
         sent = self.visual_provider.calls[0]
         self.assertEqual("resp_previous", sent["previous_response_id"])
         self.assertIn("Displayed board references", sent["user_prompt"])
         self.assertNotIn("Allowable move focus", sent["user_prompt"])
+
+    def test_continuations_are_isolated_across_versions(self):
+        response = self.post("v4", previous="resp_legacy")
+        self.assertEqual(200, response.status_code)
+        self.assertIsNone(self.visual_provider.calls[-1]["previous_response_id"])
+        self.assertTrue(response.json["continuationID"].startswith("resp_v4_"))
+        self.assertEqual(200, self.post("v3", previous=response.json["continuationID"]).status_code)
+        self.assertIsNone(self.legacy_provider.calls[-1]["previous_response_id"])
+        self.assertEqual(200, self.post("v3", previous="resp_legacy").status_code)
+        self.assertEqual("resp_legacy", self.legacy_provider.calls[-1]["previous_response_id"])
+
+    def test_malformed_continuations_are_rejected_not_reset(self):
+        for version in ("v3", "v4"):
+            for previous in ("bad", "resp_v4_", "resp_" + "x" * 252):
+                self.assertEqual(400, self.post(version, previous=previous).status_code)
+        self.assertFalse(self.legacy_provider.calls or self.visual_provider.calls)
 
     def test_visual_config_preserves_model_parameters(self):
         for field in ("model", "initial_reasoning_effort", "tactical_follow_up_reasoning_effort",

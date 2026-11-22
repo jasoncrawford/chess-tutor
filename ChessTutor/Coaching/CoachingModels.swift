@@ -563,6 +563,7 @@ struct CoachingPresentation: Equatable, Sendable {
     var focus: CoachFocusPresentation
     let isThinking: Bool
     var visualContent: ModelCoachingVisualContent? = nil
+    var replayPath: CoachFocusPath? = nil
     var canPlayInstead: Bool = false
     var canReplayVisual: Bool = false
     var isAwaitingAnswer: Bool = false

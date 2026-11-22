@@ -1,5 +1,12 @@
 # Main Thread Handoff - 2026-06-27
 
+November 21 preview: `codex/visual-coaching` adds local tappable coach references,
+directional arrows, and an explicit but quiet board-answer interaction. It includes
+merged PR #27's debounce/logging. The new client requires the dual v3/v4 server;
+do not install it against the production v3-only server. No production or Family
+iPad rollout was done here. See [the preview report](../reports/2026-11-21-visual-coaching.md)
+for validation, review fixes, and the Coaching Smoke launcher.
+
 November 20 client change: coaching board updates use a tunable 400 ms debounce,
 one in-flight call, and one replaceable pending update. Client interaction/timing
 events are included in About → Share Diagnostics; see

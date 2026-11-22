@@ -797,7 +797,7 @@ final class GameSession {
             guard intent == .tap,
                   hostedSession.recordPieceSelectionAnswer(
                       at: square,
-                      in: committedState
+                      in: state
                   ) else {
                 logCoachingEvent("board_input", fields: ["intent": intent == .tap ? "tap" : "drag", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "local"])
                 return hostedSession.isAnswering && intent == .tap

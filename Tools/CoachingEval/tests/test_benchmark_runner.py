@@ -61,6 +61,57 @@ class FakeClient:
 
 
 class BenchmarkRunnerTests(unittest.TestCase):
+    def test_explicit_resume_retains_failed_attempt_and_only_sends_remaining_cells(self):
+        client = FakeClient(failures=[None, OpenAIResponsesError("failure", category="incompleteResponse")])
+        destination = self.root / "resumable"
+        arguments = dict(corpus=self.corpus, configurations=[self.configuration], mode="regression",
+                         destination=destination, provider_factory=lambda _: client, price_table=self.prices,
+                         stop_on_provider_failure=True)
+        with self.assertRaises(RuntimeError):
+            run_candidates(**arguments)
+        saved = (self.root / "resumable.progress.jsonl").read_text()
+        manifest = run_candidates(**arguments, resume=True)
+        self.assertEqual(168, len(client.calls))
+        self.assertEqual(168, manifest["summary"]["recordCount"])
+        self.assertEqual(1, manifest["summary"]["failedCount"])
+        self.assertEqual([json.loads(line) for line in saved.splitlines()],
+                         [json.loads(line) for line in (destination / "records.jsonl").read_text().splitlines()][:2])
+
+    def test_interrupted_unknown_call_is_not_replayed_on_resume(self):
+        client = FakeClient(failures=[KeyboardInterrupt()])
+        arguments = dict(corpus=self.corpus, configurations=[self.configuration], mode="regression",
+                         destination=self.root / "unknown", provider_factory=lambda _: client, price_table=self.prices)
+        with self.assertRaises(KeyboardInterrupt):
+            run_candidates(**arguments)
+        with self.assertRaisesRegex(ValueError, "unknown outcome"):
+            run_candidates(**arguments, resume=True)
+        self.assertEqual(1, len(client.calls))
+
+    def test_resume_checks_binding_before_calling_provider(self):
+        client = FakeClient(failures=[None, BudgetExceeded("stop")])
+        destination = self.root / "bound"
+        arguments = dict(corpus=self.corpus, configurations=[self.configuration], mode="regression",
+                         destination=destination, provider_factory=lambda _: client, price_table=self.prices)
+        with self.assertRaises(BudgetExceeded):
+            run_candidates(**arguments)
+        path = self.root / "bound.progress.jsonl"
+        row = json.loads(path.read_text())
+        row["requestSHA256"] = "changed"
+        path.write_text(json.dumps(row) + "\n")
+        with self.assertRaisesRegex(ValueError, "binding"):
+            run_candidates(**arguments, resume=True)
+        self.assertEqual(2, len(client.calls))
+
+    def test_resume_restores_sequence_continuation(self):
+        client = FakeClient(failures=[None] * 33 + [BudgetExceeded("stop")])
+        destination = self.root / "sequence-resume"
+        arguments = dict(corpus=self.corpus, configurations=[self.configuration], mode="regression",
+                         destination=destination, provider_factory=lambda _: client, price_table=self.prices)
+        with self.assertRaises(BudgetExceeded):
+            run_candidates(**arguments)
+        run_candidates(**arguments, resume=True)
+        self.assertEqual("resp_33", client.calls[34]["previous_response_id"])
+
     def test_visual_candidate_uses_shared_server_schema_and_preserves_runs(self):
         configuration = load_candidate(ROOT / "Tools/CoachingEval/benchmark/configs/astra-visual-v1-low.json", ROOT)
         client = FakeClient()

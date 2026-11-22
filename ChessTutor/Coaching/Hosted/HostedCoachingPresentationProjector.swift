@@ -14,11 +14,7 @@ struct HostedCoachingPresentationProjector: Sendable {
         var emphasized = Set<Square>()
         var candidates = Set<Square>()
         var paths = Set<CoachFocusPath>()
-        if let answer = session.answerSquare {
-            emphasized.insert(answer)
-        } else if let reference = session.referenceSquare.flatMap(square) {
-            emphasized.insert(reference)
-        } else if let content = turn.visualContent {
+        if let content = turn.visualContent {
             for cue in content.visuals {
                 guard let from = square(cue.endpoints.from), let to = square(cue.endpoints.to) else { continue }
                 switch cue {
@@ -33,6 +29,14 @@ struct HostedCoachingPresentationProjector: Sendable {
                 }
                 candidates.insert(to)
             }
+        }
+        result.replayPath = paths.first
+        if let answer = session.answerSquare {
+            emphasized.insert(answer)
+            paths.removeAll(); candidates.removeAll()
+        } else if let reference = session.referenceSquare.flatMap(square) {
+            emphasized.insert(reference)
+            paths.removeAll(); candidates.removeAll()
         }
         if turn.visualContent != nil || session.answerSquare != nil {
             result.focus = .init(emphasizedSquares: emphasized, candidateSquares: candidates,
