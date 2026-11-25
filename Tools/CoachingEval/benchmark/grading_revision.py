@@ -5,13 +5,19 @@ import json
 import shutil
 from pathlib import Path
 
+from Tools.CoachingEval.benchmark.corpus import load_corpus
+
 
 class GradingRevision:
     @staticmethod
-    def prepare(source, destination, original_cases, revised_cases, *, original_sha, revised_sha, revised_schema):
+    def prepare(source, destination, original_corpus_path, revised_corpus_path):
         source, destination = Path(source).resolve(), Path(destination).resolve()
+        if destination.is_relative_to(source):
+            raise ValueError("Cannot copy a run into itself")
         if destination.exists():
             raise FileExistsError("Refusing to overwrite a grading revision")
+        original, revised = load_corpus(original_corpus_path), load_corpus(revised_corpus_path)
+        original_cases, revised_cases = original.raw_cases, revised.raw_cases
         strip = lambda case: {key: value for key, value in case.items() if key != "graderBrief"}
         if ([strip(case) for case in original_cases] != [strip(case) for case in revised_cases]
                 or not original_cases):
@@ -19,7 +25,7 @@ class GradingRevision:
         manifest_bytes = (source / "run-manifest.json").read_bytes()
         manifest = json.loads(manifest_bytes)
         records = (source / "records.jsonl").read_bytes()
-        if (manifest["corpusSHA256"] != original_sha
+        if (manifest["corpusSHA256"] != original.sha256
                 or manifest["recordsSHA256"] != hashlib.sha256(records).hexdigest()):
             raise ValueError("Original run/corpus binding changed")
         requests = {case["id"]: case["request"] for case in original_cases}
@@ -31,9 +37,9 @@ class GradingRevision:
             if request is None or row["requestSHA256"] != request_sha or row["cellID"] in seen:
                 raise ValueError("Original candidate request binding changed")
             seen.add(row["cellID"])
-        manifest["gradingRevision"] = dict(originalRun=str(source), originalCorpusSHA256=original_sha,
+        manifest["gradingRevision"] = dict(originalRun=str(source), originalCorpusSHA256=original.sha256,
             originalRunManifestSHA256=hashlib.sha256(manifest_bytes).hexdigest(), candidateCalls=0)
-        manifest["corpusSHA256"] = revised_sha
-        manifest["corpusManifestSchema"] = revised_schema
+        manifest["corpusSHA256"] = revised.sha256
+        manifest["corpusManifestSchema"] = json.loads(revised.manifest_path.read_bytes())["schemaVersion"]
         shutil.copytree(source, destination)
         (destination / "run-manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")

@@ -660,7 +660,10 @@ to improve a score. Existing candidate and grading checkpoints retain partial ru
 
 `evaluation.json` includes `judgmentMetrics`: per-case scores, conditional judged
 mean, failed/invalid and ungraded counts, and `usefulResponseRate` (judgment >=4,
-no severe error, divided by **all attempts**). Interpret alongside the full report's
+no severe error, divided by **all planned cells**, including unattempted cells).
+Stopped runs retain checksummed completed grades, a `complete: false` marker,
+and separate unattempted, unknown-outcome and ungraded counts. Their conditional
+mean is not a completed comparison. Interpret alongside the full report's
 other five dimensions, failures, latency, usage and cost. A high average alone is
 not evidence of a dependable coach. If the baseline is strong, report that result;
 do not alter this rubric to force a low score.
@@ -680,7 +683,9 @@ binary, then produce frozen evidence without model calls:
 ```
 
 Use `--engine-evidence .coaching-eval/judgment/engine.json` with the experience
-runner for the engine arm only. Preserve the corpus, shared journal, cap and
+runner for the engine arm only. Its v3 candidate config requires
+`engineEvidence: "stockfish"`; supplying it to a plain arm, or omitting it for the
+engine arm, fails before any paid call. Preserve the corpus, shared journal, cap and
 successful sensitivity artifact from the baseline. The supplement is recorded
 in the actual sent prompt, with a content hash in candidate records and the run
 manifest; it contains no rubric or hand-written chess advice.

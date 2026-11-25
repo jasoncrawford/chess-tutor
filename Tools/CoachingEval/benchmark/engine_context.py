@@ -6,6 +6,8 @@ import math
 from dataclasses import replace
 from pathlib import Path
 
+import chess
+
 
 class EngineContext:
     def __init__(self, path, corpus):
@@ -32,6 +34,37 @@ class EngineContext:
                     or type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0
                     or not 1 <= len(analysis["candidates"]) <= 3):
                 raise ValueError("Engine evidence request/position binding changed")
+            proposed = analysis["proposed"]
+            if (draft is None) != (proposed is None) or (draft and proposed["move"] != draft):
+                raise ValueError("Engine evidence proposed move differs from the child's draft")
+            board = chess.Board(analysis["positionFEN"])
+            for line in analysis["candidates"] + ([proposed] if proposed else []):
+                self._validate_line(board, line)
+
+    @staticmethod
+    def validate_assignment(candidates, context):
+        for candidate in candidates:
+            required = candidate.engine_evidence == "stockfish"
+            if required != (context is not None):
+                raise ValueError("Candidate engine evidence policy does not match the supplied experiment treatment")
+        if context is not None and not context.metadata["engine"].startswith("Stockfish "):
+            raise ValueError("Candidate requires Stockfish engine evidence")
+
+    @classmethod
+    def _validate_line(cls, board, line):
+        moves = line["line"]
+        if not isinstance(moves, list) or not 1 <= len(moves) <= 5 or line["move"] != moves[0]:
+            raise ValueError("Engine move label and continuation disagree")
+        position, notation = board.copy(), []
+        for canonical in moves:
+            move = chess.Move.from_uci(canonical)
+            if move not in position.legal_moves:
+                raise ValueError("Engine evidence contains an illegal continuation")
+            notation.append(position.san(move))
+            position.push(move)
+        if notation != line["notation"]:
+            raise ValueError("Engine notation and continuation disagree")
+        cls._line("validation", line)
 
     def augment(self, turn, compilation):
         analysis = self._entries[turn.identifier]["analysis"]

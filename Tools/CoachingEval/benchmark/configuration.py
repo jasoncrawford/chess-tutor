@@ -87,6 +87,7 @@ class CandidateConfiguration:
     pricing_version: str
     sha256: str
     raw: Mapping[str, Any]
+    engine_evidence: str = "none"
 
 
 @dataclass(frozen=True)
@@ -170,9 +171,11 @@ def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
     path = Path(path).resolve()
     repository_root = Path(repository_root).resolve()
     raw, raw_bytes = _load_json(path)
-    _exact_keys(raw, _CANDIDATE_KEYS, "Candidate")
-    if raw["schemaVersion"] != "coaching-quality-candidate.v2":
+    version = raw.get("schemaVersion")
+    if version not in ("coaching-quality-candidate.v2", "coaching-quality-candidate.v3"):
         raise ValueError("Unsupported candidate schema")
+    _exact_keys(raw, _CANDIDATE_KEYS | ({"engineEvidence"} if version == "coaching-quality-candidate.v3" else set()), "Candidate")
+    engine_evidence = _choice(raw["engineEvidence"], {"none", "stockfish"}, "engineEvidence") if version == "coaching-quality-candidate.v3" else "none"
     model_path, model_configuration = _load_pinned_model_configuration(
         repository_root,
         raw["modelConfigurationPath"],
@@ -189,6 +192,7 @@ def load_candidate(path: Path, repository_root: Path) -> CandidateConfiguration:
         pricing_version=_string(raw["pricingVersion"], "pricingVersion"),
         sha256=hashlib.sha256(raw_bytes).hexdigest(),
         raw=_frozen_copy(raw),
+        engine_evidence=engine_evidence,
     )
 
 

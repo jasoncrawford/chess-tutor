@@ -21,6 +21,7 @@ from Tools.CoachingEval.benchmark.configuration import (
 )
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.benchmark.budget import BudgetExceeded
+from Tools.CoachingEval.benchmark.engine_context import EngineContext
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -216,6 +217,7 @@ def preview_prompts(corpus, configuration, price_table, *, engine_context=None):
 
 
 def _preflight(configurations, turns, repetitions, price_table, *, engine_context=None):
+    EngineContext.validate_assignment(configurations, engine_context)
     _validate_configurations(configurations, price_table)
     cells = []
     sequence_ids = _sequence_ids(turns)
@@ -517,6 +519,7 @@ def _manifest(
                 "promptVersion": model_configuration.prompt_version,
                 "userPromptGenerator": model_configuration.user_prompt_generator,
                 "responseContract": model_configuration.response_contract,
+                "engineEvidence": configuration.engine_evidence,
                 "pricingVersion": configuration.pricing_version,
             }
         )

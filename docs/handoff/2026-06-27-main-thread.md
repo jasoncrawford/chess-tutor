@@ -1,5 +1,12 @@
 # Main Thread Handoff - 2026-06-27
 
+November 25 judgment experiment: a frozen 12-case eval measured the unchanged
+coach first. Prompt-only generation is complete, but grading stopped on exhausted
+API credits; the benchmark-only Stockfish arm is prepared, not measured or deployed.
+See [the experiment checkpoint](../reports/2026-11-25-coaching-judgment.md) for
+results, exact artifacts, the shared $10 cap and safe continuation. Production
+and issue #29 are unchanged.
+
 November 25 arrow polish: coach arrows use one continuous outlined silhouette
 and stop outside the destination ring, including its pulse. See [the arrow report](../reports/2026-11-25-coaching-arrow-polish.md).
 

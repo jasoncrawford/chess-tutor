@@ -2,9 +2,10 @@ import hashlib
 import json
 import unittest
 from dataclasses import replace
-from types import SimpleNamespace
+import chess
 
 from Tools.CoachingEval.benchmark.engine_context import EngineContext
+from Tools.CoachingEval.benchmark.configuration import load_candidate
 from Tools.CoachingEval.benchmark.runner import _preflight, _base_record
 from Tools.CoachingEval.tests import test_benchmark_runner as fixtures
 
@@ -34,7 +35,7 @@ class EngineContextTests(unittest.TestCase):
         self.save()
         context = EngineContext(self.path, self.corpus)
         old = _preflight([self.fixture.configuration], (self.turn,), 1, self.fixture.prices)[0]
-        cell = _preflight([self.fixture.configuration], (self.turn,), 1, self.fixture.prices, engine_context=context)[0]
+        cell = _preflight([self.engine_candidate()], (self.turn,), 1, self.fixture.prices, engine_context=context)[0]
         row = _base_record(cell)
         self.assertTrue(row["userPrompt"].startswith(old["compilation"].markdown))
         self.assertIn("Stockfish 18", row["userPrompt"])
@@ -55,6 +56,45 @@ class EngineContextTests(unittest.TestCase):
         self.analysis["candidates"][0]["score"] = {"mate": -3}
         self.save()
         context = EngineContext(self.path, self.corpus)
-        cell = _preflight([self.fixture.configuration], (self.turn,), 1, self.fixture.prices, engine_context=context)[0]
+        cell = _preflight([self.engine_candidate()], (self.turn,), 1, self.fixture.prices, engine_context=context)[0]
         self.assertIn("opponent can mate in 3", cell["compilation"].markdown)
         self.assertNotIn("-0.03", cell["compilation"].markdown)
+
+    def engine_candidate(self):
+        candidate = self.fixture.make_configuration(identifier="engine", baseline=False)
+        raw = dict(candidate.raw, schemaVersion="coaching-quality-candidate.v3", engineEvidence="stockfish")
+        candidate.path.write_text(json.dumps(raw))
+        return load_candidate(candidate.path, candidate.repository_root)
+
+    def test_plain_candidate_cannot_silently_receive_engine_evidence(self):
+        self.save()
+        with self.assertRaisesRegex(ValueError, "engine evidence"):
+            _preflight([self.fixture.configuration], (self.turn,), 1, self.fixture.prices,
+                       engine_context=EngineContext(self.path, self.corpus))
+
+    def test_engine_candidate_requires_evidence_and_cannot_share_it_with_plain_arm(self):
+        engine = self.engine_candidate()
+        self.save()
+        with self.assertRaisesRegex(ValueError, "engine evidence"):
+            _preflight([engine], (self.turn,), 1, self.fixture.prices)
+        with self.assertRaisesRegex(ValueError, "engine evidence"):
+            _preflight([engine, self.fixture.configuration], (self.turn,), 1, self.fixture.prices,
+                       engine_context=EngineContext(self.path, self.corpus))
+
+    def test_missing_swapped_or_mislabeled_proposal_is_rejected(self):
+        request = json.loads(json.dumps(self.turn.request))
+        board = chess.Board(request["position"]["fen"])
+        self.assertIn(chess.Move.from_uci("b1c3"), board.legal_moves)
+        self.assertIn(chess.Move.from_uci("b1a3"), board.legal_moves)
+        request["interaction"]["tentativeMove"] = {"canonicalMove": "b1c3"}
+        self.turn = replace(self.turn, request=request)
+        self.corpus = replace(self.corpus, turns=(self.turn,))
+        self.data["entries"][0]["requestSHA256"] = hashlib.sha256(json.dumps(request,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
+        self.analysis["draft"] = "b1c3"
+        valid = dict(self.analysis["candidates"][0])
+        for proposed in (None, dict(valid, move="b1a3", line=["b1a3"], notation=["Na3"]),
+                         dict(valid, line=["b1a3"], notation=["Na3"]), dict(valid, notation=["Na3"])):
+            self.analysis["proposed"] = proposed
+            self.save()
+            with self.assertRaises(ValueError):
+                EngineContext(self.path, self.corpus)
