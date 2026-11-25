@@ -171,6 +171,19 @@ struct ContentView: View {
             }
         }
         .animation(.spring(response: 0.42, dampingFraction: 0.88), value: gameLibrary.route)
+        #if DEBUG
+        .overlay {
+            if GameNavigationDiagnostics.isEnabled {
+                GameNavigationTouchProbe().accessibilityHidden(true)
+            }
+        }
+        .onChange(of: gameLibrary.route) { previous, next in
+            GameNavigationDiagnostics.record("route.changed", fields: [
+                "from": GameNavigationDiagnostics.routeName(previous),
+                "to": GameNavigationDiagnostics.routeName(next),
+            ])
+        }
+        #endif
         .overlay {
             if let invite = foregroundIncomingInvite {
                 Color.black.opacity(0.24)
@@ -482,6 +495,18 @@ struct ContentView: View {
     }
 
     private func openGameEntry(_ entry: GameLibraryEntry) {
+        #if DEBUG
+        GameNavigationDiagnostics.record("open.request", fields: [
+            "card": "game-card-\(entry.id.rawValue.uuidString)",
+            "route": GameNavigationDiagnostics.routeName(gameLibrary.route),
+        ])
+        defer {
+            GameNavigationDiagnostics.record("open.complete", fields: [
+                "card": "game-card-\(entry.id.rawValue.uuidString)",
+                "route": GameNavigationDiagnostics.routeName(gameLibrary.route),
+            ])
+        }
+        #endif
         switch entry {
         case .local(let game):
             openLocalGame(game)
@@ -2225,7 +2250,7 @@ private struct GamesRackView: View {
                                     } label: {
                                         GameRackCard(presentation: entry.cardPresentation)
                                     }
-                                    .buttonStyle(GameRackButtonStyle())
+                                    .buttonStyle(GameRackButtonStyle(diagnosticID: "game-card-\(entry.id.rawValue.uuidString)"))
                                     .accessibilityIdentifier("game-card-\(entry.id.rawValue.uuidString)")
                                 }
                             }
@@ -2236,8 +2261,19 @@ private struct GamesRackView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .scrollIndicators(.hidden)
+                #if DEBUG
+                .onScrollPhaseChange { previous, next in
+                    GameNavigationDiagnostics.record("rack.scroll", fields: [
+                        "from": String(describing: previous), "to": String(describing: next),
+                    ])
+                }
+                #endif
             }
         }
+        #if DEBUG
+        .onAppear { GameNavigationDiagnostics.record("rack.appear") }
+        .onDisappear { GameNavigationDiagnostics.record("rack.disappear") }
+        #endif
     }
 }
 
@@ -2418,11 +2454,22 @@ private var cardBackground: some View {
 }
 
 private struct GameRackButtonStyle: ButtonStyle {
+    var diagnosticID: String? = nil
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.975 : 1)
             .opacity(configuration.isPressed ? 0.80 : 1)
             .animation(.spring(response: 0.20, dampingFraction: 0.86), value: configuration.isPressed)
+            #if DEBUG
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if let diagnosticID {
+                    GameNavigationDiagnostics.record("card.pressed", fields: [
+                        "card": diagnosticID, "pressed": String(isPressed),
+                    ])
+                }
+            }
+            #endif
     }
 }
 
