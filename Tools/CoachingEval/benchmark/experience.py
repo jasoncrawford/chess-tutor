@@ -12,6 +12,7 @@ from Tools.CoachingEval.benchmark.configuration import load_candidate, load_judg
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.benchmark.grader import grade_run
 from Tools.CoachingEval.benchmark.experience_metrics import ExperienceMetrics
+from Tools.CoachingEval.benchmark.judgment_metrics import JudgmentMetrics
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 from Tools.CoachingEval.benchmark.regression import RegressionEvaluation
 from Tools.CoachingEval.benchmark.report import write_report
@@ -73,6 +74,8 @@ class ExperienceEvaluation:
             aggregate, summary = write_report(output / "candidates", output / "grades", prices, output / "report")
             report = json.loads(aggregate.read_text())
             records = [json.loads(line) for line in (output / "candidates/records.jsonl").read_text().splitlines()]
+            grades = [json.loads(line) for line in (output / "grades/absolute-grades.jsonl").read_text().splitlines()]
+            result["judgmentMetrics"] = JudgmentMetrics.summarize(records, grades)
             result["experienceMetrics"] = ExperienceMetrics.summarize(records, {
                 c.identifier: c.model_configuration.conversation_reuse for c in candidates})
             result.update(report=str(summary), integrityIssues=report["integrityIssues"],

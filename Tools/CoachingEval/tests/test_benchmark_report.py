@@ -25,6 +25,21 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class BenchmarkReportTests(unittest.TestCase):
+    def test_judgment_report_requires_twelve_cases_and_all_three_repetitions(self):
+        records = [dict(cellID=f"current|j{i}|r{rep}", configurationID="current",
+                        caseID=f"j{i}", repetition=rep, split="development")
+                   for i in range(12) for rep in range(1, 4)]
+        manifest = dict(mode="regression", regressionSuite=True,
+                        corpusManifestSchema="coaching-quality-judgment-regression-manifest.v1",
+                        evidence=dict(classification="regressionDevelopment", trialEligible=False,
+                                      promotionEvidenceEligible=False))
+        issues = []
+        result = _run_evidence(manifest, records, {"current": {}}, issues)
+        self.assertTrue(result["completeMatrix"])
+        self.assertFalse(result["promotionEvidenceEligible"])
+        self.assertEqual([], issues)
+        self.assertFalse(_run_evidence(manifest, records[:-1], {"current": {}}, [])["completeMatrix"])
+
     def test_visual_regression_has_ten_turns_and_requires_every_repetition(self):
         records = [dict(cellID=f"visual|v{i}|r{rep}", configurationID="visual",
                         caseID=f"v{i}", repetition=rep, split="development")

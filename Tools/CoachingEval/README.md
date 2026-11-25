@@ -614,3 +614,49 @@ latency, token use and estimated cost. `visualMetrics` counts links, arrows,
 coordinates and legacy-unavailable capabilities separately from quality.
 This small development suite does not establish broad chess reliability or
 authorize production promotion; use the existing broader suites as well.
+## Judgment-focused regression (v1)
+
+The 12-case `CoachingJudgmentBenchmarkTests` suite distinguishes useful evaluation
+from accurate description. It covers purposeful/unnecessary retreat, central plans,
+rook activity, active escapes and hints, favorable/unfavorable exchanges, sound
+development, and endgame goals. Its private briefs and
+`benchmark/judge-judgment-v1.json` controls are frozen before candidate tuning.
+Controls are implementer-authored, **not human calibration**. Historical suites
+are unchanged. This is development evidence, not a holdout or promotion gate.
+
+Export from a committed checkout (no paid calls):
+
+```bash
+COACHING_JUDGMENT_BENCHMARK_OUTPUT_DIR="$PWD/.coaching-eval/judgment/corpus" \
+COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$(git rev-parse HEAD)" \
+xcodebuild test -quiet -project ChessTutor.xcodeproj -scheme ChessTutor \
+  -destination 'platform=iOS Simulator,name=ChessTutor Coaching Smoke' \
+  -only-testing:ChessTutorTests/CoachingJudgmentBenchmarkTests
+```
+
+Use the existing bounded experience runner for each arm, retaining the **same
+corpus, judge, controls, and cumulative budget journal**. Supply a compatible,
+unexpired judge qualification. `OPENAI_API_KEY` is read from the environment;
+never commit it. Example unchanged-coach baseline:
+
+```bash
+.venv/bin/python -m Tools.CoachingEval.benchmark.experience \
+  --corpus .coaching-eval/judgment/corpus \
+  --controls Tools/CoachingEval/benchmark/judge-judgment-v1.json \
+  --candidate Tools/CoachingEval/benchmark/configs/astra-visual-v5-low.json \
+  --qualification "$JUDGE_QUALIFICATION" \
+  --output .coaching-eval/judgment/baseline \
+  --journal .coaching-eval/judgment/budget.jsonl --max-cost 10
+```
+
+The first run checks sensitivity (three repetitions per control), then generates
+and grades three repetitions per case. Reuse its successful sensitivity artifact
+with `--sensitivity` on later arms; bindings must match. Do not replay failed cells
+to improve a score. Existing candidate and grading checkpoints retain partial runs.
+
+`evaluation.json` includes `judgmentMetrics`: per-case scores, conditional judged
+mean, failed/invalid and ungraded counts, and `usefulResponseRate` (judgment >=4,
+no severe error, divided by **all attempts**). Interpret alongside the full report's
+other five dimensions, failures, latency, usage and cost. A high average alone is
+not evidence of a dependable coach. If the baseline is strong, report that result;
+do not alter this rubric to force a low score.
