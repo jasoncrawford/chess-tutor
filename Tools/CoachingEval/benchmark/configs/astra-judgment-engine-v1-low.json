@@ -1,0 +1,8 @@
+{
+  "baseline": false,
+  "id": "astra-judgment-engine-v1-low",
+  "modelConfigurationPath": "Tools/CoachingEval/benchmark/configs/hosted-judgment-v1.json",
+  "modelConfigurationSHA256": "d1f3aa4a408390647f8584f93f917ea928c9fddececcf0e870813eee64f2bfd9",
+  "pricingVersion": "openai-2026-09-06",
+  "schemaVersion": "coaching-quality-candidate.v2"
+}
