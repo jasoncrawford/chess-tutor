@@ -164,8 +164,9 @@ class BenchmarkCorpusTests(unittest.TestCase):
     def test_judgment_suite_requires_twelve_independent_development_cases(self):
         self.cases = self.cases[:12]
         schema = "coaching-quality-judgment-regression-manifest.v1"
-        self.write(schema)
-        self.assertEqual(12, len(load_corpus(self.root).select()))
+        for version in (1, 2):
+            self.write(f"coaching-quality-judgment-regression-manifest.v{version}")
+            self.assertEqual(12, len(load_corpus(self.root).select()))
         self.cases[0]["split"] = "holdout"
         self.write(schema)
         with self.assertRaises(ValueError):

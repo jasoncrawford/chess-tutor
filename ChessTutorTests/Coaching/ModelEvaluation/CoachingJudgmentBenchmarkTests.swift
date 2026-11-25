@@ -4,10 +4,10 @@ import XCTest
 
 /// Frozen before candidate changes. These are development probes, not holdout evidence.
 enum CoachingJudgmentBenchmark {
-    static let manifestVersion = "coaching-quality-judgment-regression-manifest.v1"
+    static let manifestVersion = "coaching-quality-judgment-regression-manifest.v2"
     static let policy = "Assess decision usefulness, not just factual description. For a staged move, convey whether it is worthwhile and one relevant reason or tradeoff. A true inventory of attacked/defended squares without a decision-useful assessment is at most 3 for coachingJudgment. A clear, proportionate assessment with a relevant reason earns 4–5. An implicit assessment is fine; no required adjective, comparison, exact move, or extra sentence. For Help/Hint, identify a useful goal or opportunity, not merely the first threat. Do not reward verbosity, gratuitous aggression, or matching an engine's favorite. A necessary retreat or sound non-best move can earn 5. Keep factual errors separate from weak judgment."
 
-    static func corpus() throws -> CoachingQualityBenchmarkCorpus {
+    static func corpus(version: Int = 2) throws -> CoachingQualityBenchmarkCorpus {
         let activeKnightHistory = ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "f3g5", "h7h6"]
         let centerHistory = ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "d2d3", "d7d6", "e1g1", "g8f6"]
         var turns = [
@@ -56,6 +56,18 @@ enum CoachingJudgmentBenchmark {
                                category: source.category, snapshot: source.snapshot,
                                graderBrief: brief(source.graderBrief.verifiedFacts, purpose), sourceTraceID: "judgment-v1:\(sourceID)"))
         }
+        if version == 2 {
+            turns = turns.map { turn in
+                let old = turn.graderBrief
+                let clarification = "The displayed board already shows the tentative capture or relocation. Past-tense descriptions such as 'your bishop captured the queen' are acceptable when the response still uses chooseWhetherToPlay and preserves the child's decision. Treating a draft as committed means an actual wrong turn/state assumption (for example, telling the child to wait for Black's turn), not past tense alone."
+                return .init(id: turn.id, groupID: turn.groupID, stepIndex: turn.stepIndex, split: turn.split,
+                             category: turn.category, snapshot: turn.snapshot,
+                             graderBrief: .init(verifiedFacts: old.verifiedFacts, coachingPurpose: old.coachingPurpose,
+                                                acceptableAlternatives: old.acceptableAlternatives + [clarification],
+                                                successCriteria: old.successCriteria, severeFailureCriteria: old.severeFailureCriteria),
+                             sourceTraceID: turn.sourceTraceID)
+            }
+        }
         return .init(independent: turns, sequences: [])
     }
 
@@ -88,6 +100,14 @@ enum CoachingJudgmentBenchmark {
 }
 
 final class CoachingJudgmentBenchmarkTests: XCTestCase {
+    func testGradingClarificationDoesNotChangeAnyCandidateRequest() throws {
+        let original = try CoachingJudgmentBenchmark.corpus(version: 1)
+        let revised = try CoachingJudgmentBenchmark.corpus()
+        XCTAssertEqual(original.allTurns.map(\.snapshot), revised.allTurns.map(\.snapshot))
+        XCTAssertEqual(original.allTurns.map(\.id), revised.allTurns.map(\.id))
+        XCTAssertNotEqual(original.allTurns[0].graderBrief, revised.allTurns[0].graderBrief)
+    }
+
     func testExportIsDeterministicAndPrivateCriteriaDoNotLeak() throws {
         let corpus = try CoachingJudgmentBenchmark.corpus()
         let artifacts = try CoachingQualityBenchmarkExporter.artifacts(sourceGitSHA: "test", corpus: corpus, regression: true,

@@ -1042,6 +1042,7 @@ def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configur
     regression_count = {
         "coaching-quality-visual-regression-manifest.v1": 10,
         "coaching-quality-judgment-regression-manifest.v1": 12,
+        "coaching-quality-judgment-regression-manifest.v2": 12,
     }.get(corpus_schema, 8)
     expected_split_counts = {"development": regression_count if regression_suite else 56}
     if include_holdout:

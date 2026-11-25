@@ -13,6 +13,7 @@ _CATEGORIES = frozenset(
 )
 _REGRESSION_INVENTORIES = {
     "coaching-quality-judgment-regression-manifest.v1": 12,
+    "coaching-quality-judgment-regression-manifest.v2": 12,
     "coaching-quality-visual-regression-manifest.v1": 8,
     "coaching-quality-playthrough-regression-manifest.v1": 8,
     "coaching-quality-experience-regression-manifest.v3": 9,
