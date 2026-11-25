@@ -4,19 +4,37 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingPanelLayoutTests: XCTestCase {
-    func testAnswerBannerNeverCoversTheGridInAnyReadingOrientation() {
+    func testAnswerBannerDoesNotResizeOrMoveTheGridInAnyReadingOrientation() {
         for angle in [0.0, 90, 180, -90] {
-            let layout = CoachingBoardLayout(size: CGSize(width: 600, height: 600), bannerHeight: 88,
-                                             readableRotationDegrees: angle)
-            let board = CGRect(origin: layout.origin, size: CGSize(width: layout.side, height: layout.side))
-            let vertical = abs(angle) == 90
-            let banner = CGRect(x: layout.bannerCenter.x - (vertical ? 88 : layout.side) / 2,
-                                y: layout.bannerCenter.y - (vertical ? layout.side : 88) / 2,
-                                width: vertical ? 88 : layout.side, height: vertical ? layout.side : 88)
-            XCTAssertFalse(board.intersects(banner))
-            XCTAssertTrue(CGRect(x: -0.01, y: -0.01, width: 600.02, height: 600.02).contains(board))
-            XCTAssertTrue(CGRect(x: -0.01, y: -0.01, width: 600.02, height: 600.02).contains(banner))
-            XCTAssertEqual(board.width, board.height)
+            for height: CGFloat in [0, 52, 88] {
+                let layout = CoachingBoardLayout(size: CGSize(width: 640, height: 600), bannerHeight: height,
+                                                 readableRotationDegrees: angle)
+                XCTAssertEqual(layout.side, 600, "Answer mode must retain the full board size")
+                XCTAssertEqual(layout.origin, CGPoint(x: 20, y: 0), "Answer mode must not shift any square")
+            }
+        }
+    }
+
+    func testAnswerBannerStraddlesTheReadersTopEdgeWithinTheExistingGutter() {
+        for angle in [0.0, 90, 180, -90] {
+            for height: CGFloat in [52, 88] {
+                let layout = CoachingBoardLayout(size: CGSize(width: 600, height: 600), bannerHeight: height,
+                                                 readableRotationDegrees: angle)
+                let vertical = abs(angle) == 90
+                let banner = CGRect(x: layout.bannerCenter.x - (vertical ? height : layout.side) / 2,
+                                    y: layout.bannerCenter.y - (vertical ? layout.side : height) / 2,
+                                    width: vertical ? height : layout.side, height: vertical ? layout.side : height)
+                let board = CGRect(x: 0, y: 0, width: 600, height: 600)
+                XCTAssertTrue(board.intersects(banner))
+                XCTAssertFalse(board.contains(banner), "Part of the banner belongs in the gutter")
+                XCTAssertTrue(board.insetBy(dx: -24, dy: -24).contains(banner), "Do not overflow the existing tabletop padding")
+                switch angle {
+                case 0: XCTAssertLessThan(banner.minY, 0)
+                case 90: XCTAssertGreaterThan(banner.maxX, 600)
+                case 180: XCTAssertGreaterThan(banner.maxY, 600)
+                default: XCTAssertLessThan(banner.minX, 0)
+                }
+            }
         }
     }
 

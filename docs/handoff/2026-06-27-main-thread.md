@@ -1,5 +1,9 @@
 # Main Thread Handoff - 2026-06-27
 
+November 25 follow-up: the board-answer banner now floats translucently across
+the reader's top edge, using the existing gutter instead of shrinking or shifting
+the board. Taps pass through it. See [the banner report](../reports/2026-11-25-floating-answer-banner.md).
+
 November 22 follow-up: inline piece icons are restored as baseline-aligned native
 text attachments. Show arrow is removed. Ordinary drafts say “Play this move”;
 an illustrated alternative hides commit, and closing Help retains the draft.

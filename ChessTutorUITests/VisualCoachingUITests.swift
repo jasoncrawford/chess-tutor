@@ -36,7 +36,7 @@ import XCTest
         attach(app, "wrapped-paragraph-large")
     }
 
-    func testAnswerBannerFitsAllRotationsWithoutCoveringSquares() {
+    func testAnswerBannerFloatsWithoutMovingSquaresInAnyRotation() {
         XCUIDevice.shared.orientation = .landscapeLeft
         for rotation in ["0", "90", "180", "-90"] {
             let app = XCUIApplication()
@@ -45,12 +45,53 @@ import XCTest
             let banner = app.descendants(matching: .any)["coaching-board-answer-banner"].firstMatch
             XCTAssertTrue(banner.waitForExistence(timeout: 5))
             XCTAssertTrue(app.frame.contains(banner.frame))
-            for name in ["White knight on b1", "White knight on g1", "Black rook on b8", "Black king on e8"] {
+            let names = ["White knight on b1", "White knight on g1", "Black rook on b8", "Black king on e8"]
+            var frames: [String: CGRect] = [:]
+            for name in names {
                 let square = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).firstMatch
-                XCTAssertFalse(banner.frame.intersects(square.frame))
                 XCTAssertTrue(square.isHittable)
+                frames[name] = square.frame
             }
             attach(app, "answer-banner-\(rotation)")
+            app.buttons["Play instead"].tap()
+            XCTAssertFalse(banner.exists)
+            for name in names {
+                let square = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).firstMatch
+                XCTAssertEqual(square.frame, frames[name], "Showing or dismissing the banner must not move or resize the board")
+            }
+            XCTAssertEqual("Requests: 1", app.staticTexts["visual-request-count"].label)
+            app.terminate()
+        }
+    }
+
+    func testAnswerBannerPassesTapsThroughToThePieceUnderneath() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        for (rotation, name) in [("0", "Black king on e8"), ("180", "White king on e1")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-ui-test-visual-coaching", "question", "-visual-rotation", rotation,
+                                   "-visual-large", "-visual-slow-answer"]
+            app.launch()
+            let banner = app.descendants(matching: .any)["coaching-board-answer-banner"].firstMatch
+            XCTAssertTrue(banner.waitForExistence(timeout: 5))
+            let square = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).firstMatch
+            let center = CGPoint(x: square.frame.midX, y: square.frame.midY)
+            XCTAssertTrue(banner.frame.contains(center), "Exercise a tap actually underneath the translucent overlay")
+            square.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertTrue(app.staticTexts["Checking your answer…"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", "Requests: 2")).firstMatch.waitForExistence(timeout: 3))
+            if rotation == "180" {
+                // The white king is both covered and movable. Starting a drag
+                // through the overlay must leave answer mode and still land on
+                // the square the child aimed at before the banner disappeared.
+                let destination = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "d2")).firstMatch
+                let target = destination.frame
+                let point = app.coordinate(withNormalizedOffset: .zero).withOffset(
+                    CGVector(dx: target.midX - app.frame.minX, dy: target.midY - app.frame.minY))
+                square.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    .press(forDuration: 0.1, thenDragTo: point)
+                XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "White king on d2")).firstMatch.waitForExistence(timeout: 3))
+                XCTAssertFalse(banner.exists)
+            }
             app.terminate()
         }
     }

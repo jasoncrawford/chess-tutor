@@ -190,6 +190,7 @@ private extension Int {
 
 struct ChessBoardView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @ScaledMetric(relativeTo: .headline) private var answerBannerHeight: CGFloat = 52
     @Bindable var session: GameSession
     let captureNamespace: Namespace.ID
@@ -251,15 +252,26 @@ struct ChessBoardView: View {
                 }
 
                 if let prompt {
-                    Label(prompt, systemImage: "hand.tap")
+                    Label {
+                        Text(prompt)
+                    } icon: {
+                        Image(systemName: "hand.tap")
+                            .foregroundStyle(AppTheme.captureBoxFelt)
+                    }
                         .font(.system(.headline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(AppTheme.whitePiece)
+                        .foregroundStyle(AppTheme.ink)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.75)
                         .padding(.horizontal, 14)
-                        .frame(width: side, height: layout.bannerHeight)
-                        .background(AppTheme.captureBoxFelt, in: RoundedRectangle(cornerRadius: 12))
+                        .frame(width: min(max(0, side - 32), 420 * layout.bannerHeight / 52), height: layout.bannerHeight)
+                        .background(AppTheme.table.opacity(accessibilityReduceTransparency ? 1 : 0.88),
+                                    in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(AppTheme.captureBoxFelt.opacity(0.28), lineWidth: 1)
+                        }
+                        .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
                         .rotationEffect(.degrees(readableRotationDegrees))
                         .position(layout.bannerCenter)
                         .allowsHitTesting(false)
@@ -816,8 +828,8 @@ struct ChessBoardView: View {
     }
 }
 
-/// Reserves space above the board in the reader's orientation. The instruction
-/// never covers a square; the same origin drives pieces, arrows and hit testing.
+/// The board is independent of the answer prompt. Its banner straddles the
+/// reader's top edge; pieces, arrows and hit testing always share a fixed grid.
 struct CoachingBoardLayout {
     let side: CGFloat
     let origin: CGPoint
@@ -826,17 +838,17 @@ struct CoachingBoardLayout {
 
     init(size: CGSize, bannerHeight: CGFloat, readableRotationDegrees: Double) {
         self.bannerHeight = bannerHeight
-        let gap: CGFloat = bannerHeight > 0 ? 12 : 0
         let radians = readableRotationDegrees * .pi / 180
         let down = CGVector(dx: -sin(radians), dy: cos(radians))
-        let reserved = bannerHeight + gap
-        side = max(0, min(size.width - abs(down.dx) * reserved,
-                          size.height - abs(down.dy) * reserved))
+        side = max(0, min(size.width, size.height))
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        origin = CGPoint(x: center.x + down.dx * reserved / 2 - side / 2,
-                         y: center.y + down.dy * reserved / 2 - side / 2)
-        bannerCenter = CGPoint(x: center.x - down.dx * (side + gap) / 2,
-                               y: center.y - down.dy * (side + gap) / 2)
+        origin = CGPoint(x: center.x - side / 2, y: center.y - side / 2)
+        // Use the existing gutter, even at large text sizes, without reserving
+        // new space or extending into the neighboring controls.
+        let overhang = min(bannerHeight / 2, 20)
+        let distance = side / 2 - bannerHeight / 2 + overhang
+        bannerCenter = CGPoint(x: center.x - down.dx * distance,
+                               y: center.y - down.dy * distance)
     }
 }
 
@@ -857,8 +869,7 @@ private struct DragState {
     let visualPieceID: UUID?
     var location: CGPoint
     var isPrepared: Bool
-    // Dismissing an answer prompt must not move destinations under the finger.
-    // Retain through the existing settle animation, then use the new layout.
+    // Retain geometry through drag/settle even if the container changes size.
     let layout: CoachingBoardLayout
 }
 
