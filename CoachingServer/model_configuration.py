@@ -36,7 +36,8 @@ _CONFIGURATION_FIELDS = frozenset(
 )
 _PROVIDERS = frozenset(("openai-responses-v1",))
 _PROMPT_GENERATORS = {name: "tutor-v13" for name in PROMPT_GENERATORS}
-_RESPONSE_CONTRACTS = frozenset(("chess-native-v13",))
+_PROMPT_GENERATORS["chess-visual-grounded-v1"] = "tutor-v14"
+_RESPONSE_CONTRACTS = frozenset(("chess-native-v13", "chess-native-v14"))
 _REASONING_EFFORTS = frozenset(("none", "low", "medium", "high"))
 _TACTICAL_FOLLOW_UP_EVENTS = frozenset(
     ("moveStaged", "moveReplaced", "squareInspected")
@@ -100,6 +101,8 @@ class HostedModelConfiguration:
             _RESPONSE_CONTRACTS,
             "response contract",
         )
+        if (_PROMPT_GENERATORS[generator] == "tutor-v14") != (response_contract == "chess-native-v14"):
+            raise ValueError("Prompt generator and response contract are incompatible")
         conversation_reuse = _boolean(raw["conversationReuse"], "conversationReuse")
         store = _boolean(raw["store"], "store")
         if conversation_reuse and not store:

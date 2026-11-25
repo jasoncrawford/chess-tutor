@@ -10,6 +10,19 @@ SCRIPT = ROOT / "scripts/run_coaching_regressions.sh"
 
 
 class RegressionLauncherTests(unittest.TestCase):
+    def test_visual_resume_skips_export_and_reuses_explicit_budget(self):
+        run = self.root / "saved"
+        (run / "evaluation").mkdir(parents=True)
+        (run / "evaluation/evaluation.json").write_text("{}")
+        result = self.run_script("--visual", "--paid", "--max-cost", "10", "--resume", str(run),
+                                 "--budget-journal", str(self.root / "shared.jsonl"))
+        self.assertEqual(0, result.returncode, result.stderr)
+        commands = self.log.read_text()
+        self.assertNotIn("export:", commands)
+        self.assertIn("--resume", commands)
+        self.assertIn("--budget-journal " + str(self.root / "shared.jsonl"), commands)
+        self.assertNotIn("sk-test", result.stdout + result.stderr + commands)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

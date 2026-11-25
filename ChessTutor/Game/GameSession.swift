@@ -126,8 +126,7 @@ final class GameSession {
     var coachingPresentation: CoachingPresentation? {
         if let hostedCoachingSession {
             return HostedCoachingPresentationProjector().presentation(
-                for: hostedCoachingSession.phase,
-                pulseID: hostedCoachingSession.pulseID
+                for: hostedCoachingSession, board: committedState.board, tentativeMove: tentativeMove
             )
         }
         return coachingSession?.presentation
@@ -142,14 +141,8 @@ final class GameSession {
     }
 
     var authoritativeCoachingBoardTask: CoachingBoardTask {
-        if let hostedCoachingSession {
-            if hostedCoachingSession.isAwaitingPieceAnswer {
-                return .identify(allowsMoveRevision: false)
-            }
-            return HostedCoachingPresentationProjector().presentation(
-                for: hostedCoachingSession.phase,
-                pulseID: hostedCoachingSession.pulseID
-            ).boardTask
+        if hostedCoachingSession != nil {
+            return coachingPresentation?.boardTask ?? .none
         }
         return coachingSession?.authoritativeBoardTask ?? .none
     }
@@ -256,13 +249,14 @@ final class GameSession {
 
         switch committedState.result {
         case .ongoing:
-            return BoardGuidancePresentation.make(
+            let guidance = BoardGuidancePresentation.make(
                 state: state,
                 analysis: displayedAnalysis,
                 selectedSquare: selectedSquare,
                 showsSelectedReach: assistSettings.showLegalMovesOnSelection,
                 keepsOnlyCheckmateKingThreat: false
             )
+            return hostedCoachingSession == nil ? guidance : guidance.quietForCoaching(in: state.board)
         case .checkmate:
             return BoardGuidancePresentation.make(
                 state: state,
@@ -786,6 +780,10 @@ final class GameSession {
         intent: CoachingSquareInteractionIntent
     ) -> Bool {
         if var hostedSession = hostedCoachingSession {
+            if intent == .dragStart, hostedSession.isAnswering {
+                playInsteadOfAnswering()
+                return false
+            }
             // A destination tap is a move, even while the tutor asks the player
             // to identify a piece. Use allowed moves, independent of visible
             // hints and of whether the move will ultimately pass check rules.
@@ -799,12 +797,11 @@ final class GameSession {
             guard intent == .tap,
                   hostedSession.recordPieceSelectionAnswer(
                       at: square,
-                      in: committedState
+                      in: state
                   ) else {
                 logCoachingEvent("board_input", fields: ["intent": intent == .tap ? "tap" : "drag", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "local"])
-                return false
+                return hostedSession.isAnswering && intent == .tap
             }
-            selectWithoutSynchronizing(square)
             hostedCoachingSession = hostedSession
             logCoachingEvent("board_input", fields: ["intent": "tap", "square": ModelCoachingPositionEncoder.squareName(square), "disposition": "answer"])
             queueHostedCoachingRequest(debounced: true)
@@ -889,6 +886,41 @@ final class GameSession {
         hostedCoachingSession = nil
         pendingHostedCoachingRequest = nil
         hostedCoachingWorkID = nil
+    }
+
+    func replayCoachingReference(at runIndex: Int) {
+        let previousPulse = hostedCoachingSession?.pulseID
+        hostedCoachingSession?.replayReference(at: runIndex)
+        if hostedCoachingSession?.pulseID != previousPulse {
+            logCoachingEvent("visual_reference", fields: ["run_index": String(runIndex), "disposition": "local"])
+        }
+    }
+
+    var coachingReferenceReplayID: String? { hostedCoachingSession?.referenceReplayID }
+
+    func expireCoachingReference(replayID: String?) {
+        hostedCoachingSession?.expireReference(replayID: replayID)
+    }
+
+    func replayCoachingVisual() {
+        let previousPulse = hostedCoachingSession?.pulseID
+        hostedCoachingSession?.replayVisual()
+        if hostedCoachingSession?.pulseID != previousPulse {
+            logCoachingEvent("visual_replay", fields: ["disposition": "local"])
+        }
+    }
+
+    func playInsteadOfAnswering() {
+        guard hostedCoachingSession?.isAnswering == true else { return }
+        if let pending = pendingHostedCoachingRequest {
+            logCoachingEvent("request_cancelled", pending: pending, fields: [
+                "reason": "play_instead", "was_dispatched": String(hostedInFlightRequestID == pending.id)
+            ])
+        }
+        pendingHostedCoachingRequest = nil
+        hostedCoachingWorkID = nil
+        hostedCoachingSession?.playInstead()
+        logCoachingEvent("play_instead", fields: ["disposition": "local"])
     }
 
     private func queueHostedCoachingRequest(debounced: Bool = false) {

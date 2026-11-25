@@ -154,6 +154,22 @@ struct CoachingPanelView: View {
     let onCommittedMove: (Move) -> Void
 
     var body: some View {
+        Group {
+            if presentation?.visualContent != nil {
+                renderedPanel
+            } else {
+                renderedPanel.accessibilityRepresentation { accessibilityPanelContent }
+            }
+        }
+        .task(id: session.coachingReferenceReplayID) {
+            guard let replay = session.coachingReferenceReplayID else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            session.expireCoachingReference(replayID: replay)
+        }
+    }
+
+    private var renderedPanel: some View {
         panelContent
             .frame(
                 width: layout.physicalContentSize.width,
@@ -166,9 +182,6 @@ struct CoachingPanelView: View {
                 height: layout.tabletopContentSize.height
             )
             .accessibilityElement(children: .contain)
-            .accessibilityRepresentation {
-                accessibilityPanelContent
-            }
     }
 
     @ViewBuilder
@@ -192,7 +205,7 @@ struct CoachingPanelView: View {
                     conversationRegion
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     panelDivider
-                    readableActions(axis: .vertical)
+                    readableActions(axis: .horizontal)
                 }
             }
         }
@@ -245,9 +258,17 @@ struct CoachingPanelView: View {
 
     private var conversationRegion: some View {
         Group {
-            if presentation?.isThinking == true {
-                CoachingThinkingIndicator(reduceMotion: reduceMotion)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if presentation?.isThinking == true || presentation?.isAwaitingAnswer == true {
+                VStack(spacing: 14) {
+                    CoachingThinkingIndicator(reduceMotion: reduceMotion)
+                    if presentation?.isAwaitingAnswer == true {
+                        Text("Checking your answer…")
+                            .font(bodyFont)
+                            .foregroundStyle(AppTheme.mutedInk)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.vertical) {
                     conversation
@@ -273,7 +294,7 @@ struct CoachingPanelView: View {
 
     private var accessibilityConversationCopy: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if presentation?.isThinking == true {
+            if presentation?.isThinking == true || presentation?.isAwaitingAnswer == true {
                 // A stable semantic counterpart to the animated visual below.
                 Color.clear
                     .frame(width: 64, height: 40)
@@ -281,10 +302,12 @@ struct CoachingPanelView: View {
                     .accessibilityLabel("Thinking")
                     .accessibilityIdentifier("coaching-thinking-indicator")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if presentation?.isAwaitingAnswer == true {
+                    Text("Checking your answer…").font(bodyFont)
+                }
             } else if let presentation {
-                Text(presentation.primaryMessage)
+                messageCopy(presentation)
                     .font(bodyFont)
-                    .lineLimit(1)
                     .accessibilitySortPriority(
                         CoachingConversationAccessibilityElement.primaryMessage.sortPriority
                     )
@@ -320,7 +343,7 @@ struct CoachingPanelView: View {
     private var conversation: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let presentation {
-                Text(presentation.primaryMessage)
+                messageCopy(presentation)
                     .font(bodyFont)
                     .foregroundStyle(AppTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
@@ -347,6 +370,18 @@ struct CoachingPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func messageCopy(_ presentation: CoachingPresentation) -> some View {
+        if let content = presentation.visualContent {
+            CoachingMessageView(content: content, board: session.state.board, fontSize: min(coachingBodySize, 25),
+                                arrowDescription: CoachingVisualAccessibility.arrow(presentation.replayPath,
+                                    board: session.state.board, isStagedMove: presentation.arrowIsDraft),
+                                onReference: session.replayCoachingReference)
+        } else {
+            Text(presentation.primaryMessage)
+        }
     }
 
     @ViewBuilder
@@ -384,7 +419,7 @@ struct CoachingPanelView: View {
                     actionButtons
                 }
             case .horizontal:
-                HStack(spacing: 7) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
                     actionButtons
                 }
             }
@@ -397,6 +432,13 @@ struct CoachingPanelView: View {
 
     @ViewBuilder
     private var actionButtons: some View {
+        if presentation?.canPlayInstead == true {
+            Button("Play instead") { session.playInsteadOfAnswering() }
+                .frame(minHeight: 44)
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.coachFocusRing)
+                .accessibilityHint("Stop answering and move pieces normally")
+        }
         ForEach(actions, id: \.action) { action in
             Button {
                 choose(action.action)
@@ -412,6 +454,7 @@ struct CoachingPanelView: View {
             }
             .buttonStyle(CoachingActionButtonStyle(prominence: action.prominence))
             .accessibilityLabel(action.accessibilityLabel)
+            .disabled(presentation?.isAwaitingAnswer == true && action.action != .stop)
         }
     }
 

@@ -12,6 +12,7 @@ _CATEGORIES = frozenset(
     ("quiet", "danger", "capture", "tentativeMove", "interaction", "specialRule")
 )
 _REGRESSION_INVENTORIES = {
+    "coaching-quality-visual-regression-manifest.v1": 8,
     "coaching-quality-playthrough-regression-manifest.v1": 8,
     "coaching-quality-experience-regression-manifest.v3": 9,
     "coaching-quality-experience-regression-manifest.v4": 13,
@@ -190,9 +191,10 @@ def _validate_inventory(turns: Tuple[BenchmarkTurn, ...], manifest: Mapping[str,
     sequences = [group for group in groups.values() if len(group) == 3]
     regression_count = _REGRESSION_INVENTORIES.get(manifest["schemaVersion"])
     regression = regression_count is not None
+    visual = manifest["schemaVersion"] == "coaching-quality-visual-regression-manifest.v1"
     if not regression and (len(independent) != 40 or len(sequences) != 10 or len(groups) != 50):
         raise ValueError("Benchmark must contain exactly 40 independent and 10 sequence groups")
-    if regression and (len(independent) != regression_count or len(groups) != regression_count):
+    if regression and not visual and (len(independent) != regression_count or len(groups) != regression_count):
         raise ValueError(f"Regression schema requires exactly {regression_count} independent groups")
     for group in independent:
         if group[0].step_index != 1:
@@ -211,6 +213,9 @@ def _validate_inventory(turns: Tuple[BenchmarkTurn, ...], manifest: Mapping[str,
         "developmentTurnCount": regression_count if regression else 56,
         "holdoutTurnCount": 0 if regression else 14,
     }
+    if visual:
+        expected.update(independentGroupCount=7, sequenceGroupCount=1, turnCount=10,
+                        developmentTurnCount=10, holdoutTurnCount=0)
     actual = dict(expected)
     actual["independentGroupCount"] = len(independent)
     actual["sequenceGroupCount"] = len(sequences)

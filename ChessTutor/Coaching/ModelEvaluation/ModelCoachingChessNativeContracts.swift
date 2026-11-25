@@ -76,17 +76,20 @@ struct ModelCoachingChessNativeTurn: Codable, Equatable, Sendable {
     let actions: [String]
     let focus: [ModelCoachingChessNativeFocus]
     let expects: ModelCoachingChessNativeExpectedResponse
+    let visualContent: ModelCoachingVisualContent?
 
     init(
         message: String,
         actions: [String],
         focus: [ModelCoachingChessNativeFocus],
-        expects: ModelCoachingChessNativeExpectedResponse = .none
+        expects: ModelCoachingChessNativeExpectedResponse = .none,
+        visualContent: ModelCoachingVisualContent? = nil
     ) {
         self.message = message
         self.actions = actions
         self.focus = focus
         self.expects = expects
+        self.visualContent = visualContent
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -94,6 +97,7 @@ struct ModelCoachingChessNativeTurn: Codable, Equatable, Sendable {
         case actions
         case focus
         case expects
+        case visualContent
     }
 
     init(from decoder: Decoder) throws {
@@ -105,5 +109,6 @@ struct ModelCoachingChessNativeTurn: Codable, Equatable, Sendable {
             ModelCoachingChessNativeExpectedResponse.self,
             forKey: .expects
         ) ?? .none
+        visualContent = try container.decodeIfPresent(ModelCoachingVisualContent.self, forKey: .visualContent)
     }
 }

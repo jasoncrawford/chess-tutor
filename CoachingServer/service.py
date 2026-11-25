@@ -24,6 +24,7 @@ from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
 )
+from Tools.CoachingEval.visual_response import VisualResponseContract
 
 
 _MAXIMUM_TOKEN_COUNT = 1_000_000_000
@@ -91,7 +92,7 @@ class HostedCoachingService:
                 previous_response_id,
                 game_id,
                 episode_id,
-            ) = _parse_envelope(request)
+            ) = _parse_envelope(request, visual=self._configuration.response_contract == "chess-native-v14")
             normalized_request = parse_neutral_request(neutral_request)
             is_follow_up = previous_response_id is not None
             compiler = PROMPT_GENERATORS[self._configuration.user_prompt_generator][int(is_follow_up)]
@@ -122,7 +123,7 @@ class HostedCoachingService:
             request_kind=request_kind,
         )
 
-        contract = ChessNativeResponseContract(
+        contract = VisualResponseContract.from_request(normalized_request) if self._configuration.response_contract == "chess-native-v14" else ChessNativeResponseContract(
             actions=compilation.actions,
             allowable_moves=compilation.allowable_moves,
             expected_responses=compilation.expected_responses,
@@ -264,7 +265,7 @@ class HostedCoachingService:
             ) from None
         emit_event("provider_response_validated", **correlation)
         response = {
-            "schemaVersion": "hosted-coaching-turn.v3",
+            "schemaVersion": "hosted-coaching-turn.v4" if self._configuration.response_contract == "chess-native-v14" else "hosted-coaching-turn.v3",
             "requestID": compilation.request_id,
             "positionRevision": compilation.position_revision,
             "promptVersion": compilation.prompt_version,
@@ -276,7 +277,8 @@ class HostedCoachingService:
             response=response,
             diagnostics=_diagnostics(
                 request=request_summary,
-                response=turn,
+                response=({**turn, "message": VisualResponseContract.plain_text(turn),
+                           "message_runs": turn["message"]} if self._configuration.response_contract == "chess-native-v14" else turn),
                 provider=provider_summary,
             ),
         )
@@ -380,10 +382,11 @@ def _bounded_int(value: object) -> int:
 
 def _parse_envelope(
     value: Mapping[str, object],
+    *, visual: bool = False,
 ) -> tuple[Mapping[str, object], str | None, str, str]:
     if not isinstance(value, Mapping) or set(value.keys()) != _ENVELOPE_FIELDS:
         raise ValueError("Invalid hosted coaching request envelope")
-    if value["schemaVersion"] != "hosted-coaching-request.v3":
+    if value["schemaVersion"] != ("hosted-coaching-request.v4" if visual else "hosted-coaching-request.v3"):
         raise ValueError("Unsupported hosted coaching request schema")
     game_id = _canonical_uuid(value["gameID"])
     episode_id = _canonical_uuid(value["episodeID"])

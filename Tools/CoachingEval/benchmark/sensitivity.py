@@ -5,12 +5,13 @@ import json
 import os
 from pathlib import Path
 
-from CoachingServer.chess_native_compiler import compile_context
+from CoachingServer.chess_native_compiler import compile_context, parse_neutral_request
 from Tools.CoachingEval.benchmark.grader import absolute_payload
 from Tools.CoachingEval.benchmark.judge_contract import (
     RUBRIC_DIMENSIONS, RUBRIC_FLAGS, absolute_schema, judge_call, validate_absolute,
 )
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
+from Tools.CoachingEval.visual_response import VisualResponseContract
 
 
 class JudgeSensitivity:
@@ -74,7 +75,8 @@ class JudgeSensitivity:
         if any(key not in RUBRIC_FLAGS or type(value) is not bool for key, value in row["flags"].items()):
             raise ValueError("Invalid sensitivity flag expectations")
         compilation = compile_context(request, "tutor-v13")
-        contract = ChessNativeResponseContract.from_markdown(compilation.markdown)
+        contract = (VisualResponseContract.from_request(parse_neutral_request(request)) if isinstance(row["candidateTurn"].get("message"), list)
+                    else ChessNativeResponseContract.from_markdown(compilation.markdown))
         contract.parse_and_validate(json.dumps(row["candidateTurn"]))
         return absolute_payload(turn, dict(userPrompt=compilation.markdown, parsedTurn=row["candidateTurn"]))
 

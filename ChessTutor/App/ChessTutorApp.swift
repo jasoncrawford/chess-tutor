@@ -15,7 +15,9 @@ struct ChessTutorApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let fixture = HostedConfigurationUITestSupport.current {
+            if VisualCoachingUITestFixture.isEnabled {
+                VisualCoachingUITestFixture()
+            } else if let fixture = HostedConfigurationUITestSupport.current {
                 HostedConfigurationUITestFixture(support: fixture, provider: hostedCoachingProvider)
             } else if ManagedGamesCoachingUITestFixture.isEnabled {
                 ManagedGamesCoachingUITestFixture()

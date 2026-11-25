@@ -103,7 +103,7 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             encoder.outputFormatting = [.sortedKeys]
             body = try encoder.encode(
                 HostedCoachingWireRequest(
-                    schemaVersion: "hosted-coaching-request.v3",
+                    schemaVersion: "hosted-coaching-request.v4",
                     gameID: correlation.gameID,
                     episodeID: correlation.episodeID,
                     request: request,
@@ -184,8 +184,8 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
             }
 
             let wire = try JSONDecoder().decode(HostedCoachingWireResponse.self, from: data)
-            guard wire.schemaVersion == "hosted-coaching-turn.v3",
-                  wire.promptVersion == "tutor-v13",
+            guard wire.schemaVersion == "hosted-coaching-turn.v4",
+                  wire.promptVersion == "tutor-v14",
                   Self.isValidContinuationID(wire.continuationID) else {
                 throw HostedCoachingTransportError.invalidResponse
             }
@@ -201,10 +201,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
                 withJSONObject: rawTurn,
                 options: [.sortedKeys]
             )
-            let turn = try ModelCoachingChessNativeTurnDecoder.decodeAndValidate(
+            let turn = try ModelCoachingVisualTurnDecoder.decodeAndValidate(
                 turnData,
-                contract: contract,
-                requiresExpectedResponse: true
+                request: request
             )
             guard turn.expects != .none else {
                 throw HostedCoachingTransportError.invalidResponse
@@ -226,9 +225,9 @@ struct URLSessionHostedCoachingTransport: HostedCoachingTurning, Sendable {
     }
 
     private static func isValidContinuationID(_ value: String) -> Bool {
-        guard value.utf8.count <= 256,
+        guard value.utf8.count <= (value.hasPrefix("resp_v4_") ? 259 : 256),
               value.hasPrefix("resp_") else { return false }
-        let suffix = value.dropFirst(5)
+        let suffix = value.dropFirst(value.hasPrefix("resp_v4_") ? 8 : 5)
         return !suffix.isEmpty && suffix.utf8.allSatisfy { byte in
             (48...57).contains(byte)
                 || (65...90).contains(byte)
@@ -274,7 +273,6 @@ private struct HostedCoachingWireResponse: Decodable {
     let positionRevision: Int
     let promptVersion: String
     let continuationID: String
-    let turn: ModelCoachingChessNativeTurn
     let metrics: HostedCoachingMetrics
 }
 

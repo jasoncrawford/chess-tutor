@@ -4,6 +4,101 @@ import XCTest
 
 @MainActor
 final class HostedGameSessionIntegrationTests: XCTestCase {
+    func testAlternativeHidesCommitAndClosingHelpPreservesTheDraft() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        let c2 = Square(file: .c, rank: 2), c3 = Square(file: .c, rank: 3)
+        session.select(c2)
+        _ = session.moveSelectedPiece(to: c3)
+        session.startCoaching()
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        await provider.succeed(requestID: request.requestID, message: "Try a middle pawn instead.", expects: .chooseWhetherToPlay,
+            visualContent: .init(runs: [.text("Try a middle pawn instead.")], visuals: [.move(from: "e2", to: "e4")]))
+        await task.value
+        let commit = session.coachingPresentation?.actions.first { $0.action == .done }
+        XCTAssertNil(commit, "An illustrated alternative must not look like the move that will be played")
+        _ = session.chooseCoachingAction(.stop)
+        XCTAssertTrue(session.canFinishTurn)
+        let move = session.finishTurn()
+        XCTAssertEqual(move?.from, c2)
+        XCTAssertEqual(move?.to, c3)
+        XCTAssertEqual(session.state.sideToMove, .black)
+        XCTAssertNotNil(session.state.board[Square(file: .e, rank: 2)])
+        XCTAssertNil(session.state.board[Square(file: .e, rank: 4)])
+    }
+
+    func testCommitVisibilityUsesCanonicalMoveNotProseOrAttackDiagrams() async {
+        let cases: [([ModelCoachingVisualCue], Bool)] = [
+            ([], true), ([.move(from: "g1", to: "h3")], true),
+            ([.move(from: "g1", to: "f3")], false),
+            ([.move(from: "e2", to: "e4")], false),
+            ([.attack(from: "g4", to: "h3")], true)
+        ]
+        for (visuals, showsCommit) in cases {
+            let provider = ControlledHostedCoachingProvider()
+            let session = GameSession(hostedCoachingProvider: provider)
+            session.select(Square(file: .g, rank: 1))
+            _ = session.moveSelectedPiece(to: Square(file: .h, rank: 3))
+            session.startCoaching()
+            let task = Task { await session.resolvePendingCoachingAdvice() }
+            let request = await provider.waitForOnlyRequest()
+            await provider.succeed(requestID: request.requestID, message: "Consider your move.", expects: .chooseWhetherToPlay,
+                visualContent: .init(runs: [.text("Consider your move.")], visuals: visuals))
+            await task.value
+            let commit = session.coachingPresentation?.actions.first { $0.action == .done }
+            XCTAssertEqual(commit != nil, showsCommit)
+            if showsCommit {
+                XCTAssertEqual(commit?.title, "Play this move")
+                XCTAssertTrue(commit?.accessibilityLabel.contains("knight") == true)
+                XCTAssertTrue(commit?.accessibilityLabel.contains("h3") == true)
+            }
+        }
+    }
+
+    func testAnswerUsesDisplayedDraftPieceAndIgnoresItsEmptyOrigin() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        let g1 = Square(file: .g, rank: 1), h3 = Square(file: .h, rank: 3)
+        session.select(g1)
+        _ = session.moveSelectedPiece(to: h3)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .selectPiece)
+        XCTAssertTrue(session.handleCoachingSquareTap(g1))
+        XCTAssertNil(session.pendingCoachingRequestID, "An empty displayed square is not an answer")
+        XCTAssertTrue(session.handleCoachingSquareTap(h3))
+        XCTAssertNotNil(session.pendingCoachingRequestID)
+        guard session.pendingCoachingRequestID != nil else { return }
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        XCTAssertEqual(["piece:white:knight:h3"], request.interaction.latestEvent.referencedIDs)
+        XCTAssertEqual(Piece(kind: .knight, color: .white), session.state.board[h3])
+        XCTAssertTrue(session.canFinishTurn)
+        await provider.succeed(requestID: request.requestID, message: "Your knight.", expects: .chooseWhetherToPlay)
+        await task.value
+    }
+
+    func testAnswerAtDraftCaptureNamesCapturingPieceNotCapturedPiece() async {
+        let provider = ControlledHostedCoachingProvider()
+        let e4 = Square(file: .e, rank: 4), d5 = Square(file: .d, rank: 5)
+        let state = GameState(board: Board(pieces: [
+            Square(file: .e, rank: 1): Piece(kind: .king, color: .white),
+            Square(file: .e, rank: 8): Piece(kind: .king, color: .black),
+            e4: Piece(kind: .pawn, color: .white), d5: Piece(kind: .pawn, color: .black)
+        ]), sideToMove: .white)
+        let session = GameSession(state: state, hostedCoachingProvider: provider)
+        session.select(e4)
+        _ = session.moveSelectedPiece(to: d5)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .selectPiece)
+        XCTAssertTrue(session.handleCoachingSquareTap(d5))
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        XCTAssertEqual(["piece:white:pawn:d5"], request.interaction.latestEvent.referencedIDs)
+        await provider.succeed(requestID: request.requestID, message: "Your pawn.", expects: .chooseWhetherToPlay)
+        await task.value
+    }
+
     func testRapidPieceAnswersSendTheLastChoiceNotTheFirst() async throws {
         let provider = ControlledHostedCoachingProvider()
         let session = GameSession(hostedCoachingProvider: provider)
@@ -22,6 +117,53 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         XCTAssertEqual(session.coachingPresentation?.primaryMessage, "Consider this knight.")
     }
 
+    func testLocalReferenceAndReplayPreserveDraftSelectionAndRequestIdentity() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        let g1 = Square(file: .g, rank: 1), h3 = Square(file: .h, rank: 3)
+        session.select(g1)
+        _ = session.moveSelectedPiece(to: h3)
+        session.startCoaching()
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        await provider.succeed(requestID: request.requestID, message: "Your knight can try here.", expects: .chooseWhetherToPlay,
+            visualContent: .init(runs: [.piece(text: "Your knight", square: "h3"), .text(" can try here.")],
+                                 visuals: [.move(from: "g1", to: "f3")]))
+        await task.value
+        let board = session.state, selected = session.selectedSquare
+        XCTAssertTrue(session.boardGuidance.selectedPaths.isEmpty, "The coach arrow must not compete with selected-piece coverage")
+        XCTAssertTrue(session.boardGuidance.supporterSquares.isEmpty)
+        session.replayCoachingReference(at: 0)
+        XCTAssertEqual([h3], session.coachingPresentation?.focus.emphasizedSquares)
+        session.replayCoachingVisual()
+        XCTAssertEqual(h3, session.coachingPresentation?.focus.paths.first?.source)
+        XCTAssertEqual(board, session.state)
+        XCTAssertEqual(selected, session.selectedSquare)
+        XCTAssertTrue(session.canFinishTurn)
+        XCTAssertNil(session.pendingCoachingRequestID)
+    }
+
+    func testPlayInsteadInvalidatesPendingAnswerAndStaleReplyCannotRestoreQuestion() async {
+        let provider = ControlledHostedCoachingProvider()
+        let session = GameSession(hostedCoachingProvider: provider)
+        session.startCoaching()
+        await answerPending(session, using: provider, expects: .findEndangeredPiece)
+        let b1 = Square(file: .b, rank: 1)
+        XCTAssertTrue(session.handleCoachingSquareTap(b1))
+        XCTAssertEqual([b1], session.coachingPresentation?.focus.emphasizedSquares)
+        XCTAssertTrue(session.coachingPresentation?.isAwaitingAnswer == true)
+        let task = Task { await session.resolvePendingCoachingAdvice() }
+        let request = await provider.waitForOnlyRequest()
+        session.playInsteadOfAnswering()
+        XCTAssertNil(session.pendingCoachingRequestID)
+        await provider.succeed(requestID: request.requestID, message: "Stale question", expects: .findEndangeredPiece)
+        await task.value
+        XCTAssertEqual("Try a move on the board.", session.coachingPresentation?.primaryMessage)
+        XCTAssertFalse(session.handleCoachingSquareTap(b1))
+        session.select(b1)
+        XCTAssertEqual(.moved, session.moveSelectedPiece(to: Square(file: .c, rank: 3)))
+        XCTAssertNotNil(session.pendingCoachingRequestID)
+    }
     func testOpponentEndedGameStaysLockedAfterSavingAndReopeningWithCaptureHistory() throws {
         let descriptor = RemoteGameDescriptor(
             id: RemoteGameID(rawValue: "ended-remote"), protocolVersion: 1, status: .active,
@@ -486,7 +628,7 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
         }
     }
 
-    func testHostedIdentificationAllowsTapCaptureAfterSelectingMover() async throws {
+    func testPlayInsteadRestoresTapCaptureAfterAnsweringQuestion() async throws {
         let state = try middlegamePlaythroughState()
         let from = Square(file: .c, rank: 4)
         let to = Square(file: .e, rank: 6)
@@ -500,6 +642,9 @@ final class HostedGameSessionIntegrationTests: XCTestCase {
 
                 XCTAssertTrue(session.handleCoachingSquareTap(from))
                 await answerPending(session, using: provider, expects: expects)
+                XCTAssertNil(session.selectedSquare, "Answering must not silently select a mover")
+                session.playInsteadOfAnswering()
+                session.select(from)
 
                 // Follow the board's real routing: only attempt movement if coaching
                 // did not consume the tap as an identification answer.
@@ -802,7 +947,8 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
         actions: [String] = [],
         focus: [ModelCoachingChessNativeFocus] = [],
         expects: ModelCoachingChessNativeExpectedResponse = .none,
-        continuationID: String? = nil
+        continuationID: String? = nil,
+        visualContent: ModelCoachingVisualContent? = nil
     ) {
         guard let call = pending.removeValue(forKey: requestID) else {
             fatalError("Missing hosted request \(requestID)")
@@ -818,7 +964,8 @@ private actor ControlledHostedCoachingProvider: HostedCoachingTurning {
                     message: message,
                     actions: actions,
                     focus: focus,
-                    expects: expects
+                    expects: expects,
+                    visualContent: visualContent
                 ),
                 metrics: HostedCoachingMetrics(
                     inputTokens: 100,

@@ -576,3 +576,41 @@ V5's terminal-outcome evidence addresses that retained failure.
 
 See [the November 4 experience report](../../docs/reports/2026-11-04-coaching-experience.md)
 for retained comparisons, failed candidates, and latency limitations.
+
+## Visual coaching regression
+
+`bash scripts/run_coaching_regressions.sh --visual` exports ten native-generated
+turns (seven independent cases and one three-turn sequence) and their complete
+rendered prompts, with **no API calls**. It requires a clean checkout so the
+export can be bound to a commit. Read the printed artifact directory's
+`evaluation/prompts.json` before running a changed prompt.
+
+`bash scripts/run_coaching_regressions.sh --visual --paid --max-cost 10` opts into
+the paid run using the existing macOS Keychain item. This is a new experiment
+cap, not permission to spend a previous cap again. For iterations, invoke
+`Tools.CoachingEval.benchmark.visual_evaluation` with a new `--output` and the
+same `--budget-journal` throughout; the shell launcher accepts this option too.
+Never run two spending clients concurrently. Resume the same saved run with
+`bash scripts/run_coaching_regressions.sh --visual --paid --max-cost 10 --resume RUN_DIR`
+(and the original `--budget-journal` if one was supplied). This skips export,
+checks exact input/configuration/schema bindings, restores sequence continuations,
+and sends only remaining candidate cells. Completed and failed attempts retain
+their original timing/cost; failed candidates are not silently retried. A call
+interrupted before its result was saved has an unknown outcome and blocks
+automatic candidate recovery. Grading retains its existing checkpoint recovery.
+Dry previews use the same initial/follow-up compiler as actual candidate calls.
+
+The pinned visual candidate shares its exact compiler, schema and validator
+with the v4 server. The unchanged judge rubric sees both readable text and
+the exact links/arrows. Six agent-authored semantic controls, repeated three
+times, test wrong-piece links, coordinate density and unnecessary draft-reset
+instructions. They are sensitivity tests, **not human calibration**. Shared
+Python/Swift fixtures separately reject reversed attacks, stale piece origins,
+and discovery-spoiling links/arrows. Ordinary prose is not penalized merely for
+having no links.
+
+Reports retain raw structured output, mechanical failures, judge grades,
+latency, token use and estimated cost. `visualMetrics` counts links, arrows,
+coordinates and legacy-unavailable capabilities separately from quality.
+This small development suite does not establish broad chess reliability or
+authorize production promotion; use the existing broader suites as well.

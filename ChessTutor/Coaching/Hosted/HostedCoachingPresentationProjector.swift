@@ -1,4 +1,74 @@
 struct HostedCoachingPresentationProjector: Sendable {
+    func presentation(for session: HostedCoachingSession, board: Board, tentativeMove: Move?) -> CoachingPresentation {
+        if session.isPlayingInstead {
+            return makePresentation(message: "Try a move on the board.", actions: [closeAction], focus: .empty, boardTask: .move)
+        }
+        let waitingForAnswer = session.phase == .thinking && session.isAnswering
+        let phase = waitingForAnswer ? session.displayedTurn.map(HostedCoachingPhase.ready) ?? session.phase : session.phase
+        var result = presentation(for: phase, pulseID: session.pulseID)
+        result.canPlayInstead = session.isAnswering
+        result.isAwaitingAnswer = waitingForAnswer
+        guard case .ready(let turn) = phase else { return result }
+        result.visualContent = turn.visualContent
+        if session.isAnswering {
+            switch turn.expects {
+            case .findEndangeredPiece: result.boardAnswerPrompt = "Tap the piece that needs help"
+            case .findSafeCapture: result.boardAnswerPrompt = "Tap a piece you can capture"
+            default: result.boardAnswerPrompt = "Tap a piece to answer"
+            }
+        }
+        if turn.visualContent != nil, let move = tentativeMove {
+            let hasAlternative = turn.visualContent!.visuals.contains { cue in
+                guard case .move(let from, let to) = cue else { return false }
+                return from != ModelCoachingPositionEncoder.squareName(move.from)
+                    || to != ModelCoachingPositionEncoder.squareName(move.to)
+            }
+            let piece = board[move.from]?.kind.rawValue ?? "piece"
+            let destination = ModelCoachingPositionEncoder.squareName(move.to)
+            result.actions = result.actions.compactMap { action in
+                guard action.action == .done else { return action }
+                guard !hasAlternative else { return nil }
+                return CoachingActionPresentation(action: .done, title: "Play this move",
+                    accessibilityLabel: "Play this move, \(piece) to \(destination)", prominence: action.prominence)
+            }
+        }
+        var emphasized = Set<Square>()
+        var candidates = Set<Square>()
+        var paths = Set<CoachFocusPath>()
+        if let content = turn.visualContent {
+            for cue in content.visuals {
+                guard let from = square(cue.endpoints.from), let to = square(cue.endpoints.to) else { continue }
+                switch cue {
+                case .attack:
+                    paths.insert(.init(source: from, destination: to, role: .attacker))
+                case .move:
+                    let revision = tentativeMove?.from == from && tentativeMove?.to != to
+                    let source = revision ? tentativeMove!.to : from
+                    let knight = board[from]?.kind == .knight
+                    paths.insert(.init(source: source, destination: to, role: .candidate,
+                        geometryKind: revision ? .relocation : knight ? .knight : .direct))
+                }
+                candidates.insert(to)
+            }
+        }
+        result.replayPath = paths.first
+        result.arrowIsDraft = paths.contains {
+            $0.role == .candidate && $0.source == tentativeMove?.from && $0.destination == tentativeMove?.to
+        }
+        if let answer = session.answerSquare {
+            emphasized.insert(answer)
+            paths.removeAll(); candidates.removeAll()
+        } else if let reference = session.referenceSquare.flatMap(square) {
+            emphasized.insert(reference)
+            paths.removeAll(); candidates.removeAll()
+        }
+        if turn.visualContent != nil || session.answerSquare != nil {
+            result.focus = .init(emphasizedSquares: emphasized, candidateSquares: candidates,
+                                paths: paths, pulseID: session.pulseID)
+        }
+        return result
+    }
+
     func presentation(
         for phase: HostedCoachingPhase,
         pulseID: Int

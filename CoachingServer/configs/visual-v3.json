@@ -1,0 +1,17 @@
+{
+  "conversationReuse": true,
+  "initialReasoningEffort": "low",
+  "maximumAttempts": 1,
+  "maximumOutputTokens": 2048,
+  "model": "gpt-6-astra",
+  "provider": "openai-responses-v1",
+  "responseContract": "chess-native-v14",
+  "schemaVersion": "hosted-coaching-model.v1",
+  "simpleFollowUpReasoningEffort": "low",
+  "store": true,
+  "systemPromptPath": "Tools/CoachingEval/prompts/tutor-v14-visual-v3.md",
+  "systemPromptSHA256": "b49c09abb522c1bd576b0611e6ec9c9487b69f1dad996f1d0554745d7ae5adae",
+  "tacticalFollowUpReasoningEffort": "low",
+  "timeoutSeconds": 60,
+  "userPromptGenerator": "chess-visual-grounded-v1"
+}

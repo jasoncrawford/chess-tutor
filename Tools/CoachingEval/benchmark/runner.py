@@ -26,6 +26,7 @@ from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseValidationError,
 )
 from Tools.CoachingEval.openai_responses import OpenAIResponsesError
+from Tools.CoachingEval.visual_response import VisualResponseContract
 
 
 _TRACE_MARKER = re.compile(r"<\s*/?\s*think\b|reasoning_content", re.IGNORECASE)
@@ -43,14 +44,17 @@ def run_candidates(
     price_table=None,
     diagnostic_subset: bool = False,
     stop_on_provider_failure: bool = False,
+    resume: bool = False,
 ):
     """Run one fully preflighted quick or comparison matrix and publish atomically."""
     destination = Path(destination)
     if os.path.lexists(destination):
         raise ValueError(f"Refusing to overwrite benchmark run: {destination}")
     progress_path = destination.with_name(destination.name + ".progress.jsonl") if mode == "regression" else None
-    if progress_path is not None and os.path.lexists(progress_path):
+    if progress_path is not None and os.path.lexists(progress_path) and not resume:
         raise ValueError("Existing regression progress must not be silently replayed")
+    if resume and (progress_path is None or not progress_path.is_file()):
+        raise ValueError("Resume requires saved regression progress")
     configurations = tuple(configurations)
     if not configurations:
         raise ValueError("At least one candidate configuration is required")
@@ -74,10 +78,32 @@ def run_candidates(
     _validate_matrix(turns, include_holdout, diagnostic_subset or corpus.is_regression)
 
     preflight = _preflight(configurations, turns, repetitions, price_table)
+    saved = []
+    pending_path = destination.with_name(destination.name + ".inflight.json")
+    binding_path = destination.with_name(destination.name + ".binding.json")
+    binding = _progress_binding(corpus, configurations, preflight, price_table)
+    if resume:
+        if not binding_path.is_file() or json.loads(binding_path.read_text()) != binding:
+            raise ValueError("Resume binding differs from the saved matrix")
+        saved = [json.loads(line) for line in progress_path.read_text().splitlines()]
+        if len(saved) > len(preflight):
+            raise ValueError("Resume binding has extra records")
+        for row, cell in zip(saved, preflight):
+            base = _base_record(cell)
+            for key in ("cellID", "requestSHA256", "systemPromptSHA256", "userPromptSHA256", "userPrompt"):
+                if row.get(key) != base[key]:
+                    raise ValueError("Resume record binding differs from current inputs")
+        if pending_path.exists():
+            pending = json.loads(pending_path.read_text())
+            if not any(row["cellID"] == pending["cellID"] for row in saved):
+                raise ValueError("An interrupted call has unknown outcome; do not automatically replay it")
+            pending_path.unlink()
     if progress_path is not None:
         progress_path.parent.mkdir(parents=True, exist_ok=True)
-        with progress_path.open("x", encoding="utf-8"):
-            pass
+        if not resume:
+            binding_path.write_bytes(_pretty_json_bytes(binding))
+            with progress_path.open("x", encoding="utf-8"):
+                pass
     clients = {
         configuration.identifier: provider_factory(configuration)
         for configuration in configurations
@@ -85,7 +111,7 @@ def run_candidates(
     records = []
     transcripts = {}
     prior_by_sequence = {}
-    for cell in preflight:
+    for index, cell in enumerate(preflight):
         configuration = cell["configuration"]
         model_configuration = configuration.model_configuration
         turn = cell["turn"]
@@ -95,6 +121,16 @@ def run_candidates(
             turn.group_id,
         )
         prior = prior_by_sequence.get(sequence_key)
+        if index < len(saved):
+            record = saved[index]
+            records.append(record)
+            prior_by_sequence[sequence_key] = {
+                "valid": record["mechanicalValidation"]["valid"],
+                "responseID": record.get("continuationResponseID"),
+            }
+            if record["mechanicalValidation"]["valid"]:
+                transcripts[_transcript_name(record)] = _transcript(record)
+            continue
         if turn.step_index > 1 and prior is not None and not prior["valid"]:
             record = _base_record(cell)
             record["generationStatus"] = "blockedByPriorTurn"
@@ -114,14 +150,24 @@ def run_candidates(
             and prior is not None
         ):
             previous_response_id = prior["responseID"]
-        record, response_id = _execute_cell(
-            cell,
-            clients[configuration.identifier],
-            previous_response_id=previous_response_id,
-            price_table=price_table,
-        )
+            if previous_response_id is None:
+                raise ValueError("Saved sequence lacks a continuation; do not replay earlier calls")
+        if progress_path is not None:
+            _append_progress(pending_path, {"cellID": _base_record(cell)["cellID"]})
+        try:
+            record, response_id = _execute_cell(
+                cell, clients[configuration.identifier], previous_response_id=previous_response_id,
+                price_table=price_table,
+            )
+        except BudgetExceeded:
+            if progress_path is not None:
+                pending_path.unlink()
+            raise
+        record["continuationResponseID"] = response_id
         records.append(record)
         _append_progress(progress_path, record)
+        if progress_path is not None:
+            pending_path.unlink()
         if stop_on_provider_failure and record["generationStatus"] not in ("completed", "invalid"):
             raise RuntimeError("Provider failed; failed case and timing retained in progress journal")
         if _is_sequence(turns, turn.group_id):
@@ -144,6 +190,24 @@ def run_candidates(
     return manifest
 
 
+def _progress_binding(corpus, configurations, cells, prices):
+    return dict(schemaVersion="coaching-candidate-progress.v1", corpusSHA256=corpus.sha256,
+                configurations=[c.sha256 for c in configurations], pricingSHA256=prices.sha256,
+                cells=[dict(cellID=_base_record(c)["cellID"], requestSHA256=_base_record(c)["requestSHA256"],
+                            userPromptSHA256=_base_record(c)["userPromptSHA256"],
+                            schemaSHA256=_sha256(_canonical_json_bytes(c["schema"])),
+                            reasoningEffort=c["reasoningEffort"]) for c in cells])
+
+
+def preview_prompts(corpus, configuration, price_table):
+    """Use exactly the candidate runner's initial/follow-up compilation."""
+    cells = _preflight([configuration], corpus.turns, 1, price_table)
+    return [dict(caseID=cell["turn"].identifier,
+                 kind="followUp" if cell["turn"].step_index > 1 else "initial",
+                 system=configuration.model_configuration.system_prompt,
+                 user=cell["compilation"].markdown) for cell in cells]
+
+
 def _preflight(configurations, turns, repetitions, price_table):
     _validate_configurations(configurations, price_table)
     cells = []
@@ -162,7 +226,9 @@ def _preflight(configurations, turns, repetitions, price_table):
                     turn.request,
                     model_configuration.prompt_version,
                 )
-                contract = ChessNativeResponseContract.from_markdown(compilation.markdown)
+                contract = (VisualResponseContract.from_request(parse_neutral_request(turn.request))
+                            if model_configuration.response_contract == "chess-native-v14"
+                            else ChessNativeResponseContract.from_markdown(compilation.markdown))
                 schema = contract.json_schema()
                 json.dumps(schema, sort_keys=True)
                 normalized_request = parse_neutral_request(turn.request)
@@ -455,6 +521,8 @@ def _manifest(
         "schemaVersion": "coaching-quality-candidate-run.v1",
         "mode": mode,
         **({"regressionSuite": corpus.is_regression} if mode == "regression" else {}),
+        **({"corpusManifestSchema": json.loads(corpus.manifest_path.read_text())["schemaVersion"]}
+           if corpus.is_regression and corpus.manifest_path else {}),
         "diagnosticSubset": diagnostic_subset,
         "includeHoldout": include_holdout,
         "evidence": {

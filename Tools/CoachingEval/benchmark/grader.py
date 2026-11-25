@@ -15,6 +15,8 @@ from typing import Any, Mapping
 
 from CoachingServer.chess_native_compiler import parse_neutral_request
 from Tools.CoachingEval.chess_native_response import ChessNativeResponseContract
+from Tools.CoachingEval.benchmark.visual_metrics import message_text
+from Tools.CoachingEval.visual_response import VisualResponseContract
 from Tools.CoachingEval.benchmark.judge_contract import (
     JudgeCallError,
     RUBRIC_DIMENSIONS,
@@ -308,9 +310,12 @@ def _pairwise_jobs(run_manifest, records, turns, configuration):
                 "kind": "pairwise",
                 "graderBrief": _brief_payload(turn.grader_brief),
                 "judgeContext": JudgeReferenceSet.judge_context(parse_neutral_request(turn.request)),
-                "availableUI": _available_ui(candidate),
-                "responseA": response_a,
-                "responseB": response_b,
+                "availableUIByResponse": {
+                    "responseA": _available_ui(candidate if candidate_is_a else baseline, turn.request),
+                    "responseB": _available_ui(baseline if candidate_is_a else candidate, turn.request),
+                },
+                "responseA": readable_turn(response_a),
+                "responseB": readable_turn(response_b),
             }
             yield {
                 "schemaVersion": "coaching-quality-pairwise-grade.v1",
@@ -423,13 +428,19 @@ def _load_calibration(path):
     return rows
 
 
+def readable_turn(turn):
+    if not isinstance(turn.get("message"), list):
+        return turn
+    return {**turn, "message": message_text(turn), "messageRuns": turn["message"]}
+
+
 def absolute_payload(turn, record):
     return {
         "kind": "absolute",
         "graderBrief": _brief_payload(turn.grader_brief),
         "judgeContext": JudgeReferenceSet.judge_context(parse_neutral_request(turn.request)),
-        "availableUI": _available_ui(record),
-        "candidateTurn": record["parsedTurn"],
+        "availableUI": _available_ui(record, turn.request),
+        "candidateTurn": readable_turn(record["parsedTurn"]),
     }
 
 
@@ -443,7 +454,28 @@ def _brief_payload(brief):
     }
 
 
-def _available_ui(record):
+def _available_ui(record, request=None):
+    turn = record.get("parsedTurn") or {}
+    if isinstance(turn.get("message"), list):
+        expected = turn.get("expects")
+        controls = {
+            "findEndangeredPiece": ["No piece needs help", "Play instead"],
+            "findSafeCapture": ["No safe capture", "Play instead"],
+            "selectPiece": ["Play instead"],
+            "judgeMoveSafety": ["Looks safe", "Try another move"],
+            "chooseWhetherToPlay": ["Play this move", "Try another move"],
+        }.get(expected, []).copy()
+        draft = ((request or {}).get("interaction", {}).get("tentativeMove") or {}).get("canonicalMove")
+        alternative = draft and any(cue.get("type") == "move" and cue["from"] + cue["to"] != draft[:4]
+                                    for cue in turn.get("visuals", []))
+        if alternative and "Play this move" in controls:
+            controls.remove("Play this move")
+        if "hint" in turn.get("actions", []):
+            controls.append("Hint")
+        return {"actions": ["hint"], "expectedResponses": list(VisualResponseContract.EXPECTED_RESPONSES),
+                "visuals": "Optional local piece/square links and one directed attack or move arrow. Links highlight without a network request. Discovery answers must not be linked or shown. Draft arrows use the original move but start at the displayed piece; direct revision needs no reset button.",
+                "controlPolicy": "These per-response controls are authoritative over generic rubric wording. Arrows are automatic, not a separate button. An alternative move arrow hides commit; closing Help preserves the original draft. Piece links should name the piece, not a pronoun such as 'it'.",
+                "localControls": controls + ["Close help"]}
     contract = ChessNativeResponseContract.from_markdown(record["userPrompt"])
     return {
         "actions": list(contract.actions),

@@ -1,5 +1,33 @@
 # Main Thread Handoff - 2026-06-27
 
+November 25 arrow polish: coach arrows use one continuous outlined silhouette
+and stop outside the destination ring, including its pulse. See [the arrow report](../reports/2026-11-25-coaching-arrow-polish.md).
+
+November 25 follow-up: the board-answer banner now floats translucently across
+the reader's top edge, using the existing gutter instead of shrinking or shifting
+the board. Taps pass through it. See [the banner report](../reports/2026-11-25-floating-answer-banner.md).
+
+November 22 follow-up: inline piece icons are restored as baseline-aligned native
+text attachments. Show arrow is removed. Ordinary drafts say “Play this move”;
+an illustrated alternative hides commit, and closing Help retains the draft.
+Visual-v5 prefers descriptive noun-phrase links; eval checks pronoun links and
+supplies actual controls to the judge. See [the follow-up report](../reports/2026-11-22-coaching-references-controls.md).
+The earlier feedback details below are historical where superseded.
+
+November 22 play-test feedback on PR #28: linked prose now uses native wrapping,
+the draft action is “Play my move”, board-answer mode has an explicit banner,
+pending answers use centered animated feedback, and replay is named “Show arrow”.
+The banner's layout is retained during drag/drop to keep destinations stable.
+Visual-v4 pins the matching control-name prompt correction; no paid model calls
+or production rollout. See [the feedback report](../reports/2026-11-22-visual-coaching-feedback.md).
+
+November 21 preview: `codex/visual-coaching` adds local tappable coach references,
+directional arrows, and an explicit but quiet board-answer interaction. It includes
+merged PR #27's debounce/logging. The new client requires the dual v3/v4 server;
+do not install it against the production v3-only server. No production or Family
+iPad rollout was done here. See [the preview report](../reports/2026-11-21-visual-coaching.md)
+for validation, review fixes, and the Coaching Smoke launcher.
+
 November 20 client change: coaching board updates use a tunable 400 ms debounce,
 one in-flight call, and one replaceable pending update. Client interaction/timing
 events are included in About → Share Diagnostics; see

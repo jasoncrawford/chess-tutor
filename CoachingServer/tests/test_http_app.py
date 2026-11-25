@@ -232,7 +232,7 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
             },
             clear=True,
         ), mock.patch(
-            "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
+            "CoachingServer.http_app.OpenAIResponsesClient"
         ) as client_type, mock.patch(
             "CoachingServer.http_app.HostedCoachingService",
             return_value=fake_service,
@@ -241,7 +241,9 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
 
         self.assertIsInstance(application, Flask)
         client_type.assert_called_once_with(api_key="private-key")
-        arguments = service_type.call_args.kwargs
+        self.assertEqual(2, service_type.call_count)
+        self.assertEqual("tutor-v14", service_type.call_args_list[1].kwargs["configuration"].prompt_version)
+        arguments = service_type.call_args_list[0].kwargs
         configuration = arguments["configuration"]
         self.assertEqual("gpt-5.6-sol", configuration.model)
         self.assertEqual("high", configuration.initial_reasoning_effort)
@@ -263,14 +265,14 @@ class HostedCoachingHTTPApplicationTests(unittest.TestCase):
             },
             clear=True,
         ), mock.patch(
-            "Tools.CoachingEval.openai_responses.OpenAIResponsesClient"
+            "CoachingServer.http_app.OpenAIResponsesClient"
         ), mock.patch(
             "CoachingServer.http_app.HostedCoachingService",
             return_value=fake_service,
         ) as service_type:
             create_environment_application()
 
-        configuration = service_type.call_args.kwargs["configuration"]
+        configuration = service_type.call_args_list[0].kwargs["configuration"]
         self.assertEqual(
             ROOT / "Tools/CoachingEval/benchmark/configs/models/astra-discovery-low-model.json",
             configuration.path,

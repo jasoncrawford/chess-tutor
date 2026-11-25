@@ -190,6 +190,8 @@ private extension Int {
 
 struct ChessBoardView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
+    @ScaledMetric(relativeTo: .headline) private var answerBannerHeight: CGFloat = 52
     @Bindable var session: GameSession
     let captureNamespace: Namespace.ID
     let viewingAngle: BoardViewingAngle
@@ -207,11 +209,12 @@ struct ChessBoardView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let side = min(proxy.size.width, proxy.size.height)
-            let origin = CGPoint(
-                x: (proxy.size.width - side) / 2,
-                y: (proxy.size.height - side) / 2
-            )
+            let prompt = session.coachingPresentation?.boardAnswerPrompt
+            let layout = dragState?.layout ?? CoachingBoardLayout(size: proxy.size,
+                bannerHeight: prompt == nil ? 0 : min(answerBannerHeight, 88),
+                readableRotationDegrees: readableRotationDegrees)
+            let side = layout.side
+            let origin = layout.origin
             let guidance = session.boardGuidance
 
             ZStack {
@@ -223,13 +226,19 @@ struct ChessBoardView: View {
                             .stroke(AppTheme.boardFrame, lineWidth: 10)
                     }
                     .shadow(color: .black.opacity(0.20), radius: 18, y: 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .position(x: origin.x + side / 2, y: origin.y + side / 2)
 
                 GuidancePathsLayer(
                     guidance: guidance,
                     side: side,
                     origin: origin,
                     viewingAngle: viewingAngle
+                )
+
+                piecesOverlay(
+                    side: side,
+                    origin: origin,
+                    guidance: guidance
                 )
 
                 if let coaching = session.coachingPresentation {
@@ -242,11 +251,33 @@ struct ChessBoardView: View {
                     )
                 }
 
-                piecesOverlay(
-                    side: side,
-                    origin: origin,
-                    guidance: guidance
-                )
+                if let prompt {
+                    Label {
+                        Text(prompt)
+                    } icon: {
+                        Image(systemName: "hand.tap")
+                            .foregroundStyle(AppTheme.captureBoxFelt)
+                    }
+                        .font(.system(.headline, design: .rounded).weight(.semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                        .padding(.horizontal, 14)
+                        .frame(width: min(max(0, side - 32), 420 * layout.bannerHeight / 52), height: layout.bannerHeight)
+                        .background(AppTheme.table.opacity(accessibilityReduceTransparency ? 1 : 0.88),
+                                    in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(AppTheme.captureBoxFelt.opacity(0.28), lineWidth: 1)
+                        }
+                        .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+                        .rotationEffect(.degrees(readableRotationDegrees))
+                        .position(layout.bannerCenter)
+                        .allowsHitTesting(false)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("coaching-board-answer-banner")
+                }
 
                 if let dragState {
                     PieceIconView(piece: dragState.piece)
@@ -258,7 +289,7 @@ struct ChessBoardView: View {
                 }
             }
             .contentShape(Rectangle())
-            .gesture(dragGesture(side: side, origin: origin))
+            .gesture(dragGesture(layout: layout))
             .onAppear {
                 syncVisualPieces(animated: false)
             }
@@ -508,8 +539,10 @@ struct ChessBoardView: View {
         return AppTheme.boardFrame.opacity(style.normalOpacity)
     }
 
-    private func dragGesture(side: CGFloat, origin: CGPoint) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+    private func dragGesture(layout: CoachingBoardLayout) -> some Gesture {
+        let side = layout.side
+        let origin = layout.origin
+        return DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
                 #if DEBUG
                 guard !isCaptureTestModeEnabled else {
@@ -563,7 +596,8 @@ struct ChessBoardView: View {
                     piece: piece,
                     visualPieceID: visualPieceID,
                     location: value.location,
-                    isPrepared: false
+                    isPrepared: false,
+                    layout: layout
                 )
                 if distance > 8,
                    let preparedSource = session.prepareDrag(from: from),
@@ -794,6 +828,30 @@ struct ChessBoardView: View {
     }
 }
 
+/// The board is independent of the answer prompt. Its banner straddles the
+/// reader's top edge; pieces, arrows and hit testing always share a fixed grid.
+struct CoachingBoardLayout {
+    let side: CGFloat
+    let origin: CGPoint
+    let bannerCenter: CGPoint
+    let bannerHeight: CGFloat
+
+    init(size: CGSize, bannerHeight: CGFloat, readableRotationDegrees: Double) {
+        self.bannerHeight = bannerHeight
+        let radians = readableRotationDegrees * .pi / 180
+        let down = CGVector(dx: -sin(radians), dy: cos(radians))
+        side = max(0, min(size.width, size.height))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        origin = CGPoint(x: center.x - side / 2, y: center.y - side / 2)
+        // Use the existing gutter, even at large text sizes, without reserving
+        // new space or extending into the neighboring controls.
+        let overhang = min(bannerHeight / 2, 20)
+        let distance = side / 2 - bannerHeight / 2 + overhang
+        bannerCenter = CGPoint(x: center.x - down.dx * distance,
+                               y: center.y - down.dy * distance)
+    }
+}
+
 private extension MoveAttemptResult {
     var isLocalMovementInteraction: Bool {
         switch self {
@@ -811,6 +869,8 @@ private struct DragState {
     let visualPieceID: UUID?
     var location: CGPoint
     var isPrepared: Bool
+    // Retain geometry through drag/settle even if the container changes size.
+    let layout: CoachingBoardLayout
 }
 
 struct BoardCoordinateLabelStyle: Equatable {

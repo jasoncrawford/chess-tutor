@@ -13,7 +13,7 @@ from CoachingServer.model_configuration import HostedModelConfiguration
 
 
 PROVIDERS = frozenset(("openai-responses-v1",))
-RESPONSE_CONTRACTS = frozenset(("chess-native-v13",))
+RESPONSE_CONTRACTS = frozenset(("chess-native-v13", "chess-native-v14"))
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _CANDIDATE_USAGE_KEYS = frozenset(
     (

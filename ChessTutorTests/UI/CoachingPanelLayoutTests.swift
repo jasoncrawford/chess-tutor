@@ -4,6 +4,139 @@ import XCTest
 @testable import ChessTutor
 
 final class CoachingPanelLayoutTests: XCTestCase {
+    func testAnswerBannerDoesNotResizeOrMoveTheGridInAnyReadingOrientation() {
+        for angle in [0.0, 90, 180, -90] {
+            for height: CGFloat in [0, 52, 88] {
+                let layout = CoachingBoardLayout(size: CGSize(width: 640, height: 600), bannerHeight: height,
+                                                 readableRotationDegrees: angle)
+                XCTAssertEqual(layout.side, 600, "Answer mode must retain the full board size")
+                XCTAssertEqual(layout.origin, CGPoint(x: 20, y: 0), "Answer mode must not shift any square")
+            }
+        }
+    }
+
+    func testAnswerBannerStraddlesTheReadersTopEdgeWithinTheExistingGutter() {
+        for angle in [0.0, 90, 180, -90] {
+            for height: CGFloat in [52, 88] {
+                let layout = CoachingBoardLayout(size: CGSize(width: 600, height: 600), bannerHeight: height,
+                                                 readableRotationDegrees: angle)
+                let vertical = abs(angle) == 90
+                let banner = CGRect(x: layout.bannerCenter.x - (vertical ? height : layout.side) / 2,
+                                    y: layout.bannerCenter.y - (vertical ? layout.side : height) / 2,
+                                    width: vertical ? height : layout.side, height: vertical ? layout.side : height)
+                let board = CGRect(x: 0, y: 0, width: 600, height: 600)
+                XCTAssertTrue(board.intersects(banner))
+                XCTAssertFalse(board.contains(banner), "Part of the banner belongs in the gutter")
+                XCTAssertTrue(board.insetBy(dx: -24, dy: -24).contains(banner), "Do not overflow the existing tabletop padding")
+                switch angle {
+                case 0: XCTAssertLessThan(banner.minY, 0)
+                case 90: XCTAssertGreaterThan(banner.maxX, 600)
+                case 180: XCTAssertGreaterThan(banner.maxY, 600)
+                default: XCTAssertLessThan(banner.minX, 0)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testIconSpacingDoesNotDependOnWhichRunOwnsTheSpace() throws {
+        for runs: [ModelCoachingVisualMessageRun] in [
+            [.text("Look at "), .piece(text: "your knight", square: "g1"), .text(".")],
+            [.text("Look at"), .piece(text: " your knight", square: "g1"), .text(".")]
+        ] {
+            let host = UIHostingController(rootView: CoachingMessageView(content: .init(runs: runs, visuals: []),
+                board: GameState.startingPosition().board, fontSize: 25, onReference: { _ in }))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 120, height: 700))
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true }
+            host.view.layoutIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            func textView(in view: UIView) -> UITextView? {
+                (view as? UITextView) ?? view.subviews.lazy.compactMap { textView(in: $0) }.first
+            }
+            let view = try XCTUnwrap(textView(in: host.view))
+            let text = try XCTUnwrap(view.attributedText)
+            XCTAssertEqual(text.string, "Look at \u{fffc}\u{00a0}your knight.")
+            let manager = view.layoutManager
+            manager.ensureLayout(for: view.textContainer)
+            let icon = manager.glyphRange(forCharacterRange: NSRange(location: 8, length: 1), actualCharacterRange: nil)
+            let word = manager.glyphRange(forCharacterRange: (text.string as NSString).range(of: "your"), actualCharacterRange: nil)
+            XCTAssertEqual(manager.boundingRect(forGlyphRange: icon, in: view.textContainer).minY,
+                           manager.boundingRect(forGlyphRange: word, in: view.textContainer).minY, accuracy: 1,
+                           "The icon must wrap with its first word, not stay behind on the previous line")
+        }
+    }
+
+    @MainActor
+    func testPieceIconsStayInsideNormalLinesAndShareTheReferenceLink() throws {
+        let content = ModelCoachingVisualContent(runs: [
+            .text("That brings "), .piece(text: "your other knight", square: "g1"),
+            .text(" off the back row and into the game. It now attacks "),
+            .piece(text: "Black's middle pawn", square: "e7"), .text(".")
+        ], visuals: [])
+        for width: CGFloat in [180, 228, 360] {
+            for size: CGFloat in [17, 25] {
+                let host = UIHostingController(rootView: CoachingMessageView(
+                    content: content, board: GameState.startingPosition().board, fontSize: size, onReference: { _ in }))
+                let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 700))
+                window.rootViewController = host
+                window.isHidden = false
+                defer { window.isHidden = true }
+                host.view.layoutIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+                func textView(in view: UIView) -> UITextView? {
+                    (view as? UITextView) ?? view.subviews.lazy.compactMap { textView(in: $0) }.first
+                }
+                let view = try XCTUnwrap(textView(in: host.view))
+                let text = try XCTUnwrap(view.attributedText)
+                var images = 0
+                text.enumerateAttribute(.attachment, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+                    guard let attachment = value as? NSTextAttachment else { return }
+                    images += 1
+                    XCTAssertNotNil(attachment.image)
+                    XCTAssertEqual(text.attribute(.link, at: range.location, effectiveRange: nil) as? URL,
+                                   text.attribute(.link, at: range.location + 2, effectiveRange: nil) as? URL)
+                }
+                XCTAssertEqual(images, 2, "Each piece reference should include the board's artwork")
+                // Inspect the real paragraph's line boxes, rather than assuming
+                // icons occupy no horizontal space or add no wrapped lines.
+                let manager = view.layoutManager
+                manager.ensureLayout(for: view.textContainer)
+                var heights: [CGFloat] = []
+                manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: view.textContainer)) { rect, _, _, _, _ in
+                    heights.append(rect.height)
+                }
+                XCTAssertGreaterThan(heights.count, 2)
+                for height in heights {
+                    XCTAssertEqual(height, UIFont.systemFont(ofSize: size).lineHeight, accuracy: 1,
+                                   "An icon must not create an oversized row")
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testLinkedParagraphWrapsWithTheSameLineHeightAsOrdinaryProse() {
+        let content = ModelCoachingVisualContent(runs: [
+            .text("That brings "), .square(text: "your other knight", square: "g1"),
+            .text(" off the back row and into the game. It now attacks "),
+            .square(text: "White's middle pawn", square: "e2"), .text(".")
+        ], visuals: [])
+        for width: CGFloat in [180, 228, 360] {
+            for size: CGFloat in [17, 25] {
+                let linked = UIHostingController(rootView: CoachingMessageView(
+                    content: content, board: GameState.startingPosition().board, fontSize: size, onReference: { _ in }
+                ).font(AppTheme.coachingBodyFont(size: size)))
+                let plain = UIHostingController(rootView: Text(content.plainText)
+                    .font(AppTheme.coachingBodyFont(size: size)).fixedSize(horizontal: false, vertical: true))
+                let proposal = CGSize(width: width, height: 2000)
+                XCTAssertEqual(linked.sizeThatFits(in: proposal).height, plain.sizeThatFits(in: proposal).height,
+                               accuracy: 1, "Links must not add tall rows or become unbreakable phrases at width \(width), font \(size)")
+            }
+        }
+    }
+
     @MainActor
     func testThinkingTilesAreCenteredInTheOpenReplyArea() throws {
         for frame in try thinkingFrames() {
