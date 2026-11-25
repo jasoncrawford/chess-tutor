@@ -22,7 +22,8 @@ struct CoachArrowGeometry: Equatable {
         let length = hypot(end.x - previous.x, end.y - previous.y)
         guard length > 0 else { return nil }
         let dx = (end.x - previous.x) / length, dy = (end.y - previous.y) / length
-        let tip = CGPoint(x: end.x - dx * geometry.cellSize * 0.33, y: end.y - dy * geometry.cellSize * 0.33)
+        let destinationInset = geometry.cellSize * CoachFocusStyle.current.arrowDestinationInsetInCells
+        let tip = CGPoint(x: end.x - dx * destinationInset, y: end.y - dy * destinationInset)
         points[points.count - 1] = tip
         let firstEnd = points[1]
         let firstLength = hypot(firstEnd.x - start.x, firstEnd.y - start.y)

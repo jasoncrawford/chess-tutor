@@ -3,21 +3,38 @@ import SwiftUI
 struct CoachFocusStyle: Equatable {
     static let current = CoachFocusStyle(
         emphasizedRingScale: 0.76,
+        emphasizedHaloExpansion: 1.11,
+        emphasizedHaloLineWidthFraction: 0.72,
         candidateRingScale: 0.80,
         ringLineWidthInCells: 0.026,
         candidateRingLineWidthInCells: 0.036,
         candidateRingKeylineWidthInCells: 0.072,
+        arrowShaftWidthInCells: 0.055,
+        arrowKeylineWidthInCells: 0.040,
         pathLineWidthInCells: 0.020,
         candidatePathDashInCells: [0.08, 0.07]
     )
 
     let emphasizedRingScale: CGFloat
+    let emphasizedHaloExpansion: CGFloat
+    let emphasizedHaloLineWidthFraction: CGFloat
     let candidateRingScale: CGFloat
     let ringLineWidthInCells: CGFloat
     let candidateRingLineWidthInCells: CGFloat
     let candidateRingKeylineWidthInCells: CGFloat
+    let arrowShaftWidthInCells: CGFloat
+    let arrowKeylineWidthInCells: CGFloat
     let pathLineWidthInCells: CGFloat
     let candidatePathDashInCells: [CGFloat]
+
+    var arrowDestinationInsetInCells: CGFloat {
+        // Keep a fixed tip outside either ring, even at the top of its pulse.
+        let pulse = CoachFocusMotionPolicy(reducesMotion: false).pulseScale
+        let candidateRadius = candidateRingScale * pulse / 2 + candidateRingKeylineWidthInCells / 2
+        let emphasizedRadius = emphasizedRingScale * pulse * emphasizedHaloExpansion / 2
+            + ringLineWidthInCells * emphasizedHaloLineWidthFraction / 2
+        return max(candidateRadius, emphasizedRadius) + arrowKeylineWidthInCells / 2 + 0.04
+    }
 
     func pathDash(for role: CoachFocusPath.Role) -> [CGFloat] {
         role == .candidate ? candidatePathDashInCells : []
@@ -97,15 +114,21 @@ struct CoachFocusOverlay: View {
         for focusPath in focus.paths.sorted(by: pathOrder) {
             guard let layout = CoachArrowGeometry.make(source: focusPath.source,
                 destination: focusPath.destination, kind: focusPath.geometryKind, geometry: geometry) else { continue }
-            var path = Path()
-            path.addLines(layout.points)
-            context.stroke(path, with: .color(AppTheme.moveInlayHighlight), style: .init(lineWidth: geometry.cellSize * 0.095, lineCap: .round, lineJoin: .round))
-            context.stroke(path, with: .color(AppTheme.coachFocusRing), style: .init(lineWidth: geometry.cellSize * 0.055, lineCap: .round, lineJoin: .round))
+            // Stop the shaft at the head's base, then merge their silhouettes.
+            // A single exterior keyline has no crossbar or protruding round cap.
+            var shaft = Path()
+            shaft.addLines(Array(layout.points.dropLast()) + [CGPoint(
+                x: (layout.arrowhead[1].x + layout.arrowhead[2].x) / 2,
+                y: (layout.arrowhead[1].y + layout.arrowhead[2].y) / 2)])
             var head = Path()
             head.addLines(layout.arrowhead)
             head.closeSubpath()
-            context.stroke(head, with: .color(AppTheme.moveInlayHighlight), lineWidth: geometry.cellSize * 0.035)
-            context.fill(head, with: .color(AppTheme.coachFocusRing))
+            let arrow = shaft.strokedPath(.init(lineWidth: geometry.cellSize * style.arrowShaftWidthInCells,
+                                                lineCap: .round, lineJoin: .round)).union(head)
+            let outline = arrow.strokedPath(.init(lineWidth: geometry.cellSize * style.arrowKeylineWidthInCells,
+                                                  lineJoin: .round)).union(arrow)
+            context.fill(outline, with: .color(AppTheme.moveInlayHighlight))
+            context.fill(arrow, with: .color(AppTheme.coachFocusRing))
         }
     }
 
@@ -155,9 +178,9 @@ struct CoachFocusOverlay: View {
                 lineWidth: geometry.cellSize * style.ringLineWidthInCells
             )
             context.stroke(
-                Path(ellipseIn: ringRect(center: center, diameter: diameter * 1.11)),
+                Path(ellipseIn: ringRect(center: center, diameter: diameter * style.emphasizedHaloExpansion)),
                 with: .color(AppTheme.coachFocusRing.opacity(0.24)),
-                lineWidth: geometry.cellSize * style.ringLineWidthInCells * 0.72
+                lineWidth: geometry.cellSize * style.ringLineWidthInCells * style.emphasizedHaloLineWidthFraction
             )
         }
     }

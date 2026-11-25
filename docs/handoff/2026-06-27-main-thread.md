@@ -1,5 +1,8 @@
 # Main Thread Handoff - 2026-06-27
 
+November 25 arrow polish: coach arrows use one continuous outlined silhouette
+and stop outside the destination ring, including its pulse. See [the arrow report](../reports/2026-11-25-coaching-arrow-polish.md).
+
 November 25 follow-up: the board-answer banner now floats translucently across
 the reader's top edge, using the existing gutter instead of shrinking or shifting
 the board. Taps pass through it. See [the banner report](../reports/2026-11-25-floating-answer-banner.md).
