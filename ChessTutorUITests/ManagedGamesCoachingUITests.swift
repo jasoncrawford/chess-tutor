@@ -72,9 +72,17 @@ final class ManagedGamesCoachingUITests: XCTestCase {
     func testShortSavedCardTapsOpenTheSelectedGameAcrossRackTransitions() {
         XCUIDevice.shared.orientation = .landscapeRight
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-test-managed-games", "managed-games-run-\(UUID().uuidString)", "-trace-game-navigation"]
+        let environment = ProcessInfo.processInfo.environment
+        let traceEnabled = environment["CHESS_SAVED_CARD_STRESS_TRACE"] != "off"
+        let immediate = environment["CHESS_SAVED_CARD_STRESS_TIMING"] == "immediate"
+        print("SAVED_CARD_STRESS_CONFIG trace=\(traceEnabled ? "on" : "off") timing=\(immediate ? "immediate" : "settled")")
+        app.launchArguments = ["-ui-test-managed-games", "managed-games-run-\(UUID().uuidString)"]
+        if traceEnabled { app.launchArguments.append("-trace-game-navigation") }
         app.launch()
-        addTeardownBlock { @MainActor in _ = self.attachNavigationTrace(app) }
+        addTeardownBlock { @MainActor in
+            if traceEnabled { _ = self.attachNavigationTrace(app) }
+            else { self.attachNavigationSnapshot(app) }
+        }
         app.buttons["empty-games-start-local"].tap()
         XCTAssertTrue(app.buttons["Help"].waitForExistence(timeout: 5))
         app.buttons["Games"].tap()
@@ -96,7 +104,8 @@ final class ManagedGamesCoachingUITests: XCTestCase {
         for index in 0..<12 {
             let identifier = identifiers[index % identifiers.count]
             let card = app.buttons[identifier]
-            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            if immediate { XCTAssertTrue(card.exists) }
+            else { XCTAssertTrue(card.waitForExistence(timeout: 5)) }
             card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.05)
             guard app.buttons["Help"].waitForExistence(timeout: 5) else {
                 XCTFail("Short saved-card tap \(index) did not open \(identifier)")
@@ -185,7 +194,7 @@ final class ManagedGamesCoachingUITests: XCTestCase {
     }
 
     @MainActor
-    private func attachNavigationTrace(_ app: XCUIApplication) -> String? {
+    private func attachNavigationSnapshot(_ app: XCUIApplication) {
         let hierarchy = XCTAttachment(string: app.debugDescription)
         hierarchy.name = "Games hierarchy before trace export"
         hierarchy.lifetime = .keepAlways
@@ -196,6 +205,11 @@ final class ManagedGamesCoachingUITests: XCTestCase {
             screen.lifetime = .keepAlways
             add(screen)
         }
+    }
+
+    @MainActor
+    private func attachNavigationTrace(_ app: XCUIApplication) -> String? {
+        attachNavigationSnapshot(app)
         app.terminate()
         app.launchArguments.append("-dump-game-navigation")
         app.launch()

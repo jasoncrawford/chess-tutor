@@ -107,3 +107,42 @@ Release build log: `/private/tmp/chess-issue29-release.log`.
 
 These results validate the diagnostics and retained requirements. They do not
 establish a behavioral fix for the original intermittent CI failure.
+
+## Bounded focused CI campaign — November 26
+
+PR #30 merged at `830f07c47b3378f3a4772266fe432db67e3cedb5` with user approval.
+The follow-up experiment uses the existing workflow's manual `saved-game-stress`
+mode on Xcode 26.6 / iOS Simulator iPad (A16). Regular PR and default manual runs
+still execute the full suites.
+
+```bash
+gh workflow run tests.yml --ref codex/saved-game-tap-stress -f mode=saved-game-stress
+```
+
+The job has a hard 30-minute timeout. Its runner budgets 24 minutes for one build
+and focused execution, reserving time for interruption/finalization and artifact
+upload. It runs the original reopen/relaunch test once, then eight combinations:
+tracing on/off, immediate/settled card lookup after returning to Games, and idle
+versus up to two CPU load workers. Each matrix case retains twelve alternating
+50 ms contacts, selected-game coaching checks, and first-attempt assertions.
+No failed test or contact is retried; the campaign stops at the first failure.
+
+“Immediate” removes the explicit per-contact existence wait; XCTest still applies
+its normal event synchronization. “Settled” retains the existing wait. The first
+contact in both profiles follows the initial two-card setup wait. These profiles
+do not promise a precise wall-clock interval after the transition; use the
+recorded event times when interpreting a failure.
+
+The runner builds once, then supplies per-profile test-host environment variables
+in sibling xctestrun files so `__TESTROOT__` stays valid. A host-side marker verifies
+that the selected trace/timing values actually reached XCTest. Untraced cases
+retain hierarchy/screenshot capture but omit the logging overlay and trace dump.
+Loaded cases start at most two separate CPU workers and clean them up after the
+case. Timeouts interrupt and then kill the complete xcodebuild process group,
+including descendants whose leader has already exited.
+
+The `SavedGameTapStress` artifact contains per-command logs, xcresult bundles,
+and `summary.json`. The summary distinguishes a test failure, harness error,
+timeout, budget exhaustion, and a fully completed matrix. A capped or partial
+matrix is not evidence that the bug is fixed. Build products are excluded from
+the upload. Every stress outcome uploads available results.

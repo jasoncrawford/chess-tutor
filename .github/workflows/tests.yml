@@ -3,6 +3,12 @@ name: Pull Request Tests
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Test suite to run
+        type: choice
+        options: [full, saved-game-stress]
+        default: full
 
 permissions:
   contents: read
@@ -14,6 +20,7 @@ concurrency:
 jobs:
   python:
     name: Python
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'saved-game-stress'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -26,11 +33,13 @@ jobs:
       - name: Run Python tests
         run: |
           set -o pipefail
+          stress_runner_status=0
+          python -m unittest discover -s scripts/tests -v 2>&1 | tee python-test-output.txt || stress_runner_status=$?
           coaching_server_status=0
-          python -m unittest discover -s CoachingServer/tests -v 2>&1 | tee python-test-output.txt || coaching_server_status=$?
+          python -m unittest discover -s CoachingServer/tests -v 2>&1 | tee -a python-test-output.txt || coaching_server_status=$?
           coaching_eval_status=0
           python -m unittest discover -s Tools/CoachingEval/tests -v 2>&1 | tee -a python-test-output.txt || coaching_eval_status=$?
-          if [ "$coaching_server_status" -ne 0 ] || [ "$coaching_eval_status" -ne 0 ]; then
+          if [ "$stress_runner_status" -ne 0 ] || [ "$coaching_server_status" -ne 0 ] || [ "$coaching_eval_status" -ne 0 ]; then
             exit 1
           fi
       - name: Upload Python test output
@@ -43,16 +52,30 @@ jobs:
   ipad:
     name: iPad
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress' && 30 || 40 }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
       - name: Run iPad tests
+        if: github.event_name != 'workflow_dispatch' || inputs.mode != 'saved-game-stress'
         run: xcodebuild test -project ChessTutor.xcodeproj -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -resultBundlePath ChessTutor.xcresult
+      - name: Run focused saved-game stress campaign
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          python3 scripts/run_saved_game_stress.py --derived-data "$RUNNER_TEMP/saved-game-stress-build" --budget-seconds 1440
+      - name: Upload saved-game stress results
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
+        uses: actions/upload-artifact@v7
+        with:
+          name: SavedGameTapStress
+          path: saved-game-stress-results
+          compression-level: 0
+          retention-days: 7
       - name: Upload Xcode result bundle
         uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() && (github.event_name != 'workflow_dispatch' || inputs.mode != 'saved-game-stress')
         with:
           name: ChessTutor.xcresult
           path: ChessTutor.xcresult
