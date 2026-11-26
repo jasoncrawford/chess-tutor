@@ -176,3 +176,38 @@ limits are 359 + 81 + 1200 = 1640 seconds (27m20s), below the aggregate 30-minut
 cap. The earlier statement about a final second attempt was superseded by this
 verified infrastructure failure before any test execution. No failed card touch
 is being retried or treated as passing.
+
+### Capped campaign result
+
+PR #30 is merged. The focused attempts used 22m33s of active iPad CI job time in
+aggregate, including setup and upload:
+
+| Run | Active job time | Result |
+| --- | --- | --- |
+| [45863623544](https://github.com/jasoncrawford/chess-tutor/actions/runs/45863623544) | 5m59s | Harness per-case guard interrupted cold startup before a card touch. |
+| [45865010767](https://github.com/jasoncrawford/chess-tutor/actions/runs/45865010767) | 1m21s | No available preset simulator; no UI test ran. |
+| [45865857803](https://github.com/jasoncrawford/chess-tutor/actions/runs/45865857803) | 15m13s | Explicit iOS 26.5/A16 provisioning succeeded; two cases passed; remaining-time cutoff interrupted the next case's startup. |
+
+The third artifact confirms Xcode 26.6 (17F113), iOS 26.5 (23F77), and iPad (A16).
+Its completed baseline exercised saved-game reopening, coaching, and relaunch.
+The completed tracing-off/immediate/idle profile exercised twelve alternating
+50 ms saved-card contacts and selected-game coaching checks. Both xcresult
+summaries show one passed test, zero failures/skips, and no runtime warnings.
+Together these completed cases cover thirteen successful saved-card opens.
+
+The tracing-on/immediate/loaded command was interrupted during startup, before
+its test body or any saved-card contact. The other six matrix profiles were not
+started. No loaded saved-card contacts were exercised, so the planned sweep is
+incomplete. The CI run's failure status reflects the budget timeout, not an
+observed missed card tap. No reproduction or behavioral fix for #29 is claimed.
+
+Per-invocation XCTest startup dominated execution: the baseline command took
+411.16 seconds (168.114 seconds in the test body), and the untraced profile took
+305.39 seconds (82.243 in the body). A future sweep should batch profiles within
+one XCTest invocation rather than paying this startup cost for each profile.
+No further CI was scheduled under this request. The experiment branch is retained
+unmerged for inspection; opening a new PR would schedule additional CI.
+
+Artifacts are preserved locally under
+`/private/tmp/chess-issue29-focused-45865857803`, with the earlier attempt folders
+alongside it. The original issue remains open awaiting a captured failure.
