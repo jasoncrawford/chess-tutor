@@ -160,3 +160,19 @@ build/execution budget to 17 minutes, preserving six minutes for cleanup/upload.
 Together with the first attempt, the maximum active CI job time stays below the
 user's aggregate 30-minute cap. No further stress dispatch is authorized under
 this campaign after that attempt. Report any omitted profiles as incomplete.
+
+
+The second attempt (45865010767) failed before test execution: Xcode reported no
+available iOS simulator destination. Its CI job took 81 seconds; build selection
+failed after 67.51 seconds. No saved-card contact or assertion ran.
+
+The next attempt explicitly inventories runtimes and creates a dedicated iPad
+(A16) on `com.apple.CoreSimulator.SimRuntime.iOS-26-5`, then selects its UUID.
+It fails clearly if that original runtime is unavailable, without downloading
+or substituting a different OS. Provisioning has a two-minute step timeout.
+Its hard job cap is 20 minutes, with a 16-minute build/execution budget; remaining
+time covers provisioning, cleanup, and upload. Combined configured active-job
+limits are 359 + 81 + 1200 = 1640 seconds (27m20s), below the aggregate 30-minute
+cap. The earlier statement about a final second attempt was superseded by this
+verified infrastructure failure before any test execution. No failed card touch
+is being retried or treated as passing.

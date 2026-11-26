@@ -52,7 +52,7 @@ jobs:
   ipad:
     name: iPad
     runs-on: macos-26
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress' && 23 || 40 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress' && 20 || 40 }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
@@ -60,11 +60,20 @@ jobs:
       - name: Run iPad tests
         if: github.event_name != 'workflow_dispatch' || inputs.mode != 'saved-game-stress'
         run: xcodebuild test -project ChessTutor.xcodeproj -scheme ChessTutor -destination 'platform=iOS Simulator,name=iPad (A16)' -resultBundlePath ChessTutor.xcresult
+      - name: Prepare original iPad runtime and dedicated simulator
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
+        timeout-minutes: 2
+        run: |
+          mkdir -p saved-game-stress-results
+          xcodebuild -version | tee saved-game-stress-results/toolchain.log
+          xcrun simctl list --json > saved-game-stress-results/simulators-before.json
+          xcrun simctl create 'Saved-card stress' com.apple.CoreSimulator.SimDeviceType.iPad-A16 com.apple.CoreSimulator.SimRuntime.iOS-26-5 > saved-game-stress-results/simulator-id.txt
       - name: Run focused saved-game stress campaign
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
         run: |
           python3 -m unittest discover -s scripts/tests -v
-          python3 scripts/run_saved_game_stress.py --derived-data "$RUNNER_TEMP/saved-game-stress-build" --budget-seconds 1020
+          stress_device_id="$(cat saved-game-stress-results/simulator-id.txt)"
+          python3 scripts/run_saved_game_stress.py --derived-data "$RUNNER_TEMP/saved-game-stress-build" --destination "platform=iOS Simulator,id=$stress_device_id" --budget-seconds 960
       - name: Upload saved-game stress results
         if: always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
         uses: actions/upload-artifact@v7
