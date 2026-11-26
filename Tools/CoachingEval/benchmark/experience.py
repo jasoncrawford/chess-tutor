@@ -12,6 +12,9 @@ from Tools.CoachingEval.benchmark.configuration import load_candidate, load_judg
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.benchmark.grader import grade_run
 from Tools.CoachingEval.benchmark.experience_metrics import ExperienceMetrics
+from Tools.CoachingEval.benchmark.judgment_metrics import JudgmentMetrics
+from Tools.CoachingEval.benchmark.judge_contract import canonical_json_bytes, validate_absolute
+from Tools.CoachingEval.benchmark.engine_context import EngineContext
 from Tools.CoachingEval.benchmark.qualification import JudgeQualification
 from Tools.CoachingEval.benchmark.regression import RegressionEvaluation
 from Tools.CoachingEval.benchmark.report import write_report
@@ -23,15 +26,17 @@ from Tools.CoachingEval.openai_responses import OpenAIResponsesClient
 class ExperienceEvaluation:
     @classmethod
     def run(cls, *, repository_root, corpus_path, candidate_paths, controls_path,
-            output, client, qualification_path, journal, max_cost="10", sensitivity_path=None):
+            output, client, qualification_path, journal, max_cost="10", sensitivity_path=None, engine_evidence_path=None):
         root, output = Path(repository_root), Path(output)
         if output.exists():
             raise FileExistsError("Refusing to overwrite or replay an experience evaluation")
         config = root / "Tools/CoachingEval/benchmark"
         corpus = load_corpus(corpus_path)
+        engine_context = EngineContext(engine_evidence_path, corpus) if engine_evidence_path else None
         candidates = [load_candidate(path, root) for path in candidate_paths]
         if not candidates:
             raise ValueError("At least one candidate is required")
+        EngineContext.validate_assignment(candidates, engine_context)
         judge = load_judge(config / "configs/judge-v4.json", root)
         prices = load_prices(config / "pricing-v2.json")
         JudgeQualification.load_compatible(qualification_path, judge, datetime.now(timezone.utc))
@@ -66,13 +71,15 @@ class ExperienceEvaluation:
                 return result
             run_candidates(corpus=corpus, configurations=candidates, mode="regression",
                            destination=output / "candidates", provider_factory=lambda _: meter,
-                           price_table=prices, stop_on_provider_failure=True)
+                           price_table=prices, stop_on_provider_failure=True, engine_context=engine_context)
             grade_run(run_root=output / "candidates", corpus=corpus, judge_configuration=judge,
                       client=meter, destination=output / "grades", qualification_path=qualification_path,
                       price_table=prices, checkpoint_path=output / "grading-checkpoint.json")
             aggregate, summary = write_report(output / "candidates", output / "grades", prices, output / "report")
             report = json.loads(aggregate.read_text())
             records = [json.loads(line) for line in (output / "candidates/records.jsonl").read_text().splitlines()]
+            grades = [json.loads(line) for line in (output / "grades/absolute-grades.jsonl").read_text().splitlines()]
+            result["judgmentMetrics"] = JudgmentMetrics.summarize(records, grades)
             result["experienceMetrics"] = ExperienceMetrics.summarize(records, {
                 c.identifier: c.model_configuration.conversation_reuse for c in candidates})
             result.update(report=str(summary), integrityIssues=report["integrityIssues"],
@@ -85,12 +92,55 @@ class ExperienceEvaluation:
             result.update(status="stopped", failureCategory=type(error).__name__)
             raise
         finally:
-            progress = output / "candidates.progress.jsonl"
-            if progress.exists():
-                rows = [json.loads(line) for line in progress.read_text().splitlines()]
-                result["experienceMetrics"] = ExperienceMetrics.summarize(rows, {
-                    c.identifier: c.model_configuration.conversation_reuse for c in candidates})
+            try:
+                cls.retain_metrics(output, result, corpus, candidates)
+            except (ValueError, KeyError, TypeError, OSError) as error:
+                result.pop("judgmentMetrics", None)
+                result["metricsIntegrityFailure"] = type(error).__name__
+                if result["status"] == "completed":
+                    result["status"] = "integrityFailure"
             RegressionEvaluation._save(output, result, meter)
+
+    @staticmethod
+    def retain_metrics(output, result, corpus, candidates):
+        """Keep incomplete runs visible without treating ungraded cells as successes."""
+        output = Path(output)
+        records_path = output / "candidates/records.jsonl"
+        if not records_path.exists():
+            records_path = output / "candidates.progress.jsonl"
+        rows = [json.loads(line) for line in records_path.read_text().splitlines()] if records_path.exists() else []
+        grades, unknown = [], []
+        pending = output / "candidates.inflight.json"
+        if pending.exists():
+            unknown.append(json.loads(pending.read_text())["cellID"])
+        grade_path = output / "grades/absolute-grades.jsonl"
+        checkpoint = output / "grading-checkpoint.json"
+        if grade_path.exists():
+            grades = [json.loads(line) for line in grade_path.read_text().splitlines()]
+        elif checkpoint.exists():
+            envelope = json.loads(checkpoint.read_text())
+            state = envelope["state"]
+            if envelope["sha256"] != hashlib.sha256(canonical_json_bytes(state)).hexdigest():
+                raise ValueError("Grading checkpoint checksum does not match")
+            expected_binding = dict(
+                corpusSHA256=corpus.sha256,
+                recordsSHA256=hashlib.sha256(records_path.read_bytes()).hexdigest(),
+                runManifestSHA256=hashlib.sha256((output / "candidates/run-manifest.json").read_bytes()).hexdigest(),
+                judgeConfigurationSHA256=result["bindings"]["judgeConfigurationSHA256"],
+                judgePromptSHA256=result["bindings"]["judgePromptSHA256"])
+            if any(state.get("bindings", {}).get(k) != v for k, v in expected_binding.items()):
+                raise ValueError("Partial grades are not bound to this run")
+            for key, cell in state["cells"].items():
+                if key.startswith("absolute|") and cell.get("output") is not None:
+                    grades.append(dict(cellID=key[len("absolute|"):], disposition="judged",
+                                       **validate_absolute(cell["output"])))
+        expected = [dict(cellID=f"{c.identifier}|{turn.identifier}|r{rep}",
+                         configurationID=c.identifier, caseID=turn.identifier)
+                    for c in candidates for rep in range(1, 4) for turn in corpus.select()]
+        result["judgmentMetrics"] = JudgmentMetrics.summarize(
+            rows, grades, expected_cells=expected, unknown_cells=unknown)
+        result["experienceMetrics"] = ExperienceMetrics.summarize(rows, {
+            c.identifier: c.model_configuration.conversation_reuse for c in candidates})
 
 
 def main(argv=None):
@@ -99,6 +149,7 @@ def main(argv=None):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--candidate", required=True, action="append", type=Path)
     parser.add_argument("--sensitivity", type=Path)
+    parser.add_argument("--engine-evidence", type=Path)
     parser.add_argument("--max-cost", default="10")
     args = parser.parse_args(argv)
     key = os.environ.get("OPENAI_API_KEY")
@@ -108,7 +159,8 @@ def main(argv=None):
     result = ExperienceEvaluation.run(repository_root=root, corpus_path=args.corpus,
         candidate_paths=args.candidate, controls_path=args.controls, output=args.output,
         qualification_path=args.qualification, journal=args.journal, max_cost=args.max_cost,
-        sensitivity_path=args.sensitivity, client=OpenAIResponsesClient(api_key=key))
+        sensitivity_path=args.sensitivity, engine_evidence_path=args.engine_evidence,
+        client=OpenAIResponsesClient(api_key=key))
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "completed" else 1
 

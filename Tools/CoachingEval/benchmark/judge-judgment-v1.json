@@ -1,0 +1,239 @@
+{
+  "schemaVersion": "coaching-judge-sensitivity.v1",
+  "provenance": "Implementer-authored judgment contrasts, frozen before the unchanged-coach baseline. Not human calibration. Distinguish accurate inventory from useful evaluation; accept a purposeful retreat and a quiet central plan; reject an invented tactical warning. The same normal response contract and private briefs apply to controls and candidates.",
+  "cases": [
+    {
+      "id": "safe-but-unhelpful",
+      "caseID": "j01-unnecessary-retreat",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j01-unnecessary-retreat",
+        "fen": "r1bqkb1r/ppp2ppp/2np1n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 5",
+        "move": "f3g1",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Your knight is safe on its new square. It controls e2 and h3."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "max": 3
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "retreat-cost",
+      "caseID": "j01-unnecessary-retreat",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j01-unnecessary-retreat",
+        "fen": "r1bqkb1r/ppp2ppp/2np1n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 5",
+        "move": "f3g1",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Your knight was safe where it was. Going back makes it less active and gets in the way of castling; bringing another piece into the game would help more."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        },
+        "chessCorrectness": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "necessary-retreat",
+      "caseID": "j02-purposeful-retreat",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j02-purposeful-retreat",
+        "fen": "r1bq1rk1/ppp1bpp1/2np1n1p/4p1B1/2B1P3/2NP1N2/PPP2PPP/R2Q1RK1 w - - 0 8",
+        "move": "g5e3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "That is a useful retreat: your bishop escapes the pawn and still has room to help in the middle."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "center-inventory",
+      "caseID": "j03-prepare-center",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j03-prepare-center",
+        "fen": "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w kq - 2 6",
+        "move": "c2c3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Your pawn now controls b4 and d4. No black piece is on either square."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "max": 3
+        },
+        "chessCorrectness": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "center-plan",
+      "caseID": "j03-prepare-center",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j03-prepare-center",
+        "fen": "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQ1RK1 w kq - 2 6",
+        "move": "c2c3",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "That is a useful way to get ready to push your other pawn into the middle. This pawn can support it there, helping you make more room for your pieces."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "fork-benefit",
+      "caseID": "j05-active-escape",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j05-active-escape",
+        "fen": "r1bqk1nr/pppp1pp1/2n4p/2b1p1N1/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 5",
+        "move": "g5f7",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "Your knight escapes the pawn and makes a strong double attack on the queen and rook. Your bishop protects the knight, so the king cannot take it."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "coachingJudgment": {
+          "min": 4
+        },
+        "chessCorrectness": {
+          "min": 4
+        }
+      },
+      "flags": {
+        "severeError": false
+      }
+    },
+    {
+      "id": "unsupported-tactical-warning",
+      "caseID": "j05-active-escape",
+      "source": {
+        "kind": "implementer-authored contrast; not human calibration"
+      },
+      "position": {
+        "id": "j05-active-escape",
+        "fen": "r1bqk1nr/pppp1pp1/2n4p/2b1p1N1/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 5",
+        "move": "g5f7",
+        "event": "moveStaged"
+      },
+      "candidateTurn": {
+        "message": [
+          {
+            "type": "text",
+            "text": "This loses your knight: the black king can take it right away. Move your knight back instead."
+          }
+        ],
+        "actions": [],
+        "visuals": [],
+        "expects": "chooseWhetherToPlay"
+      },
+      "scores": {
+        "chessCorrectness": {
+          "max": 2
+        }
+      },
+      "flags": {
+        "factualOrIllegalAdvice": true
+      }
+    }
+  ]
+}

@@ -124,6 +124,11 @@
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
+            key = "COACHING_JUDGMENT_BENCHMARK_OUTPUT_DIR"
+            value = "$(COACHING_JUDGMENT_BENCHMARK_OUTPUT_DIR)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
             key = "COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR"
             value = "$(COACHING_LATER_GAME_BENCHMARK_OUTPUT_DIR)"
             isEnabled = "YES">

@@ -1,5 +1,13 @@
 # Main Thread Handoff - 2026-06-27
 
+November 26 judgment experiment complete: a frozen 12-case eval measured the
+unchanged coach first (30/36 useful), then prompt-only (35/36), then prompt plus
+Stockfish (34/36, including two failed deliveries). Total conservative accounting
+is $9.9870640 under the user-approved $11.50 cap, with unknown reservations retained.
+See [the experiment report](../reports/2026-11-25-coaching-judgment.md) for evidence,
+judge limitations and next steps. Nothing deployed; production and issue #29 are
+unchanged. Broader regressions are needed before promoting the prompt.
+
 November 25 arrow polish: coach arrows use one continuous outlined silhouette
 and stop outside the destination ring, including its pulse. See [the arrow report](../reports/2026-11-25-coaching-arrow-polish.md).
 

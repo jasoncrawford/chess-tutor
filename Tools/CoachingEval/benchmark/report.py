@@ -1039,7 +1039,11 @@ def _complete_matrix(mode, include_holdout, diagnostic_subset, records, configur
     if regression_suite and (mode != "regression" or include_holdout):
         return False
     repetitions = 1 if mode == "quick" else 3
-    regression_count = 10 if corpus_schema == "coaching-quality-visual-regression-manifest.v1" else 8
+    regression_count = {
+        "coaching-quality-visual-regression-manifest.v1": 10,
+        "coaching-quality-judgment-regression-manifest.v1": 12,
+        "coaching-quality-judgment-regression-manifest.v2": 12,
+    }.get(corpus_schema, 8)
     expected_split_counts = {"development": regression_count if regression_suite else 56}
     if include_holdout:
         expected_split_counts["holdout"] = 14

@@ -1,10 +1,12 @@
 import json
+import hashlib
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from Tools.CoachingEval.benchmark.experience import ExperienceEvaluation
 from Tools.CoachingEval.benchmark.experience_metrics import ExperienceMetrics
+from Tools.CoachingEval.benchmark.judge_contract import RUBRIC_DIMENSIONS, RUBRIC_FLAGS, canonical_json_bytes
 from Tools.CoachingEval.benchmark.budget import BudgetedClient, BudgetExceeded
 from Tools.CoachingEval.benchmark.configuration import load_prices
 from Tools.CoachingEval.tests import test_regression_workflow as fixtures
@@ -60,6 +62,76 @@ class ExperienceEvaluationTests(unittest.TestCase):
         saved = json.loads((self.root / "budget-stop/evaluation.json").read_text())
         self.assertEqual("budgetStopped", saved["status"])
         self.assertEqual(0, saved["unknownAccountingCalls"])
+
+    def test_stopped_grading_retains_primary_metric_and_full_planned_denominator(self):
+        output = self.root / "partial-grading"
+        def stop_grading(**kwargs):
+            row = json.loads((output / "candidates/records.jsonl").read_text().splitlines()[0])
+            grade = dict(scores={d: 5 for d in RUBRIC_DIMENSIONS}, flags={f: False for f in RUBRIC_FLAGS}, evidence=["Useful."])
+            bindings = dict(json.loads((output / "evaluation.json").read_text())["bindings"],
+                recordsSHA256=hashlib.sha256((output / "candidates/records.jsonl").read_bytes()).hexdigest(),
+                runManifestSHA256=hashlib.sha256((output / "candidates/run-manifest.json").read_bytes()).hexdigest())
+            state = dict(cells={"absolute|" + row["cellID"]: {"output": grade}}, inFlight=None, bindings=bindings)
+            (output / "grading-checkpoint.json").write_text(json.dumps(dict(state=state, sha256=hashlib.sha256(canonical_json_bytes(state)).hexdigest())))
+            raise BudgetExceeded("budget stop after one grade")
+        with mock.patch("Tools.CoachingEval.benchmark.experience.JudgeQualification.load_compatible"), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.JudgeSensitivity.run", return_value={"passed": True}), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.grade_run", side_effect=stop_grading):
+            with self.assertRaises(BudgetExceeded):
+                self.run_workflow(output, client=FakeClient())
+        metrics = json.loads((output / "evaluation.json").read_text())["judgmentMetrics"]["astra-discovery-v2-low"]
+        self.assertEqual(24, metrics["plannedCount"])
+        self.assertEqual(24, metrics["attemptCount"])
+        self.assertEqual(1, metrics["judgedCount"])
+        self.assertEqual(23, metrics["ungradedValidCount"])
+        self.assertEqual(1 / 24, metrics["usefulResponseRate"])
+        self.assertFalse(metrics["complete"])
+
+    def test_unknown_call_is_not_reported_as_failed_or_unattempted(self):
+        output = self.root / "interrupted"
+        with mock.patch("Tools.CoachingEval.benchmark.experience.JudgeQualification.load_compatible"), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.JudgeSensitivity.run", return_value={"passed": True}):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_workflow(output, client=FakeClient(failures=[KeyboardInterrupt()]))
+        metrics = json.loads((output / "evaluation.json").read_text())["judgmentMetrics"]["astra-discovery-v2-low"]
+        self.assertEqual(24, metrics["plannedCount"])
+        self.assertEqual(1, metrics["unknownOutcomeCount"])
+        self.assertEqual(23, metrics["notAttemptedCount"])
+        self.assertEqual(0, metrics["failedOrInvalidCount"])
+        self.assertFalse(metrics["complete"])
+
+    def test_corrupt_partial_grades_are_rejected_without_hiding_the_stop_or_budget(self):
+        output = self.root / "corrupt-grading"
+        def stop_grading(**kwargs):
+            (output / "grading-checkpoint.json").write_text(json.dumps(dict(state={"cells": {}}, sha256="wrong")))
+            raise BudgetExceeded("original stop")
+        with mock.patch("Tools.CoachingEval.benchmark.experience.JudgeQualification.load_compatible"), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.JudgeSensitivity.run", return_value={"passed": True}), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.grade_run", side_effect=stop_grading):
+            with self.assertRaisesRegex(BudgetExceeded, "original stop"):
+                self.run_workflow(output, client=FakeClient())
+        saved = json.loads((output / "evaluation.json").read_text())
+        self.assertEqual("budgetStopped", saved["status"])
+        self.assertEqual("ValueError", saved["metricsIntegrityFailure"])
+        self.assertNotIn("judgmentMetrics", saved)
+        self.assertIn("conservativeCostOrReservationUSD", saved)
+
+    def test_partial_grades_from_a_different_run_are_not_reported(self):
+        output = self.root / "wrong-grading"
+        def stop_grading(**kwargs):
+            row = json.loads((output / "candidates/records.jsonl").read_text().splitlines()[0])
+            grade = dict(scores={d: 5 for d in RUBRIC_DIMENSIONS}, flags={f: False for f in RUBRIC_FLAGS}, evidence=["Useful."])
+            state = dict(cells={"absolute|" + row["cellID"]: {"output": grade}}, inFlight=None, bindings={"corpusSHA256": "different"})
+            (output / "grading-checkpoint.json").write_text(json.dumps(dict(state=state, sha256=hashlib.sha256(canonical_json_bytes(state)).hexdigest())))
+            raise BudgetExceeded("original stop")
+        with mock.patch("Tools.CoachingEval.benchmark.experience.JudgeQualification.load_compatible"), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.JudgeSensitivity.run", return_value={"passed": True}), \
+             mock.patch("Tools.CoachingEval.benchmark.experience.grade_run", side_effect=stop_grading):
+            with self.assertRaises(BudgetExceeded):
+                self.run_workflow(output, client=FakeClient())
+        saved = json.loads((output / "evaluation.json").read_text())
+        self.assertNotIn("judgmentMetrics", saved)
+        self.assertEqual("ValueError", saved["metricsIntegrityFailure"])
 
     def test_prior_phase_spend_is_retained_in_the_shared_budget(self):
         prices = load_prices(ROOT / "Tools/CoachingEval/benchmark/pricing-v2.json")

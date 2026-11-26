@@ -161,6 +161,22 @@ class BenchmarkCorpusTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_corpus(self.root)
 
+    def test_judgment_suite_requires_twelve_independent_development_cases(self):
+        self.cases = self.cases[:12]
+        schema = "coaching-quality-judgment-regression-manifest.v1"
+        for version in (1, 2):
+            self.write(f"coaching-quality-judgment-regression-manifest.v{version}")
+            self.assertEqual(12, len(load_corpus(self.root).select()))
+        self.cases[0]["split"] = "holdout"
+        self.write(schema)
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+        self.cases[0]["split"] = "development"
+        self.cases.pop()
+        self.write(schema)
+        with self.assertRaises(ValueError):
+            load_corpus(self.root)
+
     def test_rejects_hash_duplicate_count_split_category_and_missing_brief(self):
         original = json.loads(json.dumps(self.cases))
         mutations = (

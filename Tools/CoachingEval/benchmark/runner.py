@@ -21,6 +21,7 @@ from Tools.CoachingEval.benchmark.configuration import (
 )
 from Tools.CoachingEval.benchmark.corpus import load_corpus
 from Tools.CoachingEval.benchmark.budget import BudgetExceeded
+from Tools.CoachingEval.benchmark.engine_context import EngineContext
 from Tools.CoachingEval.chess_native_response import (
     ChessNativeResponseContract,
     ChessNativeResponseValidationError,
@@ -45,6 +46,7 @@ def run_candidates(
     diagnostic_subset: bool = False,
     stop_on_provider_failure: bool = False,
     resume: bool = False,
+    engine_context=None,
 ):
     """Run one fully preflighted quick or comparison matrix and publish atomically."""
     destination = Path(destination)
@@ -77,7 +79,9 @@ def run_candidates(
     _validate_selected_groups(turns)
     _validate_matrix(turns, include_holdout, diagnostic_subset or corpus.is_regression)
 
-    preflight = _preflight(configurations, turns, repetitions, price_table)
+    if engine_context is not None and engine_context.corpus_sha256 != corpus.sha256:
+        raise ValueError("Engine evidence corpus binding changed")
+    preflight = _preflight(configurations, turns, repetitions, price_table, engine_context=engine_context)
     saved = []
     pending_path = destination.with_name(destination.name + ".inflight.json")
     binding_path = destination.with_name(destination.name + ".binding.json")
@@ -186,6 +190,9 @@ def run_candidates(
         records,
         diagnostic_subset,
     )
+    if engine_context is not None:
+        manifest["engineEvidenceSHA256"] = engine_context.sha256
+        manifest["engineMetadata"] = engine_context.metadata
     _publish(destination, manifest, records, transcripts)
     return manifest
 
@@ -196,19 +203,21 @@ def _progress_binding(corpus, configurations, cells, prices):
                 cells=[dict(cellID=_base_record(c)["cellID"], requestSHA256=_base_record(c)["requestSHA256"],
                             userPromptSHA256=_base_record(c)["userPromptSHA256"],
                             schemaSHA256=_sha256(_canonical_json_bytes(c["schema"])),
-                            reasoningEffort=c["reasoningEffort"]) for c in cells])
+                            reasoningEffort=c["reasoningEffort"],
+                            **({"engineEvidenceSHA256": c["engineContext"].sha256} if c.get("engineContext") else {})) for c in cells])
 
 
-def preview_prompts(corpus, configuration, price_table):
+def preview_prompts(corpus, configuration, price_table, *, engine_context=None):
     """Use exactly the candidate runner's initial/follow-up compilation."""
-    cells = _preflight([configuration], corpus.turns, 1, price_table)
+    cells = _preflight([configuration], corpus.turns, 1, price_table, engine_context=engine_context)
     return [dict(caseID=cell["turn"].identifier,
                  kind="followUp" if cell["turn"].step_index > 1 else "initial",
                  system=configuration.model_configuration.system_prompt,
                  user=cell["compilation"].markdown) for cell in cells]
 
 
-def _preflight(configurations, turns, repetitions, price_table):
+def _preflight(configurations, turns, repetitions, price_table, *, engine_context=None):
+    EngineContext.validate_assignment(configurations, engine_context)
     _validate_configurations(configurations, price_table)
     cells = []
     sequence_ids = _sequence_ids(turns)
@@ -230,6 +239,8 @@ def _preflight(configurations, turns, repetitions, price_table):
                             if model_configuration.response_contract == "chess-native-v14"
                             else ChessNativeResponseContract.from_markdown(compilation.markdown))
                 schema = contract.json_schema()
+                if engine_context is not None:
+                    compilation = engine_context.augment(turn, compilation)
                 json.dumps(schema, sort_keys=True)
                 normalized_request = parse_neutral_request(turn.request)
                 cells.append(
@@ -238,6 +249,7 @@ def _preflight(configurations, turns, repetitions, price_table):
                         "turn": turn,
                         "repetition": repetition,
                         "compilation": compilation,
+                        "engineContext": engine_context,
                         "contract": contract,
                         "schema": schema,
                         "reasoningEffort": model_configuration.reasoning_effort(
@@ -438,6 +450,9 @@ def _base_record(cell):
         "systemPromptSHA256": model_configuration.system_prompt_sha256,
         "userPrompt": user_prompt,
         "userPromptSHA256": _sha256(user_prompt.encode("utf-8")),
+        **({"engineEvidenceSHA256": cell["engineContext"].sha256,
+            "engineAnalysisMilliseconds": cell["engineContext"].analysis_milliseconds(turn.identifier)}
+           if cell.get("engineContext") else {}),
         "providerModel": "",
         "providerHTTPStatus": None,
         "sanitizedOutput": "",
@@ -504,6 +519,7 @@ def _manifest(
                 "promptVersion": model_configuration.prompt_version,
                 "userPromptGenerator": model_configuration.user_prompt_generator,
                 "responseContract": model_configuration.response_contract,
+                "engineEvidence": configuration.engine_evidence,
                 "pricingVersion": configuration.pricing_version,
             }
         )

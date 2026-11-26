@@ -97,7 +97,8 @@ class PullRequestCIConfigurationTests(unittest.TestCase):
             jobs["ipad"],
         )
         self.assertTrue(CI_REQUIREMENTS.is_file(), f"missing CI requirements: {CI_REQUIREMENTS}")
-        self.assertEqual("PyYAML==6.0.3\n", CI_REQUIREMENTS.read_text(encoding="utf-8"))
+        self.assertEqual("PyYAML==6.0.3\nchess==1.11.2\n", CI_REQUIREMENTS.read_text(encoding="utf-8"))
+        self.assertNotIn("chess==", (ROOT / "requirements.txt").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

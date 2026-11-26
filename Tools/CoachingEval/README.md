@@ -614,3 +614,96 @@ latency, token use and estimated cost. `visualMetrics` counts links, arrows,
 coordinates and legacy-unavailable capabilities separately from quality.
 This small development suite does not establish broad chess reliability or
 authorize production promotion; use the existing broader suites as well.
+## Judgment-focused regression (v2)
+
+The [November 25–26 experiment](../../docs/reports/2026-11-25-coaching-judgment.md)
+compares the unchanged coach, a judgment-focused prompt, and the same prompt with
+Stockfish evidence. It records all three arms, failed deliveries, cost uncertainty
+and the rubric's alternative-plan limitation. None of these candidates is deployed.
+
+The 12-case `CoachingJudgmentBenchmarkTests` suite distinguishes useful evaluation
+from accurate description. It covers purposeful/unnecessary retreat, central plans,
+rook activity, active escapes and hints, favorable/unfavorable exchanges, sound
+development, and endgame goals. Its private briefs and
+`benchmark/judge-judgment-v2.json` controls are frozen before candidate comparison.
+Version 1 remains recorded at `d4048dd`; v2 only clarifies that describing a visible
+draft capture in the past tense is not the same as handing the turn to the opponent.
+`GradingRevision` rebinds retained answers only when every candidate input is unchanged,
+preserving the original run and recording its hash. No candidate answers are rerolled.
+Controls are implementer-authored, **not human calibration**. Historical suites
+are unchanged. This is development evidence, not a holdout or promotion gate.
+
+Export from a committed checkout (no paid calls):
+
+```bash
+COACHING_JUDGMENT_BENCHMARK_OUTPUT_DIR="$PWD/.coaching-eval/judgment/corpus" \
+COACHING_QUALITY_BENCHMARK_SOURCE_SHA="$(git rev-parse HEAD)" \
+xcodebuild test -quiet -project ChessTutor.xcodeproj -scheme ChessTutor \
+  -destination 'platform=iOS Simulator,name=ChessTutor Coaching Smoke' \
+  -only-testing:ChessTutorTests/CoachingJudgmentBenchmarkTests
+```
+
+Use the existing bounded experience runner for each arm, retaining the **same
+corpus, judge, controls, and cumulative budget journal**. Supply a compatible,
+unexpired judge qualification. `OPENAI_API_KEY` is read from the environment;
+never commit it. Example unchanged-coach baseline:
+
+```bash
+.venv/bin/python -m Tools.CoachingEval.benchmark.experience \
+  --corpus .coaching-eval/judgment/corpus \
+  --controls Tools/CoachingEval/benchmark/judge-judgment-v2.json \
+  --candidate Tools/CoachingEval/benchmark/configs/astra-visual-v5-low.json \
+  --qualification "$JUDGE_QUALIFICATION" \
+  --output .coaching-eval/judgment/baseline \
+  --journal .coaching-eval/judgment/budget.jsonl --max-cost 10
+```
+
+The first run checks sensitivity (three repetitions per control), then generates
+and grades three repetitions per case. Reuse its successful sensitivity artifact
+with `--sensitivity` on later arms; bindings must match. Do not replay failed cells
+to improve a score. Existing candidate and grading checkpoints retain partial runs.
+
+`evaluation.json` includes `judgmentMetrics`: per-case scores, conditional judged
+mean, failed/invalid and ungraded counts, and `usefulResponseRate` (judgment >=4,
+no severe error, divided by **all planned cells**, including unattempted cells).
+Stopped runs retain checksummed completed grades, a `complete: false` marker,
+and separate unattempted, unknown-outcome and ungraded counts. Their conditional
+mean is not a completed comparison. Interpret alongside the full report's
+other five dimensions, failures, latency, usage and cost. A high average alone is
+not evidence of a dependable coach. If the baseline is strong, report that result;
+do not alter this rubric to force a low score.
+
+### Experimental Stockfish arm
+
+The prompt-only candidate is `configs/astra-judgment-v1-low.json`; the engine arm
+is `configs/astra-judgment-engine-v1-low.json`. Both use the same model, reasoning,
+system prompt and response contract. Neither changes production configuration.
+Install the eval dependencies from `requirements-ci.txt` and a local Stockfish
+binary, then produce frozen evidence without model calls:
+
+```bash
+.venv/bin/python -m Tools.CoachingEval.stockfish_evidence \
+  --corpus .coaching-eval/judgment/corpus --engine /absolute/path/to/stockfish \
+  --output .coaching-eval/judgment/engine.json --nodes 200000
+```
+
+Use `--engine-evidence .coaching-eval/judgment/engine.json` with the experience
+runner for the engine arm only. Its v3 candidate config requires
+`engineEvidence: "stockfish"`; supplying it to a plain arm, or omitting it for the
+engine arm, fails before any paid call. Preserve the corpus, shared journal, cap and
+successful sensitivity artifact from the baseline. The supplement is recorded
+in the actual sent prompt, with a content hash in candidate records and the run
+manifest; it contains no rubric or hand-written chess advice.
+
+The library manages UCI; a full legal history is replayed and checked against FEN.
+Both alternative and proposed-move searches start on the committed board. Scores
+are normalized to its mover; mate distances and score bounds stay distinct.
+Engine version, binary hash, library version, nodes, threads, hash size and sample
+line bounds are recorded. The experiment uses three alternatives and at most five
+plies per line, not exhaustive reply trees.
+
+This is an offline-precomputed **benchmark prototype**, not a deployed engine
+service. `engineAnalysisMilliseconds` records local search overhead separately
+from API latency; cached benchmark prompts must not be presented as proof of
+deployed end-to-end latency. Stockfish and python-chess are GPL-licensed tools;
+deployment/packaging is a separate step.
