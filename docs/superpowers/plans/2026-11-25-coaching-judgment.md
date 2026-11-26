@@ -7,10 +7,15 @@
 **Tech Stack:** Swift/XCTest, Python unittest, existing Responses adapter, Stockfish UCI via an established library if the engine arm is reached.
 **Spec:** `docs/superpowers/specs/2026-11-25-coaching-judgment-design.md`
 
+**Outcome, November 26:** All three arms evaluated; results and limitations are in
+[the experiment report](../../reports/2026-11-25-coaching-judgment.md). Baseline
+30/36 useful, prompt-only 35/36, engine-backed 34/36. Total conservative accounting
+$9.9870640. No deployment. Independent review fixes and local tests are complete.
+
 ## Global Constraints
 
 - Work on `codex/coaching-evaluation` in the existing isolated worktree. Preserve old prompts, fixtures and production config.
-- No paid calls before the corpus, criteria and controls are frozen. Shared $10 conservative journal; retain failed calls and reservations.
+- No paid calls before the corpus, criteria and controls are frozen. Shared conservative journal, originally $10; user approved $11.50 on November 26 to finish. Retain failed calls and reservations.
 - Changes to runtime prompt behavior follow the unchanged-coach baseline, not vice versa.
 - Keep test expectations independently derived; verify chess claims through legal replay and explicit assertions.
 - No simultaneous simulator jobs. No issue #29 work or rollout.
@@ -25,11 +30,11 @@ Check rubric leakage into candidate prompts; fairness to sound retreats and non-
 
 **Interface:** A versioned 12-case native corpus uses the existing case schema, private brief and normal request builder. Existing runner/grade interfaces remain unchanged.
 
-- [ ] Add failing Python inventory/report tests; run them and observe rejection of the new schema.
-- [ ] Register the strict suite inventory without weakening old inventories; verify tests pass.
-- [ ] Add native scenarios, legal replay/factual checks, export and grader-isolation checks. Run the new native test class.
-- [ ] Add paired weak/strong judge controls bound to exported positions, plus necessary-retreat and tactical counterplay controls.
-- [ ] Record scoring policy and freeze source/controls before paid evaluation. Run Python suites and commit.
+- [x] Add failing Python inventory/report tests; run them and observe rejection of the new schema.
+- [x] Register the strict suite inventory without weakening old inventories; verify tests pass.
+- [x] Add native scenarios, legal replay/factual checks, export and grader-isolation checks. Run the new native test class.
+- [x] Add paired weak/strong judge controls bound to exported positions, plus necessary-retreat and tactical counterplay controls.
+- [x] Record scoring policy and freeze source/controls before paid evaluation. Run Python suites and commit.
 
 Expected: all tests pass; export preserves full legal history and private criteria never enter candidate requests.
 
@@ -39,9 +44,9 @@ Expected: all tests pass; export preserves full legal history and private criter
 
 **Interface:** Same frozen corpus and controls for every arm, one shared budget journal. `visual-v5` is the unchanged baseline.
 
-- [ ] Inspect qualification cache, validate judge sensitivity, then run the baseline with three repetitions.
-- [ ] Publish per-case judgment, failures, all other rubric dimensions, latency/cost and representative verbatim responses.
-- [ ] Inspect whether the new suite captures the reported weakness. Do not alter the frozen rubric to force a result.
+- [x] Inspect qualification cache, validate judge sensitivity, then run the baseline with three repetitions.
+- [x] Publish per-case judgment, failures, all other rubric dimensions, latency/cost and representative verbatim responses.
+- [x] Inspect whether the new suite captures the reported weakness. Do not alter the frozen rubric to force a result.
 
 Expected: evidence establishes the baseline before any candidate prompt edits; uncertainty and any judge disagreement remain visible.
 
@@ -51,10 +56,10 @@ Expected: evidence establishes the baseline before any candidate prompt edits; u
 
 **Interface:** Same model/reasoning and app response contract. Prompt-only arm first, then same prompt with compact engine facts. No engine facts or grading criteria smuggled into baseline.
 
-- [ ] Based on observed baseline errors, create an evaluation-focused prompt and run on the frozen suite.
-- [ ] Write failing tests for engine perspective, draft root restriction, legal history, mate scores and bounded evidence; implement using library-managed UCI.
-- [ ] Pin/log engine settings and compare the engine arm within the remaining shared budget.
-- [ ] Run relevant existing regression checks as budget permits; clearly label unrun checks and exploratory evidence.
+- [x] Based on observed baseline errors, create an evaluation-focused prompt and run on the frozen suite.
+- [x] Write failing tests for engine perspective, draft root restriction, legal history, mate scores and bounded evidence; implement using library-managed UCI.
+- [x] Pin/log engine settings and compare the engine arm within the remaining shared budget.
+- [x] Assess budget for broader regression checks and label unrun checks: no paid historical regression suite was run; it remains a prerequisite for production promotion.
 
 Expected: improved judgment without factual/interaction regressions, or an honest account of why an approach did not help.
 
@@ -62,8 +67,8 @@ Expected: improved judgment without factual/interaction regressions, or an hones
 
 **Files:** README, experiment findings and handoff notes.
 
-- [ ] Run complete Python suites and relevant native tests; inspect output.
-- [ ] Fresh independent whole-branch review; fix important findings with fail-first tests.
-- [ ] Checkpoint changes and provide measured results, costs, limitations and the recommended next step. No automatic deployment or merge.
+- [x] Run complete Python suites and relevant native tests; inspect output.
+- [x] Fresh independent whole-branch review; fix important findings with fail-first tests.
+- [x] Checkpoint changes and provide measured results, costs, limitations and the recommended next step. No automatic deployment or merge.
 
 Expected: reproducible artifacts and a concise evidence-backed recommendation.

@@ -616,6 +616,11 @@ This small development suite does not establish broad chess reliability or
 authorize production promotion; use the existing broader suites as well.
 ## Judgment-focused regression (v2)
 
+The [November 25–26 experiment](../../docs/reports/2026-11-25-coaching-judgment.md)
+compares the unchanged coach, a judgment-focused prompt, and the same prompt with
+Stockfish evidence. It records all three arms, failed deliveries, cost uncertainty
+and the rubric's alternative-plan limitation. None of these candidates is deployed.
+
 The 12-case `CoachingJudgmentBenchmarkTests` suite distinguishes useful evaluation
 from accurate description. It covers purposeful/unnecessary retreat, central plans,
 rook activity, active escapes and hints, favorable/unfavorable exchanges, sound

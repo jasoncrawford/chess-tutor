@@ -19,5 +19,5 @@ Run the unchanged `visual-v5` coach first. Preserve every failure and response. 
 - Benchmark and experimental configurations only; no production deployment, UI changes, or issue #29 work.
 - Keep old corpora and results intact. New cases are development regressions, not an untouched holdout.
 - Candidate improvement requires better judgment without new serious chess or interaction errors. Report cost, latency, failures, sample size, and uncertainty; a small suite is directional evidence, not proof of general superiority.
-- Total authorized API spending/reservations: **$10**, across judge checks, baseline and experiments. Stop paid work at the cap; do not reuse previous authorizations.
+- Total authorized API spending/reservations: originally **$10**, raised by the user to **$11.50 on November 26** to finish the Stockfish comparison. One shared journal covers judge checks, baseline and experiments. Stop paid work at the cap; do not reuse previous authorizations.
 - Stockfish does not explain strategy. The coach must not invent reasons for an engine preference. Prefer understandable sound choices over tiny score differences.

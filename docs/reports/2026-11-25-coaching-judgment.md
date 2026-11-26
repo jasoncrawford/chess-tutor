@@ -1,27 +1,36 @@
-# Coaching judgment experiment — November 25, 2026
+# Coaching judgment experiment — November 25–26, 2026
 
 ## Status
 
-**Baseline complete; prompt-only grading interrupted; Stockfish comparison prepared but not run. Nothing deployed.**
+**All three arms are evaluated. The prompt revision helps; Stockfish adds no clear
+quality gain on this suite and has two failed deliveries. Nothing deployed.**
 
 The new eval detects two of the reported problems reliably: describing a useful
 rook move mainly as a warning about a different future capture, and responding
 to a tactical hint request with another danger-identification question. It does
 not show that the current coach is generally poor: most other cases score well.
 
-The first prompt revision improves those two cases in the completed grades, but
-also introduces a disputed endgame-plan grade. This is promising development
-evidence, not yet a completed comparison or a promotion recommendation.
+Useful responses increased from **30/36 to 35/36** with the prompt revision.
+Adding Stockfish yielded **34/36**. The revised prompt improves the two weak
+cases, but also introduces a disputed endgame-plan grade. This is development
+evidence, not proof of transfer or a production promotion gate.
 
-The API stopped with HTTP 429, `credit_balance_exhausted`. All 36 prompt-only
-responses are saved; 26 have grades and 10 remain. A resumed judge call also
-failed, followed by one tiny diagnostic request. No further paid requests are
-being made until credits are restored.
+The November 25 credit interruption was recovered on November 26 from saved
+grading checkpoints. No candidate answers were rerolled. Stockfish's incomplete
+response and invalid response remain failures; all 106 valid responses across
+the three arms have grades, with two additional automatic failure grades.
 
-The shared **$10 cap remains unchanged**. Its conservative ledger currently
-counts **$7.2298675**, including **$0.7698000 reserved for three calls with unknown
-accounting**, not confirmed charges. Completed-call conservative estimates total
-$6.4600675. These are estimates/reservations, not an OpenAI invoice.
+The user raised the cap from $10 to **$11.50** to finish. Final conservative
+accounting is **$9.9870640**, including **$1.0926250 reserved for four calls with
+unknown accounting**, not confirmed charges. Completed-call conservative
+estimates total $8.8944390. The increased cap supplied headroom for a request's
+worst-case reservation; the settled estimate plus retained reservations finished
+below $10. These are not an OpenAI invoice.
+
+The prompt report retains `judge accounting is incomplete`; the engine report
+retains `candidate accounting is incomplete`. Their `integrityFailure` status
+means billing evidence is incomplete, not that grades are missing. Those warnings
+and all unknown reservations are preserved.
 
 ## Frozen experiment
 
@@ -50,49 +59,59 @@ All 27 v2 checks passed. The baseline was regraded from byte-identical saved
 responses; neither candidates nor board positions were rerolled. V1 remains
 intact for audit.
 
-## Results so far
+## Results
 
 | Measure | Unchanged baseline | Prompt-only revision | Prompt + Stockfish |
 | --- | ---: | ---: | --- |
-| Responses generated / planned | 36 / 36 | 36 / 36 | 0 / 36 |
-| Valid responses | 36 | 36 | Not measured |
-| Responses graded | 36 | 26 | Not measured |
-| Judgment mean among graded responses | 4.53 | 4.88, **partial** | Not measured |
-| Confirmed useful / planned | 30 / 36 | 25 / 36, **10 ungraded** | Not measured |
-| Severe errors among graded responses | 0 | 0, **partial** | Not measured |
-| API median / p90 | 3.90s / 6.70s | 3.36s / 10.15s | Not measured |
-| Candidate generation estimate, total | $0.474878 | $0.526918 | Not measured |
-| Candidate generation estimate, per response | $0.01319 | $0.01464 | Not measured |
+| Attempts / planned | 36 / 36 | 36 / 36 | 36 / 36 |
+| Valid responses, all graded | 36 | 36 | 34 |
+| Failed deliveries / invalid responses | 0 | 0 | 2 |
+| Judgment mean among valid responses | 4.53 | 4.92 | 4.91 |
+| Useful / planned | 30 / 36 (83.3%) | 35 / 36 (97.2%) | 34 / 36 (94.4%) |
+| Judge-flagged severe errors in valid responses | 0 | 0 | 0 |
+| API median / p90 | 3.90s / 6.70s | 3.36s / 10.15s | 3.21s / 5.86s |
+| Candidate generation estimate, total | $0.474878 | $0.526918 | $0.471486 + unknown call |
+| Candidate generation estimate, per attempt | $0.01319 | $0.01464 | Incomplete |
 
 Latency is non-streaming request completion, all fresh requests, not a simulated
 in-app conversation. Median uses the two middle observations; p90 uses the
 nearest rank. Small samples and service variation preclude a latency claim.
-Candidate estimates exclude judging and use frozen `pricing-v2.json`.
+Candidate estimates exclude judging and use frozen `pricing-v2.json`. Engine
+latency excludes local analysis (median 593 ms). All returned model identifiers
+were the same `gpt-6-astra` alias; the provider's underlying snapshot is not pinned.
 
-| Case | Baseline judgment, repetitions 1–3 | Prompt-only judgment, repetitions 1–3 |
-| --- | --- | --- |
-| j01 unnecessary knight retreat | 5, 5, 5 | 5, 5, 5 |
-| j02 purposeful bishop retreat | 5, 5, 5 | 5, 5, 5 |
-| j03 preparing a central pawn advance | 4, 5, 5 | 5, 5, pending |
-| j04 rook activity | 3, 3, 3 | 5, 5, pending |
-| j05 active escape with a fork | 4, 5, 4 | 5, 5, pending |
-| j06 counterplay hint | 2, 3, 2 | 5, 5, pending |
-| j07 capture rather than flee | 5, 5, 5 | 5, 5, pending |
-| j08 sound, non-best development | 5, 5, 5 | 5, 5, pending |
-| j09 favorable exchange | 5, 5, 5 | 5, 5, pending |
-| j10 costly capture | 5, 5, 5 | 5, 5, pending |
-| j11 active endgame king | 5, 5, 5 | 5, 5, pending |
-| j12 endgame winning plan | 5, 5, 5 | 4, 3, pending |
+| Case | Baseline, repetitions 1–3 | Prompt-only, repetitions 1–3 | With Stockfish, repetitions 1–3 |
+| --- | --- | --- | --- |
+| j01 unnecessary knight retreat | 5, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j02 purposeful bishop retreat | 5, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j03 preparing a central pawn advance | 4, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j04 rook activity | 3, 3, 3 | 5, 5, 5 | 5, 5, 5 |
+| j05 active escape with a fork | 4, 5, 4 | 5, 5, 5 | 5, 5, 5 |
+| j06 counterplay hint | 2, 3, 2 | 5, 5, 5 | Failed, 5, 5 |
+| j07 capture rather than flee | 5, 5, 5 | 5, 5, 5 | 5, Invalid, 5 |
+| j08 sound, non-best development | 5, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j09 favorable exchange | 5, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j10 costly capture | 5, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j11 active endgame king | 5, 5, 5 | 5, 5, 5 | 5, 5, 5 |
+| j12 endgame winning plan | 5, 5, 5 | 4, 3, 5 | 4, 4, 4 |
+
+The two unusable outputs receive automatic score-1/severe-contract-failure grades
+in the standard report. Including them, the engine's judgment average is 4.69;
+4.91 above is conditional on valid responses. Neither failure is hidden as a
+missing or retried success.
 
 The revision directly teaches the rook/file-pressure distinction seen in j04.
 That is a useful regression fix, **not evidence of novel transfer**. Excluding
-j04: baseline mean 4.67, 30/33 useful; revision mean 4.88 among 24 graded, 23/33
-confirmed useful with nine ungraded. Neither partial rate is a final comparison.
+j04: baseline mean 4.67, 30/33 useful; revision mean 4.91, 32/33 useful; engine
+mean 4.90 among valid responses, 31/33 useful. These are related development
+cases, not an untouched holdout.
 
-Other dimension means, baseline → revision's graded subset: chess correctness
-5.00 → 5.00; latest-action responsiveness 4.83 → 5.00; discovery/independence
-4.75 → 4.73; coherence/answerability 4.92 → 5.00; child clarity 4.86 → 4.85.
-The subsets differ; these are descriptive, not paired treatment estimates.
+Other dimension means among valid responses, baseline → prompt → engine: chess
+correctness 5.00 → 5.00 → 5.00; latest-action responsiveness 4.83 → 5.00 → 5.00;
+discovery/independence 4.75 → 4.69 → 4.79; coherence/answerability 4.92 → 5.00 →
+5.00; child clarity 4.86 → 4.86 → 4.85. The engine excludes two failed responses
+here; the standard report also includes their automatic penalties. The small
+discovery-score decrease is another reason not to claim universal improvement.
 
 ### Examples, verbatim visible text
 
@@ -124,6 +143,10 @@ alternative (4); the other acknowledges its purpose but gives 3 for overlooking
 the simpler promotion plan. Stockfish's top three moves in this position are
 rook moves leading to mate in four.
 
+All three engine-backed answers also chose the rook plan and received 4. This
+does not establish a tactical error; it exposes a preference-sensitive part of
+the rubric that should be strengthened before drawing broader conclusions.
+
 The private brief expressly accepts sound alternative plans, so the 3 deserves
 scrutiny: it may reflect a preference for the reference lesson rather than poor
 chess judgment. Preserve the frozen grade and disclose this disagreement; do not
@@ -148,6 +171,20 @@ rejects a missing supplement or one accidentally supplied to the plain arm befor
 spending. Production dependencies, prompts and server configuration are unchanged.
 GPL packaging and deployment are outside this prototype.
 
+### Observed engine-arm failures
+
+- j06/r1: non-completed API response after 17.9 seconds. The transport records
+  `incompleteResponse`, but not the provider's incomplete-reason detail, so this
+  run cannot establish whether it exhausted output tokens. No completed answer
+  was available; its full conservative cost reservation remains.
+- j07/r2: the advice suggested the sound bishop capture of the queen, but ended
+  its structured message with an empty text segment. The unchanged app contract
+  rejected that shape. The final text is retained in the budget journal; the
+  failure remains invalid in the comparison, not silently normalized afterward.
+
+Neither is proof that Stockfish caused the failure. They are observed outcomes
+under this engine-backed configuration and must count against its delivery rate.
+
 ## Reproduction and retained evidence
 
 See [the eval instructions](../../Tools/CoachingEval/README.md#judgment-focused-regression-v2)
@@ -160,10 +197,13 @@ Local artifact root: `.coaching-eval/judgment/20261125/` (git-ignored):
 - `corpus-v2/`, `baseline-v2/`: clarified private briefs and regraded baseline;
   `baseline-v2/sensitivity/result.json` is reusable for the next arms.
 - `prompt-v1/candidates/`: all 36 exact requests and responses; `transcripts/`
-  contains rendered Markdown. `grading-checkpoint.json` retains 26 completed
-  grades and both failed attempts. Resume this checkpoint, not generation.
+  contains rendered Markdown. All 36 grades are published; the checkpoint retains
+  both earlier failed judge attempts as well as the completed recovery.
+- `engine-v1/`: all 36 attempt records, 34 valid responses and published grades,
+  including the two automatic failure grades. Its checkpoint preserves recovery
+  from the earlier $10 reservation guard without rerolling candidate cells.
 - `stockfish-18-n200k.json`, `engine-prompts-preview.json`: frozen engine evidence
-  and all 12 compiled engine-arm prompts. No engine-arm model calls yet.
+  and all 12 compiled engine-arm prompts.
 - `budget.jsonl`: the single cumulative cost/reservation journal.
 
 Important hashes:
@@ -172,6 +212,7 @@ Important hashes:
 | --- | --- |
 | Baseline saved responses (v1 and v2 identical) | `5d5ce1dbc0abbe60c4765d1686dc94903908dd613b46147f4dbc60a0292ef6bf` |
 | Revision saved responses | `7eb961fc19c49764530572881826b7da7f202748dd2a8395292777aab5ed5218` |
+| Engine-arm attempt records | `67a9ad094fd26e7fd0539bd78193b72bec80ee08dff8ad4c1a03c056d39a0be6` |
 | Baseline system prompt | `d0e25081f9392ae6c6ad546998668ea7e238f0c80cd7615abd1514d0a0d3dd4a` |
 | Revision system prompt | `60dd669106e5a92c7aa66e06abd1b5ff309f44ac6183a904042392aa4211d891` |
 | Stockfish evidence | `e1aef3dc25d61042a9f6139159b6b4be1031654b4760a6238e4dbc2336260254` |
@@ -179,19 +220,20 @@ Important hashes:
 
 ## Verification and review
 
-- Native unit suite: **1,059 passed, zero failed/skipped** on Coaching Smoke.
+- Native unit suite, November 25: **1,059 passed, zero failed/skipped** on Coaching Smoke.
   An earlier run had one pre-existing test process killed by SIGKILL; its isolated
   rerun and the final full run passed without changing that test.
-- Coaching server: **81 passed**. The pinned CI dependency assertion was updated
+- Coaching server, rerun November 26: **81 passed**. The pinned CI dependency assertion was updated
   to include the benchmark chess library and verify it stays out of production.
-- Eval suite: **426 passed**, including rejection of a mismatched partial-grade
+- Eval suite, rerun November 26: **426 passed**, including rejection of a mismatched partial-grade
   checkpoint. The existing Node runtime must be on PATH for browser-core tests.
 - An independent Astra review examined the whole implementation. Important fixes
   have fail-first regressions: explicit engine treatment assignment; proposed-move
   and legal/SAN validation; complete planned denominators and retained partial
   grades; loading actual corpus files when rebinding unchanged responses.
-- No paid historical regression suites, UI test run, production rollout or
-  family-device install were performed for this experiment.
+- No paid historical regression suites, additional local UI test run, production
+  rollout or family-device install were performed for this experiment. The normal
+  PR CI remains the integration gate.
 
 ## Decisions and limitations
 
@@ -209,16 +251,25 @@ Important hashes:
    Historical regression, holdout/transfer evidence and play-testing remain needed.
 6. Keep issue #29 and production/iPad changes out of this branch. Cost: this work
    alone does not change what the family currently plays.
-7. Preserve all unknown cost reservations and stop on exhausted credits. Cost:
-   the conservative cap may stop the engine arm before all grades finish.
+7. Preserve all unknown cost reservations and stop on exhausted credits. Resume
+   only after credits and the necessary cap headroom are authorized. Cost: exact
+   billing remains unverified; total conservative accounting is $9.9870640.
+8. Do not spend the remaining cap on an incomplete broad historical suite or
+   promote either candidate yet. Cost: broader regression/transfer validation
+   remains before a production change.
 
 Deferred minor: the v2 acceptable-alternatives clarification mentions a visible
 draft even on no-draft cases. Their explicit request/facts still say no draft;
 make that clarification conditional in a future corpus version, not this run.
 
-## Next action
+## Recommended next step
 
-After credits are restored, resume the ten missing grades from the existing
-checkpoint under the same $10 journal, then run the engine arm only if the
-remaining budget permits. Keep incomplete comparisons visibly incomplete.
-Do not change the app's prompt or deploy Stockfish based on these partial results.
+Keep the prompt revision as the leading candidate, but run the broader existing
+quality regressions before promoting it. Keep Stockfish experimental: this small
+suite is now near its ceiling and does not show additional benefit from the engine.
+
+Before a deeper engine comparison, add unfamiliar positions where a safe-looking
+move misses an important opportunity, and matched controls that accept sound
+alternative winning plans. Freeze those cases before further tuning. That would
+test broader evaluation rather than merely repeating the improvements explicitly
+taught by this prompt. Do not deploy an engine dependency on this evidence alone.
