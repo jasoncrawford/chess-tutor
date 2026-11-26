@@ -146,3 +146,17 @@ and `summary.json`. The summary distinguishes a test failure, harness error,
 timeout, budget exhaustion, and a fully completed matrix. A capped or partial
 matrix is not evidence that the bug is fixed. Build products are excluded from
 the upload. Every stress outcome uploads available results.
+
+
+The first focused attempt (run 45863623544) spent 359 seconds of CI job time.
+Build-for-testing passed in 64.65 seconds. A mistaken 240-second per-case guard
+then interrupted cold simulator startup as the app was launching; no card touch
+or saved-card assertion had occurred. This is a harness timeout, not a reproduction
+of #29. The uploaded summary and baseline log preserve that distinction.
+
+The final attempt removes the per-case guard and retains the overall deadline.
+For this dispatch, the workflow hard limit is reduced to 23 minutes and the
+build/execution budget to 17 minutes, preserving six minutes for cleanup/upload.
+Together with the first attempt, the maximum active CI job time stays below the
+user's aggregate 30-minute cap. No further stress dispatch is authorized under
+this campaign after that attempt. Report any omitted profiles as incomplete.

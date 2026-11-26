@@ -128,7 +128,7 @@ class StressCampaign:
                         '-destination', self.destination, '-parallel-testing-enabled', 'NO',
                         '-only-testing:' + self.target + variant['test'],
                         '-resultBundlePath', str(self.results / (variant['name'] + '.xcresult')),
-                    ], variant['name'], min(240, self.remaining - 90))
+                    ], variant['name'], self.remaining - 90)
                 finally:
                     for worker in workers:
                         worker.terminate()

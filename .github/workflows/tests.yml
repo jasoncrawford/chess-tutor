@@ -52,7 +52,7 @@ jobs:
   ipad:
     name: iPad
     runs-on: macos-26
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress' && 30 || 40 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress' && 23 || 40 }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
@@ -64,7 +64,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
         run: |
           python3 -m unittest discover -s scripts/tests -v
-          python3 scripts/run_saved_game_stress.py --derived-data "$RUNNER_TEMP/saved-game-stress-build" --budget-seconds 1440
+          python3 scripts/run_saved_game_stress.py --derived-data "$RUNNER_TEMP/saved-game-stress-build" --budget-seconds 1020
       - name: Upload saved-game stress results
         if: always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'saved-game-stress'
         uses: actions/upload-artifact@v7
